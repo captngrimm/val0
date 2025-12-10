@@ -2,3 +2,4 @@
 val0_memory.db
 __pycache__/
 *.pyc
+.env
