@@ -1,5 +1,15 @@
+# Environment files
 .env
-val0_memory.db
+
+# Python cache
 __pycache__/
 *.pyc
-.env
+
+# Virtual environment
+.venv/
+
+# Memory databases
+*.db
+
+# Logs
+logs/
