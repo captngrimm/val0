@@ -166,3 +166,32 @@ def get_fact(chat_id: int, fact_key: str) -> Optional[str]:
     if row:
         return row["fact_value"]
     return None
+
+
+def get_all_facts(chat_id: int) -> Dict[str, str]:
+    """Return all structured facts for this chat as a simple dict."""
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT fact_key, fact_value
+                FROM user_facts
+                WHERE chat_id = ?
+                ORDER BY updated_at ASC
+                """,
+                (chat_id,),
+            )
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+    facts: Dict[str, str] = {}
+    for r in rows:
+        key = (r["fact_key"] or "").strip()
+        val = (r["fact_value"] or "").strip()
+        if not key or not val:
+            continue
+        facts[key] = val
+    return facts
