@@ -1,0 +1,34 @@
+{
+  "version": "1.0",
+  "repo_root": "/opt/val0",
+  "tasks": [
+    {
+      "id": "update-smoke-test",
+      "title": "Update smoke test (backup + sha256)",
+      "goal": "Update WRITE_TEST.md to validate backup creation and pre/post SHA256 audit logging",
+      "context": "Append one line to the end of the file confirming update executed. Keep it minimal.",
+      "inputs": {
+        "read_files": ["tools/forgeexec/WRITE_TEST.md"],
+        "constraints": "Update exactly this file only. Keep existing content intact and add one new line at the end."
+      },
+      "actions": {
+        "modify_files": [
+          {
+            "path": "tools/forgeexec/WRITE_TEST.md",
+            "operation": "update",
+            "backup": true
+          }
+        ],
+        "run_tests": []
+      },
+      "acceptance": [
+        "Backup exists under tools/forgeexec/backups/<run_id>/update-smoke-test/",
+        "Logs include backup details and write pre_sha256 + post_sha256",
+        "WRITE_TEST.md contains the new appended line"
+      ],
+      "risk_level": "low",
+      "dry_run": false,
+      "enabled": true
+    }
+  ]
+}

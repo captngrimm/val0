@@ -1,0 +1,21 @@
+{
+  "repo_root": "/opt/val0",
+  "allowed_write_paths": ["tools/forgeexec"],
+  "allowed_file_extensions": [".py", ".md", ".json"],
+  "allow_delete": false,
+  "openai": {
+    "api_key_env": "OPENAI_API_KEY",
+    "model": "gpt-4.1-mini",
+    "timeout_s": 60,
+    "max_retries": 2
+  },
+  "tests_allowlist": {},
+  "logging": {
+    "log_dir": "tools/forgeexec/logs",
+    "level": "info"
+  },
+  "execution": {
+    "dry_run_default": true,
+    "stop_on_fail": true
+  }
+}
