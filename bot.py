@@ -1,6 +1,5 @@
 import os
 import logging
-import json
 from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
@@ -14,6 +13,7 @@ from telegram.ext import (
     filters,
 )
 
+# Memory + Notes
 from memory_store import (
     init_db,
     insert_message,
@@ -21,7 +21,13 @@ from memory_store import (
     upsert_fact,
     get_fact,
     get_all_facts,
+    add_note,
+    get_notes,
+    search_notes,
 )
+
+# Places API
+from places.places_engine import places_search, place_details
 
 # --------------------------------------------------
 # Logging
@@ -49,131 +55,42 @@ if not OPENAI_API_KEY:
 openai.api_key = OPENAI_API_KEY
 
 # --------------------------------------------------
-# Persona config
+# Val persona (MVP)
 # --------------------------------------------------
-def _load_persona_config() -> Dict[str, Any]:
-    """
-    Load persona_config.json from disk.
-
-    If the file is missing or invalid, fall back to safe defaults.
-    """
-    default = {
-        "default_persona": {
-            "name": "Val",
-            "nickname": "Boss",
-            "tone": "warm_sassy",
-            "language": "auto",
-            "cussing_level": "light",
-            "humor_level": "medium",
-            "slang_pack": "panama_core",
-            "celebration_intensity": 2,
-        }
-    }
-    cfg_path = "/opt/val0/persona_config.json"
-    try:
-        if os.path.exists(cfg_path):
-            with open(cfg_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict) and "default_persona" in data:
-                    return data
-                else:
-                    logger.warning(
-                        "persona_config.json is invalid structure, using defaults."
-                    )
-        else:
-            logger.info("persona_config.json not found, using default persona config.")
-    except Exception as e:
-        logger.exception(f"Failed to load persona_config.json: {e}")
-    return default
-
-
-def _build_system_prompt(persona_cfg: Dict[str, Any]) -> str:
-    """
-    Build the base SYSTEM prompt string based on persona config.
-
-    Language overrides per-chat are handled separately via lang_hint.
-    """
-    p = persona_cfg.get("default_persona", {})
-    name = p.get("name", "Val")
-    nickname = p.get("nickname", "Boss")
-    language = p.get("language", "auto")
-
-    base = (
-        f"You are {name}, a tactical, emotionally aware AI co-pilot. "
-        "Tone: sharp, warm, protective, a bit sassy. "
-        f"You talk to the user as '{nickname}'. "
-        "You are concise, practical, and avoid fake hype. "
-    )
-
-    # Default language behavior from config
-    if language == "es":
-        lang_part = "Language: always answer in Spanish. "
-    elif language == "en":
-        lang_part = "Language: always answer in English. "
-    else:
-        lang_part = "Language: answer in Spanish or English, matching the user. "
-
-    return base + lang_part
-
-
-_PERSONA_CONFIG = _load_persona_config()
-VAL_SYSTEM_PROMPT = _build_system_prompt(_PERSONA_CONFIG)
+VAL_SYSTEM_PROMPT = (
+    "You are Val, a tactical, emotionally aware AI co-pilot. "
+    "Tone: sharp, warm, protective, a bit sassy. "
+    "You talk to the user as 'Boss'. "
+    "You are concise, practical, and avoid fake hype. "
+    "Language: answer in Spanish or English, matching the user. "
+)
 
 
 def build_context_block(rows: List[Dict[str, Any]]) -> str:
     """Build a short text block from recent messages."""
     if not rows:
         return ""
-
     lines: List[str] = []
     for r in rows:
         role = r.get("role", "user")
         content = (r.get("content") or "").strip()
         if not content:
             continue
-        if role == "assistant":
-            prefix = "Val:"
-        else:
-            prefix = "Boss:"
+        prefix = "Val:" if role == "assistant" else "Boss:"
         lines.append(f"{prefix} {content}")
-
     return "\n".join(lines)
 
 
 # --------------------------------------------------
-# OpenAI call (classic API) with context + facts + lang hint
+# OpenAI call
 # --------------------------------------------------
 def call_val_openai(
     user_text: str,
     context_block: Optional[str] = None,
     facts_block: Optional[str] = None,
-    lang_hint: Optional[str] = None,
 ) -> str:
-    """
-    Send a chat to OpenAI with Val's persona and optional:
-    - facts_block: persistent structured memory (user_facts)
-    - context_block: recent conversational context (messages)
-    - lang_hint: 'es' or 'en' to override language behavior per chat
-    """
     try:
-        messages: List[Dict[str, str]] = [
-            {"role": "system", "content": VAL_SYSTEM_PROMPT},
-        ]
-
-        if lang_hint == "es":
-            messages.append(
-                {
-                    "role": "system",
-                    "content": "El usuario prefiere que siempre le hables en español.",
-                }
-            )
-        elif lang_hint == "en":
-            messages.append(
-                {
-                    "role": "system",
-                    "content": "The user prefers that you always reply in English.",
-                }
-            )
+        messages = [{"role": "system", "content": VAL_SYSTEM_PROMPT}]
 
         if facts_block:
             messages.append(
@@ -206,6 +123,7 @@ def call_val_openai(
             temperature=0.7,
         )
         return resp["choices"][0]["message"]["content"].strip()
+
     except Exception as e:
         logger.exception(f"OpenAI call failed: {e}")
         return (
@@ -215,32 +133,14 @@ def call_val_openai(
 
 
 # --------------------------------------------------
-# Simple NLP helpers for facts
+# NLP Helpers
 # --------------------------------------------------
 def extract_favorite_color(text: str) -> Optional[str]:
-    """
-    Try to extract a color name from phrases like:
-    - 'mi color favorito es el azul oscuro'
-    - 'mi color favorito ahora es el azul'
-    - 'my favorite color is dark red'
-    - 'my favorite color now is blue'
-    Return the raw tail string, trimmed.
-
-    IMPORTANT:
-    Only treat as a setter if the phrase is at the beginning of the message.
-    """
     lowered = text.lower()
-    triggers = [
-        "mi color favorito es",
-        "mi color favorito ahora es",
-        "my favorite color is",
-        "my favorite color now is",
-    ]
-    for trig in triggers:
-        if lowered.startswith(trig):
-            idx = len(trig)
-            tail = text[idx:].strip()
-            # Strip common filler like 'el', 'la'
+    triggers = ["mi color favorito es", "my favorite color is"]
+    for t in triggers:
+        if lowered.startswith(t):
+            tail = text[len(t):].strip()
             if tail.lower().startswith(("el ", "la ")):
                 tail = tail[3:].strip()
             return tail or None
@@ -258,46 +158,15 @@ def is_color_memory_question(text: str) -> bool:
 
 
 def extract_main_goal(text: str) -> Optional[str]:
-    """
-    Try to extract the user's main goal from phrases like:
-    - 'mi objetivo principal es ...'
-    - 'mi objetivo es ...'
-    - 'my main goal is ...'
-    - 'my goal is ...'
-    Return the tail string, trimmed.
-
-    We also only treat this as a setter when the phrase is at the start.
-    """
     lowered = text.lower()
-    triggers = [
-        "mi objetivo principal es",
-        "mi objetivo es",
-        "my main goal is",
-        "my goal is",
-    ]
-    for trig in triggers:
-        if lowered.startswith(trig):
-            idx = len(trig)
-            tail = text[idx:].strip()
-            return tail or None
+    triggers = ["mi objetivo principal es", "mi objetivo es", "my main goal is", "my goal is"]
+    for t in triggers:
+        if lowered.startswith(t):
+            return text[len(t):].strip()
     return None
 
 
 def extract_preferred_language(text: str) -> Optional[str]:
-    """
-    Extract preferred language from phrases at the start of the message.
-
-    Examples:
-    - 'háblame en español'
-    - 'hablame en ingles'
-    - 'prefiero que me hables en español'
-    - 'my preferred language is english'
-
-    Returns:
-        'es' for Spanish
-        'en' for English
-        None if not clearly specified.
-    """
     lowered = text.lower().strip()
     triggers = [
         "háblame en",
@@ -307,9 +176,8 @@ def extract_preferred_language(text: str) -> Optional[str]:
         "my preferred language is",
         "i prefer you speak in",
     ]
-    if not any(lowered.startswith(trig) for trig in triggers):
+    if not any(lowered.startswith(t) for t in triggers):
         return None
-
     if "español" in lowered or "spanish" in lowered:
         return "es"
     if "inglés" in lowered or "ingles" in lowered or "english" in lowered:
@@ -317,56 +185,74 @@ def extract_preferred_language(text: str) -> Optional[str]:
     return None
 
 
+def extract_preferred_name(text: str) -> Optional[str]:
+    original = text.strip()
+    lowered = original.lower()
+    triggers = [
+        "quiero que me llames ",
+        "quiero que me llame ",
+        "llámame ",
+        "llamame ",
+        "puedes llamarme ",
+        "call me ",
+        "you can call me ",
+    ]
+    for t in triggers:
+        if lowered.startswith(t):
+            tail = original[len(t):].strip()
+            if len(tail) > 1:
+                return tail
+    return None
+
+
+def extract_freeform_note(text: str) -> Optional[str]:
+    original = text.strip()
+    lowered = original.lower()
+    prefixes = [
+        "val anota",
+        "val, anota",
+        "val anota:",
+        "val, anota:",
+        "val apunta",
+        "val, apunta",
+        "val apunta:",
+        "val, apunta:",
+        "val toma nota de",
+        "val, toma nota de",
+        "anota",
+        "anota:",
+        "anota que",
+        "anota esto",
+        "apunta",
+        "apunta:",
+        "apunta esto",
+        "toma nota de",
+    ]
+    for p in prefixes:
+        if lowered.startswith(p):
+            return original[len(p):].lstrip(" :,-").strip()
+    return None
+
+
 # --------------------------------------------------
-# Telegram handlers
+# Telegram Commands
 # --------------------------------------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    chat = update.effective_chat
-    logger.info(
-        f"/start from user_id={user.id} chat_id={chat.id} username={user.username}"
-    )
-    await update.message.reply_text(
-        "Val-0 online. Ya puedo hablar contigo por aquí, Boss."
-    )
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Val-0 online. Ya puedo hablar contigo por aquí, Boss.")
 
 
-async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show persistent facts stored for this chat."""
-    user = update.effective_user
-    chat = update.effective_chat
-    chat_id = chat.id
-    logger.info(f"/memory from user_id={user.id} chat_id={chat_id}")
-
-    try:
-        facts = get_all_facts(chat_id)
-    except Exception as e:
-        logger.exception(f"Failed to fetch user facts for /memory: {e}")
-        await update.message.reply_text(
-            "No pude leer la memoria persistente ahora mismo, Boss."
-        )
-        return
-
+async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    facts = get_all_facts(chat_id)
     if not facts:
-        await update.message.reply_text(
-            "Todavía no tengo datos persistentes guardados para este chat, Boss."
-        )
+        await update.message.reply_text("Todavía no tengo datos persistentes guardados para este chat, Boss.")
         return
-
-    lines = ["Memoria persistente para este chat:"]
-    for k, v in facts.items():
-        lines.append(f"- {k}: {v}")
-    text_out = "\n".join(lines)
-    await update.message.reply_text(text_out)
+    lines = [f"- {k}: {v}" for k, v in facts.items()]
+    await update.message.reply_text("Memoria persistente para este chat:\n" + "\n".join(lines))
 
 
-async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Basic health/status check for this chat."""
-    user = update.effective_user
-    chat = update.effective_chat
-    chat_id = chat.id
-    logger.info(f"/status from user_id={user.id} chat_id={chat_id}")
-
+async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
     db_ok = True
     recent_ok = True
     facts_count = 0
@@ -394,20 +280,186 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     await update.message.reply_text("\n".join(lines))
 
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.message.text:
+async def note_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    text = " ".join(context.args).strip() if context.args else ""
+    if not text:
+        await update.message.reply_text(
+            "Boss, dime qué nota quieres guardar. Ejemplo:\n"
+            "/note pedir cita con el dentista el lunes"
+        )
+        return
+    note_id = add_note(chat_id, text)
+    if note_id <= 0:
+        await update.message.reply_text(
+            "La nota estaba vacía o algo raro pasó, Boss. Intenta de nuevo con más detalle."
+        )
+        return
+    await update.message.reply_text(f"Listo, Boss. Guardé la nota #{note_id}:\n{text}")
+
+
+async def notes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    rows = get_notes(chat_id, limit=20)
+    if not rows:
+        await update.message.reply_text(
+            "Todavía no tienes notas guardadas, Boss. Usa /note algo que quieras recordar."
+        )
+        return
+    lines = ["Notas guardadas (más recientes primero):"]
+    for idx, r in enumerate(rows, start=1):
+        content = (r.get("content") or "").strip()
+        if len(content) > 200:
+            content = content[:197] + "..."
+        lines.append(f"{idx}. #{r.get('id')} - {content}")
+    await update.message.reply_text("\n".join(lines))
+
+
+async def search_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    query = " ".join(context.args).strip() if context.args else ""
+    if not query:
+        await update.message.reply_text(
+            "Dime qué quieres buscar en tus notas, Boss. Ejemplo:\n"
+            "/search dentista"
+        )
+        return
+
+    rows = search_notes(chat_id, query, limit=20)
+    if not rows:
+        await update.message.reply_text(f"No encontré notas que contengan '{query}', Boss.")
+        return
+
+    # Deduplicate by content to avoid confusion with identical notes
+    seen_contents = set()
+    lines = [f"Notas que contienen '{query}' (más recientes primero):"]
+    for r in rows:
+        content = (r.get("content") or "").strip()
+        if content in seen_contents:
+            continue
+        seen_contents.add(content)
+        if len(content) > 200:
+            content = content[:197] + "..."
+        lines.append(f"- #{r.get('id')} - {content}")
+
+    await update.message.reply_text("\n".join(lines))
+
+
+# --------------------------------------------------
+# /place command (Google Places)
+# --------------------------------------------------
+async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    query = " ".join(context.args).strip() if context.args else ""
+    if not query:
+        await update.message.reply_text(
+            "Dime qué buscar, Boss. Ejemplo:\n"
+            "/place dentista panama\n"
+            "/place restaurantes cerca de albrook"
+        )
+        return
+
+    results = places_search(query, limit=5)
+
+    if isinstance(results, dict) and "error" in results:
+        await update.message.reply_text(f"Error buscando lugares: {results['error']}")
+        return
+
+    if not results:
+        await update.message.reply_text("No encontré nada con esa búsqueda, Boss.")
+        return
+
+    lines = []
+    for r in results:
+        name = r.get("name", "Sin nombre")
+        addr = r.get("address", "Sin dirección")
+        rating = r.get("rating", "N/A")
+        place_id = r.get("place_id", "")
+        lines.append(
+            f"📍 *{name}*\n{addr}\n⭐ {rating}\n`{place_id}`\n"
+        )
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
+# --------------------------------------------------
+# Voice handler (Whisper via OpenAI)
+# --------------------------------------------------
+async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.message.voice:
         return
 
     user = update.effective_user
     chat = update.effective_chat
-    text = update.message.text.strip()
-    user_id = user.id
     chat_id = chat.id
     tg_msg_id = update.message.message_id
 
-    logger.info(f"msg from user_id={user_id} chat_id={chat_id}: {text!r}")
+    voice = update.message.voice
+    file_id = voice.file_id
 
-    # 1) STORE USER MESSAGE IMMEDIATELY
+    logger.info(
+        f"voice msg from user_id={user.id} chat_id={chat_id}: "
+        f"duration={voice.duration}s file_id={file_id}"
+    )
+
+    try:
+        file = await context.bot.get_file(file_id)
+        tmp_dir = "/opt/val0/tmp"
+        os.makedirs(tmp_dir, exist_ok=True)
+        tmp_path = os.path.join(tmp_dir, f"voice_{chat_id}_{tg_msg_id}.ogg")
+        await file.download_to_drive(tmp_path)
+    except Exception as e:
+        logger.exception(f"Failed to download voice file from Telegram: {e}")
+        await update.message.reply_text(
+            "No pude descargar ese mensaje de voz, Boss. Intenta de nuevo."
+        )
+        return
+
+    try:
+        with open(tmp_path, "rb") as audio_file:
+            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        transcribed_text = (transcript.get("text") or "").strip()
+    except Exception as e:
+        logger.exception(f"Whisper transcription failed: {e}")
+        await update.message.reply_text(
+            "No pude transcribir ese audio con Whisper, Boss. Intenta con texto o mándalo de nuevo."
+        )
+        return
+    finally:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception as e:
+            logger.exception(f"Failed to remove tmp voice file {tmp_path}: {e}")
+
+    if not transcribed_text:
+        await update.message.reply_text(
+            "No entendí nada claro en ese audio, Boss. Intenta de nuevo o mándalo por texto."
+        )
+        return
+
+    await _process_text_pipeline(update, context, transcribed_text)
+
+
+# --------------------------------------------------
+# Core Message Pipeline
+# --------------------------------------------------
+async def _process_text_pipeline(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    text: str,
+):
+    if not update.message:
+        return
+
+    chat = update.effective_chat
+    chat_id = chat.id
+    tg_msg_id = update.message.message_id
+
+    logger.info(f"msg from chat_id={chat_id}: {text!r}")
+
+    # Store user msg
     try:
         insert_message(
             chat_id=chat_id,
@@ -419,32 +471,27 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     except Exception as e:
         logger.exception(f"Failed to insert user message into DB: {e}")
 
-    # 1b) If the user is asking about favorite color memory, answer first
-    # and do NOT treat this as a setter.
+    # Color memory question
     if is_color_memory_question(text):
-        stored_color: Optional[str] = None
+        stored = None
         try:
-            stored_color = get_fact(chat_id=chat_id, fact_key="favorite_color")
+            stored = get_fact(chat_id=chat_id, fact_key="favorite_color")
         except Exception as e:
             logger.exception(f"Failed to read favorite_color fact: {e}")
 
-        if stored_color:
-            reply_text = (
-                f"Claro, Boss, tu color favorito es {stored_color}. "
-                "Eso no se me olvida tan fácil."
-            )
+        if stored:
+            reply = f"Claro, Boss, tu color favorito es {stored}. Eso no se me olvida tan fácil."
         else:
-            reply_text = (
+            reply = (
                 "Todavía no me has dicho claramente cuál es tu color favorito, Boss. "
                 "Dímelo con: 'mi color favorito es ...'."
             )
-
-        sent = await update.message.reply_text(reply_text)
+        sent = await update.message.reply_text(reply)
         try:
             insert_message(
                 chat_id=chat_id,
                 role="assistant",
-                content=reply_text,
+                content=reply,
                 telegram_message_id=sent.message_id,
                 model_used="gpt-4.1-mini",
             )
@@ -452,34 +499,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             logger.exception(f"Failed to insert assistant message into DB: {e}")
         return
 
-    # 2) Structured fact: favorite color (only when explicitly set)
-    fav_color = extract_favorite_color(text)
-    if fav_color:
+    # Favorite color setter
+    fav = extract_favorite_color(text)
+    if fav:
         try:
-            upsert_fact(chat_id=chat_id, fact_key="favorite_color", fact_value=fav_color)
+            upsert_fact(chat_id=chat_id, fact_key="favorite_color", fact_value=fav)
         except Exception as e:
             logger.exception(f"Failed to upsert favorite_color: {e}")
 
-        # Reply in the language we know the user prefers, if any
-        lang_for_reply = get_fact(chat_id=chat_id, fact_key="preferred_language")
-        if lang_for_reply == "en":
-            reply_text = (
-                f"Noted, Boss: your favorite color just switched to {fav_color}. "
-                "I’ve updated it in memory."
-            )
-        else:
-            reply_text = (
-                f"Queda registrado, Boss: tu color favorito ahora es {fav_color}. "
-                "Lo tengo guardado."
-            )
-
-        sent = await update.message.reply_text(reply_text)
-        # Store assistant reply
+        reply = (
+            f"Queda registrado, Boss: tu color favorito ahora es {fav}. "
+            "Lo tengo guardado."
+        )
+        sent = await update.message.reply_text(reply)
         try:
             insert_message(
                 chat_id=chat_id,
                 role="assistant",
-                content=reply_text,
+                content=reply,
                 telegram_message_id=sent.message_id,
                 model_used="gpt-4.1-mini",
             )
@@ -487,25 +524,24 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             logger.exception(f"Failed to insert assistant message into DB: {e}")
         return
 
-    # 2b) Structured fact: main goal
-    main_goal = extract_main_goal(text)
-    if main_goal:
+    # Main goal setter
+    goal = extract_main_goal(text)
+    if goal:
         try:
-            upsert_fact(chat_id=chat_id, fact_key="main_goal", fact_value=main_goal)
+            upsert_fact(chat_id=chat_id, fact_key="main_goal", fact_value=goal)
         except Exception as e:
             logger.exception(f"Failed to upsert main_goal: {e}")
 
-        reply_text = (
+        reply = (
             "Queda registrado, Boss: tu objetivo principal ahora es: "
-            f"'{main_goal}'. Lo tengo en memoria de largo plazo."
+            f"'{goal}'. Lo tengo en memoria de largo plazo."
         )
-        sent = await update.message.reply_text(reply_text)
-        # Store assistant reply
+        sent = await update.message.reply_text(reply)
         try:
             insert_message(
                 chat_id=chat_id,
                 role="assistant",
-                content=reply_text,
+                content=reply,
                 telegram_message_id=sent.message_id,
                 model_used="gpt-4.1-mini",
             )
@@ -513,29 +549,29 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             logger.exception(f"Failed to insert assistant message into DB: {e}")
         return
 
-    # 2c) Structured fact: preferred language (setter)
-    new_pref_lang = extract_preferred_language(text)
-    if new_pref_lang:
+    # Preferred language setter
+    lang = extract_preferred_language(text)
+    if lang:
         try:
             upsert_fact(
                 chat_id=chat_id,
                 fact_key="preferred_language",
-                fact_value=new_pref_lang,
+                fact_value=lang,
             )
         except Exception as e:
             logger.exception(f"Failed to upsert preferred_language: {e}")
 
-        human_label = "español" if new_pref_lang == "es" else "inglés"
-        reply_text = (
-            f"Listo, Boss: a partir de ahora prefieres que te hable en {human_label}. "
+        human = "español" if lang == "es" else "inglés"
+        reply = (
+            f"Listo, Boss: a partir de ahora prefieres que te hable en {human}. "
             "Lo tengo guardado en memoria."
         )
-        sent = await update.message.reply_text(reply_text)
+        sent = await update.message.reply_text(reply)
         try:
             insert_message(
                 chat_id=chat_id,
                 role="assistant",
-                content=reply_text,
+                content=reply,
                 telegram_message_id=sent.message_id,
                 model_used="gpt-4.1-mini",
             )
@@ -545,74 +581,134 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
         return
 
-    # 3) LOAD RECENT CONTEXT FOR THIS CHAT
+    # Preferred name setter
+    name = extract_preferred_name(text)
+    if name:
+        try:
+            upsert_fact(chat_id=chat_id, fact_key="preferred_name", fact_value=name)
+        except Exception as e:
+            logger.exception(f"Failed to upsert preferred_name: {e}")
+
+        reply = (
+            f"Perfecto. A partir de ahora te voy a llamar {name}. "
+            "Lo dejo anotado en memoria, Boss."
+        )
+        sent = await update.message.reply_text(reply)
+        try:
+            insert_message(
+                chat_id=chat_id,
+                role="assistant",
+                content=reply,
+                telegram_message_id=sent.message_id,
+                model_used="gpt-4.1-mini",
+            )
+        except Exception as e:
+            logger.exception(
+                f"Failed to insert assistant message into DB (preferred_name): {e}"
+            )
+        return
+
+    # Natural-language note
+    note = extract_freeform_note(text)
+    if note:
+        try:
+            note_id = add_note(chat_id, note)
+        except Exception as e:
+            logger.exception(f"Failed to insert natural note for chat_id={chat_id}: {e}")
+            await update.message.reply_text(
+                "Quise guardar esa nota pero algo falló, Boss. Intenta de nuevo."
+            )
+            return
+
+        if note_id <= 0:
+            await update.message.reply_text(
+                "La nota quedó demasiado vacía, Boss. Dímela con un poco más de detalle."
+            )
+            return
+
+        reply = f"Listo, Boss. Guardé la nota #{note_id}:\n{note}"
+        sent = await update.message.reply_text(reply)
+        try:
+            insert_message(
+                chat_id=chat_id,
+                role="assistant",
+                content=reply,
+                telegram_message_id=sent.message_id,
+                model_used="gpt-4.1-mini",
+            )
+        except Exception as e:
+            logger.exception(
+                f"Failed to insert assistant message into DB (natural note): {e}"
+            )
+        return
+
+    # Load context + facts
     try:
-        recent_rows = get_recent_messages(chat_id=chat_id, limit=12)
+        recent = get_recent_messages(chat_id=chat_id, limit=12)
     except Exception as e:
         logger.exception(f"Failed to fetch recent messages from DB: {e}")
-        recent_rows = []
+        recent = []
 
-    context_block = build_context_block(recent_rows)
+    context_block = build_context_block(recent)
 
-    # 3b) LOAD STRUCTURED FACTS (PERSISTENT MEMORY) FOR THIS CHAT
-    facts_block = ""
     try:
         facts = get_all_facts(chat_id=chat_id)
     except Exception as e:
         logger.exception(f"Failed to fetch user facts from DB: {e}")
         facts = {}
 
+    facts_block = ""
     if facts:
         fact_lines: List[str] = []
         for k, v in facts.items():
             fact_lines.append(f"{k}: {v}")
         facts_block = "\n".join(fact_lines)
 
-    # Derive lang_hint from facts
-    lang_hint = None
-    if isinstance(facts, dict):
-        pref = facts.get("preferred_language")
-        if pref in ("es", "en"):
-            lang_hint = pref
-
-    # 4) CALL OPENAI WITH CONTEXT + FACTS + LANG HINT
-    reply_text = call_val_openai(
+    reply = call_val_openai(
         text,
         context_block=context_block,
         facts_block=facts_block,
-        lang_hint=lang_hint,
     )
 
-    # 5) SEND REPLY TO TELEGRAM
-    sent = await update.message.reply_text(reply_text)
-
-    # 6) STORE ASSISTANT MESSAGE AFTER SUCCESSFUL SEND
+    sent = await update.message.reply_text(reply)
     try:
         insert_message(
             chat_id=chat_id,
             role="assistant",
-            content=reply_text,
+            content=reply,
             telegram_message_id=sent.message_id,
             model_used="gpt-4.1-mini",
         )
     except Exception as e:
-        logger.exception(f"Failed to insert assistant message into DB: {e}")
+        logger.exception(
+            f"Failed to insert assistant message into DB (final reply): {e}"
+        )
+
+
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message and update.message.text:
+        await _process_text_pipeline(update, context, update.message.text.strip())
 
 
 # --------------------------------------------------
 # Main
 # --------------------------------------------------
-def main() -> None:
-    logger.info("Initializing SQLite memory spine…")
+def main():
     init_db()
-    logger.info("Starting Val-0 Telegram bot…")
-
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 
+    # Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CommandHandler("note", note_cmd))
+    app.add_handler(CommandHandler("notes", notes_cmd))
+    app.add_handler(CommandHandler("search", search_cmd))
+    app.add_handler(CommandHandler("place", place_cmd))
+
+    # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice))
 
     app.run_polling(drop_pending_updates=True)
 

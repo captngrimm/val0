@@ -38,7 +38,7 @@ def init_db() -> None:
                 """
             )
 
-            # User facts: structured memory (e.g., favorite_color)
+            # User facts: structured memory (e.g., favorite_color, main_goal, preferred_language)
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS user_facts (
@@ -48,6 +48,18 @@ def init_db() -> None:
                     fact_value TEXT NOT NULL,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(chat_id, fact_key)
+                );
+                """
+            )
+
+            # Notes: free-form notes per chat (for /note, /notes)
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS notes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
                 """
             )
@@ -169,7 +181,7 @@ def get_fact(chat_id: int, fact_key: str) -> Optional[str]:
 
 
 def get_all_facts(chat_id: int) -> Dict[str, str]:
-    """Return all structured facts for this chat as a simple dict."""
+    """Return all facts for this chat_id as a dict[key] = value."""
     with _lock:
         conn = _get_conn()
         try:
@@ -187,11 +199,88 @@ def get_all_facts(chat_id: int) -> Dict[str, str]:
         finally:
             conn.close()
 
-    facts: Dict[str, str] = {}
+    out: Dict[str, str] = {}
     for r in rows:
-        key = (r["fact_key"] or "").strip()
-        val = (r["fact_value"] or "").strip()
-        if not key or not val:
-            continue
-        facts[key] = val
-    return facts
+        out[r["fact_key"]] = r["fact_value"]
+    return out
+
+
+def add_note(chat_id: int, content: str) -> int:
+    """Insert a note for this chat and return its ID."""
+    content = (content or "").strip()
+    if not content:
+        return 0
+
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO notes (chat_id, content)
+                VALUES (?, ?)
+                """,
+                (chat_id, content),
+            )
+            conn.commit()
+            note_id = cur.lastrowid
+            logger.info("Inserted note id=%s chat_id=%s", note_id, chat_id)
+            return note_id
+        finally:
+            conn.close()
+
+
+def get_notes(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    """Return recent notes for this chat_id (newest → oldest)."""
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, chat_id, content, created_at
+                FROM notes
+                WHERE chat_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (chat_id, limit),
+            )
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+    return [dict(r) for r in rows]
+
+
+def search_notes(chat_id: int, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    """
+    Simple keyword search over notes content for this chat.
+    Case-insensitive LIKE on the 'content' field.
+    """
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    pattern = f"%{query}%"
+
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, chat_id, content, created_at
+                FROM notes
+                WHERE chat_id = ?
+                  AND content LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (chat_id, pattern, limit),
+            )
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+    return [dict(r) for r in rows]

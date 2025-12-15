@@ -1,0 +1,67 @@
+import os
+import requests
+from dotenv import load_dotenv
+
+# Cargar el .env explícitamente para este módulo
+load_dotenv(dotenv_path="/opt/val0/.env")
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
+
+if not GOOGLE_API_KEY:
+    raise RuntimeError("Missing GOOGLE_PLACES_API_KEY in .env")
+
+BASE_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+BASE_DETAIL_URL = "https://maps.googleapis.com/maps/api/place/details/json"
+
+
+def places_search(query: str, limit: int = 5):
+    """Search places by natural-language text."""
+    params = {
+        "query": query,
+        "key": GOOGLE_API_KEY,
+    }
+    r = requests.get(BASE_SEARCH_URL, params=params, timeout=10)
+
+    if r.status_code != 200:
+        return {"error": f"HTTP {r.status_code}"}
+
+    data = r.json()
+
+    if data.get("status") != "OK":
+        return {"error": data.get("status"), "data": data}
+
+    results = data.get("results", [])[:limit]
+
+    output = []
+    for r in results:
+        output.append(
+            {
+                "name": r.get("name"),
+                "address": r.get("formatted_address"),
+                "rating": r.get("rating"),
+                "types": r.get("types"),
+                "place_id": r.get("place_id"),
+            }
+        )
+
+    return output
+
+
+def place_details(place_id: str):
+    """Get details of a single place."""
+    params = {
+        "place_id": place_id,
+        "key": GOOGLE_API_KEY,
+        "fields": "name,formatted_address,formatted_phone_number,opening_hours,rating,website",
+    }
+    r = requests.get(BASE_DETAIL_URL, params=params, timeout=10)
+
+    if r.status_code != 200:
+        return {"error": f"HTTP {r.status_code}"}
+
+    data = r.json()
+
+    if data.get("status") != "OK":
+        return {"error": data.get("status"), "data": data}
+
+    return data.get("result", {})
