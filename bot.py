@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+import time
 from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
@@ -38,6 +39,11 @@ from places.places_engine import places_search, place_details
 # Stores last search results so user can reply "1", "2", etc.
 # --------------------------------------------------
 _PLACES_SESSION = {}  # chat_id -> {"ts": epoch, "results": [ {place_id, name, maps_url, ...}, ... ]}
+# --------------------------------------------------
+# Companion Operator v0 — session timing
+# --------------------------------------------------
+_CO_SESSION = {}  # chat_id -> {"start": epoch, "nudged": bool}
+
 
 def _places_session_set(chat_id: int, results):
     try:
