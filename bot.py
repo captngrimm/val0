@@ -1,12 +1,10 @@
+import time
 import os
 import logging
-import re
-import time
 from typing import List, Dict, Any, Optional
-
 from dotenv import load_dotenv
 import openai
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
@@ -16,7 +14,6 @@ from telegram.ext import (
     Defaults,
     filters,
 )
-
 # Memory + Notes
 from memory_store import (
     init_db,
@@ -29,16 +26,15 @@ from memory_store import (
     get_notes,
     search_notes,
 )
-
 # Places API
 from places.places_engine import places_search, place_details
-
 
 # --------------------------------------------------
 # Places session (process memory, resets on restart)
 # Stores last search results so user can reply "1", "2", etc.
 # --------------------------------------------------
 _PLACES_SESSION = {}  # chat_id -> {"ts": epoch, "results": [ {place_id, name, maps_url, ...}, ... ]}
+
 # --------------------------------------------------
 # Companion Operator v0 — session timing
 # --------------------------------------------------
@@ -47,10 +43,10 @@ _CO_SESSION = {}  # chat_id -> {"start": epoch, "nudged": bool}
 
 def _places_session_set(chat_id: int, results):
     try:
-        import time
         _PLACES_SESSION[int(chat_id)] = {"ts": int(time.time()), "results": list(results or [])}
     except Exception:
         pass
+
 
 def _places_session_get(chat_id: int):
     try:
@@ -58,23 +54,6 @@ def _places_session_get(chat_id: int):
     except Exception:
         return None
 
-def _normalize_phone(raw: str) -> str:
-    """
-    Normaliza a algo tipo +50760301212 cuando se puede.
-    - Si ya viene con +, conserva.
-    - Si son 8 dígitos (Panamá), asume +507.
-    - Si no, devuelve dígitos tal cual (Telegram igual lo muestra).
-    """
-    if not raw:
-        return ""
-    raw = raw.strip()
-    if raw.startswith("+"):
-        digits = "+" + re.sub(r"\D+", "", raw)
-        return digits
-    digits = re.sub(r"\D+", "", raw)
-    if len(digits) == 8:
-        return "+507" + digits
-    return digits
 
 # Semantic Memory (FAISS)
 from semantic.memory_embeddings import MemoryEmbeddings
@@ -99,10 +78,8 @@ logging.getLogger("telegram").setLevel(logging.WARNING)
 async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         logger.exception("Unhandled exception in handler: %s", context.error)
-
         # Try to notify user (plain text only)
         msg = "Boss, algo se rompió procesando eso. Ya lo vi en los logs."
-
         effective_message = getattr(update, "effective_message", None)
         if effective_message:
             try:
@@ -110,7 +87,6 @@ async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> 
                 return
             except Exception:
                 pass
-
         bot = getattr(context, "bot", None)
         if bot:
             chat_id = getattr(getattr(update, "effective_chat", None), "id", None)
@@ -119,7 +95,6 @@ async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> 
                     await bot.send_message(chat_id=chat_id, text=msg)
                 except Exception:
                     pass
-
     except Exception:
         # Never allow the error handler to raise
         pass
@@ -129,13 +104,11 @@ async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> 
 # Env + API keys
 # --------------------------------------------------
 load_dotenv(dotenv_path="/opt/val0/.env")
-
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not TELEGRAM_BOT_TOKEN:
     raise RuntimeError("Missing TELEGRAM_BOT_TOKEN in .env")
-
 if not OPENAI_API_KEY:
     raise RuntimeError("Missing OPENAI_API_KEY in .env")
 
@@ -178,7 +151,6 @@ def call_val_openai(
 ) -> str:
     try:
         messages = [{"role": "system", "content": VAL_SYSTEM_PROMPT}]
-
         if facts_block:
             messages.append(
                 {
@@ -189,7 +161,6 @@ def call_val_openai(
                     ),
                 }
             )
-
         if context_block:
             messages.append(
                 {
@@ -201,19 +172,15 @@ def call_val_openai(
                     ),
                 }
             )
-
         messages.append({"role": "user", "content": user_text})
-
         resp = openai.ChatCompletion.create(
             model="gpt-4.1-mini",
             messages=messages,
             temperature=0.7,
         )
         out = resp["choices"][0]["message"]["content"].strip()
-        # SANITIZE_TELEGRAM_HTML_BR: Telegram HTML parser rejects \n
-        out = out.replace("\n", "\n").replace("<br />", "\n").replace("\n", "\n")
+        # Keep output safe for Telegram plain text (we use parse_mode=None by default)
         return out
-
     except Exception as e:
         logger.exception(f"OpenAI call failed: {e}")
         return (
@@ -324,12 +291,10 @@ def extract_freeform_note(text: str) -> Optional[str]:
     return None
 
 
-
 def _looks_like_places_request(text: str) -> bool:
     t = (text or "").strip().lower()
     if not t:
         return False
-
     # Spanish triggers
     es = [
         "cerca", "cerca de", "en ", "albrook", "panamá", "panama",
@@ -337,13 +302,11 @@ def _looks_like_places_request(text: str) -> bool:
         "café", "cafe", "restaurante", "farmacia", "super", "hotel", "bar", "gym", "gimnasio", "dentista",
         "clínica", "clinica", "hospital", "gasolinera", "banco", "cajero", "mall", "centro comercial"
     ]
-
     # English triggers
     en = [
         "near", "near me", "in ", "find", "search", "where is", "recommend",
         "coffee", "cafe", "restaurant", "pharmacy", "hotel", "bar", "gym", "dentist", "clinic", "hospital", "atm", "mall"
     ]
-
     return any(k in t for k in es) or any(k in t for k in en)
 
 
@@ -362,6 +325,96 @@ def _reply_language(text: str) -> str:
     t = (text or "").lower()
     spanish_markers = ["á", "é", "í", "ó", "ú", "ñ", "cerca", "dónde", "donde", "recom", "busca", "encuentra", "panamá"]
     return "es" if any(m in t for m in spanish_markers) else "en"
+
+
+# --------------------------------------------------
+# Places result normalization (prevents crashes)
+# --------------------------------------------------
+def _normalize_places_results(results: Any) -> List[Dict[str, Any]]:
+    """
+    Places results can be list[dict], list[str], dict wrapper, or junk.
+    Normalize into list[dict] so downstream code never crashes.
+    """
+    try:
+        if results is None:
+            return []
+        if isinstance(results, dict):
+            # Some wrappers: {"results": [...]} or {"items":[...]}
+            for key in ("results", "items", "data"):
+                if key in results and isinstance(results[key], list):
+                    results = results[key]
+                    break
+            else:
+                return []
+        if not isinstance(results, list):
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for r in results:
+            if r is None:
+                continue
+            if isinstance(r, dict):
+                out.append(r)
+                continue
+            if isinstance(r, str):
+                # Best-effort: treat as a name
+                out.append({"name": r})
+                continue
+            # Unknown type — skip but don't crash
+            continue
+        return out
+    except Exception:
+        return []
+
+
+def _safe_get_place_id(item: Any) -> str:
+    try:
+        if isinstance(item, dict):
+            return (item.get("place_id") or item.get("placeId") or item.get("id") or "").strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _safe_name(item: Any) -> str:
+    try:
+        if isinstance(item, dict):
+            n = item.get("name") or item.get("title") or item.get("label") or ""
+            return str(n).strip() if n is not None else "?"
+        if isinstance(item, str):
+            return item.strip() or "?"
+    except Exception:
+        pass
+    return "?"
+
+
+def _safe_addr(item: Any) -> str:
+    try:
+        if isinstance(item, dict):
+            a = item.get("address") or item.get("formatted_address") or item.get("vicinity") or ""
+            return str(a).strip() if a is not None else ""
+    except Exception:
+        pass
+    return ""
+
+
+def _safe_rating(item: Any):
+    try:
+        if isinstance(item, dict):
+            return item.get("rating")
+    except Exception:
+        pass
+    return None
+
+
+def _safe_maps(item: Any) -> str:
+    try:
+        if isinstance(item, dict):
+            u = item.get("maps_url") or item.get("mapsUrl") or item.get("url") or ""
+            return str(u).strip() if u is not None else ""
+    except Exception:
+        pass
+    return ""
 
 
 # --------------------------------------------------
@@ -386,7 +439,6 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db_ok = True
     recent_ok = True
     facts_count = 0
-
     try:
         _ = get_recent_messages(chat_id=chat_id, limit=1)
         recent_ok = True
@@ -394,19 +446,16 @@ async def status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"Failed to fetch recent messages in /status: {e}")
         db_ok = False
         recent_ok = False
-
     try:
         facts = get_all_facts(chat_id=chat_id)
         facts_count = len(facts)
     except Exception as e:
         logger.exception(f"Failed to fetch user facts in /status: {e}")
         db_ok = False
-
     lines = ["Estado de Val-0 para este chat:"]
     lines.append(f"- DB OK: {'sí' if db_ok else 'no'}")
     lines.append(f"- Mensajes recientes accesibles: {'sí' if recent_ok else 'no'}")
     lines.append(f"- Hechos persistentes guardados: {facts_count}")
-
     await update.message.reply_text("\n".join(lines))
 
 
@@ -454,12 +503,10 @@ async def search_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/search dentista"
         )
         return
-
     rows = search_notes(chat_id, query, limit=20)
     if not rows:
         await update.message.reply_text(f"No encontré notas que contengan '{query}', Boss.")
         return
-
     # Deduplicate by content to avoid confusion with identical notes
     seen_contents = set()
     lines = [f"Notas que contienen '{query}' (más recientes primero):"]
@@ -471,7 +518,6 @@ async def search_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(content) > 200:
             content = content[:197] + "..."
         lines.append(f"- #{r.get('id')} - {content}")
-
     await update.message.reply_text("\n".join(lines))
 
 
@@ -480,7 +526,6 @@ async def search_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
-
     query = " ".join(context.args).strip() if context.args else ""
     if not query:
         await update.message.reply_text(
@@ -489,27 +534,26 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "/place restaurantes cerca de albrook"
         )
         return
-
     results = places_search(query, limit=5)
-
     if isinstance(results, dict) and "error" in results:
         await update.message.reply_text(f"Error buscando lugares: {results['error']}")
         return
 
-    if not results:
+    results_list = _normalize_places_results(results)
+    if not results_list:
         await update.message.reply_text("No encontré nada con esa búsqueda, Boss.")
         return
 
     lines = []
-    for r in results:
-        name = r.get("name", "Sin nombre")
-        addr = r.get("address", "Sin dirección")
-        rating = r.get("rating", "N/A")
-        place_id = r.get("place_id", "")
+    for r in results_list:
+        name = _safe_name(r) or "Sin nombre"
+        addr = _safe_addr(r) or "Sin dirección"
+        rating = _safe_rating(r)
+        place_id = _safe_get_place_id(r)
+        rating_str = rating if rating is not None else "N/A"
         lines.append(
-            f"📍 *{name}*\n{addr}\n⭐ {rating}\n`{place_id}`\n"
+            f"📍 *{name}*\n{addr}\n⭐ {rating_str}\n`{place_id}`\n"
         )
-
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
@@ -519,20 +563,16 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.voice:
         return
-
     user = update.effective_user
     chat = update.effective_chat
     chat_id = chat.id
     tg_msg_id = update.message.message_id
-
     voice = update.message.voice
     file_id = voice.file_id
-
     logger.info(
         f"voice msg from user_id={user.id} chat_id={chat_id}: "
         f"duration={voice.duration}s file_id={file_id}"
     )
-
     try:
         file = await context.bot.get_file(file_id)
         tmp_dir = "/opt/val0/tmp"
@@ -545,7 +585,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "No pude descargar ese mensaje de voz, Boss. Intenta de nuevo."
         )
         return
-
     try:
         with open(tmp_path, "rb") as audio_file:
             transcript = openai.Audio.transcribe("whisper-1", audio_file)
@@ -562,13 +601,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 os.remove(tmp_path)
         except Exception as e:
             logger.exception(f"Failed to remove tmp voice file {tmp_path}: {e}")
-
     if not transcribed_text:
         await update.message.reply_text(
             "No entendí nada claro en ese audio, Boss. Intenta de nuevo o mándalo por texto."
         )
         return
-
     await _process_text_pipeline(update, context, transcribed_text)
 
 
@@ -582,11 +619,28 @@ async def _process_text_pipeline(
 ):
     if not update.message:
         return
-
     chat = update.effective_chat
     chat_id = chat.id
-    tg_msg_id = update.message.message_id
 
+    # --------------------------------------------------
+    # CO1 — Companion Operator timer nudge (1x per chat session)
+    # Default: 3600s (1 hour). Override with CO1_NUDGE_SECONDS env.
+    # --------------------------------------------------
+    try:
+        now = int(time.time())
+        threshold = int(os.getenv("CO1_NUDGE_SECONDS", "3600"))
+        sess = _CO_SESSION.get(int(chat_id))
+        if not sess:
+            _CO_SESSION[int(chat_id)] = {"start": now, "nudged": False}
+        else:
+            elapsed = now - int(sess.get("start", now))
+            if elapsed >= threshold and not sess.get("nudged", False):
+                _CO_SESSION[int(chat_id)]["nudged"] = True
+                await update.message.reply_text("Boss: water + stretch for 30 seconds. 💧")
+    except Exception:
+        pass
+
+    tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
 
     # Store user msg
@@ -608,7 +662,6 @@ async def _process_text_pipeline(
             stored = get_fact(chat_id=chat_id, fact_key="favorite_color")
         except Exception as e:
             logger.exception(f"Failed to read favorite_color fact: {e}")
-
         if stored:
             reply = f"Claro, Boss, tu color favorito es {stored}. Eso no se me olvida tan fácil."
         else:
@@ -636,7 +689,6 @@ async def _process_text_pipeline(
             upsert_fact(chat_id=chat_id, fact_key="favorite_color", fact_value=fav)
         except Exception as e:
             logger.exception(f"Failed to upsert favorite_color: {e}")
-
         reply = (
             f"Queda registrado, Boss: tu color favorito ahora es {fav}. "
             "Lo tengo guardado."
@@ -661,7 +713,6 @@ async def _process_text_pipeline(
             upsert_fact(chat_id=chat_id, fact_key="main_goal", fact_value=goal)
         except Exception as e:
             logger.exception(f"Failed to upsert main_goal: {e}")
-
         reply = (
             "Queda registrado, Boss: tu objetivo principal ahora es: "
             f"'{goal}'. Lo tengo en memoria de largo plazo."
@@ -690,7 +741,6 @@ async def _process_text_pipeline(
             )
         except Exception as e:
             logger.exception(f"Failed to upsert preferred_language: {e}")
-
         human = "español" if lang == "es" else "inglés"
         reply = (
             f"Listo, Boss: a partir de ahora prefieres que te hable en {human}. "
@@ -718,7 +768,6 @@ async def _process_text_pipeline(
             upsert_fact(chat_id=chat_id, fact_key="preferred_name", fact_value=name)
         except Exception as e:
             logger.exception(f"Failed to upsert preferred_name: {e}")
-
         reply = (
             f"Perfecto. A partir de ahora te voy a llamar {name}. "
             "Lo dejo anotado en memoria, Boss."
@@ -749,13 +798,11 @@ async def _process_text_pipeline(
                 "Quise guardar esa nota pero algo falló, Boss. Intenta de nuevo."
             )
             return
-
         if note_id <= 0:
             await update.message.reply_text(
                 "La nota quedó demasiado vacía, Boss. Dímela con un poco más de detalle."
             )
             return
-
         reply = f"Listo, Boss. Guardé la nota #{note_id}:\n{note}"
         sent = await update.message.reply_text(reply)
         try:
@@ -772,8 +819,6 @@ async def _process_text_pipeline(
             )
         return
 
-
-
     # --------------------------------------------------
     # Number-to-details (Places)
     # If the last reply was a Places list, user can respond with "1".."5"
@@ -783,60 +828,53 @@ async def _process_text_pipeline(
         sess = _places_session_get(chat_id)
         if sess and 1 <= sel <= 5:
             # Optional TTL: 10 minutes
-            import time
-            if int(time.time()) - int(sess.get("ts", 0)) <= 600:
-                results = sess.get("results") or []
-                idx = sel - 1
-                if idx < len(results):
-                    pid = (results[idx] or {}).get("place_id")
-                    if pid:
-                        d = place_details(pid)
-                        lang = _reply_language(text)
-
-                        if isinstance(d, dict) and d.get("error"):
-                            msg = ("Se cayó el detalle del lugar, Boss."
-                                   if lang == "es" else "Place details failed, Boss.")
-                            await update.message.reply_text(msg)
+            try:
+                if int(time.time()) - int(sess.get("ts", 0)) <= 600:
+                    results_raw = sess.get("results") or []
+                    results = _normalize_places_results(results_raw)
+                    idx = sel - 1
+                    if idx < len(results):
+                        pid = _safe_get_place_id(results[idx])
+                        if pid:
+                            d = place_details(pid)
+                            lang = _reply_language(text)
+                            if isinstance(d, dict) and d.get("error"):
+                                msg = ("Se cayó el detalle del lugar, Boss."
+                                       if lang == "es" else "Place details failed, Boss.")
+                                await update.message.reply_text(msg)
+                                return
+                            name = (d.get("name") or "?") if isinstance(d, dict) else "?"
+                            addr = (d.get("address") or "") if isinstance(d, dict) else ""
+                            phone = (d.get("phone") or "") if isinstance(d, dict) else ""
+                            rating = d.get("rating") if isinstance(d, dict) else None
+                            website = (d.get("website") or "") if isinstance(d, dict) else ""
+                            maps_url = ""
+                            if isinstance(d, dict):
+                                maps_url = d.get("maps_url") or ""
+                            if not maps_url:
+                                maps_url = _safe_maps(results[idx]) or ""
+                            # Format plain text for Telegram
+                            parts = [f"{name}"]
+                            if rating is not None:
+                                parts.append(f"⭐ {rating}")
+                            if addr:
+                                parts.append(addr)
+                            if phone:
+                                parts.append(f"📞 {phone}")
+                            if website:
+                                parts.append(f"🌐 {website}")
+                            if maps_url:
+                                parts.append(f"🗺️ {maps_url}")
+                            msg = "\n".join(parts)
+                            await update.message.reply_text(
+                                msg,
+                                parse_mode=None,
+                                disable_web_page_preview=True,
+                            )
                             return
-
-                        name = (d.get("name") or "?")
-                        addr = (d.get("address") or "")
-                        phone = (d.get("formatted_phone_number") or d.get("phone") or "")
-                        rating = d.get("rating")
-                        website = d.get("website") or ""
-                        maps_url = d.get("maps_url") or (results[idx] or {}).get("maps_url") or ""
-
-                        # Format HTML for Telegram
-                        parts = [f"{name}"]
-                        if rating is not None:
-                            parts.append(f"⭐ {rating}")
-                        if addr:
-                            parts.append(addr)
-                        if phone:
-                            parts.append(f"📞 {phone}")
-                        if website:
-                            parts.append(f"🌐 {website}")
-                        if maps_url:
-                            parts.append(f"🗺️ {maps_url}")
-
-                        msg = "\n".join(parts)
-                        await update.message.reply_text(
-                            msg,
-                                            disable_web_page_preview=True,
-                        )
-                        # Send as Telegram Contact so mobile can tap-to-call reliably
-                        if phone:
-                            try:
-                                pn = _normalize_phone(phone)
-                                if pn:
-                                    await update.message.reply_contact(
-                                        phone_number=pn,
-                                        first_name=(name or "Lugar")[:50],
-                                    )
-                            except Exception:
-                                pass
-
-                        return
+            except Exception as e:
+                logger.exception(f"Places selection flow failed: {e}")
+                # fall through to normal AI reply
 
     # --------------------------------------------------
     # Natural language → Google Places (MVP)
@@ -854,11 +892,13 @@ async def _process_text_pipeline(
             )
             return
 
-        # Save results so user can reply with a number for details
-        if isinstance(results, list):
-            _places_session_set(chat_id, results)
+        results_list = _normalize_places_results(results)
 
-        if not results:
+        # Save results so user can reply with a number for details
+        if results_list:
+            _places_session_set(chat_id, results_list)
+
+        if not results_list:
             await update.message.reply_text(
                 "No encontré resultados con eso, Boss. Prueba con más detalle (tipo + zona)."
                 if _reply_language(text) == "es"
@@ -868,12 +908,11 @@ async def _process_text_pipeline(
 
         lang = _reply_language(text)
         lines = []
-        for i, r in enumerate(results, start=1):
-            name = (r.get("name") or "?")
-            addr = r.get("address") or r.get("formatted_address") or ""
-            rating = r.get("rating")
-            maps_url = r.get("maps_url") or ""
-
+        for i, r in enumerate(results_list, start=1):
+            name = _safe_name(r)
+            addr = _safe_addr(r)
+            rating = _safe_rating(r)
+            maps_url = _safe_maps(r)
             part = f"{i}) {name}"
             if rating is not None:
                 part += f" ⭐ {rating}"
@@ -881,18 +920,16 @@ async def _process_text_pipeline(
                 part += f"\n{addr}"
             if maps_url:
                 part += f"\n🗺️ {maps_url}"
-
             lines.append(part)
-
         header = "Aquí tienes, Boss:" if lang == "es" else "Here you go, Boss:"
-        footer = ("\n\nResponde con un número (1–5) para ver detalles." if lang == "es" else "\n\nReply with a number (1–5) to see details.")
-
+        footer = ("\n\nResponde con un número (1–5) para ver detalles."
+                  if lang == "es" else "\n\nReply with a number (1–5) to see details.")
         await update.message.reply_text(
             header + "\n\n" + "\n\n".join(lines) + footer,
+            parse_mode=None,
             disable_web_page_preview=True,
         )
         return
-
 
     # Load context + facts
     try:
@@ -900,15 +937,12 @@ async def _process_text_pipeline(
     except Exception as e:
         logger.exception(f"Failed to fetch recent messages from DB: {e}")
         recent = []
-
     context_block = build_context_block(recent)
-
     try:
         facts = get_all_facts(chat_id=chat_id)
     except Exception as e:
         logger.exception(f"Failed to fetch user facts from DB: {e}")
         facts = {}
-
     facts_block = ""
     if facts:
         fact_lines: List[str] = []
@@ -921,7 +955,6 @@ async def _process_text_pipeline(
         context_block=context_block,
         facts_block=facts_block,
     )
-
     sent = await update.message.reply_text(reply)
     try:
         insert_message(
@@ -937,11 +970,11 @@ async def _process_text_pipeline(
         )
 
 
-
 # --------------------------------------------------
 # Semantic Memory Commands (FAISS)
 # --------------------------------------------------
 _semantic = None
+
 
 def _get_semantic():
     global _semantic
@@ -957,9 +990,7 @@ async def sremember_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         await update.message.reply_text("Uso: /sremember <texto a guardar>")
         return
-
     try:
-        import time
         sem = _get_semantic()
         sem.add_memory(
             text=text,
@@ -980,18 +1011,14 @@ async def ssearch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not query:
         await update.message.reply_text("Uso: /ssearch <consulta>")
         return
-
     try:
         sem = _get_semantic()
         hits = sem.search(query=query, k=5)
-
         # Filter to this chat only (since FAISS store is shared)
         hits = [h for h in hits if str(h.get("meta", {}).get("chat_id", "")) == str(chat_id)]
-
         if not hits:
             await update.message.reply_text("No encontré nada relevante en memoria semántica para este chat.")
             return
-
         lines = ["Resultados (memoria semántica):"]
         for i, h in enumerate(hits, start=1):
             score = h.get("score", 0.0)
@@ -1000,11 +1027,9 @@ async def ssearch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if len(text) > 220:
                 text = text[:217] + "..."
             lines.append(f"{i}) {score:.4f} — {text}")
-
         await update.message.reply_text("\n".join(lines))
     except Exception as e:
         await update.message.reply_text(f"❌ Falló /ssearch: {type(e).__name__}: {e}")
-
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
