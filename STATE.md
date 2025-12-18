@@ -56,3 +56,8 @@ Last confirmed working test:
 - "Pizza cerca de Albrook" → returns 5 results + selectable details.
 
 
+
+### 🔮 FUTURE (NON-BLOCKING)
+- Potential distribution via ChatGPT Actions / App Directory when mature.
+  (Note: does not affect current build or priorities.)
+
