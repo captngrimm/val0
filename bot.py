@@ -1,10 +1,11 @@
 import os
 import logging
+import re
 from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
 import openai
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
@@ -50,6 +51,24 @@ def _places_session_get(chat_id: int):
         return _PLACES_SESSION.get(int(chat_id))
     except Exception:
         return None
+
+def _normalize_phone(raw: str) -> str:
+    """
+    Normaliza a algo tipo +50760301212 cuando se puede.
+    - Si ya viene con +, conserva.
+    - Si son 8 dígitos (Panamá), asume +507.
+    - Si no, devuelve dígitos tal cual (Telegram igual lo muestra).
+    """
+    if not raw:
+        return ""
+    raw = raw.strip()
+    if raw.startswith("+"):
+        digits = "+" + re.sub(r"\D+", "", raw)
+        return digits
+    digits = re.sub(r"\D+", "", raw)
+    if len(digits) == 8:
+        return "+507" + digits
+    return digits
 
 # Semantic Memory (FAISS)
 from semantic.memory_embeddings import MemoryEmbeddings
@@ -776,7 +795,7 @@ async def _process_text_pipeline(
 
                         name = (d.get("name") or "?")
                         addr = (d.get("address") or "")
-                        phone = (d.get("phone") or "")
+                        phone = (d.get("formatted_phone_number") or d.get("phone") or "")
                         rating = d.get("rating")
                         website = d.get("website") or ""
                         maps_url = d.get("maps_url") or (results[idx] or {}).get("maps_url") or ""
@@ -797,9 +816,20 @@ async def _process_text_pipeline(
                         msg = "\n".join(parts)
                         await update.message.reply_text(
                             msg,
-                            parse_mode=None,
-                            disable_web_page_preview=True,
+                                            disable_web_page_preview=True,
                         )
+                        # Send as Telegram Contact so mobile can tap-to-call reliably
+                        if phone:
+                            try:
+                                pn = _normalize_phone(phone)
+                                if pn:
+                                    await update.message.reply_contact(
+                                        phone_number=pn,
+                                        first_name=(name or "Lugar")[:50],
+                                    )
+                            except Exception:
+                                pass
+
                         return
 
     # --------------------------------------------------
@@ -853,7 +883,6 @@ async def _process_text_pipeline(
 
         await update.message.reply_text(
             header + "\n\n" + "\n\n".join(lines) + footer,
-            parse_mode=None,
             disable_web_page_preview=True,
         )
         return
