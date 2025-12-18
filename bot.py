@@ -68,6 +68,37 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("telegram").setLevel(logging.WARNING)
 
+# --------------------------------------------------
+# Global Error Handler (prevents silent failures)
+# --------------------------------------------------
+async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        logger.exception("Unhandled exception in handler: %s", context.error)
+
+        # Try to notify user (plain text only)
+        msg = "Boss, algo se rompió procesando eso. Ya lo vi en los logs."
+
+        effective_message = getattr(update, "effective_message", None)
+        if effective_message:
+            try:
+                await effective_message.reply_text(msg)
+                return
+            except Exception:
+                pass
+
+        bot = getattr(context, "bot", None)
+        if bot:
+            chat_id = getattr(getattr(update, "effective_chat", None), "id", None)
+            if chat_id:
+                try:
+                    await bot.send_message(chat_id=chat_id, text=msg)
+                except Exception:
+                    pass
+
+    except Exception:
+        # Never allow the error handler to raise
+        pass
+
 
 # --------------------------------------------------
 # Env + API keys
@@ -952,6 +983,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_db()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).defaults(Defaults(parse_mode=None)).build()
+    app.add_error_handler(_error_handler)
 
     # Commands
     app.add_handler(CommandHandler("start", start))
