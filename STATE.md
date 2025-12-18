@@ -20,3 +20,39 @@
 - Code: present
 - Runtime test: PASS | FAIL
 - Verified on: YYYY-MM-DD
+
+## CURRENT STATE — 2025-12-18
+
+### ✅ STABLE FEATURES
+- Telegram bot operational (text + voice).
+- Google Places integration (Natural Language + /place command).
+- Places results include:
+  - Name
+  - Rating
+  - Address
+  - Google Maps link
+- HTML parse errors resolved by removing Telegram HTML formatting.
+- Places output is now plain text + links (Telegram-safe).
+
+### 🔒 FROZEN (V1)
+- Google Places Concierge is considered **V1 complete**.
+- No further formatting or feature changes unless:
+  - A bug breaks results
+  - Google API fails
+  - Telegram parsing regresses
+
+### 🚧 NEXT FOCUS
+**Companion Operator (CO-1)**
+
+Planned scope:
+- Time awareness (accurate local time replies).
+- Simple timers / reminders (focus, water, breaks).
+- Lightweight nudges (text-first, no voice yet).
+
+Rule:
+- Companion work must not modify Google Places logic.
+
+Last confirmed working test:
+- "Pizza cerca de Albrook" → returns 5 results + selectable details.
+
+
