@@ -5,11 +5,13 @@ from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 import openai
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     ContextTypes,
+    Defaults,
     filters,
 )
 
@@ -29,6 +31,29 @@ from memory_store import (
 # Places API
 from places.places_engine import places_search, place_details
 
+
+# --------------------------------------------------
+# Places session (process memory, resets on restart)
+# Stores last search results so user can reply "1", "2", etc.
+# --------------------------------------------------
+_PLACES_SESSION = {}  # chat_id -> {"ts": epoch, "results": [ {place_id, name, maps_url, ...}, ... ]}
+
+def _places_session_set(chat_id: int, results):
+    try:
+        import time
+        _PLACES_SESSION[int(chat_id)] = {"ts": int(time.time()), "results": list(results or [])}
+    except Exception:
+        pass
+
+def _places_session_get(chat_id: int):
+    try:
+        return _PLACES_SESSION.get(int(chat_id))
+    except Exception:
+        return None
+
+# Semantic Memory (FAISS)
+from semantic.memory_embeddings import MemoryEmbeddings
+
 # --------------------------------------------------
 # Logging
 # --------------------------------------------------
@@ -37,6 +62,12 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("val0-bot")
+
+# Reduce noisy HTTP logs (prevents leaking bot token in journalctl)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+
 
 # --------------------------------------------------
 # Env + API keys
@@ -122,7 +153,10 @@ def call_val_openai(
             messages=messages,
             temperature=0.7,
         )
-        return resp["choices"][0]["message"]["content"].strip()
+        out = resp["choices"][0]["message"]["content"].strip()
+        # SANITIZE_TELEGRAM_HTML_BR: Telegram HTML parser rejects \n
+        out = out.replace("\n", "\n").replace("<br />", "\n").replace("\n", "\n")
+        return out
 
     except Exception as e:
         logger.exception(f"OpenAI call failed: {e}")
@@ -232,6 +266,46 @@ def extract_freeform_note(text: str) -> Optional[str]:
         if lowered.startswith(p):
             return original[len(p):].lstrip(" :,-").strip()
     return None
+
+
+
+def _looks_like_places_request(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    # Spanish triggers
+    es = [
+        "cerca", "cerca de", "en ", "albrook", "panamá", "panama",
+        "busca", "búscame", "buscame", "encuentra", "dónde queda", "donde queda", "recomiéndame", "recomiendame",
+        "café", "cafe", "restaurante", "farmacia", "super", "hotel", "bar", "gym", "gimnasio", "dentista",
+        "clínica", "clinica", "hospital", "gasolinera", "banco", "cajero", "mall", "centro comercial"
+    ]
+
+    # English triggers
+    en = [
+        "near", "near me", "in ", "find", "search", "where is", "recommend",
+        "coffee", "cafe", "restaurant", "pharmacy", "hotel", "bar", "gym", "dentist", "clinic", "hospital", "atm", "mall"
+    ]
+
+    return any(k in t for k in es) or any(k in t for k in en)
+
+
+def _places_query_from_text(text: str) -> str:
+    t = (text or "").strip()
+    if not t:
+        return ""
+    low = t.lower()
+    # Default Panama for your current tester base (can be improved later)
+    if ("panama" not in low) and ("panamá" not in low):
+        t = f"{t}, Panama"
+    return t
+
+
+def _reply_language(text: str) -> str:
+    t = (text or "").lower()
+    spanish_markers = ["á", "é", "í", "ó", "ú", "ñ", "cerca", "dónde", "donde", "recom", "busca", "encuentra", "panamá"]
+    return "es" if any(m in t for m in spanish_markers) else "en"
 
 
 # --------------------------------------------------
@@ -642,6 +716,118 @@ async def _process_text_pipeline(
             )
         return
 
+
+
+    # --------------------------------------------------
+    # Number-to-details (Places)
+    # If the last reply was a Places list, user can respond with "1".."5"
+    # --------------------------------------------------
+    if text.isdigit():
+        sel = int(text)
+        sess = _places_session_get(chat_id)
+        if sess and 1 <= sel <= 5:
+            # Optional TTL: 10 minutes
+            import time
+            if int(time.time()) - int(sess.get("ts", 0)) <= 600:
+                results = sess.get("results") or []
+                idx = sel - 1
+                if idx < len(results):
+                    pid = (results[idx] or {}).get("place_id")
+                    if pid:
+                        d = place_details(pid)
+                        lang = _reply_language(text)
+
+                        if isinstance(d, dict) and d.get("error"):
+                            msg = ("Se cayó el detalle del lugar, Boss."
+                                   if lang == "es" else "Place details failed, Boss.")
+                            await update.message.reply_text(msg)
+                            return
+
+                        name = (d.get("name") or "?")
+                        addr = (d.get("address") or "")
+                        phone = (d.get("phone") or "")
+                        rating = d.get("rating")
+                        website = d.get("website") or ""
+                        maps_url = d.get("maps_url") or (results[idx] or {}).get("maps_url") or ""
+
+                        # Format HTML for Telegram
+                        parts = [f"{name}"]
+                        if rating is not None:
+                            parts.append(f"⭐ {rating}")
+                        if addr:
+                            parts.append(addr)
+                        if phone:
+                            parts.append(f"📞 {phone}")
+                        if website:
+                            parts.append(f"🌐 {website}")
+                        if maps_url:
+                            parts.append(f"🗺️ {maps_url}")
+
+                        msg = "\n".join(parts)
+                        await update.message.reply_text(
+                            msg,
+                            parse_mode=None,
+                            disable_web_page_preview=True,
+                        )
+                        return
+
+    # --------------------------------------------------
+    # Natural language → Google Places (MVP)
+    # --------------------------------------------------
+    if _looks_like_places_request(text):
+        q = _places_query_from_text(text)
+        try:
+            results = places_search(q, limit=5)
+        except Exception as e:
+            logger.exception(f"Places search failed: {e}")
+            await update.message.reply_text(
+                "Se cayó la búsqueda de lugares, Boss. Intenta otra vez en un minuto."
+                if _reply_language(text) == "es"
+                else "Places search failed, Boss. Try again in a minute."
+            )
+            return
+
+        # Save results so user can reply with a number for details
+        if isinstance(results, list):
+            _places_session_set(chat_id, results)
+
+        if not results:
+            await update.message.reply_text(
+                "No encontré resultados con eso, Boss. Prueba con más detalle (tipo + zona)."
+                if _reply_language(text) == "es"
+                else "No results for that, Boss. Try adding more detail (type + area)."
+            )
+            return
+
+        lang = _reply_language(text)
+        lines = []
+        for i, r in enumerate(results, start=1):
+            name = (r.get("name") or "?")
+            addr = r.get("address") or r.get("formatted_address") or ""
+            rating = r.get("rating")
+            maps_url = r.get("maps_url") or ""
+
+            part = f"{i}) {name}"
+            if rating is not None:
+                part += f" ⭐ {rating}"
+            if addr:
+                part += f"\n{addr}"
+            if maps_url:
+                part += f"\n🗺️ {maps_url}"
+
+            lines.append(part)
+
+        header = "Aquí tienes, Boss:" if lang == "es" else "Here you go, Boss:"
+        footer = ("\n\nResponde con un número (1–5) para ver detalles." if lang == "es" else "\n\nReply with a number (1–5) to see details.")
+
+        await update.message.reply_text(
+            header + "\n\n" + "\n\n".join(lines) + footer,
+            parse_mode=None,
+            disable_web_page_preview=True,
+        )
+        return
+
+
     # Load context + facts
     try:
         recent = get_recent_messages(chat_id=chat_id, limit=12)
@@ -685,6 +871,76 @@ async def _process_text_pipeline(
         )
 
 
+
+# --------------------------------------------------
+# Semantic Memory Commands (FAISS)
+# --------------------------------------------------
+_semantic = None
+
+def _get_semantic():
+    global _semantic
+    if _semantic is None:
+        # Store per-repo, persistent on disk
+        _semantic = MemoryEmbeddings(store_dir="/opt/val0/semantic/faiss_store")
+    return _semantic
+
+
+async def sremember_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    text = " ".join(context.args).strip() if context.args else ""
+    if not text:
+        await update.message.reply_text("Uso: /sremember <texto a guardar>")
+        return
+
+    try:
+        import time
+        sem = _get_semantic()
+        sem.add_memory(
+            text=text,
+            meta={
+                "chat_id": str(chat_id),
+                "ts": int(time.time()),
+                "source": "telegram",
+            },
+        )
+        await update.message.reply_text("✅ Guardado en memoria semántica.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Falló /sremember: {type(e).__name__}: {e}")
+
+
+async def ssearch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    query = " ".join(context.args).strip() if context.args else ""
+    if not query:
+        await update.message.reply_text("Uso: /ssearch <consulta>")
+        return
+
+    try:
+        sem = _get_semantic()
+        hits = sem.search(query=query, k=5)
+
+        # Filter to this chat only (since FAISS store is shared)
+        hits = [h for h in hits if str(h.get("meta", {}).get("chat_id", "")) == str(chat_id)]
+
+        if not hits:
+            await update.message.reply_text("No encontré nada relevante en memoria semántica para este chat.")
+            return
+
+        lines = ["Resultados (memoria semántica):"]
+        for i, h in enumerate(hits, start=1):
+            score = h.get("score", 0.0)
+            meta = h.get("meta", {}) or {}
+            text = (meta.get("text") or "").strip()
+            if len(text) > 220:
+                text = text[:217] + "..."
+            lines.append(f"{i}) {score:.4f} — {text}")
+
+        await update.message.reply_text("\n".join(lines))
+    except Exception as e:
+        await update.message.reply_text(f"❌ Falló /ssearch: {type(e).__name__}: {e}")
+
+
+
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.text:
         await _process_text_pipeline(update, context, update.message.text.strip())
@@ -695,7 +951,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 def main():
     init_db()
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).defaults(Defaults(parse_mode=None)).build()
 
     # Commands
     app.add_handler(CommandHandler("start", start))
@@ -705,6 +961,8 @@ def main():
     app.add_handler(CommandHandler("notes", notes_cmd))
     app.add_handler(CommandHandler("search", search_cmd))
     app.add_handler(CommandHandler("place", place_cmd))
+    app.add_handler(CommandHandler("sremember", sremember_cmd))
+    app.add_handler(CommandHandler("ssearch", ssearch_cmd))
 
     # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

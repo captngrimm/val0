@@ -1,16 +1,41 @@
-# Environment files
+# Secrets
 .env
+*.env
 
-# Python cache
+# Python
+.venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Virtual environment
-.venv/
-
-# Memory databases
+# Local DBs
 *.db
+*.sqlite
+*.sqlite3
 
-# Logs
+# Logs / runtime artifacts
 logs/
-val0_memory.db
+tools/forgeexec/logs/
+*.log
+
+# local backups / scratch
+backups/
+docs/
+semantic/
+*.bak
+*.bak.*
+bot.py.bak.*
+bot.py.save*
+bot.py.before_*
+bot.py.pre_*
+places/*.bak.*
+tools/forgeexec/backups/
+
+# local task scratch (keep out of git unless you explicitly productize it)
+tasks.json
+tools/forgeexec/tasks/*.json
+
+# misc
+.DS_Store

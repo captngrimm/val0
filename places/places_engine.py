@@ -1,10 +1,20 @@
 import os
 import requests
+from urllib.parse import quote
 
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY")
 
 BASE_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
 BASE_DETAIL_URL = "https://maps.googleapis.com/maps/api/place/details/json"
+
+
+def _maps_url(name: str, place_id: str) -> str:
+    """Return a clickable Google Maps URL for Telegram."""
+    n = (name or "place").strip()
+    pid = (place_id or "").strip()
+    q = quote(n)
+    # Use query + query_place_id for best match
+    return f"https://www.google.com/maps/search/?api=1&query={q}&query_place_id={pid}"
 
 
 def places_search(query: str, limit: int = 5):
@@ -48,6 +58,7 @@ def places_search(query: str, limit: int = 5):
                 "rating": item.get("rating"),
                 "types": item.get("types"),
                 "place_id": item.get("place_id"),
+                "maps_url": _maps_url(item.get("name"), item.get("place_id")),
             }
         )
 
@@ -95,4 +106,5 @@ def place_details(place_id: str):
         "opening_hours": result.get("opening_hours"),
         "rating": result.get("rating"),
         "website": result.get("website"),
+        "maps_url": _maps_url(result.get("name"), place_id),
     }
