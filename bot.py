@@ -2,6 +2,7 @@ import time
 import os
 import logging
 import unicodedata
+import re
 from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
@@ -186,13 +187,17 @@ def call_val_openai(
                 {
                     "role": "system",
                     "content": (
-                        "MEMORIA SEMÁNTICA (solo apoyo, prioridad baja):\n"
+                        "=== MEMORIA SEMÁNTICA (READ-ONLY / ASISTIVA) ===\n"
+                        "Estos son fragmentos previos proporcionados por el Boss (pueden estar incompletos).\n"
+                        "Trátalos como pistas, no como hechos verificados.\n"
                         "- Úsala SOLO si es claramente relevante al mensaje actual.\n"
                         "- NUNCA cambies de tema por algo leído aquí.\n"
                         "- NO la cites, NO la repitas, NO la enumeres.\n"
-                        "- Si no aplica, IGNÓRALA.\n"
-                        "Contenido:\n"
+                        "- NO edites ni “corrijas” estos fragmentos (solo apoyo).\n"
+                        "- Si hay duda o ambigüedad, PREGUNTA al Boss para confirmar.\n"
+                        "— BEGIN SNIPPETS (READ-ONLY) —\n"
                         + semantic_block
+                        + "\n— END SNIPPETS —"
                     ),
                 }
             )
@@ -625,27 +630,90 @@ def _semantic_recall_block(chat_id: int, query: str, k: int = 5) -> str:
     """
     Return a short bullet block of semantic memories relevant to this chat/query.
     Safe: never throws.
+
+    Precision hardening:
+    - Keeps existing length/control gating unchanged (handled by caller).
+    - Does NOT change memory write behavior.
+    - Filters candidate hits with a lightweight lexical relevance check to reduce noisy/off-topic recalls.
     """
     try:
         sem = _get_semantic()
         hits = sem.search(query=query, k=k) or []
-        filtered = []
+
+        # Chat isolation (only memories from this chat)
+        candidates = []
         for h in hits:
             if not isinstance(h, dict):
                 continue
             meta = h.get("meta", {}) or {}
-            if str(meta.get("chat_id", "")) == str(chat_id):
-                filtered.append(h)
+            if str(meta.get("chat_id", "")) != str(chat_id):
+                continue
 
-        if not filtered:
-            return ""
-
-        lines = []
-        for h in filtered[:k]:
-            meta = h.get("meta", {}) or {}
             txt = (meta.get("text") or "").strip()
             if not txt:
                 continue
+
+            score = h.get("score", None)
+            candidates.append({"text": txt, "score": score})
+
+        if not candidates:
+            return ""
+
+        # --- lexical relevance filter (score-agnostic, reduces off-topic recalls) ---
+        def _tok(s: str):
+            s = _norm_text(s or "")
+            # Keep words with letters/numbers, strip punctuation-ish
+            raw = re.findall(r"[a-z0-9]+", s)
+            # Drop tiny tokens and common stopwords (ES+EN)
+            stop = {
+                "a","an","and","are","as","at","be","but","by","do","does","did","for","from","how","i","if","in","is","it",
+                "me","my","of","on","or","so","that","the","this","to","was","were","what","when","where","who","why","you",
+                "your","yours","we","our","ours","they","their","them","he","she","him","her","its",
+                "el","la","los","las","un","una","unos","unas","y","o","de","del","al","por","para","con","sin","que","como",
+                "cuando","donde","quien","quienes","cual","cuales","mi","mis","tu","tus","su","sus","yo","me","te","se","es",
+                "son","era","fue","ser","estar","estoy","estas","esta","estaba","estaban","en","lo","le","les","ya","si",
+                "no","pero","porque","porq","pq","muy","mas","menos","tambien","también","aqui","aquí","ahi","ahí",
+            }
+            out = []
+            for w in raw:
+                if len(w) < 3:
+                    continue
+                if w in stop:
+                    continue
+                out.append(w)
+            return set(out)
+
+        q_tokens = _tok(query)
+        if q_tokens:
+            filtered = []
+            seen = set()
+            for c in candidates:
+                t = c["text"]
+                if t in seen:
+                    continue
+                seen.add(t)
+
+                t_tokens = _tok(t)
+                # Require at least one meaningful shared token OR substring match on tokens
+                if (q_tokens & t_tokens):
+                    filtered.append(c)
+                    continue
+                # Substring fallback (handles compounds / short queries)
+                t_norm = _norm_text(t)
+                if any(tok in t_norm for tok in q_tokens):
+                    filtered.append(c)
+
+            candidates = filtered
+
+        if not candidates:
+            return ""
+
+        # Cap returned snippets (higher precision, less noise)
+        MAX_SNIPPETS = 3
+
+        lines = []
+        for c in candidates[:MAX_SNIPPETS]:
+            txt = c["text"]
             if len(txt) > 240:
                 txt = txt[:237] + "..."
             lines.append(f"- {txt}")
