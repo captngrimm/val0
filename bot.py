@@ -235,6 +235,54 @@ def _norm_text(s: str) -> str:
     s = ''.join(ch for ch in s if not unicodedata.combining(ch))
     return s
 
+
+def _extract_area_hint(text: str) -> str:
+    """Extract a short area/neighborhood hint from user text for Places UX.
+
+    Purpose: improve conversational disambiguation copy only.
+    Returns '' when no known area is found.
+    """
+    t = _norm_text((text or '').strip())
+    if not t:
+        return ""
+
+    anchors = [
+        "villa zaita", "las cumbres", "cumbres",
+        "albrook", "multiplaza", "via españa", "via espana", "vía españa", "vía espana",
+        "el cangrejo", "cangrejo",
+        "costa del este", "san francisco", "obarrio", "marbella", "paitilla",
+        "el dorado", "tumba muerto", "clayton", "condado", "casco viejo", "tocumen",
+        "centennial", "brisas", "brisas del golf",
+    ]
+    for a in anchors:
+        if a in t:
+            # Return a nicely cased hint for copy; keep it short and human.
+            if a == "via espana" or a == "vía espana":
+                return "Vía España"
+            if a == "via españa" or a == "vía españa":
+                return "Vía España"
+            if a == "el cangrejo":
+                return "El Cangrejo"
+            if a == "costa del este":
+                return "Costa del Este"
+            if a == "san francisco":
+                return "San Francisco"
+            if a == "brisas del golf":
+                return "Brisas del Golf"
+            if a == "casco viejo":
+                return "Casco Viejo"
+            if a == "tumba muerto":
+                return "Tumba Muerto"
+            if a == "el dorado":
+                return "El Dorado"
+            if a == "las cumbres":
+                return "Las Cumbres"
+            if a == "villa zaita":
+                return "Villa Zaita"
+            # Default: title-case words
+            return " ".join([w.capitalize() for w in a.split()])
+    return ""
+
 # --------------------------------------------------
 # NLP Helpers
 # --------------------------------------------------
@@ -372,137 +420,41 @@ def _is_control_ack(text: str) -> bool:
     return False
 
 def _is_places_intent(text: str) -> bool:
-    """Natural-language Places intent detection. Accent-insensitive.
-
-    Goal: reduce false negatives on Panama Spanish / Spanglish while keeping false positives low.
-    NOTE: /place command and drill-down behavior are unchanged.
-    """
+    """Explicit Places search intent only. Accent-insensitive."""
     t = _norm_text((text or "").strip())
     if not t:
         return False
     if _is_control_ack(t):
         return False
-
-    # Light negative guardrails for casual chatter (avoid triggering Places on feelings/opinions)
-    if any(p in t for p in ("me cae mal", "me gusta", "odio", "amo")) and not any(x in t for x in ("cerca", "near", "donde", "where", "busca", "find", "search")):
-        return False
-
-    # Strong question / locator phrases (high signal)
-    q_phrases = [
-        "donde queda", "donde hay", "donde encuentro", "donde consigo",
-        "where is", "where's", "where can i find", "where to find",
+    intent_terms = [
+        "cerca", "cerca de", "busca", "buscame", "encuentra",
+        "recomiendame", "donde queda",
+        "near", "near me", "find", "search", "where is", "recommend",
     ]
-
-    # Search verbs (medium signal)
-    verbs = [
-        "busca", "buscame", "buscame", "busco", "ando buscando", "encuentra", "encuentrame",
-        "recomiendame", "recomienda", "recomendame", "sugiereme", "sugiere",
-        "ubica", "ubicame", "me ubicas", "me consigues",
-        "find", "search", "look for", "recommend",
-    ]
-
-    # Location cues (medium signal)
-    loc_cues = [
-        "cerca", "cerca de", "por", "por el", "por la", "en", "pa ", "para ", "via ", "vía ",
-        "near", "near me", "around", "by ", "in ",
-    ]
-
-    # Place categories / brands (used to keep false positives low)
-    place_terms = [
-        # ES common
-        "farmacia", "farmacias", "gasolinera", "gasolineras", "restaurante", "restaurantes",
-        "cafeteria", "cafeterias", "cafe", "cafes", "café", "coffeeshop", "coffee shop",
-        "mall", "centro comercial", "super", "supermercado", "supermercados",
-        "hospital", "hospitales", "clinica", "clinicas", "dentista", "dentistas",
-        "hotel", "hoteles", "bar", "bares", "gym", "gimnasio", "gimnasios",
-        # EN common
-        "pharmacy", "pharmacies", "gas station", "gasstation", "restaurant", "restaurants",
-        "cafe", "cafes", "coffee", "coffee shop", "hotel", "hotels", "bar", "bars", "gym", "gyms",
-        "clinic", "clinics", "dentist", "dentists",
-        # Brands
-        "mcdonalds", "mcdonald", "starbucks",
-    ]
-
-    has_q = any(p in t for p in q_phrases)
-    has_verb = any(v in t for v in verbs)
-    has_loc = any(c in t for c in loc_cues)
-    has_place = any(p in t for p in place_terms)
-
-    # Require a meaningful combination to keep false positives low:
-    # - question phrase + place term ("donde queda un mcdonald's")
-    # - verb + (place term or location cue)
-    # - place term + location cue ("restaurantes por el cangrejo")
-    if has_q and has_place:
-        return True
-    if has_verb and (has_place or has_loc):
-        return True
-    if has_place and has_loc:
-        return True
-
-    return False
-
+    return any(term in t for term in intent_terms)
 
 def _looks_like_places_request(text: str) -> bool:
-    """Second-stage Places request check.
-
-    Keeps false positives low by requiring a place category/brand and a location cue,
-    or a strong question/verb pattern.
-    """
     t = _norm_text((text or "").strip())
     if not t:
         return False
-    if _is_control_ack(t):
-        return False
 
-    # Place categories / brands
-    place_terms = [
-        # ES
-        "farmacia", "farmacias", "gasolinera", "gasolineras", "restaurante", "restaurantes",
-        "cafeteria", "cafeterias", "cafe", "cafes", "café", "coffee shop", "coffeeshop",
-        "hotel", "hoteles", "bar", "bares", "gimnasio", "gimnasios", "gym", "gyms",
-        "dentista", "dentistas", "clinica", "clinicas", "hospital", "hospitales",
-        # EN
-        "pharmacy", "pharmacies", "gas station", "restaurant", "restaurants", "cafe", "cafes",
-        "coffee shop", "hotel", "hotels", "bar", "bars", "gym", "gyms", "dentist", "dentists",
-        "clinic", "clinics", "hospital", "hospitals",
-        # Brands
-        "mcdonalds", "mcdonald", "starbucks",
+    intent_es = [
+        "cerca de", "cerca", "busca", "buscame", "encuentra",
+        "donde queda", "recomiendame",
+        "restaurantes", "pizzeria", "pizzerias", "cafes", "farmacias",
+        "hoteles", "bares", "gimnasios", "dentistas", "clinicas",
+    ]
+    intent_en = [
+        "near", "near me", "find", "search", "where is", "recommend",
+        "restaurants", "pizza", "cafes", "pharmacies", "hotels", "bars", "gyms", "dentists", "clinics",
     ]
 
-    # Location cues / connectors
-    loc_cues = [
-        "cerca", "cerca de", "por", "por el", "por la", "en", "via ", "vía ", "near", "near me", "around", "by ",
-    ]
+    anchors = ["albrook", "panama", "centennial", "via israel", "ciudad", "mall"]
 
-    # Panama anchors (helps with non-standard phrasing, slang, Spanglish)
-    anchors = [
-        "albrook", "via espana", "via españa", "via israel", "el cangrejo", "cangrejo",
-        "multiplaza", "costa del este", "san francisco", "obarrio", "marbella", "paitilla",
-        "el dorado", "tumba muerto", "clayton", "condado", "casco viejo", "tocumen", "aeropuerto",
-        "centennial", "brisas",
-    ]
+    has_intent = any(k in t for k in intent_es) or any(k in t for k in intent_en)
+    has_anchor = any(a in t for a in anchors)
 
-    verbs_or_questions = [
-        "donde queda", "donde hay", "donde encuentro", "donde consigo",
-        "busca", "buscame", "busco", "encuentra", "recomiendame", "recomienda", "ubicame", "ubica",
-        "find", "search", "where is", "where's", "recommend",
-        "necesito",  # only counts if place_terms exists
-    ]
-
-    has_place = any(p in t for p in place_terms)
-    has_loc = any(c in t for c in loc_cues) or any(a in t for a in anchors)
-    has_vq = any(v in t for v in verbs_or_questions)
-
-    # Keep it strict: we only proceed when it clearly looks like a places lookup.
-    # - place term + (location cue or anchor)
-    # - (question/verb) + place term
-    if has_place and has_loc:
-        return True
-    if has_vq and has_place:
-        return True
-
-    return False
-
+    return bool(has_intent and (has_anchor or "cerca" in t or "near" in t))
 
 def _places_query_from_text(text: str) -> str:
     t = (text or "").strip()
