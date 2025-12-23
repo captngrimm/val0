@@ -39,3 +39,8 @@ tools/forgeexec/tasks/*.json
 
 # misc
 .DS_Store
+
+# local backups / logs
+*.bak*
+*.good_*
+DEPLOY_LOG.txt
