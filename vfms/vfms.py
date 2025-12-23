@@ -2,7 +2,6 @@
 import argparse
 import hashlib
 import json
-import os
 import shutil
 import sqlite3
 import subprocess
@@ -13,10 +12,12 @@ DATA_ROOT = Path("vfms_data")
 RAW_DIR = DATA_ROOT / "raw"
 EXTRACTED_DIR = DATA_ROOT / "extracted"
 INDEX_DIR = DATA_ROOT / "index"
+OUTPUTS_DIR = DATA_ROOT / "outputs"
+
 MANIFEST = INDEX_DIR / "manifest.jsonl"
 SQLITE_DB = INDEX_DIR / "vfms.sqlite"
 
-# v0: simple chunking by characters (auditable, deterministic)
+# v0: deterministic chunking
 CHUNK_SIZE = 1500
 CHUNK_OVERLAP = 150
 
@@ -123,12 +124,10 @@ def extract(ingest_id: str, ocr_mode: str) -> None:
         ok = run_pdftotext(raw_path, out_txt)
         if not ok:
             raise SystemExit("ERROR: pdftotext not available or failed. Install poppler-utils or use a different extraction method.")
-        pages = None
         ocr_used = False
     elif suffix in [".txt", ".md", ".csv", ".log"]:
         engine = "direct"
         extract_text_only(raw_path, out_txt)
-        pages = None
         ocr_used = False
     elif suffix in [".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"]:
         if ocr_mode == "off":
@@ -146,7 +145,6 @@ def extract(ingest_id: str, ocr_mode: str) -> None:
         if not out_txt.exists():
             raise SystemExit("ERROR: tesseract did not produce output text.")
         ocr_used = True
-        pages = None
     else:
         raise SystemExit(f"ERROR: unsupported file type for extraction in v0: {suffix}")
 
@@ -214,8 +212,7 @@ def chunk_text(txt: str):
     n = len(txt)
     step = max(1, CHUNK_SIZE - CHUNK_OVERLAP)
     while i < n:
-        chunk = txt[i:i+CHUNK_SIZE]
-        chunks.append(chunk)
+        chunks.append(txt[i:i+CHUNK_SIZE])
         i += step
     return chunks
 
@@ -229,7 +226,6 @@ def index_one(ingest_id: str) -> None:
 
     conn = ensure_db()
     try:
-        # Upsert doc record
         conn.execute("""
         INSERT INTO docs (ingest_id, source_filename, raw_path, text_path, created_at_utc)
         VALUES (?, ?, ?, ?, ?)
@@ -239,7 +235,6 @@ def index_one(ingest_id: str) -> None:
           text_path=excluded.text_path
         """, (ingest_id, source_filename, str(raw_path), str(txt_path), utc_now()))
 
-        # Idempotent re-index: wipe old chunks for this ingest_id
         conn.execute("DELETE FROM chunks WHERE ingest_id = ?", (ingest_id,))
 
         created = utc_now()
@@ -276,8 +271,7 @@ def index_all():
     for ingest_id in ids:
         index_one(ingest_id)
 
-
-def query_db(q: str, top: int = 5, ingest_id: str | None = None) -> None:
+def query_db(q: str, top: int = 5, ingest_id: str | None = None) -> list[tuple[str, str, str, str]]:
     if not SQLITE_DB.exists():
         raise SystemExit("ERROR: index DB not found. Run: vfms index <ingest_id>")
 
@@ -303,20 +297,58 @@ def query_db(q: str, top: int = 5, ingest_id: str | None = None) -> None:
         LIMIT ?
         """
         params.append(int(top))
-
         rows = conn.execute(sql, params).fetchall()
-        if not rows:
-            print("No matches.")
-            return
-
-        for (iid, fname, cid, ctext) in rows:
-            snippet = ctext.replace("\n", " ").strip()
-            if len(snippet) > 240:
-                snippet = snippet[:240] + "…"
-            print(f"- ingest_id: {iid} | file: {fname} | chunk: {cid}")
-            print(f"  {snippet}")
+        return rows
     finally:
         conn.close()
+
+def print_query(rows):
+    if not rows:
+        print("No matches.")
+        return
+    for (iid, fname, cid, ctext) in rows:
+        snippet = ctext.replace("\n", " ").strip()
+        if len(snippet) > 240:
+            snippet = snippet[:240] + "…"
+        print(f"- ingest_id: {iid} | file: {fname} | chunk: {cid}")
+        print(f"  {snippet}")
+
+def summarize(prompt: str, top: int = 5, ingest_id: str | None = None, out_path: str | None = None) -> None:
+    # v0: summarization is "grounded compilation" (no model). It writes chunks with citations.
+    rows = query_db(prompt, top=top, ingest_id=ingest_id)
+    if not rows:
+        raise SystemExit("ERROR: no matches to summarize from. Try a different query.")
+
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    if out_path:
+        out = Path(out_path)
+    else:
+        slug = prompt.lower().replace(" ", "_")[:40]
+        out = OUTPUTS_DIR / f"summary__{slug}.md"
+
+    with out.open("w", encoding="utf-8") as f:
+        f.write("# VFMS v0 Grounded Output\n\n")
+        f.write(f"**Query:** {prompt}\n\n")
+        if ingest_id:
+            f.write(f"**Doc filter:** {ingest_id}\n\n")
+        f.write("## Sources (extracted chunks)\n\n")
+        for (iid, fname, cid, text) in rows:
+            f.write(f"### {fname} — {cid}\n\n")
+            f.write(text.strip() + "\n\n")
+        f.write("---\n")
+        f.write("_Generated manually from indexed chunks. No background processing._\n")
+
+    append_manifest({
+        "type": "summarize_update",
+        "prompt": prompt,
+        "ingest_id": ingest_id,
+        "top": top,
+        "out_path": str(out),
+        "created_at_utc": utc_now()
+    })
+
+    print(f"Summary written to: {out}")
 
 def main():
     ap = argparse.ArgumentParser(prog="vfms", description="VFMS v0 (manual triggers only)")
@@ -329,25 +361,28 @@ def main():
     p_ext.add_argument("ingest_id", help="Ingest ID to extract")
     p_ext.add_argument("--ocr", choices=["auto", "force", "off"], default="auto", help="OCR mode (only applies to images)")
 
-    
+    p_idx = sub.add_parser("index", help="Index an extracted ingest_id into SQLite (manual; no background)")
+    p_idx.add_argument("ingest_id", nargs="?", help="Ingest ID to index")
+    p_idx.add_argument("--all", action="store_true", help="Index all extracted .txt files")
+
     p_q = sub.add_parser("query", help="Directed retrieval from SQLite (manual; no background)")
     p_q.add_argument("text", help="Query text (substring match in v0)")
     p_q.add_argument("--top", type=int, default=5, help="Max results")
     p_q.add_argument("--doc", dest="doc", default=None, help="Filter to a specific ingest_id")
 
-    p_idx = sub.add_parser("index", help="Index an extracted ingest_id into SQLite (manual; no background)")
-    p_idx.add_argument("ingest_id", nargs="?", help="Ingest ID to index")
-    p_idx.add_argument("--all", action="store_true", help="Index all extracted .txt files")
+    p_s = sub.add_parser("summarize", help="Generate grounded Markdown output (manual; no background)")
+    p_s.add_argument("prompt", help="Query text to retrieve chunks for the output")
+    p_s.add_argument("--top", type=int, default=5, help="Max chunks")
+    p_s.add_argument("--doc", dest="doc", default=None, help="Filter to a specific ingest_id")
+    p_s.add_argument("--out", dest="out", default=None, help="Output .md path")
 
     args = ap.parse_args()
 
     if args.cmd == "ingest":
         ingest_file(Path(args.path))
+
     elif args.cmd == "extract":
         extract(args.ingest_id, args.ocr)
-    
-    elif args.cmd == "query":
-        query_db(args.text, top=args.top, ingest_id=args.doc)
 
     elif args.cmd == "index":
         if args.all:
@@ -356,6 +391,13 @@ def main():
             index_one(args.ingest_id)
         else:
             raise SystemExit("ERROR: provide an ingest_id or use --all")
+
+    elif args.cmd == "query":
+        rows = query_db(args.text, top=args.top, ingest_id=args.doc)
+        print_query(rows)
+
+    elif args.cmd == "summarize":
+        summarize(args.prompt, top=args.top, ingest_id=args.doc, out_path=args.out)
 
 if __name__ == "__main__":
     main()
