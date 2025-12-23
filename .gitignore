@@ -39,3 +39,16 @@ tools/forgeexec/tasks/*.json
 
 # misc
 .DS_Store
+
+# local backups / logs
+*.bak*
+*.good_*
+DEPLOY_LOG.txt
+
+# --- allow frozen authoritative docs (Val0 / VFMS v0 source of truth) ---
+!docs/
+!docs/PERSONA.md
+!docs/VAL0_STATE.md
+!docs/VMFS_v0.md
+!docs/SIDEBOARD.md
+!docs/POST_MVP_QUEUE.md

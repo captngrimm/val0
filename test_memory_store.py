@@ -1,24 +1,30 @@
-from memory_store import init_db, save_message, get_recent_messages
+import unittest
+import time
+
+from memory_store import init_db, insert_message, get_recent_messages
 
 
-def main() -> None:
-    chat_id = 123456
-    print("Initializing DB…")
-    init_db()
+class TestMemoryStore(unittest.TestCase):
+    def test_insert_and_fetch_recent(self):
+        init_db()
 
-    print("Inserting sample messages…")
-    mid1 = save_message(chat_id, "user", "Hola, Val", None, "test-model")
-    mid2 = save_message(chat_id, "assistant", "Hola, Boss", 999, "test-model")
+        chat_id = int(time.time())  # unique enough for test runs
+        content = f"unit-test-{chat_id}"
 
-    print(f"Inserted IDs: {mid1}, {mid2}")
+        insert_message(
+            chat_id=chat_id,
+            role="user",
+            content=content,
+            telegram_message_id=None,
+            model_used=None,
+        )
 
-    print("Fetching recent messages…")
-    msgs = get_recent_messages(chat_id, limit=10)
-    for m in msgs:
-        print(m["id"], m["role"], m["content"])
-
-    print("Done.")
+        rows = get_recent_messages(chat_id=chat_id, limit=5)
+        self.assertTrue(isinstance(rows, list))
+        self.assertTrue(len(rows) >= 1)
+        # newest should contain our content somewhere
+        self.assertTrue(any((r.get("content") == content) for r in rows))
 
 
 if __name__ == "__main__":
-    main()
+    unittest.main()
