@@ -1,221 +1,123 @@
-📄 VFMS_INTERPRETER_MODE.md
+VFMS Interpreter Mode — Specification (v1.0)
 
-Version: v0.1
-Status: Draft (Foundational)
+Status: Documentation-only
+Scope: VFMS v0 compatible
+Automation: None
+Agents: None
 
-1. Purpose
+Purpose
 
-Interpreter Mode defines how an AI assistant (e.g., Val) may assist an operator using VFMS without compromising accuracy, auditability, or safety.
+VFMS Interpreter Mode is a presentation layer that renders corpus-grounded outputs for humans at varying skill levels.
 
-The goal is to bridge the gap between expert-authored documentation and novice or intermediate operators, while preventing hallucinated commands, invented configurations, or unsafe assumptions.
+It does not ingest data, extract text, index content, or execute actions.
 
-Interpreter Mode is explicitly opt-in and operates on top of VFMS outputs.
+Interpreter Mode only operates on content already retrieved by VFMS v0.
 
-2. Design Principles
-2.1 Truth First
+Its function is to transform verified excerpts into usable, confidence-building guidance without inventing facts or procedures.
 
-All vendor-specific facts, commands, and sequences must originate from the VFMS corpus.
+What Interpreter Mode DOES
 
-Interpreter Mode may not invent authoritative steps.
+Explains retrieved documentation in plain language
 
-2.2 Explicit Uncertainty
+Preserves verbatim source excerpts
 
-When required information is missing, the system must:
+Separates facts from explanations
 
-stop forward execution
+Enforces hard stops when required information is missing
 
-surface the uncertainty
+Generates role-appropriate guidance (e.g., neophyte, intermediate, advanced)
 
-convert it into questions or branches
+Produces human-readable artifacts (Markdown, text)
 
-2.3 Human-in-Control
+Interpreter Mode never acts without an explicit user request.
 
-The operator always decides:
+What Interpreter Mode DOES NOT Do
 
-what level of explanation they want
+Does not invent commands or procedures
 
-when to proceed
+Does not infer undocumented behavior
 
-when to escalate or verify externally
+Does not automate execution
 
-3. Output Structure (Mandatory)
+Does not modify source documents
 
-Every Interpreter Mode response must contain the following sections in order:
+Does not run background processes
 
-A. Verified Steps (Corpus-Sourced)
+Does not learn or adapt autonomously
 
-Content in this section:
+Does not replace authoritative documentation
 
-Exact commands
+If a step cannot be supported by source material, Interpreter Mode stops and asks for clarification.
 
-Required sequences
+Skill Level Rendering
 
-Vendor-defined behavior
+The same retrieved content may be rendered differently depending on operator level:
 
-Rules:
+Beginner (Neophyte)
 
-Every item must be traceable to the VFMS corpus
+Expanded explanations
 
-Citations must include document name and location (page, section, or chunk ID)
+Frequent hard stops
 
-No inference or extrapolation allowed
+Explicit questions to ask customers or senior engineers
 
-B. Explain Like I’m New (AI Coaching)
+Intermediate
 
-Purpose:
+Condensed explanations
 
-Reduce cognitive load for inexperienced operators
+Risks highlighted
 
-Allowed content:
+Fewer interruptions
 
-Plain-language explanations of concepts
+Advanced
 
-Why a step exists
+Commands and procedures first
 
-What problem the step prevents
+Assumptions stated explicitly
 
-Common beginner mistakes
+Only critical warnings included
 
-Restrictions:
+Rendering changes presentation only.
+Source truth remains unchanged.
 
-No new commands
+Relationship to VFMS v0
 
-No configuration values
+Interpreter Mode depends on VFMS v0 for:
 
-Educational only
+Ingestion
 
-C. Uncertainty & Required Clarifications
+Extraction
 
-This section is mandatory when assumptions exist.
+Indexing
 
-The AI must:
+Retrieval
 
-Identify missing or ambiguous prerequisites
+Interpreter Mode never bypasses VFMS v0 safeguards.
 
-Explain why each unknown matters
+If VFMS v0 cannot retrieve grounded content, Interpreter Mode cannot proceed.
 
-Convert gaps into actionable questions
+Demonstration Reference
 
-Example prompts:
+See:
 
-“Ask the customer whether this is a physical appliance or virtual.”
+Data Domain Initial Provisioning — Neophyte Guide (DEMO)
 
-“Confirm network bonding mode before proceeding.”
+This document illustrates Interpreter Mode behavior using mock sources.
 
-If critical information is missing, the AI must explicitly recommend pausing execution.
+Non-Goals (Explicit)
 
-D. Operator Flow (Decision Tree)
+Interpreter Mode is not:
 
-Purpose:
+An agent framework
 
-Prevent blind execution
+An automation engine
 
-Format:
+A decision-maker
 
-IF / THEN branches
+A recommendation system
 
-STOP points when information is insufficient
+A replacement for training or certification
 
-Clear escalation paths
+It exists to make documentation usable, not to replace human responsibility.
 
-Example:
-
-IF new installation → follow Path A  
-IF replacement / migration → follow Path B  
-IF unknown → STOP and collect required information
-
-4. Experience Levels (Training Wheels Toggle)
-
-Interpreter Mode supports explicit operator experience levels:
-
-4.1 Beginner (Neophyte)
-
-Full explanations
-
-Aggressive uncertainty detection
-
-Conservative stop points
-
-High question density
-
-4.2 Intermediate
-
-Assumes core technical literacy
-
-Explanations collapsed or optional
-
-Still flags uncertainty
-
-Checklist-oriented
-
-4.3 Advanced
-
-Commands and sequences first
-
-Minimal explanation
-
-Critical uncertainty only
-
-Assumptions explicitly listed at top
-
-The operator may switch levels per task.
-
-5. Allowed vs Forbidden Behavior
-Allowed
-
-Explain concepts
-
-Generate clarification questions
-
-Suggest safe checkpoints
-
-Recommend escalation
-
-Say “insufficient data”
-
-Forbidden
-
-Invent commands or flags
-
-Guess configuration values
-
-Mask uncertainty
-
-Mix inferred guidance into verified steps
-
-Present “best practices” as vendor facts
-
-6. Relationship to VFMS
-
-VFMS provides truth and grounding
-
-Interpreter Mode provides context, explanation, and safety
-
-Interpreter Mode may never bypass VFMS constraints
-
-Interpreter Mode is a consumer of VFMS, not a replacement.
-
-7. Intended Use Cases
-
-Neophyte operator enablement
-
-On-the-job training
-
-Safe troubleshooting
-
-Customer-facing confidence
-
-Knowledge transfer without tribal loss
-
-8. Non-Goals
-
-Interpreter Mode does not:
-
-Perform autonomous actions
-
-Monitor systems
-
-Recommend changes without user initiation
-
-Replace human judgment
-
+End of Specification
