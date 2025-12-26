@@ -70,3 +70,19 @@ panapass.pdf
 
 # temp
 /tmp/*
+
+# VFMS data (never commit)
+vfms_data/
+vfms_data/**
+
+# Inbox / staged docs (never commit)
+opt/vfms_inbox/
+opt/vfms_inbox/**
+
+# Large artifacts
+*.pdf
+*.zip
+
+# Temp scratch
+/tmp/*.txt
+/tmp/*.tsv
