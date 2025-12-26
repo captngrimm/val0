@@ -52,3 +52,21 @@ DEPLOY_LOG.txt
 !docs/VMFS_v0.md
 !docs/SIDEBOARD.md
 !docs/POST_MVP_QUEUE.md
+
+# --- VFMS runtime artifacts (do not commit) ---
+vfms_data/raw/
+vfms_data/extracted/
+vfms_data/index/
+vfms_data/outputs/legal_noah_docs/
+vfms_data/outputs/legal_noah_docs_ocr/
+vfms_data/outputs/legal_noah_evidence/
+vfms_data/outputs/summary__*.md
+vfms_data/outputs/TEST__*.md
+vfms_data_BAD_IDS_*/
+*.zip
+
+# inbox / misc
+panapass.pdf
+
+# temp
+/tmp/*
