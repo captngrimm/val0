@@ -59,6 +59,37 @@ When a user names a common neighborhood with multiple results, assume the most c
 Avoid immediately asking for numbered selection unless needed
 
 Scope: copy + flow only, no ranking changes
+
+# VAL0 — State Log
+
+## 2025-12-26 — Legal OCR + Case Pipeline v0
+
+### What shipped
+- End-to-end legal document pipeline validated using real court documents
+- OCR normalization via ocrmypdf (Spanish)
+- VFMS grounded summarization (no inference)
+- Per-document facts/dates + evidence extraction
+- Chronological timeline merge
+- Case binder (MD + TSV)
+- OCR confidence audit with human-review handoff
+- One-command rebuild script for legal case artifacts
+
+### What this proves
+- VFMS handles real, dirty PDFs without hallucination
+- System is suitable for legal review workflows
+- Outputs are auditable, traceable, and defensible
+- Pipeline is reproducible (not a one-off)
+
+### Known limitations
+- OCR is not 100% accurate; flagged docs require manual validation
+- Telegram ingestion not yet wired
+- No cross-case memory yet (per-case only)
+
+### Next focus candidates
+- Telegram as ingestion pipe
+- Interpreter / Q&A over case binder
+- Persistent cross-case memory (VAL1)
+
 ---
 
 ## 🛠️ IN PROGRESS (Actively improving)
