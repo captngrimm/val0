@@ -21,8 +21,10 @@ SQLITE_DB = INDEX_DIR / "vfms.sqlite"
 CHUNK_SIZE = 1500
 CHUNK_OVERLAP = 150
 
+
 def utc_now() -> str:
     return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
 
 def sha256_of(path: Path) -> str:
     h = hashlib.sha256()
@@ -31,13 +33,16 @@ def sha256_of(path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
+
 def make_ingest_id() -> str:
-    return datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    return datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
+
 
 def append_manifest(rec: dict) -> None:
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     with MANIFEST.open("a", encoding="utf-8") as f:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
 
 def find_raw_by_ingest_id(ingest_id: str) -> Path:
     if not RAW_DIR.exists():
@@ -46,14 +51,20 @@ def find_raw_by_ingest_id(ingest_id: str) -> Path:
     if not matches:
         raise SystemExit(f"ERROR: no raw file found for ingest_id {ingest_id}")
     if len(matches) > 1:
-        raise SystemExit(f"ERROR: multiple raw files found for ingest_id {ingest_id}: {[m.name for m in matches]}")
+        raise SystemExit(
+            f"ERROR: multiple raw files found for ingest_id {ingest_id}: {[m.name for m in matches]}"
+        )
     return matches[0]
+
 
 def find_extracted_txt(ingest_id: str) -> Path:
     txt = EXTRACTED_DIR / f"{ingest_id}.txt"
     if not txt.exists():
-        raise SystemExit(f"ERROR: extracted text not found for ingest_id {ingest_id}. Run: vfms extract {ingest_id}")
+        raise SystemExit(
+            f"ERROR: extracted text not found for ingest_id {ingest_id}. Run: vfms extract {ingest_id}"
+        )
     return txt
+
 
 def ingest_file(src_path: Path) -> str:
     if not src_path.exists() or not src_path.is_file():
@@ -81,7 +92,7 @@ def ingest_file(src_path: Path) -> str:
         "ocr_used": None,
         "text_path": None,
         "meta_path": None,
-        "notes": ""
+        "notes": "",
     }
     append_manifest(rec)
 
@@ -90,131 +101,145 @@ def ingest_file(src_path: Path) -> str:
     print(f"stored_as: {dest_path}")
     return ingest_id
 
-def run_pdftotext(pdf_path: Path, out_txt: Path) -> bool:
-    try:
-        subprocess.run(["pdftotext", "-layout", str(pdf_path), str(out_txt)], check=True)
-        return True
-    except FileNotFoundError:
-        return False
-    except subprocess.CalledProcessError:
-        return False
 
-def extract_text_only(src_path: Path, out_txt: Path) -> None:
-    data = src_path.read_bytes()
-    try:
-        txt = data.decode("utf-8")
-    except UnicodeDecodeError:
-        txt = data.decode("latin-1", errors="replace")
-    out_txt.write_text(txt, encoding="utf-8")
+def run_pdftotext(pdf_path: Path, out_txt: Path) -> None:
+    # Requires poppler-utils: pdftotext
+    cmd = ["pdftotext", "-layout", str(pdf_path), str(out_txt)]
+    subprocess.run(cmd, check=True)
 
-def extract(ingest_id: str, ocr_mode: str) -> None:
+
+def run_ocrmypdf(pdf_path: Path, out_pdf: Path, lang: str = "eng") -> None:
+    # Requires ocrmypdf + tesseract
+    # Force OCR to ensure a text layer is created
+    cmd = [
+        "ocrmypdf",
+        "--force-ocr",
+        "--deskew",
+        "--clean",
+        "--rotate-pages",
+        "--language",
+        lang,
+        str(pdf_path),
+        str(out_pdf),
+    ]
+    subprocess.run(cmd, check=True)
+
+
+def extract(ingest_id: str, ocr: str = "auto") -> None:
     raw_path = find_raw_by_ingest_id(ingest_id)
     EXTRACTED_DIR.mkdir(parents=True, exist_ok=True)
 
-    out_txt = EXTRACTED_DIR / f"{ingest_id}.txt"
-    out_meta = EXTRACTED_DIR / f"{ingest_id}.json"
+    txt_path = EXTRACTED_DIR / f"{ingest_id}.txt"
+    meta_path = EXTRACTED_DIR / f"{ingest_id}.json"
 
-    suffix = raw_path.suffix.lower()
-    ocr_used = None
-    engine = None
-    pages = None
+    ocr_used = False
 
-    if suffix == ".pdf":
-        engine = "pdftotext"
-        ok = run_pdftotext(raw_path, out_txt)
-        if not ok:
-            raise SystemExit("ERROR: pdftotext not available or failed. Install poppler-utils or use a different extraction method.")
-        ocr_used = False
-    elif suffix in [".txt", ".md", ".csv", ".log"]:
-        engine = "direct"
-        extract_text_only(raw_path, out_txt)
-        ocr_used = False
-    elif suffix in [".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff"]:
-        if ocr_mode == "off":
-            raise SystemExit("ERROR: OCR is off but the input is an image. Re-run with --ocr auto or --ocr force.")
-        engine = "tesseract"
+    # v0 logic:
+    # - Try pdftotext. If it yields almost nothing (or user forces OCR), run OCR and then pdftotext again.
+    # - This is deterministic and auditable.
+    if raw_path.suffix.lower() == ".pdf":
+        tmp_txt = EXTRACTED_DIR / f"{ingest_id}__tmp_pdftotext.txt"
         try:
-            subprocess.run(
-                ["tesseract", str(raw_path), str(out_txt.with_suffix(''))],
-                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
-        except FileNotFoundError:
-            raise SystemExit("ERROR: tesseract not installed. Install tesseract-ocr to extract from images.")
-        except subprocess.CalledProcessError:
-            raise SystemExit("ERROR: tesseract failed on this image.")
-        if not out_txt.exists():
-            raise SystemExit("ERROR: tesseract did not produce output text.")
-        ocr_used = True
-    else:
-        raise SystemExit(f"ERROR: unsupported file type for extraction in v0: {suffix}")
+            run_pdftotext(raw_path, tmp_txt)
+        except Exception as e:
+            tmp_txt.write_text("", encoding="utf-8")
+        text = tmp_txt.read_text(encoding="utf-8", errors="replace")
 
+        needs_ocr = False
+        if ocr == "force":
+            needs_ocr = True
+        elif ocr == "off":
+            needs_ocr = False
+        else:
+            # auto: if text layer is basically empty, OCR it
+            stripped = "".join(ch for ch in text if not ch.isspace())
+            if len(stripped) < 200:
+                needs_ocr = True
+
+        if needs_ocr:
+            ocr_used = True
+            ocr_pdf = EXTRACTED_DIR / f"{ingest_id}__ocr.pdf"
+            # default Spanish for your current legal corpus; adjust if needed
+            run_ocrmypdf(raw_path, ocr_pdf, lang="spa")
+            run_pdftotext(ocr_pdf, txt_path)
+        else:
+            shutil.move(str(tmp_txt), str(txt_path))
+    else:
+        # For now, v0 only supports PDFs in extraction
+        raise SystemExit("ERROR: v0 extract supports only PDFs")
+
+    # Metadata record
     meta = {
-        "type": "extract",
         "ingest_id": ingest_id,
         "raw_path": str(raw_path),
-        "text_path": str(out_txt),
+        "text_path": str(txt_path),
         "ocr_used": ocr_used,
-        "engine": engine,
-        "created_at_utc": utc_now(),
-        "pages": pages,
-    }
-    out_meta.write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-    append_manifest({
-        "type": "extract_update",
-        "ingest_id": ingest_id,
-        "extracted": True,
         "extracted_at_utc": utc_now(),
-        "ocr_used": ocr_used,
-        "text_path": str(out_txt),
-        "meta_path": str(out_meta),
-        "engine": engine
-    })
+    }
+    meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    append_manifest(
+        {
+            "type": "extract_update",
+            "ingest_id": ingest_id,
+            "extracted": True,
+            "extracted_at_utc": utc_now(),
+            "ocr_used": ocr_used,
+            "text_path": str(txt_path),
+            "meta_path": str(meta_path),
+        }
+    )
 
     print(f"Extracted ingest_id: {ingest_id}")
-    print(f"text: {out_txt}")
-    print(f"meta: {out_meta}")
-    print(f"ocr_used: {ocr_used}, engine: {engine}")
+    print(f"text: {txt_path}")
+    print(f"meta: {meta_path}")
+    print(f"ocr_used: {ocr_used}")
 
-def ensure_db():
+
+def chunk_text(text: str) -> list[str]:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    pieces = []
+    i = 0
+    n = len(text)
+    while i < n:
+        j = min(i + CHUNK_SIZE, n)
+        chunk = text[i:j]
+        pieces.append(chunk)
+        if j >= n:
+            break
+        i = max(0, j - CHUNK_OVERLAP)
+    return pieces
+
+
+def ensure_db() -> sqlite3.Connection:
     INDEX_DIR.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(SQLITE_DB))
-    conn.execute("""
+    conn.execute(
+        """
     CREATE TABLE IF NOT EXISTS docs (
-      ingest_id TEXT PRIMARY KEY,
-      source_filename TEXT,
-      raw_path TEXT,
-      text_path TEXT,
-      created_at_utc TEXT
+        ingest_id TEXT PRIMARY KEY,
+        source_filename TEXT,
+        raw_path TEXT,
+        text_path TEXT,
+        created_at_utc TEXT
     )
-    """)
-    conn.execute("""
+    """
+    )
+    conn.execute(
+        """
     CREATE TABLE IF NOT EXISTS chunks (
-      chunk_id TEXT PRIMARY KEY,
-      ingest_id TEXT,
-      chunk_index INTEGER,
-      page INTEGER,
-      chunk_text TEXT,
-      created_at_utc TEXT,
-      FOREIGN KEY (ingest_id) REFERENCES docs (ingest_id)
+        chunk_id TEXT PRIMARY KEY,
+        ingest_id TEXT,
+        chunk_index INTEGER,
+        page INTEGER,
+        chunk_text TEXT,
+        created_at_utc TEXT,
+        FOREIGN KEY (ingest_id) REFERENCES docs(ingest_id)
     )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_ingest ON chunks(ingest_id)")
-    conn.commit()
+    """
+    )
     return conn
 
-def chunk_text(txt: str):
-    txt = txt.strip()
-    if not txt:
-        return []
-    chunks = []
-    i = 0
-    n = len(txt)
-    step = max(1, CHUNK_SIZE - CHUNK_OVERLAP)
-    while i < n:
-        chunks.append(txt[i:i+CHUNK_SIZE])
-        i += step
-    return chunks
 
 def index_one(ingest_id: str) -> None:
     raw_path = find_raw_by_ingest_id(ingest_id)
@@ -226,41 +251,50 @@ def index_one(ingest_id: str) -> None:
 
     conn = ensure_db()
     try:
-        conn.execute("""
+        conn.execute(
+            """
         INSERT INTO docs (ingest_id, source_filename, raw_path, text_path, created_at_utc)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(ingest_id) DO UPDATE SET
           source_filename=excluded.source_filename,
           raw_path=excluded.raw_path,
           text_path=excluded.text_path
-        """, (ingest_id, source_filename, str(raw_path), str(txt_path), utc_now()))
+        """,
+            (ingest_id, source_filename, str(raw_path), str(txt_path), utc_now()),
+        )
 
         conn.execute("DELETE FROM chunks WHERE ingest_id = ?", (ingest_id,))
 
         created = utc_now()
         for idx, chunk in enumerate(pieces, start=1):
             chunk_id = f"{ingest_id}_c{idx:04d}"
-            conn.execute("""
+            conn.execute(
+                """
             INSERT INTO chunks (chunk_id, ingest_id, chunk_index, page, chunk_text, created_at_utc)
             VALUES (?, ?, ?, ?, ?, ?)
-            """, (chunk_id, ingest_id, idx, None, chunk, created))
+            """,
+                (chunk_id, ingest_id, idx, None, chunk, created),
+            )
 
         conn.commit()
     finally:
         conn.close()
 
-    append_manifest({
-        "type": "index_update",
-        "ingest_id": ingest_id,
-        "indexed": True,
-        "indexed_at_utc": utc_now(),
-        "db_path": str(SQLITE_DB),
-        "chunk_count": len(pieces)
-    })
+    append_manifest(
+        {
+            "type": "index_update",
+            "ingest_id": ingest_id,
+            "indexed": True,
+            "indexed_at_utc": utc_now(),
+            "db_path": str(SQLITE_DB),
+            "chunk_count": len(pieces),
+        }
+    )
 
     print(f"Indexed ingest_id: {ingest_id}")
     print(f"chunks: {len(pieces)}")
     print(f"db: {SQLITE_DB}")
+
 
 def index_all():
     if not EXTRACTED_DIR.exists():
@@ -270,6 +304,7 @@ def index_all():
         raise SystemExit("ERROR: no extracted .txt files found to index.")
     for ingest_id in ids:
         index_one(ingest_id)
+
 
 def query_db(q: str, top: int = 5, ingest_id: str | None = None) -> list[tuple[str, str, str, str]]:
     if not SQLITE_DB.exists():
@@ -302,6 +337,7 @@ def query_db(q: str, top: int = 5, ingest_id: str | None = None) -> list[tuple[s
     finally:
         conn.close()
 
+
 def print_query(rows):
     if not rows:
         print("No matches.")
@@ -313,9 +349,34 @@ def print_query(rows):
         print(f"- ingest_id: {iid} | file: {fname} | chunk: {cid}")
         print(f"  {snippet}")
 
+
+def parse_prompt(prompt: str) -> tuple[str, str | None]:
+    """
+    Supports: "QUERY :: INSTRUCTIONS"
+    - QUERY is used for retrieval (literal substring match).
+    - INSTRUCTIONS are written into the output but NOT used for retrieval.
+    Backwards compatible: if no '::', prompt is treated as QUERY only.
+    """
+    if prompt is None:
+        return "", None
+    raw = prompt.strip()
+    if "::" not in raw:
+        return raw, None
+
+    left, right = raw.split("::", 1)
+    query_text = left.strip()
+    instructions = right.strip() if right.strip() else None
+    return query_text, instructions
+
+
 def summarize(prompt: str, top: int = 5, ingest_id: str | None = None, out_path: str | None = None) -> None:
     # v0: summarization is "grounded compilation" (no model). It writes chunks with citations.
-    rows = query_db(prompt, top=top, ingest_id=ingest_id)
+    query_text, instructions = parse_prompt(prompt)
+
+    if not query_text:
+        raise SystemExit("ERROR: empty query (left side of '::' is blank)")
+
+    rows = query_db(query_text, top=top, ingest_id=ingest_id)
     if not rows:
         raise SystemExit("ERROR: no matches to summarize from. Try a different query.")
 
@@ -324,12 +385,14 @@ def summarize(prompt: str, top: int = 5, ingest_id: str | None = None, out_path:
     if out_path:
         out = Path(out_path)
     else:
-        slug = prompt.lower().replace(" ", "_")[:40]
+        slug = query_text.lower().replace(" ", "_")[:40]
         out = OUTPUTS_DIR / f"summary__{slug}.md"
 
     with out.open("w", encoding="utf-8") as f:
         f.write("# VFMS v0 Grounded Output\n\n")
-        f.write(f"**Query:** {prompt}\n\n")
+        f.write(f"**Query:** {query_text}\n\n")
+        if instructions:
+            f.write("**Instructions:** " + instructions + "\n\n")
         if ingest_id:
             f.write(f"**Doc filter:** {ingest_id}\n\n")
         f.write("## Sources (extracted chunks)\n\n")
@@ -339,16 +402,21 @@ def summarize(prompt: str, top: int = 5, ingest_id: str | None = None, out_path:
         f.write("---\n")
         f.write("_Generated manually from indexed chunks. No background processing._\n")
 
-    append_manifest({
-        "type": "summarize_update",
-        "prompt": prompt,
-        "ingest_id": ingest_id,
-        "top": top,
-        "out_path": str(out),
-        "created_at_utc": utc_now()
-    })
+    append_manifest(
+        {
+            "type": "summarize_update",
+            "prompt": prompt,
+            "query_text": query_text,
+            "instructions": instructions,
+            "ingest_id": ingest_id,
+            "top": top,
+            "out_path": str(out),
+            "created_at_utc": utc_now(),
+        }
+    )
 
     print(f"Summary written to: {out}")
+
 
 def main():
     ap = argparse.ArgumentParser(prog="vfms", description="VFMS v0 (manual triggers only)")
@@ -371,7 +439,7 @@ def main():
     p_q.add_argument("--doc", dest="doc", default=None, help="Filter to a specific ingest_id")
 
     p_s = sub.add_parser("summarize", help="Generate grounded Markdown output (manual; no background)")
-    p_s.add_argument("prompt", help="Query text to retrieve chunks for the output")
+    p_s.add_argument("prompt", help="Query text to retrieve chunks for the output. You may use: QUERY :: INSTRUCTIONS")
     p_s.add_argument("--top", type=int, default=5, help="Max chunks")
     p_s.add_argument("--doc", dest="doc", default=None, help="Filter to a specific ingest_id")
     p_s.add_argument("--out", dest="out", default=None, help="Output .md path")
@@ -398,6 +466,7 @@ def main():
 
     elif args.cmd == "summarize":
         summarize(args.prompt, top=args.top, ingest_id=args.doc, out_path=args.out)
+
 
 if __name__ == "__main__":
     main()
