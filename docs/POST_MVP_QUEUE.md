@@ -24,6 +24,11 @@ Status:
 Post-MVP laboratory and experiments.
 
 ## Candidates
+“TTS (VibeVoice / GLM-TTS)”
+
+“Local image gen (Z-Image-Turbo)”
+
+“Alternate local LLM backend w/ function calling (GLM-4.6V-Flash)”
 - Contradiction detection across documents
 - Relevant change alerts
 - Automatic executive summaries
