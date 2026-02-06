@@ -2,7 +2,7 @@ import os
 import sqlite3
 import threading
 import logging
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 
 logger = logging.getLogger("val0-memory")
 
@@ -38,7 +38,7 @@ def init_db() -> None:
                 """
             )
 
-            # User facts: structured memory (e.g., favorite_color, main_goal, preferred_language)
+            # User facts: structured memory (e.g., preferred_language)
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS user_facts (
@@ -63,7 +63,38 @@ def init_db() -> None:
                 );
                 """
             )
+            # Daily logs: one summary per day per chat (for /daily, /dailies)
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS daily_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(chat_id, date)
+                );
+                """
+            )
 
+            
+            # Reminders: scheduled nudges per chat (for /remind, /reminders)
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS reminders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    due_at_utc TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    sent_at TIMESTAMP,
+                    status TEXT DEFAULT 'pending'
+                );
+                """
+            )
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(status, due_at_utc);"
+            )
             conn.commit()
             logger.info("SQLite DB initialized at %s", DB_PATH)
         finally:
@@ -117,7 +148,6 @@ def get_recent_messages(chat_id: int, limit: int = 12) -> List[Dict[str, Any]]:
         finally:
             conn.close()
 
-    # Reverse to oldest→newest for context
     rows = list(rows)[::-1]
     return [dict(r) for r in rows]
 
@@ -138,50 +168,17 @@ def upsert_fact(chat_id: int, fact_key: str, fact_value: str) -> None:
                 INSERT INTO user_facts (chat_id, fact_key, fact_value)
                 VALUES (?, ?, ?)
                 ON CONFLICT(chat_id, fact_key)
-                DO UPDATE SET
-                    fact_value = excluded.fact_value,
-                    updated_at = CURRENT_TIMESTAMP
+                DO UPDATE SET fact_value = excluded.fact_value, updated_at = CURRENT_TIMESTAMP
                 """,
                 (chat_id, fact_key, fact_value),
             )
             conn.commit()
-            logger.info(
-                "Upserted fact chat_id=%s key=%s value=%s",
-                chat_id,
-                fact_key,
-                fact_value,
-            )
         finally:
             conn.close()
 
 
-def get_fact(chat_id: int, fact_key: str) -> Optional[str]:
-    """Get the latest value for a structured fact."""
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT fact_value
-                FROM user_facts
-                WHERE chat_id = ? AND fact_key = ?
-                ORDER BY updated_at DESC
-                LIMIT 1
-                """,
-                (chat_id, fact_key),
-            )
-            row = cur.fetchone()
-        finally:
-            conn.close()
-
-    if row:
-        return row["fact_value"]
-    return None
-
-
-def get_all_facts(chat_id: int) -> Dict[str, str]:
-    """Return all facts for this chat_id as a dict[key] = value."""
+def get_facts(chat_id: int) -> Dict[str, str]:
+    """Return all facts for a chat_id."""
     with _lock:
         conn = _get_conn()
         try:
@@ -191,7 +188,7 @@ def get_all_facts(chat_id: int) -> Dict[str, str]:
                 SELECT fact_key, fact_value
                 FROM user_facts
                 WHERE chat_id = ?
-                ORDER BY updated_at ASC
+                ORDER BY updated_at DESC
                 """,
                 (chat_id,),
             )
@@ -201,37 +198,44 @@ def get_all_facts(chat_id: int) -> Dict[str, str]:
 
     out: Dict[str, str] = {}
     for r in rows:
-        out[r["fact_key"]] = r["fact_value"]
+        out[str(r["fact_key"])] = str(r["fact_value"])
     return out
 
 
+
+# -----------------------------
+# Compatibility wrappers (bot.py expects these names)
+# -----------------------------
+def get_fact(chat_id: int, fact_key: str) -> str:
+    """Return a single fact value for a key, or empty string."""
+    facts = get_facts(chat_id)
+    return (facts.get((fact_key or "").strip()) or "").strip()
+
+def get_all_facts(chat_id: int) -> Dict[str, str]:
+    """Alias for get_facts(chat_id)."""
+    return get_facts(chat_id)
+
+
 def add_note(chat_id: int, content: str) -> int:
-    """Insert a note for this chat and return its ID."""
     content = (content or "").strip()
     if not content:
-        return 0
+        return -1
 
     with _lock:
         conn = _get_conn()
         try:
             cur = conn.cursor()
             cur.execute(
-                """
-                INSERT INTO notes (chat_id, content)
-                VALUES (?, ?)
-                """,
+                "INSERT INTO notes (chat_id, content) VALUES (?, ?)",
                 (chat_id, content),
             )
             conn.commit()
-            note_id = cur.lastrowid
-            logger.info("Inserted note id=%s chat_id=%s", note_id, chat_id)
-            return note_id
+            return cur.lastrowid
         finally:
             conn.close()
 
 
 def get_notes(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-    """Return recent notes for this chat_id (newest → oldest)."""
     with _lock:
         conn = _get_conn()
         try:
@@ -253,17 +257,12 @@ def get_notes(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def search_notes(chat_id: int, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-    """
-    Simple keyword search over notes content for this chat.
-    Case-insensitive LIKE on the 'content' field.
-    """
+def search_notes(chat_id: int, query: str, limit: int = 20) -> List[Dict[str, Any]]:
     query = (query or "").strip()
     if not query:
         return []
 
-    pattern = f"%{query}%"
-
+    like = f"%{query}%"
     with _lock:
         conn = _get_conn()
         try:
@@ -277,10 +276,97 @@ def search_notes(chat_id: int, query: str, limit: int = 10) -> List[Dict[str, An
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (chat_id, pattern, limit),
+                (chat_id, like, limit),
             )
             rows = cur.fetchall()
         finally:
             conn.close()
 
     return [dict(r) for r in rows]
+
+
+# -----------------------------
+# Daily logs (long-term summary)
+# -----------------------------
+def upsert_daily_log(chat_id: int, date: str, summary: str) -> Tuple[bool, str]:
+    """
+    Insert or replace a daily summary for a chat_id on a given date (YYYY-MM-DD).
+    Returns (ok, msg).
+    """
+    date = (date or "").strip()
+    summary = (summary or "").strip()
+    if not date or not summary:
+        return (False, "Missing date or summary")
+
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO daily_logs (chat_id, date, summary)
+                VALUES (?, ?, ?)
+                ON CONFLICT(chat_id, date)
+                DO UPDATE SET summary = excluded.summary, created_at = CURRENT_TIMESTAMP
+                """,
+                (chat_id, date, summary),
+            )
+            conn.commit()
+            return (True, "saved")
+        finally:
+            conn.close()
+
+
+def get_daily_logs(chat_id: int, limit: int = 7) -> List[Dict[str, Any]]:
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, chat_id, date, summary, created_at
+                FROM daily_logs
+                WHERE chat_id = ?
+                ORDER BY date DESC
+                LIMIT ?
+                """,
+                (chat_id, limit),
+            )
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+    return [dict(r) for r in rows]
+
+
+def search_daily_logs(chat_id: int, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    like = f"%{query}%"
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, chat_id, date, summary, created_at
+                FROM daily_logs
+                WHERE chat_id = ?
+                  AND summary LIKE ?
+                ORDER BY date DESC
+                LIMIT ?
+                """,
+                (chat_id, like, limit),
+            )
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+    return [dict(r) for r in rows]
+
+# -----------------------------
+# Daily Logs (long-term summary)
+# -----------------------------
+

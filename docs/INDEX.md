@@ -3,15 +3,25 @@
 This file is the canonical map of Val0's docs.
 If you're unsure what a file is for, start here.
 
-## Core contracts (authoritative)
+## Core Contracts & State (Authoritative)
+
+These documents define current system behavior.
+Anything not listed here is non-authoritative.
+
+- docs/VAL0_STATE.md  
+  _Living snapshot of Val0’s current capabilities, limits, and recent changes._
+
 - docs/QUERY_CONTRACT__VFMS.md  
-  Defines evidence rules: grounded output only, no inference, cite chunks, failure modes.
+  _Rules governing what document-based questions are allowed and how they must be answered._
 
 - docs/QUERY_PLAYBOOK__TIMELINE_SPLIT__v4.md  
-  Deterministic timeline extraction rules (facts/dates only, no inference).
+  _Deterministic timeline extraction rules. No inference._
 
 - docs/MEMORY_GATE__PRE_INFINITE.md  
-  Rules for what can be remembered vs what must stay document-scoped.
+  _Constraints and safeguards before enabling persistent memory._
+
+- docs/TELEGRAM_UX__DOCUMENT_PIPELINE.md  
+  _How documents enter Val0 via Telegram and how users interact with them._
 
 ## Telegram UX (experience layer)
 - docs/TELEGRAM_UX__DOCUMENT_PIPELINE.md  

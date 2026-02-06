@@ -93,6 +93,42 @@ Scope: copy + flow only, no ranking changes
 ---
 
 ## 🛠️ IN PROGRESS (Actively improving)
+# VAL0 — NEXT STEP (Option A: Timeline Interpreter) — 2025-12-26
+
+GOAL:
+Turn the Legal/Noah OCR outputs into an interactive “timeline interpreter” that answers questions grounded in ingested documents (no guessing).
+
+INPUTS (already generated):
+- vfms_data/outputs/LEGAL_NOAH__TIMELINE__v2.md
+- vfms_data/outputs/LEGAL_NOAH__CASE_BINDER__v1.md
+- vfms_data/outputs/LEGAL_NOAH__CASE_BINDER__v1.tsv
+- vfms_data/outputs/legal_noah_docs/*__FACTS_DATES.md
+- vfms_data/outputs/legal_noah_evidence/*__EVIDENCE__*.md
+
+TASKS (do in order):
+1) Validate interpreter dataset is coherent:
+   - Pick 3 random FACTS_DATES files and confirm: dates, parties, doc type, orders appear with literal context.
+2) Build “Query Playbook v0” (Markdown):
+   - 15 example questions grouped by: dates, parties, incidents, orders, deadlines, appeals.
+   - Each question must specify the expected output format.
+3) Implement Interpreter CLI workflow (manual first, no new code required):
+   - Use VFMS query/summarize against a doc-scope or token-scope.
+   - Produce answers with: (a) short answer (b) citations/chunks (c) gaps explicitly.
+4) Produce “Legal/Noah Master Timeline v3”:
+   - Merge timeline into strict chronological order.
+   - Each entry: DATE → EVENT → DOCUMENT(S) → ORDER/DECISION → SOURCE SNIPPET.
+5) Define success criteria:
+   - “If I ask X, it finds the right doc in <60 seconds and shows proof.”
+
+RULES:
+- Grounded only. No inference.
+- If OCR confidence is uncertain, label “NEEDS HUMAN CHECK.”
+- Outputs go to: vfms_data/outputs/legal_noah_interpreter/
+
+NEXT ARTIFACTS TO CREATE:
+- vfms_data/outputs/legal_noah_interpreter/QUERY_PLAYBOOK__v0.md
+- vfms_data/outputs/legal_noah_interpreter/LEGAL_NOAH__TIMELINE__v3.md
+- vfms_data/outputs/legal_noah_interpreter/INTERPRETER_SESSION_LOG__v0
 - VFMS v0: definition frozen, implementation NOT started
 Semantic recall tuning
 

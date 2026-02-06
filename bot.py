@@ -1,3 +1,34 @@
+"""
+VAL0 BOT — NAVIGATION MAP (DO NOT DELETE)
+
+PIPELINE OVERVIEW (top → bottom):
+
+1) Command handlers
+   - /start, /note, /daily, /dailies, etc.
+
+2) _process_text_pipeline()
+   a) Identity & preferences (name, language)
+   b) Timers / nudges (CO1)
+   c) Message persistence (insert_message)
+   d) Fast memory intercepts (facts, notes)
+   e) External tools (Places)
+   f) CONTEXT ASSEMBLY (authoritative):
+      - get_recent_messages()
+      - build_context_block()
+      - get_all_facts()
+      - _semantic_recall_block()
+   g) MODEL CALL:
+      - call_val_openai(...)
+
+3) Post-reply persistence
+   - insert_message (assistant)
+
+SOURCE OF TRUTH:
+- Prompt assembly happens ONLY in _process_text_pipeline()
+- call_val_openai() is the final gateway to the model
+"""
+
+
 import time
 import os
 import logging
@@ -28,6 +59,10 @@ from memory_store import (
     add_note,
     get_notes,
     search_notes,
+    upsert_daily_log,
+    get_daily_logs,
+
+    search_daily_logs,
 )
 
 # Places API
@@ -156,9 +191,14 @@ def call_val_openai(
     facts_block: Optional[str] = None,
     semantic_block: Optional[str] = None,
     forced_lang: Optional[str] = None,
+    system_rules: Optional[str] = None,
 ) -> str:
     try:
         messages = [{"role": "system", "content": VAL_SYSTEM_PROMPT}]
+# Additional hard rules injected by pipeline (kept separate from VAL_SYSTEM_PROMPT)
+        if system_rules:
+            messages.append({"role": "system", "content": system_rules.strip()})
+
 
         # Hard language enforcement when preferred_language exists.
         # forced_lang: 'es' or 'en'
@@ -1075,6 +1115,195 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"Failed to insert assistant message into DB (final reply): {e}")
 
 
+
+# --------------------------------------------------
+# Daily logs commands
+# --------------------------------------------------
+from datetime import datetime
+try:
+    from zoneinfo import ZoneInfo  # py3.9+
+except Exception:
+    ZoneInfo = None
+
+VAL0_TZ = os.getenv("VAL0_TZ", "America/Panama")
+
+def _today_ymd() -> str:
+    if ZoneInfo:
+        try:
+            return datetime.now(ZoneInfo(VAL0_TZ)).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _facts_block_from_dict(facts: dict) -> str:
+    if not facts:
+        return ""
+    lines = []
+    for k, v in facts.items():
+        lines.append(f"{k}: {v}")
+    return "\n".join(lines)
+
+def _notes_block(chat_id: int, limit: int = 10) -> str:
+    try:
+        rows = get_notes(chat_id, limit=limit)
+    except Exception:
+        rows = []
+    if not rows:
+        return ""
+    parts = []
+    for r in rows:
+        txt = (r.get("content") or "").strip()
+        if txt:
+            parts.append(f"- {txt}")
+    return "\n".join(parts)
+
+def _daily_auto_generate(chat_id: int, date: str) -> str:
+    # Pull a bigger slice than normal chat reply context
+    try:
+        recent = get_recent_messages(chat_id=chat_id, limit=30)
+    except Exception:
+        recent = []
+
+    context_block = build_context_block(recent)
+
+    try:
+        facts = get_all_facts(chat_id=chat_id)
+    except Exception:
+        facts = {}
+
+    facts_block = _facts_block_from_dict(facts)
+    notes_block = _notes_block(chat_id, limit=10)
+
+    # Semantic recall is optional; don't let it dominate
+    try:
+        semantic_block = _semantic_recall_block(chat_id=chat_id, query="daily summary", k=5)
+    except Exception:
+        semantic_block = ""
+
+    # Respect preferred language if present
+    forced_lang = None
+    try:
+        forced_lang = get_fact(chat_id=chat_id, fact_key="preferred_language")
+        if forced_lang not in ("es", "en"):
+            forced_lang = None
+    except Exception:
+        forced_lang = None
+
+    # We reuse call_val_openai, but force it into "daily summary mode"
+    # Output must be short + actionable.
+    user_text = (
+        f"Genera el DAILY del día {date} para el Boss.\n"
+        "REGLAS:\n"
+        "- 3 a 7 bullets máximo.\n"
+        "- Enfócate en hechos, decisiones, progreso, bloqueos.\n"
+        "- Termina con 'Siguiente:' y 1 a 3 acciones concretas.\n"
+        "- Nada de terapia, nada de relleno.\n"
+    )
+
+    # Inject notes as extra stable context (not as user text)
+    if notes_block:
+        notes_block = "Notas recientes (del Boss):\n" + notes_block
+
+    # We'll pass notes via facts_block channel to keep plumbing minimal, but label it clearly.
+    merged_facts = facts_block
+    if notes_block:
+        merged_facts = (merged_facts + "\n\n" + notes_block).strip() if merged_facts else notes_block
+
+    out = call_val_openai(
+        user_text,
+        context_block=context_block,
+        facts_block=merged_facts,
+        semantic_block=semantic_block,
+        forced_lang=forced_lang,
+    )
+    return (out or "").strip()
+
+async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /daily <summary>
+    /daily auto
+    Saves a daily summary for today (per chat).
+    """
+    chat_id = update.effective_chat.id
+    text = (update.message.text or "").strip()
+    parts = text.split(" ", 1)
+    if len(parts) < 2 or not parts[1].strip():
+        await update.message.reply_text("Usa: /daily <resumen corto del día>  |  /daily auto")
+        return
+
+    arg = parts[1].strip()
+    date = _today_ymd()
+
+    # AUTO MODE
+    if arg.lower() == "auto":
+        try:
+            summary = _daily_auto_generate(chat_id=chat_id, date=date)
+        except Exception as e:
+            await update.message.reply_text(f"No pude generar el daily auto: {e}")
+            return
+
+        if not summary:
+            await update.message.reply_text("No pude generar un daily (salió vacío).")
+            return
+
+        ok, msg = upsert_daily_log(chat_id=chat_id, date=date, summary=summary)
+        if not ok:
+            await update.message.reply_text(f"No pude guardar el daily: {msg}")
+            return
+
+        await update.message.reply_text(f"Listo, Boss. Guardé el daily auto de {date} ✅\n\n{summary}")
+        return
+
+    # MANUAL MODE
+    summary = arg
+    ok, msg = upsert_daily_log(chat_id=chat_id, date=date, summary=summary)
+    if not ok:
+        await update.message.reply_text(f"No pude guardar el daily: {msg}")
+        return
+
+    await update.message.reply_text(f"Listo, Boss. Guardé el daily de {date} ✅")
+
+async def dailies_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /dailies
+    Lists last N daily summaries.
+    """
+    chat_id = update.effective_chat.id
+    rows = get_daily_logs(chat_id=chat_id, limit=7)
+    if not rows:
+        await update.message.reply_text("Todavía no hay dailies guardados. Usa /daily <resumen>.")
+        return
+
+    lines = []
+    for r in rows:
+        lines.append(f"- {r['date']}: {r['summary']}")
+    await update.message.reply_text("Tus últimos dailies:\n" + "\n".join(lines))
+
+async def dsearch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    /dsearch <query>
+    Search inside daily summaries.
+    """
+    chat_id = update.effective_chat.id
+    text = (update.message.text or "").strip()
+    parts = text.split(" ", 1)
+    if len(parts) < 2 or not parts[1].strip():
+        await update.message.reply_text("Usa: /dsearch <palabra o frase>")
+        return
+
+    q = parts[1].strip()
+    rows = search_daily_logs(chat_id=chat_id, query=q, limit=10)
+    if not rows:
+        await update.message.reply_text("No encontré matches en tus dailies.")
+        return
+
+    lines = []
+    for r in rows:
+        lines.append(f"- {r['date']}: {r['summary']}")
+    await update.message.reply_text("Matches:\n" + "\n".join(lines))
+
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -1097,6 +1326,9 @@ def main():
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("note", note_cmd))
     app.add_handler(CommandHandler("notes", notes_cmd))
+    app.add_handler(CommandHandler("daily", daily_cmd))
+    app.add_handler(CommandHandler("dailies", dailies_cmd))
+    app.add_handler(CommandHandler("dsearch", dsearch_cmd))
     app.add_handler(CommandHandler("search", search_cmd))
     app.add_handler(CommandHandler("place", place_cmd))
     app.add_handler(CommandHandler("sremember", sremember_cmd))

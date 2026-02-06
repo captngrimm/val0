@@ -38,3 +38,15 @@ Purpose:
 Prevent context loss.
 Prevent rework.
 Enable handover without explanation.
+
+> ⚠️ AUTHORITY NOTICE
+>
+> This document is an OPERATIONAL HANDOVER.
+> It describes infrastructure, deployment, and recovery procedures.
+>
+> It does NOT define system intent, guarantees, privacy model, or behavior.
+>
+> If any content here conflicts with:
+>   /VAL0_CORE.md
+>
+> Then VAL0_CORE.md is the authoritative source of truth.
