@@ -1,508 +1,168 @@
 import os
-import sqlite3
 import threading
 import logging
 from typing import List, Dict, Optional, Any, Tuple
 
 logger = logging.getLogger("val0-memory")
 
-DB_PATH = os.getenv("VAL0_DB_PATH", "/opt/val0/val0_memory.db")
+# Encrypted DB path (systemd sets this)
+DB_PATH = os.getenv("VAL0_DB_PATH", "/opt/val0/val0_memory.enc.db")
+
+# Prefer key file (systemd sets this). Env key is only for dev fallback.
+DB_KEY_FILE = os.getenv("VAL0_DB_KEY_FILE", "").strip()
+DB_KEY_ENV = os.getenv("VAL0_DB_KEY", "").strip()
+
+# Default: do NOT allow plaintext fallback unless explicitly enabled
+ALLOW_PLAINTEXT = os.getenv("VAL0_ALLOW_PLAINTEXT", "0").strip().lower() in ("1", "true", "yes")
+
 _lock = threading.Lock()
 
+def _read_db_key() -> str:
+    if DB_KEY_FILE:
+        with open(DB_KEY_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    if DB_KEY_ENV:
+        return DB_KEY_ENV
+    return ""
 
-def _get_conn() -> sqlite3.Connection:
+def _get_conn():
+    """
+    Encrypted-first DB connection.
+    If a key exists => SQLCipher (pysqlcipher3)
+    If no key => refuse unless VAL0_ALLOW_PLAINTEXT=1
+    """
+    key = _read_db_key()
+
+    if key:
+        from pysqlcipher3 import dbapi2 as sqlcipher
+        conn = sqlcipher.connect(DB_PATH)
+        conn.row_factory = sqlcipher.Row
+        cur = conn.cursor()
+
+        # Escape single quotes just in case
+        key_esc = key.replace("'", "''")
+        cur.execute(f"PRAGMA key='{key_esc}';")
+        cur.execute("PRAGMA cipher_compatibility=4;")
+        return conn
+
+    if not ALLOW_PLAINTEXT:
+        raise RuntimeError(
+            "No DB key provided. Set VAL0_DB_KEY_FILE (recommended) or VAL0_DB_KEY. "
+            "If you want plaintext dev mode, set VAL0_ALLOW_PLAINTEXT=1."
+        )
+
+    import sqlite3
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db() -> None:
-    """Create tables if they don't exist."""
+    """
+    Create tables if they don't exist.
+    Compatible with both sqlite3 and SQLCipher.
+    """
     with _lock:
         conn = _get_conn()
-        try:
-            cur = conn.cursor()
+        cur = conn.cursor()
 
-            # Messages table: one row per message (user or assistant)
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS messages (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER NOT NULL,
-                    role TEXT NOT NULL,               -- 'user' or 'assistant'
-                    content TEXT NOT NULL,
-                    telegram_message_id INTEGER,
-                    model_used TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-            )
+        # messages
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            user_id INTEGER,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at_utc TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """)
 
-            # User facts: structured memory (e.g., preferred_language)
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS user_facts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER NOT NULL,
-                    fact_key TEXT NOT NULL,
-                    fact_value TEXT NOT NULL,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(chat_id, fact_key)
-                );
-                """
-            )
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at_utc);")
 
-            # Notes: free-form notes per chat (for /note, /notes)
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER NOT NULL,
-                    content TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-            )
-            # Daily logs: one summary per day per chat (for /daily, /dailies)
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS daily_logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER NOT NULL,
-                    date TEXT NOT NULL,
-                    summary TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(chat_id, date)
-                );
-                """
-            )
+        # reminders
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            due_at_utc TEXT NOT NULL,
+            text TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            sent_at TEXT
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(status, due_at_utc);")
 
-            
-            # Reminders: scheduled nudges per chat (for /remind, /reminders)
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS reminders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    chat_id INTEGER NOT NULL,
-                    due_at_utc TEXT NOT NULL,
-                    text TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    sent_at TIMESTAMP,
-                    status TEXT DEFAULT 'pending'
-                );
-                """
-            )
-            cur.execute(
-                "CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(status, due_at_utc);"
-            )
-            conn.commit()
-            logger.info("SQLite DB initialized at %s", DB_PATH)
-        finally:
-            conn.close()
+        conn.commit()
+        conn.close()
+
+        logger.info(f"SQLite DB initialized at {DB_PATH}")
 
 
-def insert_message(
-    chat_id: int,
-    role: str,
-    content: str,
-    telegram_message_id: Optional[int] = None,
-    model_used: Optional[str] = None,
-) -> int:
-    """Insert a single message row and return its ID."""
+def insert_message(chat_id: int, user_id: Optional[int], role: str, content: str) -> None:
     with _lock:
         conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO messages (chat_id, role, content, telegram_message_id, model_used)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (chat_id, role, content, telegram_message_id, model_used),
-            )
-            conn.commit()
-            msg_id = cur.lastrowid
-            logger.debug("Inserted message id=%s chat_id=%s role=%s", msg_id, chat_id, role)
-            return msg_id
-        finally:
-            conn.close()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO messages(chat_id, user_id, role, content) VALUES(?,?,?,?)",
+            (chat_id, user_id, role, content),
+        )
+        conn.commit()
+        conn.close()
 
 
-def get_recent_messages(chat_id: int, limit: int = 12) -> List[Dict[str, Any]]:
-    """Return recent messages for this chat_id (oldest → newest)."""
+def fetch_recent_messages(chat_id: int, limit: int = 30) -> List[Dict[str, Any]]:
     with _lock:
         conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, chat_id, role, content, telegram_message_id, model_used, created_at
-                FROM messages
-                WHERE chat_id = ?
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (chat_id, limit),
-            )
-            rows = cur.fetchall()
-        finally:
-            conn.close()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, chat_id, user_id, role, content, created_at_utc "
+            "FROM messages WHERE chat_id=? ORDER BY id DESC LIMIT ?",
+            (chat_id, limit),
+        )
+        rows = cur.fetchall()
+        conn.close()
+    return [dict(r) for r in reversed(rows)]
 
-    rows = list(rows)[::-1]
+
+def insert_reminder(chat_id: int, due_at_utc: str, text: str, status: str = "pending") -> int:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO reminders(chat_id, due_at_utc, text, status) VALUES(?,?,?,?)",
+            (chat_id, due_at_utc, text, status),
+        )
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return rid
+
+
+def fetch_due_reminders(limit: int = 10) -> List[Dict[str, Any]]:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, chat_id, due_at_utc, text, status, sent_at "
+            "FROM reminders "
+            "WHERE status='pending' AND due_at_utc <= datetime('now') "
+            "ORDER BY due_at_utc ASC LIMIT ?",
+            (limit,),
+        )
+        rows = cur.fetchall()
+        conn.close()
     return [dict(r) for r in rows]
 
-
-def upsert_fact(chat_id: int, fact_key: str, fact_value: str) -> None:
-    """Create or update a structured fact for this chat."""
-    fact_key = fact_key.strip()
-    fact_value = fact_value.strip()
-    if not fact_key or not fact_value:
-        return
-
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO user_facts (chat_id, fact_key, fact_value)
-                VALUES (?, ?, ?)
-                ON CONFLICT(chat_id, fact_key)
-                DO UPDATE SET fact_value = excluded.fact_value, updated_at = CURRENT_TIMESTAMP
-                """,
-                (chat_id, fact_key, fact_value),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-
-def get_facts(chat_id: int) -> Dict[str, str]:
-    """Return all facts for a chat_id."""
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT fact_key, fact_value
-                FROM user_facts
-                WHERE chat_id = ?
-                ORDER BY updated_at DESC
-                """,
-                (chat_id,),
-            )
-            rows = cur.fetchall()
-        finally:
-            conn.close()
-
-    out: Dict[str, str] = {}
-    for r in rows:
-        out[str(r["fact_key"])] = str(r["fact_value"])
-    return out
-
-
-
-# -----------------------------
-# Compatibility wrappers (bot.py expects these names)
-# -----------------------------
-def get_fact(chat_id: int, fact_key: str) -> str:
-    """Return a single fact value for a key, or empty string."""
-    facts = get_facts(chat_id)
-    return (facts.get((fact_key or "").strip()) or "").strip()
-
-def get_all_facts(chat_id: int) -> Dict[str, str]:
-    """Alias for get_facts(chat_id)."""
-    return get_facts(chat_id)
-
-
-def add_note(chat_id: int, content: str) -> int:
-    content = (content or "").strip()
-    if not content:
-        return -1
-
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO notes (chat_id, content) VALUES (?, ?)",
-                (chat_id, content),
-            )
-            conn.commit()
-            return cur.lastrowid
-        finally:
-            conn.close()
-
-# -----------------------------
-# Reminders helpers (Runner support)
-# -----------------------------
-def fetch_due_reminders(limit: int = 20) -> List[Dict[str, Any]]:
-    """
-    Return due reminders (pending + due_at_utc <= CURRENT_TIMESTAMP).
-    Assumes due_at_utc stored as 'YYYY-MM-DD HH:MM:SS' UTC (SQLite-friendly).
-    """
-    limit = max(1, min(100, int(limit or 20)))
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, chat_id, due_at_utc, text
-                FROM reminders
-                WHERE status = 'pending'
-                  AND due_at_utc <= CURRENT_TIMESTAMP
-                ORDER BY due_at_utc ASC
-                LIMIT ?
-                """,
-                (limit,),
-            )
-            rows = cur.fetchall()
-            return [dict(r) for r in rows]
-        finally:
-            conn.close()
-
-def claim_due_reminders(limit: int = 20) -> List[Dict[str, Any]]:
-    """
-    Atomically claim a batch of due reminders (pending -> sending) and return them.
-    This prevents double-sends even if multiple runners overlap.
-    """
-    limit = max(1, min(100, int(limit or 20)))
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-
-            # 1) Find due pending reminders
-            cur.execute(
-                """
-                SELECT id, chat_id, due_at_utc, text
-                FROM reminders
-                WHERE status = 'pending'
-                  AND due_at_utc <= CURRENT_TIMESTAMP
-                ORDER BY due_at_utc ASC
-                LIMIT ?
-                """,
-                (limit,),
-            )
-            rows = cur.fetchall()
-            if not rows:
-                return []
-
-            ids = [int(r["id"]) for r in rows]
-
-            # 2) Claim them in the same transaction
-            placeholders = ",".join(["?"] * len(ids))
-            cur.execute(
-                f"""
-                UPDATE reminders
-                SET status = 'sending'
-                WHERE status = 'pending'
-                  AND id IN ({placeholders})
-                """,
-                tuple(ids),
-            )
-            conn.commit()
-
-            # 3) Return only what we intended to send
-            return [dict(r) for r in rows]
-        finally:
-            conn.close()
-
-
-def claim_reminder(reminder_id: int) -> bool:
-    """
-    Atomic-ish claim: pending -> sending. Returns True only if we claimed it.
-    Prevents double-send if runner overlaps.
-    """
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                UPDATE reminders
-                SET status = 'sending'
-                WHERE id = ? AND status = 'pending'
-                """,
-                (int(reminder_id),),
-            )
-            conn.commit()
-            return cur.rowcount == 1
-        finally:
-            conn.close()
 
 def mark_reminder_sent(reminder_id: int) -> None:
     with _lock:
         conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                UPDATE reminders
-                SET status = 'sent',
-                    sent_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (int(reminder_id),),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-def revert_reminder_pending(reminder_id: int) -> None:
-    """
-    If send fails, revert sending -> pending so it can retry.
-    """
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                UPDATE reminders
-                SET status = 'pending'
-                WHERE id = ? AND status = 'sending'
-                """,
-                (int(reminder_id),),
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-def get_notes(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, chat_id, content, created_at
-                FROM notes
-                WHERE chat_id = ?
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (chat_id, limit),
-            )
-            rows = cur.fetchall()
-        finally:
-            conn.close()
-
-    return [dict(r) for r in rows]
-
-
-def search_notes(chat_id: int, query: str, limit: int = 20) -> List[Dict[str, Any]]:
-    query = (query or "").strip()
-    if not query:
-        return []
-
-    like = f"%{query}%"
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, chat_id, content, created_at
-                FROM notes
-                WHERE chat_id = ?
-                  AND content LIKE ?
-                ORDER BY id DESC
-                LIMIT ?
-                """,
-                (chat_id, like, limit),
-            )
-            rows = cur.fetchall()
-        finally:
-            conn.close()
-
-    return [dict(r) for r in rows]
-
-
-# -----------------------------
-# Daily logs (long-term summary)
-# -----------------------------
-def upsert_daily_log(chat_id: int, date: str, summary: str) -> Tuple[bool, str]:
-    """
-    Insert or replace a daily summary for a chat_id on a given date (YYYY-MM-DD).
-    Returns (ok, msg).
-    """
-    date = (date or "").strip()
-    summary = (summary or "").strip()
-    if not date or not summary:
-        return (False, "Missing date or summary")
-
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                INSERT INTO daily_logs (chat_id, date, summary)
-                VALUES (?, ?, ?)
-                ON CONFLICT(chat_id, date)
-                DO UPDATE SET summary = excluded.summary, created_at = CURRENT_TIMESTAMP
-                """,
-                (chat_id, date, summary),
-            )
-            conn.commit()
-            return (True, "saved")
-        finally:
-            conn.close()
-
-
-def get_daily_logs(chat_id: int, limit: int = 7) -> List[Dict[str, Any]]:
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, chat_id, date, summary, created_at
-                FROM daily_logs
-                WHERE chat_id = ?
-                ORDER BY date DESC
-                LIMIT ?
-                """,
-                (chat_id, limit),
-            )
-            rows = cur.fetchall()
-        finally:
-            conn.close()
-
-    return [dict(r) for r in rows]
-
-
-def search_daily_logs(chat_id: int, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-    query = (query or "").strip()
-    if not query:
-        return []
-
-    like = f"%{query}%"
-    with _lock:
-        conn = _get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, chat_id, date, summary, created_at
-                FROM daily_logs
-                WHERE chat_id = ?
-                  AND summary LIKE ?
-                ORDER BY date DESC
-                LIMIT ?
-                """,
-                (chat_id, like, limit),
-            )
-            rows = cur.fetchall()
-        finally:
-            conn.close()
-
-    return [dict(r) for r in rows]
-
-# -----------------------------
-# Daily Logs (long-term summary)
-# -----------------------------
-
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE reminders SET status='sent', sent_at=datetime('now') WHERE id=?",
+            (reminder_id,),
+        )
+        conn.commit()
+        conn.close()
