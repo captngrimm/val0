@@ -234,6 +234,142 @@ def add_note(chat_id: int, content: str) -> int:
         finally:
             conn.close()
 
+# -----------------------------
+# Reminders helpers (Runner support)
+# -----------------------------
+def fetch_due_reminders(limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Return due reminders (pending + due_at_utc <= CURRENT_TIMESTAMP).
+    Assumes due_at_utc stored as 'YYYY-MM-DD HH:MM:SS' UTC (SQLite-friendly).
+    """
+    limit = max(1, min(100, int(limit or 20)))
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, chat_id, due_at_utc, text
+                FROM reminders
+                WHERE status = 'pending'
+                  AND due_at_utc <= CURRENT_TIMESTAMP
+                ORDER BY due_at_utc ASC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+def claim_due_reminders(limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Atomically claim a batch of due reminders (pending -> sending) and return them.
+    This prevents double-sends even if multiple runners overlap.
+    """
+    limit = max(1, min(100, int(limit or 20)))
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+
+            # 1) Find due pending reminders
+            cur.execute(
+                """
+                SELECT id, chat_id, due_at_utc, text
+                FROM reminders
+                WHERE status = 'pending'
+                  AND due_at_utc <= CURRENT_TIMESTAMP
+                ORDER BY due_at_utc ASC
+                LIMIT ?
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            if not rows:
+                return []
+
+            ids = [int(r["id"]) for r in rows]
+
+            # 2) Claim them in the same transaction
+            placeholders = ",".join(["?"] * len(ids))
+            cur.execute(
+                f"""
+                UPDATE reminders
+                SET status = 'sending'
+                WHERE status = 'pending'
+                  AND id IN ({placeholders})
+                """,
+                tuple(ids),
+            )
+            conn.commit()
+
+            # 3) Return only what we intended to send
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
+
+def claim_reminder(reminder_id: int) -> bool:
+    """
+    Atomic-ish claim: pending -> sending. Returns True only if we claimed it.
+    Prevents double-send if runner overlaps.
+    """
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE reminders
+                SET status = 'sending'
+                WHERE id = ? AND status = 'pending'
+                """,
+                (int(reminder_id),),
+            )
+            conn.commit()
+            return cur.rowcount == 1
+        finally:
+            conn.close()
+
+def mark_reminder_sent(reminder_id: int) -> None:
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE reminders
+                SET status = 'sent',
+                    sent_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (int(reminder_id),),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+def revert_reminder_pending(reminder_id: int) -> None:
+    """
+    If send fails, revert sending -> pending so it can retry.
+    """
+    with _lock:
+        conn = _get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE reminders
+                SET status = 'pending'
+                WHERE id = ? AND status = 'sending'
+                """,
+                (int(reminder_id),),
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
 def get_notes(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     with _lock:

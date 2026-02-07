@@ -61,8 +61,13 @@ from memory_store import (
     search_notes,
     upsert_daily_log,
     get_daily_logs,
-
     search_daily_logs,
+
+    fetch_due_reminders,
+    claim_due_reminders,
+    claim_reminder,
+    mark_reminder_sent,
+    revert_reminder_pending,
 )
 
 # Places API
@@ -1305,6 +1310,54 @@ async def dsearch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --------------------------------------------------
+# Reminder Runner (JobQueue)
+# --------------------------------------------------
+def _reminder_poll_seconds() -> int:
+    try:
+        return max(10, int(os.getenv("REMINDER_POLL_SECONDS", "30")))
+    except Exception:
+        return 30
+
+def _reminder_batch_limit() -> int:
+    try:
+        return max(1, min(50, int(os.getenv("REMINDER_BATCH_LIMIT", "20"))))
+    except Exception:
+        return 20
+
+async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
+    try:
+        due = fetch_due_reminders(limit=_reminder_batch_limit())
+        logger.info("ReminderRunner tick: due=%d", len(due))
+        if not due:
+            return
+
+        for r in due:
+            rid = int(r.get("id"))
+            chat_id = int(r.get("chat_id"))
+            text = (r.get("text") or "").strip()
+
+            # empty reminder text -> mark sent to avoid clogging
+            if not text:
+                if claim_reminder(rid):
+                    mark_reminder_sent(rid)
+                continue
+
+            # claim the reminder first to prevent double-send
+            if not claim_reminder(rid):
+                continue
+
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=text)
+                mark_reminder_sent(rid)
+                logger.info("ReminderRunner: sent id=%s chat_id=%s", rid, chat_id)
+            except Exception as e:
+                logger.exception("ReminderRunner: send failed id=%s chat_id=%s err=%s", rid, chat_id, e)
+                revert_reminder_pending(rid)
+
+    except Exception as e:
+        logger.exception("ReminderRunner tick crashed: %s", e)
+
+# --------------------------------------------------
 # Text handler
 # --------------------------------------------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1318,6 +1371,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_db()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).defaults(Defaults(parse_mode=None)).build()
+    # Reminder Runner schedule
+    try:
+        interval = _reminder_poll_seconds()
+        logger.info("ReminderRunner: scheduling run_repeating interval=%ss", interval)
+        app.job_queue.run_repeating(_reminder_tick, interval=interval, first=10)
+    except Exception as e:
+        logger.exception("ReminderRunner: failed to schedule: %s", e)
+
     app.add_error_handler(_error_handler)
 
     # Commands
