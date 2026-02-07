@@ -86,3 +86,5 @@ opt/vfms_inbox/**
 # Temp scratch
 /tmp/*.txt
 /tmp/*.tsv
+*.PLAIN_UNUSED.*
+*.db
