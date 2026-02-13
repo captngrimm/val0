@@ -167,6 +167,84 @@ def init_db() -> None:
             cur.execute("UPDATE reminders SET target=CAST(chat_id AS TEXT) WHERE target IS NULL;")
         except Exception:
             pass
+          # ==========================================================
+          # MIGUEL MVP — CASES + DEADLINES (auto-migrating, safe)
+          # ==========================================================
+
+          # cases: one row per (chat_id, expediente)
+          cur.execute("""
+          CREATE TABLE IF NOT EXISTS cases (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              chat_id INTEGER NOT NULL,
+              expediente TEXT NOT NULL,
+              client_name TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE(chat_id, expediente)
+          );
+          """)
+          cur.execute("CREATE INDEX IF NOT EXISTS idx_cases_chat_id ON cases(chat_id);")
+          cur.execute("CREATE INDEX IF NOT EXISTS idx_cases_expediente ON cases(chat_id, expediente);")
+          _ensure_column(cur, "cases", "principal_id", "principal_id TEXT")
+
+          # case_events: every voice-logged event for a case
+          # NOTE: legacy deployments may already have case_events without chat_id and with 'description' column.
+          cur.execute("""
+          CREATE TABLE IF NOT EXISTS case_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              chat_id INTEGER NOT NULL,
+              case_id INTEGER NOT NULL,
+              event_text TEXT NOT NULL,
+              term_days INTEGER,
+              start_date TEXT,
+              deadline_date TEXT,
+              raw_text TEXT,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY(case_id) REFERENCES cases(id)
+          );
+          """)
+
+          # ---- Legacy migration: add missing columns, then backfill chat_id
+          cols = _table_columns(cur, "case_events")
+
+          # If legacy table exists, CREATE TABLE IF NOT EXISTS won't change it — so we migrate in-place.
+          if "chat_id" not in cols:
+              _ensure_column(cur, "case_events", "chat_id", "chat_id INTEGER")
+          if "event_text" not in cols:
+              _ensure_column(cur, "case_events", "event_text", "event_text TEXT")
+          if "raw_text" not in cols:
+              _ensure_column(cur, "case_events", "raw_text", "raw_text TEXT")
+          _ensure_column(cur, "case_events", "principal_id", "principal_id TEXT")
+
+          # Copy legacy 'description' into event_text if present and event_text is empty
+          cols = _table_columns(cur, "case_events")
+          if "description" in cols and "event_text" in cols:
+              try:
+                  cur.execute("""
+                      UPDATE case_events
+                      SET event_text = COALESCE(NULLIF(event_text,''), description)
+                      WHERE (event_text IS NULL OR event_text = '');
+                  """)
+              except Exception:
+                  pass
+
+          # Backfill chat_id from cases (case_id -> cases.id)
+          try:
+              cur.execute("""
+                  UPDATE case_events
+                  SET chat_id = (
+                      SELECT c.chat_id FROM cases c WHERE c.id = case_events.case_id
+                  )
+                  WHERE chat_id IS NULL OR chat_id = 0;
+              """)
+          except Exception:
+              pass
+
+          # Indexes (safe after migration)
+          cur.execute("CREATE INDEX IF NOT EXISTS idx_case_events_chat_id ON case_events(chat_id);")
+          cur.execute("CREATE INDEX IF NOT EXISTS idx_case_events_case_id ON case_events(case_id);")
+          cur.execute("CREATE INDEX IF NOT EXISTS idx_case_events_deadline ON case_events(chat_id, deadline_date);")
+
 
         # -------------------------
         # USER FACTS (we keep your existing API keyed by chat_id for now,
