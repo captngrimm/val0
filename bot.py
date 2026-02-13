@@ -108,6 +108,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("val0-bot")
 
+import memory_store
+memory_store._log_db_mode()
+
+
 # Reduce noisy HTTP logs (prevents leaking bot token in journalctl)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
