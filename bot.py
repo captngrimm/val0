@@ -27,6 +27,22 @@ SOURCE OF TRUTH:
 - Prompt assembly happens ONLY in _process_text_pipeline()
 - call_val_openai() is the final gateway to the model
 """
+# ==========================================================
+# VAL0 PATCH LOG
+# ==========================================================
+# Format:
+# [YYYY-MM-DD] - Short title
+#   - What changed
+#   - Why it changed
+#
+# 2026-02-13 - SQLCipher Enforcement + DB Mode Logging
+#   - Enforced SQLCipher-only DB mode
+#   - Added startup DB CHECK logging
+#   - Fixed stray escape char crash in memory_store.py
+#
+# ==========================================================
+
+
 
 
 import time
