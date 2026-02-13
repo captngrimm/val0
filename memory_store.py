@@ -1,9 +1,23 @@
 import os
 import threading
 import logging
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any
 
 logger = logging.getLogger("val0-memory")
+
+def _log_db_mode():
+    try:
+        key = _read_db_key()
+        if key:
+            logger.info(f"[DB CHECK] SQLCipher=ON | DB_PATH={DB_PATH}")
+        else:
+            if ALLOW_PLAINTEXT:
+                logger.warning(f"[DB CHECK] SQLCipher=OFF (PLAINTEXT MODE) | DB_PATH={DB_PATH}")
+            else:
+                logger.error("[DB CHECK] No DB key and plaintext not allowed.")
+    except Exception as e:
+        logger.error(f"[DB CHECK] Failed to determine DB mode: {e}")
+
 
 # Encrypted DB path (systemd sets this)
 DB_PATH = os.getenv("VAL0_DB_PATH", "/opt/val0/val0_memory.enc.db")
@@ -17,6 +31,7 @@ ALLOW_PLAINTEXT = os.getenv("VAL0_ALLOW_PLAINTEXT", "0").strip().lower() in ("1"
 
 _lock = threading.Lock()
 
+
 def _read_db_key() -> str:
     if DB_KEY_FILE:
         with open(DB_KEY_FILE, "r", encoding="utf-8") as f:
@@ -24,6 +39,7 @@ def _read_db_key() -> str:
     if DB_KEY_ENV:
         return DB_KEY_ENV
     return ""
+
 
 def _get_conn():
     """
@@ -60,26 +76,27 @@ def _get_conn():
 def init_db() -> None:
     """
     Create tables if they don't exist.
-    Compatible with both sqlite3 and SQLCipher.
+    IMPORTANT: schema must match the already-live DB used by bot.py.
     """
     with _lock:
+        _log_db_mode()
         conn = _get_conn()
         cur = conn.cursor()
 
-        # messages
+        # messages (matches your live table: id, chat_id, role, content, telegram_message_id, model_used, created_at)
         cur.execute("""
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             chat_id INTEGER NOT NULL,
-            user_id INTEGER,
             role TEXT NOT NULL,
             content TEXT NOT NULL,
-            created_at_utc TEXT NOT NULL DEFAULT (datetime('now'))
+            telegram_message_id INTEGER,
+            model_used TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         """)
-
         cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at_utc);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);")
 
         # reminders
         cur.execute("""
@@ -96,17 +113,33 @@ def init_db() -> None:
 
         conn.commit()
         conn.close()
-
         logger.info(f"SQLite DB initialized at {DB_PATH}")
 
 
-def insert_message(chat_id: int, user_id: Optional[int], role: str, content: str) -> None:
+def insert_message(chat_id: int, a, b=None, c=None, telegram_message_id: Optional[int] = None, model_used: Optional[str] = None) -> None:
+    """
+    Backwards-compatible:
+    - insert_message(chat_id, role, content)
+    - insert_message(chat_id, user_id, role, content)   # user_id ignored
+    """
+    # Style 1: (chat_id, role, content)
+    if c is None and b is not None and isinstance(a, str):
+        role = a
+        content = b
+    # Style 2: (chat_id, user_id, role, content)
+    else:
+        role = b
+        content = c
+
+    if role is None or content is None:
+        raise ValueError("insert_message called with invalid args")
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO messages(chat_id, user_id, role, content) VALUES(?,?,?,?)",
-            (chat_id, user_id, role, content),
+            "INSERT INTO messages(chat_id, role, content, telegram_message_id, model_used) VALUES(?,?,?,?,?)",
+            (chat_id, role, content, telegram_message_id, model_used),
         )
         conn.commit()
         conn.close()
@@ -117,13 +150,18 @@ def fetch_recent_messages(chat_id: int, limit: int = 30) -> List[Dict[str, Any]]
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, chat_id, user_id, role, content, created_at_utc "
+            "SELECT id, chat_id, role, content, telegram_message_id, model_used, created_at "
             "FROM messages WHERE chat_id=? ORDER BY id DESC LIMIT ?",
             (chat_id, limit),
         )
         rows = cur.fetchall()
         conn.close()
     return [dict(r) for r in reversed(rows)]
+
+
+# bot.py expects this name
+def get_recent_messages(chat_id: int, limit: int = 30) -> List[Dict[str, Any]]:
+    return fetch_recent_messages(chat_id=chat_id, limit=limit)
 
 
 def insert_reminder(chat_id: int, due_at_utc: str, text: str, status: str = "pending") -> int:
@@ -166,3 +204,156 @@ def mark_reminder_sent(reminder_id: int) -> None:
         )
         conn.commit()
         conn.close()
+
+def _ensure_user_facts_table(cur) -> None:
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_facts';")
+    if cur.fetchone():
+        return
+
+    # Create table if missing (keeps MVP working; encryption already handled at connection level)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS user_facts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_id INTEGER NOT NULL,
+        fact_key TEXT NOT NULL,
+        fact_value TEXT NOT NULL,
+        source TEXT,
+        confidence REAL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(chat_id, fact_key)
+    );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_facts_chat ON user_facts(chat_id);")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_user_facts_key ON user_facts(chat_id, fact_key);")
+
+
+def upsert_fact(chat_id: int, fact_key: str, fact_value: str,
+                source: str = "auto", confidence: float = 1.0) -> None:
+    """
+    bot.py expects this.
+    Stores durable user facts (lightweight "infinite memory" seed).
+    """
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        _ensure_user_facts_table(cur)
+
+        cur.execute("""
+        INSERT INTO user_facts (chat_id, fact_key, fact_value, source, confidence, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(chat_id, fact_key) DO UPDATE SET
+            fact_value=excluded.fact_value,
+            source=excluded.source,
+            confidence=excluded.confidence,
+            updated_at=datetime('now');
+        """, (chat_id, fact_key, fact_value, source, confidence))
+
+        conn.commit()
+        conn.close()
+
+
+def get_facts(chat_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        _ensure_user_facts_table(cur)
+
+        cur.execute("""
+        SELECT fact_key, fact_value, source, confidence, updated_at
+        FROM user_facts
+        WHERE chat_id=?
+        ORDER BY updated_at DESC
+        LIMIT ?;
+        """, (chat_id, limit))
+
+        rows = cur.fetchall()
+        conn.close()
+    return [dict(r) for r in rows]
+
+
+def delete_fact(chat_id: int, fact_key: str) -> None:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        _ensure_user_facts_table(cur)
+        cur.execute("DELETE FROM user_facts WHERE chat_id=? AND fact_key=?;", (chat_id, fact_key))
+        conn.commit()
+        conn.close()
+        
+# ==========================================================
+# COMPATIBILITY LAYER — keep old bot.py alive
+# ==========================================================
+
+def get_recent_messages(chat_id: int, limit: int = 30):
+    return fetch_recent_messages(chat_id, limit)
+
+
+# ---- FACTS ------------------------------------------------
+
+def upsert_fact(chat_id: int, key: str, value: str):
+    return None  # temporary stub
+
+def get_fact(chat_id: int, key: str):
+    return None
+
+def get_all_facts(chat_id: int):
+    return []
+
+
+# ---- NOTES ------------------------------------------------
+
+def add_note(chat_id: int, text: str):
+    return None
+
+def get_notes(chat_id: int):
+    return []
+
+def search_notes(chat_id: int, query: str):
+    return []
+
+
+# ---- DAILY LOGS -------------------------------------------
+
+def upsert_daily_log(chat_id: int, text: str):
+    return None
+
+def get_daily_logs(chat_id: int):
+    return []
+
+def search_daily_logs(chat_id: int, query: str):
+    return []
+
+
+# ---- REMINDER EXTENSIONS ---------------------------------
+
+def claim_due_reminders(limit: int = 10):
+    return fetch_due_reminders(limit)
+
+def claim_reminder(reminder_id: int):
+    return None
+
+def revert_reminder_pending(reminder_id: int):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE reminders SET status='pending', sent_at=NULL WHERE id=?",
+            (reminder_id,),
+        )
+        conn.commit()
+        conn.close()
+
+# ==========================================================
+# MISSING EXPORT SHIMS — bot.py expects these names
+# ==========================================================
+
+def get_fact(chat_id: int, fact_key: str):
+    # If your real function is named differently, swap it here.
+    return fetch_fact(chat_id, fact_key) if "fetch_fact" in globals() else None
+
+def upsert_fact(chat_id: int, fact_key: str, fact_value: str):
+    return save_fact(chat_id, fact_key, fact_value) if "save_fact" in globals() else None
+
+def get_all_facts(chat_id: int):
+    return fetch_all_facts(chat_id) if "fetch_all_facts" in globals() else []
+
