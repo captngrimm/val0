@@ -1,7 +1,7 @@
 import unittest
 import time
 
-from memory_store import init_db, insert_message, get_recent_messages
+from memory_store import init_db, insert_message, fetch_recent_messages
 
 
 class TestMemoryStore(unittest.TestCase):
@@ -19,7 +19,7 @@ class TestMemoryStore(unittest.TestCase):
             model_used=None,
         )
 
-        rows = get_recent_messages(chat_id=chat_id, limit=5)
+        rows = fetch_recent_messages(chat_id=chat_id, limit=5)
         self.assertTrue(isinstance(rows, list))
         self.assertTrue(len(rows) >= 1)
         # newest should contain our content somewhere

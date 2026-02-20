@@ -116,23 +116,19 @@ def init_db() -> None:
         logger.info(f"SQLite DB initialized at {DB_PATH}")
 
 
-def insert_message(chat_id: int, a, b=None, c=None, telegram_message_id: Optional[int] = None, model_used: Optional[str] = None) -> None:
+def insert_message(
+    chat_id: int,
+    role: str,
+    content: str,
+    telegram_message_id: Optional[int] = None,
+    model_used: Optional[str] = None,
+) -> None:
     """
-    Backwards-compatible:
-    - insert_message(chat_id, role, content)
-    - insert_message(chat_id, user_id, role, content)   # user_id ignored
+    Clean version. No legacy positional guessing.
     """
-    # Style 1: (chat_id, role, content)
-    if c is None and b is not None and isinstance(a, str):
-        role = a
-        content = b
-    # Style 2: (chat_id, user_id, role, content)
-    else:
-        role = b
-        content = c
 
-    if role is None or content is None:
-        raise ValueError("insert_message called with invalid args")
+    if not role or not content:
+        raise ValueError("insert_message requires role and content")
 
     with _lock:
         conn = _get_conn()
@@ -160,9 +156,6 @@ def fetch_recent_messages(chat_id: int, limit: int = 30) -> List[Dict[str, Any]]
 
 
 # bot.py expects this name
-def get_recent_messages(chat_id: int, limit: int = 30) -> List[Dict[str, Any]]:
-    return fetch_recent_messages(chat_id=chat_id, limit=limit)
-
 
 def insert_reminder(chat_id: int, due_at_utc: str, text: str, status: str = "pending") -> int:
     with _lock:
@@ -279,13 +272,10 @@ def delete_fact(chat_id: int, fact_key: str) -> None:
         cur.execute("DELETE FROM user_facts WHERE chat_id=? AND fact_key=?;", (chat_id, fact_key))
         conn.commit()
         conn.close()
-        
+
 # ==========================================================
 # COMPATIBILITY LAYER — keep old bot.py alive
 # ==========================================================
-
-def get_recent_messages(chat_id: int, limit: int = 30):
-    return fetch_recent_messages(chat_id, limit)
 
 
 # ---- FACTS ------------------------------------------------
@@ -357,3 +347,6 @@ def upsert_fact(chat_id: int, fact_key: str, fact_value: str):
 def get_all_facts(chat_id: int):
     return fetch_all_facts(chat_id) if "fetch_all_facts" in globals() else []
 
+# --- Compat alias (tests + older callers) ---
+def get_recent_messages(chat_id: int, limit: int = 30):
+    return fetch_recent_messages(chat_id=chat_id, limit=limit)
