@@ -30,6 +30,14 @@ SOURCE OF TRUTH:
 
 
 import time
+
+# --- MIGUEL MVP: gates wiring (do not remove) ---
+try:
+    from core.case_mvp import try_case_summary, try_due_today  # preferred
+except Exception:
+    pass
+    # Fallback stubs: keep bot stable even if module isn't present yet
+
 import os
 import logging
 import unicodedata
@@ -1071,6 +1079,25 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             disable_web_page_preview=True,
         )
         return
+
+    # --------------------------------------------------
+    # MIGUEL MVP — GATES (must run BEFORE model call)
+    # --------------------------------------------------
+    try:
+        logger.info('[GATE] try_case_summary check')
+        if await try_case_summary(update, chat_id, text):
+            logger.info('[GATE] try_case_summary HIT (short-circuit)')
+            return
+    except Exception as e:
+        logger.exception(f"[GATE] try_case_summary failed: {e}")
+
+    try:
+        logger.info('[GATE] try_due_today check')
+        if await try_due_today(update, chat_id, text):
+            logger.info('[GATE] try_due_today HIT (short-circuit)')
+            return
+    except Exception as e:
+        logger.exception(f"[GATE] try_due_today failed: {e}")
 
     # --------------------------------------------------
     # Load context + facts + semantic recall (C2) — with C3 gating
