@@ -97,3 +97,12 @@ gcal_events_smoke.py
 *_smoke.py
 client_secret*.json
 refresh_token
+
+# --- Google OAuth / Calendar (local secrets + scratch) ---
+google_oauth.json
+oauth_test.py
+gcal_smoke.py
+gcal_events_smoke.py
+*_smoke.py
+client_secret*.json
+refresh_token

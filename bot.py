@@ -33,7 +33,7 @@ import time
 
 # --- MIGUEL MVP: gates wiring (do not remove) ---
 try:
-    from core.case_mvp import try_case_summary, try_due_today  # preferred
+    from core.case_mvp import try_case_summary, try_due_today, try_due_range  # preferred
 except Exception:
     pass
     # Fallback stubs: keep bot stable even if module isn't present yet
@@ -1098,6 +1098,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[GATE] try_due_today failed: {e}")
+    try:
+        logger.info('[GATE] try_due_range check')
+        if await try_due_range(update, chat_id, text):
+            logger.info('[GATE] try_due_range HIT (short-circuit)')
+            return
+    except Exception as e:
+        logger.exception(f"[GATE] try_due_range failed: {e}")
+
 
     # --------------------------------------------------
     # Load context + facts + semantic recall (C2) — with C3 gating
