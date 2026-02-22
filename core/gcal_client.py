@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import os
 import json
 from typing import List, Dict, Any, Optional
 
@@ -30,7 +31,11 @@ def _load_creds() -> Credentials:
     )
 
 def _default_calendar_id() -> str:
-    return CAL_ID_PATH.read_text().strip()
+    try:
+        cid = CAL_ID_PATH.read_text().strip()
+        return cid or "primary"
+    except FileNotFoundError:
+        return "primary"
 
 def get_events_between(
     start_dt: datetime,

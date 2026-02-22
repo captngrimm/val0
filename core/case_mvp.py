@@ -1,12 +1,15 @@
 import re
+import os
 import logging
 import unicodedata
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from typing import Dict, List, Any, Optional, Tuple
 
 from memory_store import _get_conn
 
 logger = logging.getLogger("val0-bot")
+
 
 def _clean(s: str) -> str:
     s = (s or "").strip().lower()
@@ -19,6 +22,114 @@ def _clean(s: str) -> str:
 
     s = re.sub(r"\s+", " ", s)
     return s
+
+
+def _dt_local_from_item(it: Dict[str, Any], tz: ZoneInfo) -> Optional[datetime]:
+    """
+    Deterministic local datetime for an item.
+    Prefer due_ts (UTC seconds). Fallback to parsing due_local if present.
+    """
+    try:
+        ts = it.get("due_ts")
+        if ts is not None:
+            ts_i = int(ts)
+            return datetime.fromtimestamp(ts_i, tz=timezone.utc).astimezone(tz)
+    except Exception:
+        pass
+
+    # Fallback: due_local like "YYYY-MM-DD HH:MM"
+    dl = (it.get("due_local") or "").strip()
+    if dl:
+        try:
+            # interpret as local time already
+            dt = datetime.strptime(dl, "%Y-%m-%d %H:%M")
+            return dt.replace(tzinfo=tz)
+        except Exception:
+            return None
+
+    return None
+
+
+def _group_items_by_local_date(
+    items: List[Dict[str, Any]],
+    tz: ZoneInfo,
+) -> List[Tuple[str, List[Dict[str, Any]]]]:
+    """
+    Group items by local YYYY-MM-DD. Deterministic ordering:
+    - group keys sorted ascending
+    - within group sorted by (due_ts asc, source asc, title asc)
+    """
+    buckets: Dict[str, List[Dict[str, Any]]] = {}
+
+    for it in items:
+        dt_local = _dt_local_from_item(it, tz)
+        if dt_local is None:
+            # shove unknowns into a special bucket
+            key = "—"
+        else:
+            key = dt_local.date().isoformat()
+
+        buckets.setdefault(key, []).append(it)
+
+    def _sort_key(it: Dict[str, Any]) -> Tuple[int, str, str]:
+        try:
+            ts = int(it.get("due_ts") or 0)
+        except Exception:
+            ts = 0
+        src = str(it.get("source") or "")
+        title = str(it.get("title") or "")
+        return (ts, src, title)
+
+    grouped: List[Tuple[str, List[Dict[str, Any]]]] = []
+    for day in sorted(buckets.keys()):
+        group = buckets[day]
+        group_sorted = sorted(group, key=_sort_key)
+        grouped.append((day, group_sorted))
+
+    return grouped
+
+
+def _render_due_grouped(
+    *,
+    header: str,
+    items: List[Dict[str, Any]],
+    tz: ZoneInfo,
+) -> str:
+    """
+    Render grouped-by-date, deterministic.
+    DB items show: expediente/case_id + title.
+    GCAL items show: HH:MM | title (and optional case_id if present).
+    """
+    lines: List[str] = [header]
+
+    grouped = _group_items_by_local_date(items, tz)
+    for day, group in grouped:
+        lines.append(f"\n📅 {day}")
+        for it in group:
+            src = (it.get("source") or "db").strip()
+            title = (it.get("title") or "").strip() or "(evento)"
+            case_id = (it.get("case_id") or "").strip()
+
+            dt_local = _dt_local_from_item(it, tz)
+            hhmm = dt_local.strftime("%H:%M") if dt_local else ""
+
+            if src == "db":
+                # DB: case_id is your expediente (stable identifier)
+                if case_id:
+                    lines.append(f"- {case_id}: {title}")
+                else:
+                    lines.append(f"- {title}")
+            else:
+                # GCAL/unbound: show time + title, optionally case binding if present
+                if hhmm and case_id:
+                    lines.append(f"- {hhmm} | {case_id}: {title}")
+                elif hhmm:
+                    lines.append(f"- {hhmm} | {title}")
+                else:
+                    lines.append(f"- {title}")
+
+    return "\n".join(lines)
+
 
 async def try_case_summary(update, chat_id, text) -> bool:
     """
@@ -62,7 +173,7 @@ async def try_case_summary(update, chat_id, text) -> bool:
         events = cur.fetchall() or []
         conn.close()
 
-        lines = []
+        lines: List[str] = []
         lines.append(f"📁 Expediente {row['expediente']} | Cliente: {client_name}")
         lines.append("Últimos movimientos (máx 10):")
 
@@ -104,14 +215,13 @@ async def try_due_today(update, chat_id, text) -> bool:
     if not re.search(r"\b(que|qué)\s+vence\s+hoy\b", cleaned):
         return False
 
-    tz = ZoneInfo("America/Panama")
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
     today = datetime.now(tz).date().isoformat()
 
     try:
         conn = _get_conn()
         cur = conn.cursor()
 
-        # Pull case deadlines where deadline_date == today
         cur.execute(
             "SELECT c.expediente, ce.event_text, ce.deadline_date "
             "FROM case_events ce "
@@ -123,23 +233,56 @@ async def try_due_today(update, chat_id, text) -> bool:
         rows = cur.fetchall() or []
         conn.close()
 
-        if not rows:
-            await update.message.reply_text("Hoy no tengo vencimientos registrados en tu base de datos.")
-            return True
+        # --- deterministic merge: DB + optional Google Calendar (no model) ---
+        from core.due_merge import merge_due_items
 
-        lines = [f"⏰ Vence hoy ({today}):"]
+        # compute date parts once (fixes y referenced-before-assignment edge cases)
+        y, m, d = map(int, today.split("-"))
+
+        db_items: List[Dict[str, Any]] = []
         for r in rows:
             exp = r["expediente"]
             et = (r["event_text"] or "").strip() or "(evento)"
-            lines.append(f"- {exp}: {et}")
 
-        await update.message.reply_text("\n".join(lines))
+            # Deterministic rule: DB deadlines treated as 09:00 local on deadline_date
+            local_dt = datetime(y, m, d, 9, 0, 0, tzinfo=tz)
+            due_ts = int(local_dt.astimezone(timezone.utc).timestamp())
+
+            db_items.append({
+                "due_ts": due_ts,
+                "title": et,
+                "case_id": exp,      # expediente as stable case identifier
+                "source": "db",
+                "external_id": None,
+            })
+
+        # Merge range for "today": [00:00, 23:59:59] local → UTC
+        start_local = datetime(y, m, d, 0, 0, 0, tzinfo=tz)
+        end_local = datetime(y, m, d, 23, 59, 59, tzinfo=tz)
+
+        items = merge_due_items(
+            db_items=db_items,
+            range_start_utc=start_local.astimezone(timezone.utc),
+            range_end_utc=end_local.astimezone(timezone.utc),
+        )
+
+        if not items:
+            await update.message.reply_text("Hoy no tengo vencimientos registrados.")
+            return True
+
+        msg = _render_due_grouped(
+            header=f"⏰ Vence hoy ({today}):",
+            items=items,
+            tz=tz,
+        )
+        await update.message.reply_text(msg)
         return True
 
     except Exception as e:
         logger.exception(f"[CASE MVP] try_due_today failed: {e}")
         await update.message.reply_text("Se cayó el chequeo de vencimientos de hoy. Reviso logs.")
         return True
+
 
 async def try_due_range(update, chat_id, text) -> bool:
     """
@@ -154,15 +297,14 @@ async def try_due_range(update, chat_id, text) -> bool:
 
     cleaned = _clean(text)
 
-    # Detect range
-    days = None
-    weeks = None
+    days: Optional[int] = None
+    weeks: Optional[int] = None
 
     if re.search(r"\b(que|qué)\s+vence\s+esta\s+semana\b", cleaned):
         weeks = 1
         days = 7
     else:
-        # digits: "en 2 semanas", "en las próximas 2 semanas", "las proximas 2 semanas", etc.
+        # digits: "... 2 semanas", "... proximas 3 semanas", etc.
         m = re.search(
             r"\b(que|qué)\s+vence(?:\s+en(?:\s+las)?)?(?:\s+las)?(?:\s+(?:proximas|próximas))?\s+(\d+)\s+semanas?\b",
             cleaned,
@@ -188,21 +330,22 @@ async def try_due_range(update, chat_id, text) -> bool:
             )
             if m:
                 weeks = word_map.get(m.group(2))
-                days = weeks * 7
+                if weeks is not None:
+                    days = weeks * 7
+
     if days is None:
         return False
 
-    tz = ZoneInfo("America/Panama")
-    start = datetime.now(tz).date()
-    end = start + timedelta(days=days)
-    start_s = start.isoformat()
-    end_s = end.isoformat()
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+    start_date = datetime.now(tz).date()
+    end_date = start_date + timedelta(days=days)
+    start_s = start_date.isoformat()
+    end_s = end_date.isoformat()
 
     try:
         conn = _get_conn()
         cur = conn.cursor()
 
-        # NOTE: deadline_date stored as ISO YYYY-MM-DD, so lexical BETWEEN works.
         cur.execute(
             "SELECT c.expediente, ce.event_text, ce.deadline_date "
             "FROM case_events ce "
@@ -214,25 +357,59 @@ async def try_due_range(update, chat_id, text) -> bool:
         rows = cur.fetchall() or []
         conn.close()
 
-        if not rows:
-            w = weeks or (days // 7)
-            label = "esta semana" if days == 7 else f"las próximas {w} semanas"
-            await update.message.reply_text(f"No tengo vencimientos registrados para {label}.")
-            return True
+        # --- deterministic merge: DB + optional Google Calendar (no model) ---
+        from core.due_merge import merge_due_items
 
         w = weeks or (days // 7)
         label = "esta semana" if days == 7 else f"las próximas {w} semanas"
-        lines = [f"⏰ Vence {label} ({start_s} → {end_s}):"]
+
+        db_items: List[Dict[str, Any]] = []
         for r in rows:
             exp = r["expediente"]
-            dd = r["deadline_date"] or "—"
+            dd = r["deadline_date"] or ""
             et = (r["event_text"] or "").strip() or "(evento)"
-            lines.append(f"- {dd} | {exp}: {et}")
 
-        await update.message.reply_text("\n".join(lines))
+            if not dd:
+                continue
+
+            # deadline_date treated as 09:00 local
+            y, m, d = map(int, dd.split("-"))
+            local_dt = datetime(y, m, d, 9, 0, 0, tzinfo=tz)
+            due_ts = int(local_dt.astimezone(timezone.utc).timestamp())
+
+            db_items.append({
+                "due_ts": due_ts,
+                "title": et,
+                "case_id": exp,              # expediente as stable case identifier
+                "deadline_date": dd,         # kept for possible future rendering
+                "source": "db",
+                "external_id": None,
+            })
+
+        # Merge range (local) → UTC
+        start_local = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0, tzinfo=tz)
+        end_local = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59, tzinfo=tz)
+
+        items = merge_due_items(
+            db_items=db_items,
+            range_start_utc=start_local.astimezone(timezone.utc),
+            range_end_utc=end_local.astimezone(timezone.utc),
+        )
+
+        if not items:
+            await update.message.reply_text(f"No tengo vencimientos registrados para {label}.")
+            return True
+
+        msg = _render_due_grouped(
+            header=f"⏰ Vence {label} ({start_s} → {end_s}):",
+            items=items,
+            tz=tz,
+        )
+        await update.message.reply_text(msg)
         return True
 
     except Exception as e:
         logger.exception(f"[CASE MVP] try_due_range failed: {e}")
         await update.message.reply_text("Se cayó el chequeo de vencimientos por rango. Reviso logs.")
         return True
+    
