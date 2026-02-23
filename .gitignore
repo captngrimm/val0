@@ -106,3 +106,4 @@ gcal_events_smoke.py
 *_smoke.py
 client_secret*.json
 refresh_token
+*.locked.*

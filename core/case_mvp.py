@@ -136,23 +136,29 @@ def _render_due_grouped(
 def _audit_merge(*, gate: str, chat_id: int, label: str, items: list) -> None:
     """Phase 1 audit: read-only per-query merge summary."""
     try:
-        import os
         import logging
         from collections import Counter
 
-        total = len(items or [])
-        sources = Counter((it.get("source") or "unknown") for it in (items or []))
-        case_ids = sorted({str(it.get("case_id")) for it in (items or []) if it.get("case_id")})
+        items = items or []
+        total = len(items)
+        sources = Counter((it.get("source") or "unknown") for it in items)
+
+        # case_ids: unique bound case identifiers (strings)
+        case_ids = sorted({str(it.get("case_id")) for it in items if it.get("case_id")})
+
+        # case_items: count of items that are bound to a case_id (not unique)
+        case_item_count = sum(1 for it in items if it.get("case_id"))
 
         logging.getLogger("val0-bot").info(
-            "[AUDIT] gate=%s chat_id=%s label=%s total=%d db=%d gcal=%d cases=%d",
+            "[AUDIT] gate=%s chat_id=%s label=%s total=%d db=%d gcal=%d case_items=%d case_ids=%d",
             gate,
             int(chat_id),
             label,
             total,
             int(sources.get("db", 0)),
             int(sources.get("gcal", 0)),
-            len(case_ids),
+            int(case_item_count),
+            int(len(case_ids)),
         )
     except Exception:
         pass

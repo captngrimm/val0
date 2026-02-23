@@ -213,6 +213,12 @@ def merge_due_items(
 
         title = (ev.get("summary") or "(no title)").strip()
         case_id = _extract_case_id_from_title(title)
+        if total_ev <= 5:
+            logger.info("[MERGE] ev_dbg start=%s titleh=%s bound=%s",
+                start_str,
+                _title_hash(title),
+                case_id or "-")
+    
         due_date = _local_label(due_dt_utc)[:10]
 
         if case_id is None:

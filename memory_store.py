@@ -319,8 +319,27 @@ def search_daily_logs(chat_id: int, query: str):
 def claim_due_reminders(limit: int = 10):
     return fetch_due_reminders(limit)
 
-def claim_reminder(reminder_id: int):
-    return None
+def claim_reminder(reminder_id: int) -> bool:
+    """
+    Atomically claim a pending reminder so only one runner instance sends it.
+    Returns True if claimed, False otherwise.
+    """
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE reminders
+            SET status='sending'
+            WHERE id=?
+              AND status='pending'
+              AND sent_at IS NULL
+            """,
+            (reminder_id,),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+    
 
 def revert_reminder_pending(reminder_id: int):
     with _lock:

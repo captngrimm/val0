@@ -1419,13 +1419,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     init_db()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).defaults(Defaults(parse_mode=None)).build()
-    # Reminder Runner schedule
+    interval = _reminder_poll_seconds()
+    # --- Reminder Runner: schedule exactly once (no duplicates) ---
+    REMINDER_JOB_NAME = "reminder_tick"
+
+    # Remove any existing reminder job(s) with the same name (safe across versions)
     try:
-        interval = _reminder_poll_seconds()
-        logger.info("ReminderRunner: scheduling run_repeating interval=%ss", interval)
-        app.job_queue.run_repeating(_reminder_tick, interval=interval, first=10)
-    except Exception as e:
-        logger.exception("ReminderRunner: failed to schedule: %s", e)
+        existing = app.job_queue.get_jobs_by_name(REMINDER_JOB_NAME)
+        for j in existing:
+          j.schedule_removal()
+    except Exception:
+        # Older versions may not support get_jobs_by_name; ignore and just schedule
+        pass
+
+    app.job_queue.run_repeating(
+        _reminder_tick,
+        interval=interval,
+        first=10,
+        name=REMINDER_JOB_NAME,
+    )
 
     app.add_error_handler(_error_handler)
 

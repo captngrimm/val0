@@ -16,6 +16,7 @@ CLIENT_SECRET_PATH = Path("/etc/val0/gcal/client_secret.json")
 REFRESH_TOKEN_PATH  = Path("/etc/val0/gcal/refresh_token")
 CAL_ID_PATH         = Path("/etc/val0/gcal/calendar_id")
 
+
 def _load_creds() -> Credentials:
     refresh_token = REFRESH_TOKEN_PATH.read_text().strip()
     data = json.loads(CLIENT_SECRET_PATH.read_text())
@@ -30,12 +31,14 @@ def _load_creds() -> Credentials:
         scopes=SCOPES,
     )
 
+
 def _default_calendar_id() -> str:
     try:
         cid = CAL_ID_PATH.read_text().strip()
         return cid or "primary"
     except FileNotFoundError:
         return "primary"
+
 
 def get_events_between(
     start_dt: datetime,
@@ -46,7 +49,13 @@ def get_events_between(
 ) -> List[Dict[str, Any]]:
     """
     Returns normalized events list:
-      [{ "start": "...", "end": "...", "summary": "...", "htmlLink": "..."}]
+      [{
+        "id": "...",
+        "start": "...",
+        "end": "...",
+        "summary": "...",
+        "htmlLink": "..."
+      }]
     """
     if calendar_id is None:
         calendar_id = _default_calendar_id()
@@ -74,6 +83,7 @@ def get_events_between(
         start = (e.get("start", {}).get("dateTime") or e.get("start", {}).get("date") or "")
         end = (e.get("end", {}).get("dateTime") or e.get("end", {}).get("date") or "")
         out.append({
+            "id": e.get("id") or "",
             "start": start,
             "end": end,
             "summary": e.get("summary") or "(no title)",
