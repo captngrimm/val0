@@ -1,109 +1,13 @@
-# Secrets
-.env
-*.env
-
-# Python
-.venv/
-venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Local DBs
-*.db
-*.sqlite
-*.sqlite3
-
-# Logs / runtime artifacts
-logs/
-tools/forgeexec/logs/
-*.log
-
-# local backups / scratch
-backups/
-docs/
-semantic/
-*.bak
-*.bak.*
-bot.py.bak.*
-bot.py.save*
-bot.py.before_*
-bot.py.pre_*
-places/*.bak.*
-tools/forgeexec/backups/
-
-# local task scratch (keep out of git unless you explicitly productize it)
-tasks.json
-tools/forgeexec/tasks/*.json
-
-# misc
-.DS_Store
-
-# local backups / logs
-*.bak*
-*.good_*
-DEPLOY_LOG.txt
-
-# --- allow frozen authoritative docs (Val0 / VFMS v0 source of truth) ---
-!docs/
-!docs/PERSONA.md
-!docs/VAL0_STATE.md
-!docs/VMFS_v0.md
-!docs/SIDEBOARD.md
-!docs/POST_MVP_QUEUE.md
-
-# --- VFMS runtime artifacts (do not commit) ---
-vfms_data/raw/
-vfms_data/extracted/
-vfms_data/index/
-vfms_data/outputs/legal_noah_docs/
-vfms_data/outputs/legal_noah_docs_ocr/
-vfms_data/outputs/legal_noah_evidence/
-vfms_data/outputs/summary__*.md
-vfms_data/outputs/TEST__*.md
-vfms_data_BAD_IDS_*/
-*.zip
-
-# inbox / misc
-panapass.pdf
-
-# temp
-/tmp/*
-
-# VFMS data (never commit)
-vfms_data/
-vfms_data/**
-
-# Inbox / staged docs (never commit)
-opt/vfms_inbox/
-opt/vfms_inbox/**
-
-# Large artifacts
-*.pdf
-*.zip
-
-# Temp scratch
-/tmp/*.txt
-/tmp/*.tsv
-*.PLAIN_UNUSED.*
-*.db
-
-# --- Google OAuth / Calendar (local secrets + scratch) ---
-google_oauth.json
-oauth_test.py
-gcal_smoke.py
-gcal_events_smoke.py
-*_smoke.py
-client_secret*.json
-refresh_token
-
-# --- Google OAuth / Calendar (local secrets + scratch) ---
-google_oauth.json
-oauth_test.py
-gcal_smoke.py
-gcal_events_smoke.py
-*_smoke.py
-client_secret*.json
-refresh_token
+# Local safety snapshots / lock files
 *.locked.*
+*.pre_ops.*
+*.pre_fix.*
+*.bak.*
+
+# Never commit DBs or snapshots
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.enc.db
+*.enc.db.locked.*
