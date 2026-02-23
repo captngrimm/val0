@@ -73,7 +73,11 @@ This phase defines long-term trust contract.
 ---
 
 # PHASE 0.5 — User Memory Spine (Foundation Layer)
+spine schema accepted as baseline
 
+trigger policy locked (HIT full text; non-HIT hash+prefix)
+
+CHECK constraint enforced
 Goal: Structured long-term recall without breaking determinism.
 
 - memory_entries table
