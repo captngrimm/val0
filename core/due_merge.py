@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -33,7 +34,6 @@ def include_unbound_events() -> bool:
 
 def _to_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
-        # assume local if naive
         dt = dt.replace(tzinfo=_tz())
     return dt.astimezone(timezone.utc)
 
@@ -43,6 +43,16 @@ def _local_label(dt_utc: datetime) -> str:
     return dt_utc.astimezone(tz).strftime("%Y-%m-%d %H:%M")
 
 
+def _norm_title(s: str) -> str:
+    return " ".join((s or "").strip().lower().split())
+
+
+def _title_hash(s: str) -> str:
+    # short stable fingerprint for logs (avoid leaking full titles)
+    h = hashlib.sha1(_norm_title(s).encode("utf-8")).hexdigest()
+    return h[:10]
+
+
 def _dedupe_key(item: Dict[str, Any]) -> Tuple[str, str, int]:
     """
     Deterministic-ish de-dupe:
@@ -50,10 +60,19 @@ def _dedupe_key(item: Dict[str, Any]) -> Tuple[str, str, int]:
     - if case_id missing, use "" (still stable)
     """
     case_id = str(item.get("case_id") or "").strip()
-    title = str(item.get("title") or "").strip().lower()
+    title = _norm_title(str(item.get("title") or ""))
     due_ts = int(item.get("due_ts") or 0)
     minute_bucket = due_ts // 60
     return (case_id, title, minute_bucket)
+
+
+def _dedupe_key_public(item: Dict[str, Any]) -> str:
+    # log-safe key representation (hash title)
+    case_id = str(item.get("case_id") or "").strip()
+    due_ts = int(item.get("due_ts") or 0)
+    minute_bucket = due_ts // 60
+    th = _title_hash(str(item.get("title") or ""))
+    return f"case={case_id or '-'} titleh={th} minbucket={minute_bucket}"
 
 
 def _parse_google_start_to_due_ts(start_str: str) -> Optional[int]:
@@ -118,32 +137,42 @@ def merge_due_items(
         "source": "db" | "gcal",
         "external_id": Optional[str],
       }
+
+    Phase 1: no user-visible behavior change — only adds structured audit logs.
     """
     out: List[Dict[str, Any]] = []
 
-    # Normalize DB items first
+    # --- Normalize DB items first ---
+    # Build an index for conflict detection: (case_id, due_date) -> list[db_item]
+    db_index: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+
     for it in db_items:
         it = dict(it)
         it.setdefault("source", "db")
         it.setdefault("external_id", None)
         it["due_ts"] = int(it.get("due_ts") or 0)
+
         it.setdefault("due_local", _local_label(datetime.fromtimestamp(it["due_ts"], tz=timezone.utc)))
         it.setdefault("due_date", it["due_local"][:10] if it.get("due_local") else "")
         it.setdefault("case_id", it.get("case_id"))
         it.setdefault("title", it.get("title") or "(evento)")
         out.append(it)
 
+        case_id = str(it.get("case_id") or "").strip()
+        due_date = str(it.get("due_date") or "").strip()
+        if case_id and due_date:
+            db_index.setdefault((case_id, due_date), []).append(it)
+
     if not gcal_enabled():
         return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
 
-    # Pull GCAL events (normalized) using your existing core/gcal_client.py
+    # Pull GCAL events (normalized)
     try:
-        from core.gcal_client import get_events_between  # existing module
+        from core.gcal_client import get_events_between
     except Exception as e:
         logger.info("[MERGE] gcal_import_fail err=%s", type(e).__name__)
         return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
 
-    # Convert range to tz-aware UTC bounds
     start_utc = _to_utc(range_start_utc)
     end_utc = _to_utc(range_end_utc)
 
@@ -153,7 +182,7 @@ def merge_due_items(
         logger.info("[MERGE] gcal_fetch_fail err=%s", type(e).__name__)
         return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
 
-    # Phase 1: strict unbound handling + structured merge stats
+    # Phase 1: strict unbound handling + merge stats
     allow_unbound = include_unbound_events()
     total_ev = 0
     kept_bound = 0
@@ -161,6 +190,12 @@ def merge_due_items(
     dropped_unbound = 0
     dropped_oob = 0
     dropped_no_ts = 0
+
+    # Phase 1: conflict detection stats (DB vs GCAL)
+    conflict_total = 0
+    conflict_time = 0
+    conflict_title = 0
+    conflict_samples: List[str] = []  # log-safe samples (no titles)
 
     for ev in events or []:
         total_ev += 1
@@ -172,14 +207,13 @@ def merge_due_items(
             continue
 
         due_dt_utc = datetime.fromtimestamp(due_ts, tz=timezone.utc)
-
-        # hard bound filter (deterministic)
         if due_dt_utc < start_utc or due_dt_utc > end_utc:
             dropped_oob += 1
             continue
 
         title = (ev.get("summary") or "(no title)").strip()
         case_id = _extract_case_id_from_title(title)
+        due_date = _local_label(due_dt_utc)[:10]
 
         if case_id is None:
             if not allow_unbound:
@@ -189,11 +223,40 @@ def merge_due_items(
         else:
             kept_bound += 1
 
+            # --- Conflict detection (Phase 1): if DB has same case_id + due_date, compare ---
+            db_candidates = db_index.get((case_id, due_date)) or []
+            if db_candidates:
+                # Compare against the first DB candidate deterministically (sorted by due_ts then id-ish stable fields if present)
+                db_sorted = sorted(db_candidates, key=lambda x: (int(x.get("due_ts") or 0), _norm_title(str(x.get("title") or ""))))
+                db_it = db_sorted[0]
+
+                db_ts = int(db_it.get("due_ts") or 0)
+                g_ts = int(due_ts)
+                delta_min = abs(db_ts - g_ts) // 60
+
+                db_th = _title_hash(str(db_it.get("title") or ""))
+                g_th = _title_hash(title)
+
+                time_mismatch = (db_ts != g_ts)
+                title_mismatch = (db_th != g_th)
+
+                if time_mismatch or title_mismatch:
+                    conflict_total += 1
+                    if time_mismatch:
+                        conflict_time += 1
+                    if title_mismatch:
+                        conflict_title += 1
+
+                    if len(conflict_samples) < 3:
+                        conflict_samples.append(
+                            f"case={case_id} date={due_date} dmin={delta_min} db_titleh={db_th} gcal_titleh={g_th}"
+                        )
+
         out.append(
             {
                 "due_ts": due_ts,
                 "due_local": _local_label(due_dt_utc),
-                "due_date": _local_label(due_dt_utc)[:10],
+                "due_date": due_date,
                 "title": title,
                 "case_id": case_id,
                 "source": "gcal",
@@ -212,22 +275,39 @@ def merge_due_items(
         "1" if allow_unbound else "0",
     )
 
-    # De-dupe (prefer DB over GCAL on collision)
+    if conflict_total:
+        logger.info(
+            "[MERGE] conflict_stats total=%d time=%d title=%d samples=%s",
+            conflict_total,
+            conflict_time,
+            conflict_title,
+            conflict_samples,
+        )
+    else:
+        logger.info("[MERGE] conflict_stats total=0")
+
+    # --- De-dupe (prefer DB over GCAL on collision) + refined logs ---
     deduped: List[Dict[str, Any]] = []
     seen = set()
+
     gcal_skipped_collisions = 0
+    collision_samples: List[str] = []  # log-safe
 
     for it in sorted(out, key=lambda x: (int(x.get("due_ts") or 0), str(x.get("source") or ""))):
         k = _dedupe_key(it)
         if k in seen:
-            # if collision: skip gcal
             if it.get("source") == "gcal":
                 gcal_skipped_collisions += 1
+                if len(collision_samples) < 3:
+                    collision_samples.append(_dedupe_key_public(it))
                 continue
         seen.add(k)
         deduped.append(it)
 
-    if gcal_skipped_collisions:
-        logger.info("[MERGE] dedupe gcal_skipped_collisions=%d", gcal_skipped_collisions)
+    logger.info(
+        "[MERGE] dedupe_stats gcal_skipped=%d sample=%s",
+        gcal_skipped_collisions,
+        collision_samples,
+    )
 
     return sorted(deduped, key=lambda x: int(x.get("due_ts") or 0))
