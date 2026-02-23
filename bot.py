@@ -116,6 +116,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("val0-bot")
 
+
+# Phase 1 ops hardening: log-throttle state (module-level)
+_VAL0_LAST_TICK_LOG_TS = None
+
 import memory_store
 memory_store._log_db_mode()
 
@@ -1366,7 +1370,12 @@ def _reminder_batch_limit() -> int:
 async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
     try:
         due = fetch_due_reminders(limit=_reminder_batch_limit())
-        logger.info("ReminderRunner tick: due=%d", len(due))
+        # Phase 1 ops hardening: throttle tick log to reduce noise (no behavior change)
+        global _VAL0_LAST_TICK_LOG_TS
+        now_ts = int(time.time())
+        if _VAL0_LAST_TICK_LOG_TS is None or (now_ts - _VAL0_LAST_TICK_LOG_TS) >= 600:
+            logger.info("ReminderRunner tick: due=%d", len(due))
+            _VAL0_LAST_TICK_LOG_TS = now_ts
         if not due:
             return
 
