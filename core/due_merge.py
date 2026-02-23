@@ -1,12 +1,17 @@
 from __future__ import annotations
 
+import logging
 import os
-from datetime import datetime, timedelta, timezone
+import re
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from zoneinfo import ZoneInfo
 
-logger_name = "val0-bot"
+logger = logging.getLogger("val0-bot")
+
+# Phase 1 hardening: strict case binding pattern
+CASE_BIND_RE = re.compile(r"\bCASE:(\d+)\b", re.IGNORECASE)
 
 
 def _tz() -> ZoneInfo:
@@ -22,7 +27,7 @@ def gcal_enabled() -> bool:
 
 
 def include_unbound_events() -> bool:
-    # Off by default to avoid noise. Turn on only if you want “general calendar stuff” merged too.
+    # Phase 1: OFF by default to avoid noise. Enable only for testing/general calendar inclusion.
     return os.getenv("VAL0_GCAL_INCLUDE_UNBOUND", "0").strip().lower() in ("1", "true", "yes", "on")
 
 
@@ -82,6 +87,19 @@ def _parse_google_start_to_due_ts(start_str: str) -> Optional[int]:
         return None
 
 
+def _extract_case_id_from_title(title: str) -> Optional[str]:
+    """
+    Phase 1 hardening: strict case binding pattern CASE:<digits>.
+    Returns case_id string if present, else None.
+    """
+    if not title:
+        return None
+    m = CASE_BIND_RE.search(title)
+    if not m:
+        return None
+    return m.group(1)
+
+
 def merge_due_items(
     *,
     db_items: List[Dict[str, Any]],
@@ -120,9 +138,9 @@ def merge_due_items(
 
     # Pull GCAL events (normalized) using your existing core/gcal_client.py
     try:
-        from core.gcal_client import get_events_between  # your file exists already
-    except Exception:
-        # If import fails, still return DB-only deterministically.
+        from core.gcal_client import get_events_between  # existing module
+    except Exception as e:
+        logger.info("[MERGE] gcal_import_fail err=%s", type(e).__name__)
         return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
 
     # Convert range to tz-aware UTC bounds
@@ -131,27 +149,45 @@ def merge_due_items(
 
     try:
         events = get_events_between(start_utc, end_utc, limit=250)
-    except Exception:
+    except Exception as e:
+        logger.info("[MERGE] gcal_fetch_fail err=%s", type(e).__name__)
         return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
 
+    # Phase 1: strict unbound handling + structured merge stats
+    allow_unbound = include_unbound_events()
+    total_ev = 0
+    kept_bound = 0
+    kept_unbound = 0
+    dropped_unbound = 0
+    dropped_oob = 0
+    dropped_no_ts = 0
+
     for ev in events or []:
+        total_ev += 1
+
         start_str = (ev.get("start") or "").strip()
         due_ts = _parse_google_start_to_due_ts(start_str)
         if due_ts is None:
+            dropped_no_ts += 1
             continue
 
         due_dt_utc = datetime.fromtimestamp(due_ts, tz=timezone.utc)
+
         # hard bound filter (deterministic)
         if due_dt_utc < start_utc or due_dt_utc > end_utc:
+            dropped_oob += 1
             continue
 
         title = (ev.get("summary") or "(no title)").strip()
+        case_id = _extract_case_id_from_title(title)
 
-        # We are NOT binding to cases yet (strict rules later). Keep as general unless enabled.
-        case_id = None
-        if not include_unbound_events():
-            # default: skip unbound calendar events entirely
-            continue
+        if case_id is None:
+            if not allow_unbound:
+                dropped_unbound += 1
+                continue
+            kept_unbound += 1
+        else:
+            kept_bound += 1
 
         out.append(
             {
@@ -165,16 +201,33 @@ def merge_due_items(
             }
         )
 
+    logger.info(
+        "[MERGE] gcal_stats total=%d bound=%d unbound_kept=%d unbound_dropped=%d oob_dropped=%d no_ts_dropped=%d include_unbound=%s",
+        total_ev,
+        kept_bound,
+        kept_unbound,
+        dropped_unbound,
+        dropped_oob,
+        dropped_no_ts,
+        "1" if allow_unbound else "0",
+    )
+
     # De-dupe (prefer DB over GCAL on collision)
     deduped: List[Dict[str, Any]] = []
     seen = set()
+    gcal_skipped_collisions = 0
+
     for it in sorted(out, key=lambda x: (int(x.get("due_ts") or 0), str(x.get("source") or ""))):
         k = _dedupe_key(it)
         if k in seen:
             # if collision: skip gcal
             if it.get("source") == "gcal":
+                gcal_skipped_collisions += 1
                 continue
         seen.add(k)
         deduped.append(it)
+
+    if gcal_skipped_collisions:
+        logger.info("[MERGE] dedupe gcal_skipped_collisions=%d", gcal_skipped_collisions)
 
     return sorted(deduped, key=lambda x: int(x.get("due_ts") or 0))
