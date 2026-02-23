@@ -11,3 +11,53 @@
 *.db-shm
 *.enc.db
 *.enc.db.locked.*
+
+# --- Local env / secrets ---
+.env
+google_oauth.json
+*.json
+
+# --- Virtualenv / caches ---
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+
+# --- Logs / runtime ---
+logs/
+DEPLOY_LOG.txt
+
+# --- Backups / snapshots ---
+backups/
+*.bak
+*.bak.*
+*.save
+*.save.*
+*.pre_*
+*.locked.*
+
+# --- Big generated data (VFMS outputs etc) ---
+vfms_data/
+vfms_data_BAD_IDS_*/
+semantic/
+faiss/
+
+# backups & junk
+*.bak
+*.bak_*
+*.before_*
+*.good_*
+*.PLAIN_UNUSED*
+*.save*
+*.pre_*
+
+# local db
+val0_memory.db*
+val0_memory.enc.db*
+*.db
+
+# local experiments
+*gcal*_smoke.py
+oauth_test.py
+panapass.pdf
+
