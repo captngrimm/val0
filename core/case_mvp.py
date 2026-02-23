@@ -131,6 +131,32 @@ def _render_due_grouped(
     return "\n".join(lines)
 
 
+
+
+def _audit_merge(*, gate: str, chat_id: int, label: str, items: list) -> None:
+    """Phase 1 audit: read-only per-query merge summary."""
+    try:
+        import os
+        import logging
+        from collections import Counter
+
+        total = len(items or [])
+        sources = Counter((it.get("source") or "unknown") for it in (items or []))
+        case_ids = sorted({str(it.get("case_id")) for it in (items or []) if it.get("case_id")})
+
+        logging.getLogger("val0-bot").info(
+            "[AUDIT] gate=%s chat_id=%s label=%s total=%d db=%d gcal=%d cases=%d",
+            gate,
+            int(chat_id),
+            label,
+            total,
+            int(sources.get("db", 0)),
+            int(sources.get("gcal", 0)),
+            len(case_ids),
+        )
+    except Exception:
+        pass
+
 async def try_case_summary(update, chat_id, text) -> bool:
     """
     Handles: 'Resumen del expediente <id>'
@@ -265,7 +291,7 @@ async def try_due_today(update, chat_id, text) -> bool:
             range_start_utc=start_local.astimezone(timezone.utc),
             range_end_utc=end_local.astimezone(timezone.utc),
         )
-
+        _audit_merge(gate="due_today", chat_id=int(chat_id), label=f"{today}", items=items)        
         if not items:
             await update.message.reply_text("Hoy no tengo vencimientos registrados.")
             return True
@@ -395,7 +421,7 @@ async def try_due_range(update, chat_id, text) -> bool:
             range_start_utc=start_local.astimezone(timezone.utc),
             range_end_utc=end_local.astimezone(timezone.utc),
         )
-
+        _audit_merge(gate="due_range", chat_id=int(chat_id), label=f"{start_s}->{end_s}", items=items)
         if not items:
             await update.message.reply_text(f"No tengo vencimientos registrados para {label}.")
             return True
