@@ -479,15 +479,22 @@ def get_chat_voice_enabled(chat_id: int) -> bool:
 
 
 def set_chat_voice_enabled(chat_id: int, enabled: bool) -> None:
+    """Set per-chat voice mode.
+    Uses INSERT OR IGNORE + UPDATE (works on older SQLite/SQLCipher builds).
+    """
     conn = _get_conn()
     cur = conn.cursor()
+    cid = int(chat_id)
+    val = 1 if enabled else 0
+    # Ensure row exists
     cur.execute(
-        """
-        INSERT INTO chat_prefs (chat_id, voice_enabled, updated_at)
-        VALUES (?, ?, datetime('now'))
-        ON CONFLICT(chat_id) DO UPDATE SET
-          voice_enabled=excluded.voice_enabled,
-          updated_at=datetime('now')
-        """,
-        (int(chat_id), 1 if enabled else 0),
+        "INSERT OR IGNORE INTO chat_prefs (chat_id, voice_enabled, updated_at) VALUES (?, ?, datetime('now'))",
+        (cid, val),
     )
+    # Always update (covers existing + newly inserted)
+    cur.execute(
+        "UPDATE chat_prefs SET voice_enabled = ?, updated_at = datetime('now') WHERE chat_id = ?",
+        (val, cid),
+    )
+    conn.commit()
+
