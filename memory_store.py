@@ -369,3 +369,85 @@ def get_all_facts(chat_id: int):
 # --- Compat alias (tests + older callers) ---
 def get_recent_messages(chat_id: int, limit: int = 30):
     return fetch_recent_messages(chat_id=chat_id, limit=limit)
+
+# =========================
+# OPS HELPERS (Reminders)
+# =========================
+
+def reminder_stats() -> Dict[str, int]:
+    """
+    Counts reminder states using the SQLCipher-backed connection.
+    """
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT
+          COUNT(*) AS total,
+          SUM(CASE WHEN status='pending' AND sent_at IS NULL THEN 1 ELSE 0 END) AS pending,
+          SUM(CASE WHEN status='pending' AND sent_at IS NULL AND due_at_utc <= datetime('now') THEN 1 ELSE 0 END) AS due_now,
+          SUM(CASE WHEN status='sending' THEN 1 ELSE 0 END) AS sending,
+          SUM(CASE WHEN status='sent' THEN 1 ELSE 0 END) AS sent
+        FROM reminders
+        """
+    )
+    row = cur.fetchone()
+
+    def _get(idx: int, key: str) -> int:
+        try:
+            if hasattr(row, "get"):
+                return int(row.get(key) or 0)
+            return int(row[idx] or 0)
+        except Exception:
+            return 0
+
+    return {
+        "total": _get(0, "total"),
+        "pending": _get(1, "pending"),
+        "due_now": _get(2, "due_now"),
+        "sending": _get(3, "sending"),
+        "sent": _get(4, "sent"),
+    }
+
+
+def list_reminders(statuses: Optional[List[str]] = None, limit: int = 25) -> List[Dict[str, Any]]:
+    """
+    List reminders filtered by statuses (default pending+sending).
+    """
+    if statuses is None:
+        statuses = ["pending", "sending"]
+    limit = max(1, min(100, int(limit or 25)))
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    placeholders = ",".join(["?"] * len(statuses))
+    sql = f"""
+      SELECT id, chat_id, due_at_utc, status, created_at, sent_at, channel, target, text
+      FROM reminders
+      WHERE status IN ({placeholders})
+      ORDER BY due_at_utc ASC
+      LIMIT ?
+    """
+    cur.execute(sql, [*statuses, limit])
+    rows = cur.fetchall() or []
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        if hasattr(r, "keys"):
+            out.append({k: r[k] for k in r.keys()})
+        else:
+            out.append(
+                {
+                    "id": r[0],
+                    "chat_id": r[1],
+                    "due_at_utc": r[2],
+                    "status": r[3],
+                    "created_at": r[4],
+                    "sent_at": r[5],
+                    "channel": r[6],
+                    "target": r[7],
+                    "text": r[8],
+                }
+            )
+    return out

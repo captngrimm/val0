@@ -7,6 +7,7 @@ Record client feature requests without committing to delivery timeline.
 ---
 
 ## Rules
+
 1. All requests logged.
 2. No feature promised verbally.
 3. Tagged as:
@@ -20,6 +21,9 @@ Record client feature requests without committing to delivery timeline.
 ---
 
 ## Entries
+
+(Format)
+
 Date:
 Client:
 Feature:

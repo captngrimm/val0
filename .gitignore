@@ -58,3 +58,13 @@ oauth_test.py
 DEPLOY_LOG.txt
 tools/ops_runner.sh
 
+
+# More local artifacts / legacy backups
+bot.py.bak*
+bot.py.before_*
+bot.py.good_*
+bot.py.save*
+memory_store.py.bak*
+semantic/
+vfms_data/
+vfms/*.bak*
