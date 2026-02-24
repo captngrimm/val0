@@ -109,6 +109,15 @@ def init_db() -> None:
             sent_at TEXT
         );
         """)
+
+        # chat_prefs: per-chat toggles (voice mode, etc)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_prefs (
+          chat_id INTEGER PRIMARY KEY,
+          voice_enabled INTEGER DEFAULT 0,
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+        """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(status, due_at_utc);")
 
         conn.commit()
@@ -451,3 +460,34 @@ def list_reminders(statuses: Optional[List[str]] = None, limit: int = 25) -> Lis
                 }
             )
     return out
+
+# =========================
+# CHAT PREFS (Voice mode)
+# =========================
+def get_chat_voice_enabled(chat_id: int) -> bool:
+    conn = _get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT voice_enabled FROM chat_prefs WHERE chat_id = ?", (int(chat_id),))
+        row = cur.fetchone()
+        if row is None:
+            return False
+        v = row[0] if not hasattr(row, "get") else row.get("voice_enabled")
+        return bool(int(v or 0))
+    except Exception:
+        return False
+
+
+def set_chat_voice_enabled(chat_id: int, enabled: bool) -> None:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO chat_prefs (chat_id, voice_enabled, updated_at)
+        VALUES (?, ?, datetime('now'))
+        ON CONFLICT(chat_id) DO UPDATE SET
+          voice_enabled=excluded.voice_enabled,
+          updated_at=datetime('now')
+        """,
+        (int(chat_id), 1 if enabled else 0),
+    )
