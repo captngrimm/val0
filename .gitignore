@@ -28,3 +28,33 @@ backups/
 
 # PDFs / exports (repo should not bloat)
 *.pdf
+
+# Runtime junk
+*.bak
+*.save
+*.pre_*
+*.PLAIN_UNUSED*
+*.sha256
+__pycache__/
+.venv/
+.env
+logs/
+backups/
+tmp/
+
+# Generated legal outputs
+vfms_data/outputs/
+vfms_data/extracted/
+vfms_data/index/
+vfms_data/evidence_confirmations/
+vfms_data/evidence_freeze/
+vfms_data/raw/
+vfms_data_BAD_IDS_*/
+
+# Local test tools
+gcal_smoke.py
+gcal_events_smoke.py
+oauth_test.py
+DEPLOY_LOG.txt
+tools/ops_runner.sh
+

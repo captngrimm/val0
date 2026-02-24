@@ -1,141 +1,200 @@
-# VAL0 — Legal Ops Core
-Operational Roadmap
-Last Updated: 2026-02-22
+# VAL0 — Legal Ops Core  
+Operational Roadmap  
+Last Updated: 2026-02-23
 
 ---
 
 # CURRENT STATE (Verified Live)
 
-## VERIFIED EVIDENCE (How to re-check fast)
-- Service env:
-  sudo systemctl show val0-bot.service -p Environment --no-pager | tr ' ' '\n' | egrep 'VAL0_(GCAL|TZ|DB_)'
-- Bot logs (gates firing):
-  sudo journalctl -u val0-bot.service -n 80 --no-pager | egrep "\[GATE\]|HIT|CASE MVP"
-- GCAL connectivity (direct):
-  python3 /opt/val0/gcal_smoke.py
-  python3 /opt/val0/gcal_events_smoke.py
+## VERIFIED EVIDENCE (Deterministic CLI)
 
-## MVP 1.1 — Deterministic Legal Gates
+Primary control surface:
+```
+val0ctl ops
+```
+
+Confirms:
+- Service state
+- SQLCipher open
+- DB integrity_check
+- Reminder counts
+- Scheduler running
+- Git clean/dirty status
+- Syntax compilation check
+
+Systemd status:
+```
+sudo systemctl status val0-bot.service
+```
+
+GCAL smoke:
+```
+python3 /opt/val0/gcal_smoke.py
+python3 /opt/val0/gcal_events_smoke.py
+```
+
+---
+
+## MVP 1.1 — Deterministic Legal Gates (LIVE)
+
 - Case summary gate (DB-backed, deterministic)
 - Due today gate (DB deadlines only)
 - Due range gate (DB deadlines only)
 - SQLCipher encrypted database
 - Short-circuit pipeline confirmed
 - No LLM involvement in legal gates
+- DB integrity_check enforced via ops runner
 
-## MVP 1.2 — Google Calendar Merge (Events Only)
+---
+
+## MVP 1.2 — Google Calendar Merge (Events Only) (LIVE)
+
 - Feature flag: VAL0_GCAL_ENABLED
 - Timezone control: VAL0_TZ
-- Deterministic merge layer (DB + Google Calendar)
-- Events-only (no Tasks yet)
-- No secrets stored in repo
-- OAuth refresh token stored under /etc/val0/gcal
-- Merge performed at query-time (no DB mutation)
-- Short-circuit preserved
+- Deterministic merge layer (DB + GCAL)
+- Events-only
+- OAuth token isolated under /etc/val0/gcal
+- Merge performed at query-time
+- No DB mutation
 - No LLM involvement
 
 ---
 
-# DESIGN PRINCIPLES
+## MVP 1.3 — Operational Discipline Layer (PARTIAL LIVE)
+
+- Reminder runner (APScheduler) running
+- Deterministic tick logging
+- Encrypted reminder storage
+- CLI-based reminder injection testable
+- Scheduler health visible in ops runner
+- No auto-modifying legal records
+
+Pending:
+- Daily 08:00 summary push
+- Overdue escalation tagging
+- Per-user timezone enforcement
+
+---
+
+# DESIGN PRINCIPLES (Locked)
 
 1. Determinism first.
 2. Database is source of truth.
-3. Calendar is supplemental, never authoritative.
-4. No silent data mutation.
-5. Every automation must be auditable.
-6. Feature flags control risk.
-7. Memory must never override legal determinism.
+3. Calendar is supplemental.
+4. No silent mutation.
+5. Every automation auditable.
+6. Feature flags gate risk.
+7. Memory advisory only.
 8. Privacy is product.
 9. No architectural drift.
+10. Operational state must be CLI-verifiable.
 
 ---
 
-# PHASE 0 — Trust Model Definition (NEW)
-
-Goal: Define privacy architecture before expansion.
+# PHASE 0 — Trust Model Definition
 
 Telegram Phase:
-- Encrypted storage (SQLCipher at rest)
-- No human review of user conversations
+- SQLCipher at rest
 - No analytics resale
 - No model training reuse
-- Server processes plaintext during execution
+- Server processes plaintext during execution only
 
-Standalone Phase (Future):
-- End-to-end encryption (client-side encryption)
-- Zero-knowledge vault design
-- Server cannot decrypt vault contents
-- User-controlled key model
-- Optional recovery mechanism
-
-This phase defines long-term trust contract.
+Standalone Phase:
+- Client-side encryption
+- Zero-knowledge vault
+- User key authority
+- No server decryption capability
 
 ---
 
-# PHASE 0.5 — User Memory Spine (Foundation Layer)
-spine schema accepted as baseline
+# PHASE 0.5 — Memory Spine (IN PROGRESS)
 
-trigger policy locked (HIT full text; non-HIT hash+prefix)
+Baseline schema accepted.
 
-CHECK constraint enforced
-Goal: Structured long-term recall without breaking determinism.
+Constraints:
+- Advisory only.
+- Never auto-modifies deadlines.
 
-- memory_entries table
-- memory_domains table
-- idea_inbox table
-- automatic interaction logging
-- manual domain tagging first (LLM inference later)
-- keyword recall command
-- time-range recall command
-- per-user vault isolation
-- encryption preserved (SQLCipher)
+Components:
+- memory_entries
+- memory_domains
+- idea_inbox
+- Interaction logging
+- Domain tagging (manual first)
+- Recall by keyword
+- Recall by time-range
+- Per-user vault isolation
+- SQLCipher preserved
 
-Important:
-Memory layer is advisory.
-It never modifies legal deadlines automatically.
+Next step:
+- Minimal deterministic recall CLI test
+- Audit visibility in ops runner
 
 ---
 
-# PHASE 1 — Hardening the Deterministic Core
+# PHASE 1 — Deterministic Core Hardening (ACTIVE)
 
-Goal: Make deadline system bulletproof.
+Remaining tasks:
 
-- [ ] Enforce strict case binding pattern (CASE:<id>)
+- [ ] Strict CASE:<id> enforcement
 - [ ] Disable unbound GCAL events by default
-- [ ] Add conflict detection (DB vs GCAL duplicate)
-- [ ] Improve dedupe logic logging
-- [ ] Add internal audit log for merged results
-- [ ] Structured log tags for legal audit mode
-- [ ] Deadline formatting normalization
+- [ ] Conflict detection (DB vs GCAL duplicate)
+- [ ] Merge dedupe log improvement
+- [ ] Internal audit log table
+- [ ] Structured legal audit log tags
+- [ ] Deadline normalization rules
 
-No expansion until stable.
+Hard rule:
+No new expansion until audit logging exists.
 
 ---
 
-# PHASE 2 — Discipline Layer
+# PHASE 2 — Discipline Automation (ACTIVE)
 
-Goal: Move from reactive to proactive.
+Status:
+Reminder engine running.
 
-- [ ] Reminder runner (daily scheduler)
-- [ ] 08:00 daily summary auto-push
-- [ ] Overdue detection
-- [ ] Escalation tagging (⚠ overdue > X days)
-- [ ] Optional push notification toggle
-- [ ] Per-user timezone handling
+Remaining:
+
+- [ ] Daily summary auto-push
+- [ ] Overdue detection engine
+- [ ] Escalation tagging rules
+- [ ] Push toggle per user
+- [ ] Per-user timezone enforcement
+- [ ] Reminder state audit log
+
+---
+
+# PHASE 2.5 — Operational Control Layer (NEW)
+
+Goal: Reduce manual ops drift.
+
+Implemented:
+- val0ctl ops
+- DB integrity check
+- Git dirty detection
+- Service health verification
+- Scheduler verification
+
+Planned:
+- val0ctl fix reminders
+- val0ctl fix gcal
+- val0ctl doctor full
+- Controlled auto-fix with dry-run mode
+
+This is foundation for future controlled automation.
 
 ---
 
 # PHASE 3 — Controlled Sync (Optional)
 
-Goal: Snapshot GCAL into DB with audit trail.
-
-- [ ] Background sync job
-- [ ] Snapshot Google events into case_events
-- [ ] Preserve source metadata (gcal_event_id)
-- [ ] Immutable audit record
-- [ ] Conflict detection on modified events
-- [ ] Deletion detection
-- [ ] Sync enable flag
+- Background sync job
+- Snapshot Google events into case_events
+- Preserve source metadata (gcal_event_id)
+- Immutable audit record
+- Conflict detection on modified events
+- Deletion detection
+- Sync enable flag
 
 Never overwrite DB silently.
 
@@ -143,33 +202,32 @@ Never overwrite DB silently.
 
 # PHASE 4 — Miguel UX Simplification
 
-Goal: Make it usable for non-technical operators.
-
-- [ ] Standardized event title template
-- [ ] Simple case-binding instruction sheet
-- [ ] One-line quick entry format
-- [ ] Emoji priority tagging (optional)
-- [ ] Syntax friction reduction
+- Standardized event title template
+- Simple case-binding instruction sheet
+- One-line quick entry format
+- Emoji priority tagging (optional)
+- Syntax friction reduction
 
 ---
 
 # PHASE 5 — Operational Expansion
 
-Goal: Expand capability without breaking core.
+Frozen until Phase 1 + Phase 2 stable.
 
-- [ ] Google Tasks evaluation (only if justified)
-- [ ] Multi-calendar support
-- [ ] Role-based filtering
-- [ ] Case status classification
-- [ ] Structured deadline categories
-- [ ] PDF export
-- [ ] Read-only web dashboard
+- Google Tasks evaluation
+- Multi-calendar support
+- Role-based filtering
+- Case status classification
+- Structured deadline categories
+- PDF export
+- Read-only web dashboard
 
 ---
 
 # PHASE 6 — Standalone VAL Interface
 
-Goal: Move beyond Telegram.
+Precondition:
+Operational control layer must be deterministic and scriptable.
 
 - Dedicated web UI
 - Timeline visualization
@@ -183,11 +241,8 @@ Goal: Move beyond Telegram.
 
 # PHASE 7 — Capsule Network (Future)
 
-Goal: Controlled cross-user collaboration.
-
 - Opt-in trust circles
 - Explicit permission-based vault sharing
-- No automatic cross-access
 - Share-by-capsule model only
 - Zero implicit data exposure
 
@@ -197,14 +252,15 @@ Goal: Controlled cross-user collaboration.
 
 Core Layers:
 
-1. Storage (Encrypted DB)
+1. Encrypted storage
 2. Deterministic legal engine
 3. Merge layer
-4. Memory spine
-5. Scheduler / discipline layer
-6. UI layer
-7. Optional LLM narrative layer (never authoritative)
-8. Future E2EE client layer
+4. Memory spine (advisory)
+5. Scheduler layer
+6. Ops control layer (CLI)
+7. UI layer
+8. Optional narrative layer (never authoritative)
+9. Future E2EE client layer
 
 ---
 
@@ -222,11 +278,14 @@ Core Layers:
 # CURRENT PRIORITY
 
 1. Finish Phase 1 hardening.
-2. Implement Phase 0.5 memory spine (minimal version).
-3. Do not expand surface area further.
+2. Add audit log table.
+3. Complete Phase 2 automation (overdue + summary).
+4. Expand ops runner into structured doctor.
+5. Do not expand UI.
+6. Do not add features unrelated to determinism.
 
-Revenue stability first.
-Architecture second.
+Revenue stability first.  
+Architecture second.  
 Ambition third.
 
 ---
