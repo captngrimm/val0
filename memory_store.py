@@ -110,6 +110,23 @@ def init_db() -> None:
         );
         """)
 
+        # legal audit log (deterministic trace layer)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS legal_audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            gate_name TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            metadata_json TEXT,
+            source TEXT,
+            severity TEXT DEFAULT 'info',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_legal_audit_chat_id ON legal_audit_log(chat_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_legal_audit_gate ON legal_audit_log(gate_name);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_legal_audit_created_at ON legal_audit_log(created_at);")        
+
         # chat_prefs: per-chat toggles (voice mode, etc)
         cur.execute("""
         CREATE TABLE IF NOT EXISTS chat_prefs (
@@ -119,6 +136,22 @@ def init_db() -> None:
         );
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(status, due_at_utc);")
+
+        # audit_log: immutable operational trace
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            chat_id INTEGER NOT NULL,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id TEXT,
+            payload TEXT,
+            source TEXT
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_chat ON audit_log(chat_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);")
 
         conn.commit()
         conn.close()
@@ -498,3 +531,94 @@ def set_chat_voice_enabled(chat_id: int, enabled: bool) -> None:
     )
     conn.commit()
 
+
+# =========================
+# CASE NOTES + ACTIVE CASE (Phase B0)
+# =========================
+def get_active_case_id(chat_id: int) -> str:
+    """
+    Returns active case_id for this chat (expediente), or "" if none.
+    Stored in chat_prefs.active_case_id
+    """
+    try:
+        with _lock:
+            conn = _get_conn()
+            cur = conn.cursor()
+            # Column should exist (you already added it)
+            cur.execute("SELECT active_case_id FROM chat_prefs WHERE chat_id=?", (int(chat_id),))
+            row = cur.fetchone()
+            conn.close()
+        if not row:
+            return ""
+        val = row[0] if not isinstance(row, dict) else row.get("active_case_id")
+        return (val or "").strip()
+    except Exception:
+        return ""
+
+
+def set_active_case_id(chat_id: int, case_id: str) -> None:
+    """
+    Upserts active_case_id for this chat.
+    """
+    case_id = (case_id or "").strip()
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        # Ensure row exists
+        cur.execute("INSERT OR IGNORE INTO chat_prefs(chat_id) VALUES(?)", (int(chat_id),))
+        cur.execute(
+            "UPDATE chat_prefs SET active_case_id=?, updated_at=datetime('now') WHERE chat_id=?",
+            (case_id, int(chat_id)),
+        )
+        conn.commit()
+        conn.close()
+
+
+def insert_case_note(
+    chat_id: int,
+    case_id: str,
+    note_text: str,
+    source: str = "text",
+    telegram_message_id: int | None = None,
+) -> int:
+    """
+    Inserts a case note into case_notes. Returns new row id.
+    case_notes columns: id, chat_id, case_id, note_text, source, telegram_message_id, created_at
+    """
+    case_id = (case_id or "").strip()
+    note_text = (note_text or "").strip()
+    source = (source or "").strip() or "text"
+    if not case_id or not note_text:
+        return 0
+
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO case_notes(chat_id, case_id, note_text, source, telegram_message_id) VALUES(?,?,?,?,?)",
+            (int(chat_id), case_id, note_text, source, telegram_message_id),
+        )
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return int(rid)
+
+
+def fetch_case_notes(chat_id: int, case_id: str, limit: int = 20) -> list[dict]:
+    """
+    Fetch recent notes for a case, newest first.
+    """
+    case_id = (case_id or "").strip()
+    if not case_id:
+        return []
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, chat_id, case_id, note_text, source, telegram_message_id, created_at "
+            "FROM case_notes WHERE chat_id=? AND case_id=? ORDER BY id DESC LIMIT ?",
+            (int(chat_id), case_id, int(limit)),
+        )
+        rows = cur.fetchall() or []
+        conn.close()
+    return [dict(r) for r in rows]

@@ -68,3 +68,15 @@ memory_store.py.bak*
 semantic/
 vfms_data/
 vfms/*.bak*
+archive/
+*.bak*
+*.old
+*.backup
+
+# Runtime / heavy assets
+tools/piper/
+tts_models/
+tts_models_piper/
+*.wav
+*.ogg
+/opt/val0/tmp/

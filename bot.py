@@ -47,6 +47,7 @@ from dotenv import load_dotenv
 import openai
 
 from telegram import Update
+from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -116,6 +117,66 @@ logging.basicConfig(
 )
 logger = logging.getLogger("val0-bot")
 
+# =========================
+# CASE CAPTURE (Phase B0)
+# =========================
+import re as _re_case
+
+_CASE_RE = _re_case.compile(r"\b(?:expediente|exp|caso|case)\s*[:#]?\s*(\d{4,})\b", _re_case.IGNORECASE)
+
+def _extract_case_id(text: str) -> str:
+    if not text:
+        return ""
+    m = _CASE_RE.search(text)
+    return (m.group(1) or "").strip() if m else ""
+
+async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str):
+    """
+    Phase B0 behavior:
+    - If text contains an expediente/case number => set as active case
+    - If there is an active case => store the note to case_notes
+    """
+    try:
+        from memory_store import get_active_case_id, set_active_case_id, insert_case_note
+    except Exception:
+        return
+
+    tg_msg_id = None
+    try:
+        if update and getattr(update, "message", None):
+            tg_msg_id = int(update.message.message_id)
+    except Exception:
+        tg_msg_id = None
+
+    found = _extract_case_id(text)
+    if found:
+        set_active_case_id(int(chat_id), found)
+
+    active = get_active_case_id(int(chat_id)) or found
+    if active:
+        insert_case_note(
+            chat_id=int(chat_id),
+            case_id=str(active),
+            note_text=str(text or "").strip(),
+            source=str(source or "text"),
+            telegram_message_id=tg_msg_id,
+        )
+
+import asyncio
+
+async def _chat_action_once(context, chat_id: int, action: str):
+    try:
+        await context.bot.send_chat_action(chat_id=chat_id, action=action)
+    except Exception:
+        pass
+
+async def _chat_action_keepalive(context, chat_id: int, action: str, done_evt: asyncio.Event, every: float = 4.0):
+    try:
+        while not done_evt.is_set():
+            await _chat_action_once(context, chat_id, action)
+            await asyncio.sleep(every)
+    except Exception:
+        pass
 
 # Phase 1 ops hardening: log-throttle state (module-level)
 _VAL0_LAST_TICK_LOG_TS = None
@@ -715,7 +776,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not transcribed_text:
         await update.message.reply_text("No entendí nada claro en ese audio, Boss. Intenta de nuevo o mándalo por texto.")
         return
-
+    await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice")    
     await _process_text_pipeline(update, context, transcribed_text)
 
 
@@ -860,7 +921,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
-
+    await _maybe_capture_case_note(update, chat_id, text, source="text")
     # Store user msg
     try:
         insert_message(
@@ -891,7 +952,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 "Dímelo con: 'mi color favorito es ...'."
             )
 
-        sent = await update.message.reply_text(reply)
+        sent = await _send_reply(update, context, reply)
         try:
             insert_message(
                 chat_id=chat_id,
@@ -911,7 +972,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             logger.exception(f"Failed to upsert favorite_color: {e}")
         reply = f"Queda registrado, {preferred_name}: tu color favorito ahora es {fav}. Lo tengo guardado."
-        sent = await update.message.reply_text(reply)
+        sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
         except Exception:
@@ -925,7 +986,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             logger.exception(f"Failed to upsert main_goal: {e}")
         reply = f"Queda registrado, {preferred_name}: tu objetivo principal ahora es: '{goal}'."
-        sent = await update.message.reply_text(reply)
+        sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
         except Exception:
@@ -944,7 +1005,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             reply = f"Listo, {preferred_name}: a partir de ahora hablamos en español."
         else:
             reply = f"Got it, {preferred_name}: from now on we’ll speak in English."
-        sent = await update.message.reply_text(reply)
+        sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
         except Exception:
@@ -958,7 +1019,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             logger.exception(f"Failed to upsert preferred_name: {e}")
         reply = f"Perfecto. A partir de ahora te voy a llamar {name}. Lo dejo anotado en memoria."
-        sent = await update.message.reply_text(reply)
+        sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
         except Exception:
@@ -977,7 +1038,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(f"La nota quedó demasiado vacía, {preferred_name}.")
             return
         reply = f"Listo, {preferred_name}. Guardé la nota #{note_id}:\n{note}"
-        sent = await update.message.reply_text(reply)
+        sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
         except Exception:
@@ -1150,7 +1211,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         forced_lang=preferred_language,
     )
 
-    sent = await update.message.reply_text(reply)
+    sent = await _send_reply(update, context, reply)
     try:
         insert_message(
             chat_id=chat_id,
@@ -1422,6 +1483,244 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 # Main
 # --------------------------------------------------
+
+# =========================
+# VOICE MODE (Piper TTS)
+# =========================
+import subprocess
+from pathlib import Path as _Path
+
+def _piper_bin() -> str:
+    return os.getenv("VAL0_PIPER_BIN", "/opt/val0/tools/piper/piper_bin")
+
+def _piper_model_es() -> str:
+    return os.getenv(
+        "VAL0_PIPER_MODEL_ES",
+        "/opt/val0/tts_models/es_AR-daniela-high/es_AR-daniela-high.onnx",
+    )
+
+def _piper_cfg_es() -> str:
+    return os.getenv(
+        "VAL0_PIPER_CFG_ES",
+        "/opt/val0/tts_models/es_AR-daniela-high/es_AR-daniela-high.onnx.json",
+    )
+
+def _tts_enabled() -> bool:
+    return os.getenv("VAL0_TTS_ENABLED", "1") == "1"
+
+def _prepare_tts_text(text: str) -> str:
+    # Remove inverted Spanish punctuation (Piper struggles with them)
+    text = text.replace("¿", "").replace("¡", "")
+
+    # Force slight separation before questions
+    text = text.replace("? ", "?\n")
+
+    # Encourage softer pause before question ending
+    if text.endswith("?"):
+        text = text[:-1] + "...?"
+
+    return text.strip()
+
+def _tts_text_sanitize(t: str) -> str:
+    t = (t or "").strip()
+    # keep it short-ish for driving; tweak via env
+    max_chars = int(os.getenv("VAL0_TTS_MAX_CHARS", "900"))
+    if len(t) > max_chars:
+        t = t[:max_chars].rstrip() + "…"
+    return t
+
+def _prepare_tts_text(t: str) -> str:
+    """
+    Add light punctuation shaping for more natural tone.
+    """
+    t = _tts_text_sanitize(t)
+
+    # Ensure proper pauses
+    t = t.replace(". ", ".  ")
+    t = t.replace(", ", ",  ")
+
+    # Add question tone hint
+    if t.endswith("?"):
+        t = t[:-1] + " ?"
+
+    return t
+
+def tts_synthesize_es_to_wav(text: str, out_wav: str) -> None:
+    """
+    Synthesize Spanish TTS to WAV using Piper.
+    """
+    text = _prepare_tts_text(text)
+    if not text:
+        raise RuntimeError("empty text")
+    pbin = _piper_bin()
+    model = _piper_model_es()
+    cfg = _piper_cfg_es()
+    _Path(out_wav).parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        pbin,
+        "--model", model,
+        "--config", cfg,
+        "--length_scale", os.getenv("VAL0_PIPER_LENGTH_ES", "1.20"),
+        "--output_file", out_wav,
+        "--quiet",
+    ]
+
+    # Optional: select Spanish speaker id (multi-speaker models)
+    spk = os.getenv("VAL0_PIPER_SPEAKER_ES", "").strip()
+    if spk:
+        cmd.extend(["--speaker", spk])
+
+    
+    # Optional: slow down / speed up speech (default 1.25)
+    length_scale = os.getenv("VAL0_PIPER_LENGTH_SCALE", "1.25").strip()
+    if length_scale:
+        cmd.extend(["--length_scale", length_scale])
+# Piper reads stdin
+    proc = subprocess.run(cmd, input=text.encode("utf-8"), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if proc.returncode != 0:
+        raise RuntimeError(f"piper failed rc={proc.returncode} err={proc.stderr.decode('utf-8','ignore')[:300]}")
+
+# =========================
+# Telegram Chat Action Keepalive
+# =========================
+async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply: str):
+    """
+    Central reply sender.
+    - If voice mode ON and TTS enabled → send voice
+    - Else → send text
+    """
+
+    chat = update.effective_chat
+    chat_id = chat.id if chat else None
+    msg = update.effective_message
+
+    if chat_id is None or msg is None:
+        return await update.message.reply_text(reply)
+
+    try:
+        from memory_store import get_chat_voice_enabled
+    except Exception:
+        get_chat_voice_enabled = None
+
+    voice_on = False
+    try:
+        if get_chat_voice_enabled:
+            voice_on = bool(get_chat_voice_enabled(int(chat_id)))
+    except Exception:
+        voice_on = False
+
+    # Voice path
+    if voice_on and _tts_enabled():
+        import os, time, subprocess, re
+
+        def _looks_spanish(s: str) -> bool:
+            s = (s or "").strip()
+            if not s:
+                return False
+            # If it has Spanish punctuation/accents, assume Spanish
+            if any(ch in s for ch in "¿¡áéíóúÁÉÍÓÚñÑ"):
+                return True
+            # If it's mostly ASCII letters and contains common English words, treat as non-Spanish
+            low = s.lower()
+            if any(w in low.split() for w in ("hello", "hi", "thanks", "please", "what", "why", "who", "when", "where")):
+                return False
+            # Otherwise: allow it (numbers/short tokens are fine)
+            return True
+
+        try:
+            # If message is likely English/non-Spanish: do NOT TTS (prevents gibberish)
+            if not _looks_spanish(reply):
+                return await msg.reply_text(reply)
+
+            tmp_dir = os.getenv("VAL0_TMP_DIR", "/opt/val0/tmp")
+            os.makedirs(tmp_dir, exist_ok=True)
+
+            # Light punctuation tuning so Piper breathes a bit
+            t = (reply or "").strip()
+            t = t.replace(" punto ", ". ")
+            t = t.replace(" ,", ",")
+            t = t.replace(" .", ".")
+            # Tiny pause hints (Piper reacts better to commas/periods than "...")
+            t = t.replace("...", ".")
+            # If it ends with a question-ish word and no '?', add it.
+            if t and (t.lower().endswith("bien") or t.lower().endswith("verdad") or t.lower().endswith("cierto")) and not t.endswith("?"):
+                t = t + "?"
+
+            wav_path = os.path.join(tmp_dir, f"tts_{chat_id}_{int(time.time())}.wav")
+            ogg_path = os.path.join(tmp_dir, f"tts_{chat_id}_{int(time.time())}.ogg")
+
+            # Keep Telegram “recording voice…” alive until we finish sending the VN
+            done_evt = asyncio.Event()
+            keepalive_task = asyncio.create_task(
+                _chat_action_keepalive(context, chat_id, ChatAction.RECORD_VOICE, done_evt, every=2.5)
+            )
+
+            try:
+                # Synthesize WAV
+                await asyncio.to_thread(tts_synthesize_es_to_wav, t, wav_path)
+
+                # Convert to OGG/Opus for Telegram voice messages
+                ff = ["ffmpeg", "-y", "-loglevel", "quiet", "-i", wav_path, "-c:a", "libopus", ogg_path]
+                await asyncio.to_thread(subprocess.run, ff, check=True)
+
+                with open(ogg_path, "rb") as vf:
+                    sent = await context.bot.send_voice(chat_id=chat_id, voice=vf)
+
+                return sent
+
+            finally:
+                # Stop keepalive ASAP
+                done_evt.set()
+                try:
+                    keepalive_task.cancel()
+                except Exception:
+                    pass
+
+                # cleanup
+                for p in (ogg_path, wav_path):
+                    try:
+                        if os.path.exists(p):
+                            os.remove(p)
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            logger.exception(f"TTS failed, falling back to text: {e}")
+            return await msg.reply_text(reply)
+
+    # TEXT PATH
+    return await msg.reply_text(reply)
+async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    from memory_store import get_chat_voice_enabled, set_chat_voice_enabled
+    """
+    /voice on|off|status
+    """
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if chat_id is None:
+        return
+
+    parts = (update.message.text or "").strip().split()
+    mode = parts[1].lower() if len(parts) >= 2 else "status"
+
+    if mode in ("on", "1", "yes", "enable", "enabled"):
+        set_chat_voice_enabled(int(chat_id), True)
+        await update.message.reply_text("🎧 Voice mode: ON. Te respondo con audio cuando pueda.")
+        return
+
+    if mode in ("off", "0", "no", "disable", "disabled"):
+        set_chat_voice_enabled(int(chat_id), False)
+        await update.message.reply_text("🛑 Voice mode: OFF. Vuelvo a texto normal.")
+        return
+
+    # status/default
+    on = get_chat_voice_enabled(int(chat_id))
+    await update.message.reply_text(f"🎧 Voice mode: {'ON' if on else 'OFF'}")
+
+
+
+
 def main():
     init_db()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).defaults(Defaults(parse_mode=None)).build()
@@ -1463,6 +1762,9 @@ def main():
     app.add_handler(CommandHandler("dsearch", dsearch_cmd))
     app.add_handler(CommandHandler("search", search_cmd))
     app.add_handler(CommandHandler("place", place_cmd))
+    # HOTFIX: temporarily disabled until voice_cmd is defined correctly
+    app.add_handler(CommandHandler("voice", voice_cmd))
+
     app.add_handler(CommandHandler("sremember", sremember_cmd))
     app.add_handler(CommandHandler("ssearch", ssearch_cmd))
 
@@ -1475,11 +1777,14 @@ def main():
 if __name__ == "__main__":
     main()
 
+
 # =========================
 # OPS COMMANDS: /ops /health /reminders
 # =========================
 from datetime import datetime
 from memory_store import reminder_stats, list_reminders
+from memory_store import get_chat_voice_enabled, set_chat_voice_enabled
+
 
 # tick telemetry for /health
 _VAL0_LAST_TICK_TS = None
