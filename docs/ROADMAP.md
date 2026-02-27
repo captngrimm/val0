@@ -9,10 +9,18 @@ CURRENT STATE (VERIFIED LIVE)
 Deterministic legal engine operational.
 Encrypted storage active (SQLCipher).
 Google Calendar merge hardened and gated.
-Reminder engine running.
+Reminder engine stable and verified.
 Voice ingestion + case note capture live.
 Semantic recall operational (advisory only).
 Ops CLI control surface active.
+
+Reminder Runner:
+- 3/3 due reminders delivered live (chat_id verified).
+- Blocked-user path marks reminder failed without crash.
+- No stuck "sending" rows.
+- due_now returns 0 after delivery.
+- APScheduler stable across restart.
+- Schema verified: due_at_utc authoritative.
 
 No LLM involvement in legal gates.
 No silent DB mutation.
@@ -24,10 +32,6 @@ val0ctl ops
 
 Systemd:
 sudo systemctl status val0-bot.service
-
-GCAL smoke:
-python3 /opt/val0/gcal_smoke.py
-python3 /opt/val0/gcal_events_smoke.py
 
 =====================================================================
 MVP 1.1 — DETERMINISTIC LEGAL GATES (LIVE)
@@ -64,15 +68,16 @@ MVP 1.2 — GOOGLE CALENDAR MERGE (LIVE, HARDENED)
 Merge is read-only and query-time only.
 
 =====================================================================
-MVP 1.3 — DISCIPLINE LAYER (LIVE)
+MVP 1.3 — DISCIPLINE LAYER (LIVE, STABLE)
 =====================================================================
 
-- Reminder runner (APScheduler)
+- Reminder runner (APScheduler stable)
 - Deterministic tick logging
 - Encrypted reminder storage
 - CLI injection testable
 - Scheduler health visible via ops
-- Hybrid voice/text response mode
+- Blocked-user handling hardened (marks failed, no crash)
+- No stuck pending states post-send
 - case_notes table live
 - Active case binding per user
 - Voice-to-note ingestion (text + voice)
@@ -156,6 +161,30 @@ Purpose:
 Reduce manual ops drift.
 Everything scriptable.
 Everything verifiable.
+
+=====================================================================
+PHASE 2.6 — MAINTENANCE HARNESS (PLANNED)
+=====================================================================
+
+Objective:
+Observability layer for reliability tracking.
+
+Scope:
+- Tool success rate metrics
+- Token spend logging
+- Workflow latency tracking
+- User correction event capture
+- Weekly snapshot review mode
+- Metrics + repo snapshot (manual review only)
+
+Constraints:
+- No auto-deploy
+- No self-modifying behavior
+- No recursive automation
+- Deterministic core untouched
+
+Rule:ssh val0
+Observability only. Never mutation.
 
 =====================================================================
 PHASE 3 — CONTROLLED SYNC (OPTIONAL)
