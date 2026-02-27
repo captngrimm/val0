@@ -212,6 +212,26 @@ def insert_reminder(chat_id: int, due_at_utc: str, text: str, status: str = "pen
         conn.close()
         return rid
 
+def insert_audit(
+    chat_id: int,
+    action: str,
+    entity_type: str = None,
+    entity_id: str = None,
+    payload: str = None,
+    source: str = None,
+) -> None:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO audit_log(chat_id, action, entity_type, entity_id, payload, source)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (chat_id, action, entity_type, entity_id, payload, source),
+        )
+        conn.commit()
+        conn.close()
 
 def fetch_due_reminders(limit: int = 10) -> List[Dict[str, Any]]:
     with _lock:
@@ -235,6 +255,18 @@ def mark_reminder_sent(reminder_id: int) -> None:
         cur = conn.cursor()
         cur.execute(
             "UPDATE reminders SET status='sent', sent_at=datetime('now') WHERE id=?",
+            (reminder_id,),
+        )
+        conn.commit()
+        conn.close()
+
+
+def mark_reminder_failed(reminder_id: int, reason: str = "failed") -> None:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE reminders SET status='failed', sent_at=datetime('now') WHERE id=?",
             (reminder_id,),
         )
         conn.commit()

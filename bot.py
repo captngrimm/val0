@@ -76,6 +76,7 @@ from memory_store import (
     claim_due_reminders,
     claim_reminder,
     mark_reminder_sent,
+    mark_reminder_failed,
     revert_reminder_pending,
 )
 
@@ -154,13 +155,14 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
     active = get_active_case_id(int(chat_id)) or found
     if active:
-        insert_case_note(
+        note_id = insert_case_note(
             chat_id=int(chat_id),
             case_id=str(active),
             note_text=str(text or "").strip(),
             source=str(source or "text"),
             telegram_message_id=tg_msg_id,
         )
+        logger.info(f"[CASE_NOTE] inserted id={note_id} case_id={active} source={source}")
 
 import asyncio
 
@@ -745,20 +747,32 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"duration={voice.duration}s file_id={file_id}"
     )
 
+    # Download voice to tmp
+    tmp_dir = "/opt/val0/tmp"
+    os.makedirs(tmp_dir, exist_ok=True)
+    tmp_path = os.path.join(tmp_dir, f"voice_{chat_id}_{tg_msg_id}.ogg")
+
     try:
         file = await context.bot.get_file(file_id)
-        tmp_dir = "/opt/val0/tmp"
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = os.path.join(tmp_dir, f"voice_{chat_id}_{tg_msg_id}.ogg")
         await file.download_to_drive(tmp_path)
     except Exception as e:
         logger.exception(f"Failed to download voice file from Telegram: {e}")
-        await update.message.reply_text("No pude descargar ese mensaje de voz, Boss. Intenta de nuevo.")
+        await update.message.reply_text(
+            "No pude descargar ese mensaje de voz, Boss. Intenta de nuevo."
+        )
         return
 
+    # Transcribe (Whisper) + perf log
+    transcribed_text = ""
     try:
+        import time
+
+        t0 = time.time()
         with open(tmp_path, "rb") as audio_file:
             transcript = openai.Audio.transcribe("whisper-1", audio_file)
+        t1 = time.time()
+
+        logger.info(f"[PERF] whisper_sec={round(t1 - t0, 2)}")
         transcribed_text = (transcript.get("text") or "").strip()
     except Exception as e:
         logger.exception(f"Whisper transcription failed: {e}")
@@ -774,11 +788,14 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             logger.exception(f"Failed to remove tmp voice file {tmp_path}: {e}")
 
     if not transcribed_text:
-        await update.message.reply_text("No entendí nada claro en ese audio, Boss. Intenta de nuevo o mándalo por texto.")
+        await update.message.reply_text(
+            "No entendí nada claro en ese audio, Boss. Intenta de nuevo o mándalo por texto."
+        )
         return
-    await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice")    
-    await _process_text_pipeline(update, context, transcribed_text)
 
+    # Capture note + continue normal pipeline
+    await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice")
+    await _process_text_pipeline(update, context, transcribed_text)
 
 # --------------------------------------------------
 # Semantic Memory (FAISS) — C2: automatic recall
@@ -1466,9 +1483,23 @@ async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
                 mark_reminder_sent(rid)
                 logger.info("ReminderRunner: sent id=%s chat_id=%s", rid, chat_id)
             except Exception as e:
-                logger.exception("ReminderRunner: send failed id=%s chat_id=%s err=%s", rid, chat_id, e)
-                revert_reminder_pending(rid)
+                from telegram.error import Forbidden
 
+                if isinstance(e, Forbidden):
+                    logger.warning(
+                        "ReminderRunner: user blocked bot id=%s chat_id=%s",
+                        rid,
+                        chat_id,
+                    )
+                    mark_reminder_failed(rid, reason="blocked")
+                else:
+                    logger.exception(
+                        "ReminderRunner: send failed id=%s chat_id=%s err=%s",
+                        rid,
+                        chat_id,
+                        e,
+                    )
+                    revert_reminder_pending(rid)
     except Exception as e:
         logger.exception("ReminderRunner tick crashed: %s", e)
 
@@ -1477,8 +1508,16 @@ async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.text:
-        await _process_text_pipeline(update, context, update.message.text.strip())
+        text = update.message.text.strip()
 
+        # Phase B0: capture active case + case note (text path)
+        try:
+            chat_id = update.effective_chat.id
+            await _maybe_capture_case_note(update, chat_id, text, source="text")
+        except Exception:
+            pass
+
+        await _process_text_pipeline(update, context, text)
 
 # --------------------------------------------------
 # Main
@@ -1532,8 +1571,13 @@ def _tts_text_sanitize(t: str) -> str:
 def _prepare_tts_text(t: str) -> str:
     """
     Add light punctuation shaping for more natural tone.
+    Also forces digit-by-digit pronunciation.
     """
     t = _tts_text_sanitize(t)
+
+    # Force digit-by-digit pronunciation
+    import re
+    t = re.sub(r"\d+", lambda m: " ".join(m.group(0)), t)
 
     # Ensure proper pauses
     t = t.replace(". ", ".  ")
@@ -1638,6 +1682,26 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
 
             # Light punctuation tuning so Piper breathes a bit
             t = (reply or "").strip()
+            # --- Case/expediente digits: force digit-by-digit for clarity ---
+            # Converts "Caso 123456" -> "Caso 1 2 3 4 5 6"
+            # Also handles "Expediente 123 del 2026" -> "Expediente 1 2 3 del 2 0 2 6"
+            def _spell_digits(s: str) -> str:
+                s = str(s or "")
+                return " ".join(list(s))
+
+            # Only target numbers that follow case keywords (Spanish)
+            t = re.sub(
+                r"(?i)\b(caso|expediente)\s+(\d{3,})\b",
+                lambda m: f"{m.group(1)} {_spell_digits(m.group(2))}",
+                t,
+            )
+
+            # Also target patterns like "del 2026"
+            t = re.sub(
+                r"(?i)\bdel\s+(\d{4,})\b",
+                lambda m: f"del {_spell_digits(m.group(1))}",
+                t,
+            )
             t = t.replace(" punto ", ". ")
             t = t.replace(" ,", ",")
             t = t.replace(" .", ".")
