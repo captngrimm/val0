@@ -1,6 +1,6 @@
 VAL0 — LEGAL OPS CORE
 Operational Roadmap
-Last Updated: 2026-02-25
+Last Updated: 2026-02-27
 
 =====================================================================
 CURRENT STATE (VERIFIED LIVE)
@@ -21,6 +21,15 @@ Reminder Runner:
 - due_now returns 0 after delivery.
 - APScheduler stable across restart.
 - Schema verified: due_at_utc authoritative.
+
+Isolation:
+- DM + group chat isolation verified (distinct chat_id storage, no leakage in logs).
+
+Memory Spine (Minimal):
+- memory_entries table present.
+- Insert verified.
+- Keyword recall verified.
+- Date-range recall verified.
 
 No LLM involvement in legal gates.
 No silent DB mutation.
@@ -96,9 +105,14 @@ Baseline schema operational.
 
 Live:
 - case_notes (encrypted)
-- active_case_id (chat_prefs)
-- semantic recall (FAISS advisory)
-- per-user vault isolation
+- chat_prefs (active_case_id, voice_enabled)
+- memory_entries (minimal deterministic store)
+- per-user vault isolation (chat_id partitioning)
+
+Verified:
+- Deterministic insert works.
+- Keyword recall works.
+- Date-range recall works.
 
 Constraints:
 - Advisory only
@@ -106,9 +120,8 @@ Constraints:
 - Never overrides deterministic gates
 
 Pending:
-- Deterministic recall CLI test
 - Memory audit visibility in ops runner
-- Memory health verification command
+- Memory health verification command (val0ctl doctor phase)
 
 =====================================================================
 PHASE 1 — HARDENING (NEAR COMPLETE)

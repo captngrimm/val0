@@ -45,20 +45,23 @@ STATUS: COMPLETE
 ---
 
 ## 4) Multi-user isolation sanity
-- [ ] 2-user cross isolation test
-- [ ] No leakage confirmed in logs
+- [x] 2-user cross isolation test (DM + group)
+- [x] No leakage confirmed in logs
+  - DM chat_id=1789350565 stored only DM secret
+  - Group chat_id=-5109037524 stored only group secret
+  - journalctl shows correct chat_id per message
 
-STATUS: PENDING
+STATUS: COMPLETE
 
 ---
 
 ## 5) Memory Spine (Minimal)
-- [ ] memory_entries table verified
-- [ ] Insert + recall test
-- [ ] Keyword recall works
-- [ ] Date-range recall works
+- [x] memory_entries table verified/created
+- [x] Insert + recall test
+- [x] Keyword recall works (alpha returns only DM row)
+- [x] Date-range recall works (last 1 day returns both rows)
 
-STATUS: PENDING
+STATUS: COMPLETE
 
 ---
 
@@ -70,8 +73,9 @@ STATUS: PENDING
 
 ---
 
-SPRINT 01 = 60–70% COMPLETE
+SPRINT 01 = 5/6 SECTIONS COMPLETE
 
-Remaining scope small and well defined.
+Remaining scope:
+- Create launch docs (CLIENT_POLICY.md + WISHLIST.md)
 No architectural debt added.
 Core deterministic layer stable.
