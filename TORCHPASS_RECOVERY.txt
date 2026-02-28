@@ -1,0 +1,38 @@
+# TORCHPASS RECOVERY PACK (paste outputs back into ChatGPT)
+
+cd /opt/val0
+
+echo "=== GIT ==="
+git branch --show-current
+git rev-parse HEAD
+git status --short
+
+echo "=== SERVICE ==="
+systemctl status val0-bot.service --no-pager | sed -n '1,20p'
+
+echo "=== OPS RUNNER ==="
+val0ctl ops
+
+echo "=== AUDIT LAST 20 ==="
+KEY="$(cat /etc/val0/db_key)"
+sqlcipher /opt/val0/val0_memory.enc.db <<SQL
+PRAGMA key="$KEY";
+.headers on
+.mode column
+SELECT id, created_at, chat_id, action, source, substr(payload,1,60) AS payload
+FROM audit_log
+ORDER BY id DESC
+LIMIT 20;
+SQL
+
+echo "=== CASE_NOTES LAST 10 (Frank) ==="
+sqlcipher /opt/val0/val0_memory.enc.db <<SQL
+PRAGMA key="$KEY";
+.headers on
+.mode column
+SELECT id, created_at, chat_id, case_id, substr(note_text,1,60) AS note
+FROM case_notes
+WHERE chat_id=1789350565
+ORDER BY id DESC
+LIMIT 10;
+SQL
