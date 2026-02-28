@@ -1528,12 +1528,41 @@ async def _handle_group_deterministic(update: Update, context: ContextTypes.DEFA
     return await _send_reply(update, context, "Group mode: commands only (ping, CASE:<id>, note: <text>).")
 
 # --------------------------------------------------
+# AUDIT LOG (deterministic trace)
+# --------------------------------------------------
+def _audit(chat_id: int, action: str, entity_type: str = None, entity_id: str = None, payload: str = None, source: str = None):
+    try:
+        from memory_store import insert_audit
+        insert_audit(
+            chat_id=int(chat_id),
+            action=str(action),
+            entity_type=entity_type,
+            entity_id=entity_id,
+            payload=payload,
+            source=source,
+        )
+    except Exception:
+        # Never crash core flow for audit logging
+        pass
+
+# --------------------------------------------------
 # Text handler
 # --------------------------------------------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.text:
         text = update.message.text.strip()
         chat_id = update.effective_chat.id
+        tg_msg_id = getattr(update.message, "message_id", None)
+
+        _audit(
+            chat_id,
+            action="IN_TEXT",
+            entity_type="tg_msg",
+            entity_id=str(tg_msg_id) if tg_msg_id is not None else None,
+            payload=text[:500],
+            source="group" if int(chat_id) < 0 else "dm",
+        )
+
         if int(chat_id) < 0:
             return await _handle_group_deterministic(update, context, text)
         # Phase B0: capture active case + case note (text path)
@@ -1665,7 +1694,21 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
     chat_id = chat.id if chat else None
     msg = update.effective_message
 
+    def _audit_out(text: str):
+        try:
+            _audit(
+                int(chat_id) if chat_id is not None else 0,
+                action="OUT_TEXT",
+                entity_type="tg_msg",
+                entity_id=str(getattr(msg, "message_id", None)) if msg else None,
+                payload=(text or "")[:500],
+                source="group" if (chat_id is not None and int(chat_id) < 0) else "dm",
+            )
+        except Exception:
+            pass
+
     if chat_id is None or msg is None:
+        _audit_out(reply)
         return await update.message.reply_text(reply)
 
     try:
@@ -1701,8 +1744,8 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
         try:
             # If message is likely English/non-Spanish: do NOT TTS (prevents gibberish)
             if not _looks_spanish(reply):
+                _audit_out(reply)
                 return await msg.reply_text(reply)
-
             tmp_dir = os.getenv("VAL0_TMP_DIR", "/opt/val0/tmp")
             os.makedirs(tmp_dir, exist_ok=True)
 
@@ -1777,9 +1820,11 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
 
         except Exception as e:
             logger.exception(f"TTS failed, falling back to text: {e}")
+            _audit_out(reply)
             return await msg.reply_text(reply)
 
     # TEXT PATH
+    _audit_out(reply)
     return await msg.reply_text(reply)
 async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
