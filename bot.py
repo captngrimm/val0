@@ -270,6 +270,7 @@ def build_context_block(rows: List[Dict[str, Any]]) -> str:
 # OpenAI call
 # --------------------------------------------------
 def call_val_openai(
+    chat_id: int,
     user_text: str,
     context_block: Optional[str] = None,
     facts_block: Optional[str] = None,
@@ -334,6 +335,18 @@ def call_val_openai(
             )
 
         messages.append({"role": "user", "content": user_text})
+
+        try:
+            _audit(
+                chat_id,
+                action="MODEL_CALL",
+                entity_type="openai",
+                entity_id="chatcompletion",
+                payload=(user_text or "")[:200],
+                source="dm",
+            )
+        except Exception:
+            pass
 
         resp = openai.ChatCompletion.create(
             model="gpt-4.1-mini",
@@ -1220,7 +1233,20 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     if len(tclean) < 8 or _is_control_ack(tclean):
         semantic_block = ""
 
+    # HARD BLOCK: group chats are deterministic only (never call model)
+    if int(chat_id) < 0:
+        _audit(
+            chat_id,
+            action="MODEL_BLOCKED_GROUP",
+            entity_type="guard",
+            entity_id=None,
+            payload=(text or "")[:200],
+            source="group",
+        )
+        return await _send_reply(update, context, "Group mode: commands only (ping, CASE:<id>, note: <text>).")
+
     reply = call_val_openai(
+        chat_id,
         text,
         context_block=context_block,
         facts_block=facts_block,
@@ -1519,12 +1545,21 @@ async def _handle_group_deterministic(update: Update, context: ContextTypes.DEFA
         pass
 
     low = t.lower()
+
     if low == "ping":
+        _audit(chat_id, action="CMD_PING", entity_type="cmd", entity_id=None, payload="ping", source="group")
         return await _send_reply(update, context, "pong")
+
     if low.startswith("case:"):
+        case_id = t.split(":", 1)[1].strip() if ":" in t else ""
+        _audit(chat_id, action="CMD_CASE_BIND", entity_type="case", entity_id=case_id or None, payload=t[:200], source="group")
         return await _send_reply(update, context, "CASE bound.")
+
     if low.startswith("note:"):
+        _audit(chat_id, action="CMD_NOTE", entity_type="note", entity_id=None, payload=t[:500], source="group")
         return await _send_reply(update, context, "Noted.")
+
+    _audit(chat_id, action="CMD_REFUSAL", entity_type="guard", entity_id=None, payload=t[:200], source="group")
     return await _send_reply(update, context, "Group mode: commands only (ping, CASE:<id>, note: <text>).")
 
 # --------------------------------------------------
@@ -1798,6 +1833,7 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
                 await asyncio.to_thread(subprocess.run, ff, check=True)
 
                 with open(ogg_path, "rb") as vf:
+                    _audit_out(reply)
                     sent = await context.bot.send_voice(chat_id=chat_id, voice=vf)
 
                 return sent
