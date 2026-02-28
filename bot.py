@@ -1503,13 +1503,39 @@ async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("ReminderRunner tick crashed: %s", e)
 
+async def _handle_group_deterministic(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    """
+    Group chats (chat_id < 0) are deterministic-only.
+    Allowed: ping, CASE:<id>, note: <text>
+    Everything else: fixed refusal.
+    """
+    chat = update.effective_chat
+    chat_id = chat.id if chat else None
+    t = (text or "").strip()
+    # Capture note deterministically (same path as DMs)
+    try:
+        await _maybe_capture_case_note(update, chat_id, t, source="group")
+    except Exception:
+        pass
+
+    low = t.lower()
+    if low == "ping":
+        return await _send_reply(update, context, "pong")
+    if low.startswith("case:"):
+        return await _send_reply(update, context, "CASE bound.")
+    if low.startswith("note:"):
+        return await _send_reply(update, context, "Noted.")
+    return await _send_reply(update, context, "Group mode: commands only (ping, CASE:<id>, note: <text>).")
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.text:
         text = update.message.text.strip()
-
+        chat_id = update.effective_chat.id
+        if int(chat_id) < 0:
+            return await _handle_group_deterministic(update, context, text)
         # Phase B0: capture active case + case note (text path)
         try:
             chat_id = update.effective_chat.id

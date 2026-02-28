@@ -614,21 +614,47 @@ def insert_case_note(
     telegram_message_id: int | None = None,
 ) -> int:
     """
-    Inserts a case note into case_notes. Returns new row id.
-    case_notes columns: id, chat_id, case_id, note_text, source, telegram_message_id, created_at
+    Inserts a case note into case_notes. Idempotent by (chat_id, telegram_message_id).
+    Returns row id (existing if duplicate).
     """
-    case_id = (case_id or "").strip()
+    if not case_id:
+        raise ValueError("insert_case_note requires case_id")
     note_text = (note_text or "").strip()
-    source = (source or "").strip() or "text"
-    if not case_id or not note_text:
-        return 0
+    if not note_text:
+        raise ValueError("insert_case_note requires note_text")
 
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
+
+        # If we have a Telegram message id, make it idempotent.
+        if telegram_message_id is not None:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO case_notes(chat_id, case_id, note_text, source, telegram_message_id)
+                VALUES(?,?,?,?,?)
+                """,
+                (int(chat_id), str(case_id), note_text, str(source or "text"), int(telegram_message_id)),
+            )
+            conn.commit()
+
+            # Return the existing row id (whether inserted now or already existed)
+            cur.execute(
+                """
+                SELECT id FROM case_notes
+                WHERE chat_id=? AND telegram_message_id=?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (int(chat_id), int(telegram_message_id)),
+            )
+            row = cur.fetchone()
+            conn.close()
+            return int(row[0]) if row else 0
+
+        # Fallback path (no message id): regular insert
         cur.execute(
             "INSERT INTO case_notes(chat_id, case_id, note_text, source, telegram_message_id) VALUES(?,?,?,?,?)",
-            (int(chat_id), case_id, note_text, source, telegram_message_id),
+            (int(chat_id), str(case_id), note_text, str(source or "text"), None),
         )
         conn.commit()
         rid = cur.lastrowid
