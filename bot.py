@@ -1176,6 +1176,28 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     # --------------------------------------------------
+    # Reminder Creator (DM only) — deterministic
+    # --------------------------------------------------
+    try:
+        from core.reminders_mvp import try_create_reminder
+
+        _audit(
+            chat_id,
+            action="DEBUG_REMINDER_GATE_ENTER",
+            entity_type="debug",
+            entity_id=None,
+            payload=(text or "")[:200],
+            source="dm",
+        )
+
+        if int(chat_id) > 0:
+            if await try_create_reminder(update, chat_id, text, audit_fn=_audit):
+                return
+
+    except Exception as e:
+        logger.exception(f"[GATE] try_create_reminder failed: {e}")
+
+    # --------------------------------------------------
     # MIGUEL MVP — GATES (must run BEFORE model call)
     # --------------------------------------------------
     try:
