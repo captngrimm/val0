@@ -1,13 +1,13 @@
-SPRINT 01 — Stability + Launchable Basic
-Dates: 2026-02-23 to 2026-02-27
+# SPRINT 01 — Stability + Launchable Basic
+Dates: 2026-02-23 to 2026-02-27  
 Actual Duration: 4 days
 
 Definition of Done:
 - Bot runs 24h without crash loops.
 - Reminders send reliably.
 - Ops report green.
-- 5-user isolation confirmed.
-- Basic $30 package operational.
+- Multi-user isolation confirmed (DM + group).
+- Basic $30 package operational (core features live; launch docs pending).
 
 ---
 
@@ -77,5 +77,7 @@ SPRINT 01 = 5/6 SECTIONS COMPLETE
 
 Remaining scope:
 - Create launch docs (CLIENT_POLICY.md + WISHLIST.md)
-No architectural debt added.
-Core deterministic layer stable.
+
+Notes:
+- No architectural debt added.
+- Core deterministic layer stable.

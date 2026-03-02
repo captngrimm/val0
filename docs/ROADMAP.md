@@ -3,7 +3,7 @@ VAL0 — COGNITIVE OPERATIONS CORE
 =====================================================================
 
 Operational Roadmap  
-Last Updated: 2026-03-01
+Last Updated: 2026-03-02
 
 Mission:
 Val0 is a deterministic cognitive operations engine.
@@ -35,6 +35,7 @@ Encrypted storage active (SQLCipher).
 Google Calendar merge hardened and gated.
 Reminder engine stable and verified.
 Reminder cancellation deterministic (ID-based, DB-backed).
+Ops commands stable (/ops /health /reminders).
 Voice ingestion + case note capture live.
 Semantic recall operational (advisory only).
 Ops CLI control surface active.
@@ -49,7 +50,7 @@ Reminder Runner:
 
 Isolation:
 - DM + group chat isolation verified.
-- No cross-chat leakage.
+- /reminders is chat-scoped (no cross-chat leakage).
 
 Memory Spine (Minimal):
 - memory_entries table present.
@@ -62,7 +63,7 @@ Hard Rules:
 - No LLM involvement in legal gates.
 - No silent DB mutation.
 - All merge logic is query-time only.
-- All automation auditable via logs.
+- All automation auditable via logs/audit tables.
 
 Primary control surface:
 val0ctl ops
@@ -118,11 +119,12 @@ MVP 1.3 — DISCIPLINE LAYER (LIVE, STABLE)
 - case_notes table live
 - Active case binding per user
 - Voice-to-note ingestion (text + voice)
+- /reminders is chat-scoped (no cross-chat listing)
 
 Pending:
 - Daily 08:00 summary push
 - Overdue escalation tagging
-- Reminder audit table
+- Reminder state audit log (state-change timeline)
 - Per-user timezone enforcement
 - Local-time display normalization for reminder list
 
@@ -148,18 +150,22 @@ Pending:
 - Memory health verification command (val0ctl doctor phase)
 
 =====================================================================
-PHASE 1 — HARDENING (NEAR COMPLETE)
+PHASE 1 — HARDENING (ACTIVE)
 =====================================================================
 
+Live:
+- audit_log table exists and is populated (IN/OUT/MODEL_CALL + reminder actions)
+- legal_audit_log table present (legal tagging path)
+
 Remaining:
-- Internal audit_log table
-- Structured legal audit tagging
+- Structured legal audit tagging expansion (user-facing optional)
 - Deadline normalization refinement
-- Merge audit table
+- Merge audit table (calendar)
 - Explicit GCAL conflict surfacing (optional user-facing)
+- Reminder state audit timeline (sent/cancelled/failed per reminder)
 
 Hard rule:
-No expansion until audit logging exists.
+No scope expansion that risks deterministic stability.
 
 =====================================================================
 PHASE 2 — DISCIPLINE AUTOMATION (ACTIVE)
@@ -174,7 +180,7 @@ Remaining:
 - Escalation tagging rules
 - Push toggle per user
 - Per-user timezone enforcement
-- Reminder state audit log
+- Reminder state audit log (state transitions)
 
 Constraint:
 No mutation outside deterministic rules.
@@ -362,8 +368,8 @@ CURRENT PRIORITY
 =====================================================================
 
 1. Finish Phase 1 hardening.
-2. Add audit_log table.
-3. Complete Phase 2 automation.
+2. Expand audit visibility (state transitions, merge audit).
+3. Complete Phase 2 automation (daily + overdue).
 4. Expand ops runner into structured doctor.
 5. Stabilize hybrid voice/text UX.
 6. Begin controlled Personality Renderer implementation.
