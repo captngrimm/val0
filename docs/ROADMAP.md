@@ -1,40 +1,68 @@
-VAL0 — LEGAL OPS CORE
-Operational Roadmap
-Last Updated: 2026-02-27
+=====================================================================
+VAL0 — COGNITIVE OPERATIONS CORE
+=====================================================================
+
+Operational Roadmap  
+Last Updated: 2026-03-01
+
+Mission:
+Val0 is a deterministic cognitive operations engine.
+It began with legal workflow hardening, but its scope includes:
+
+- Deterministic legal execution
+- Discipline automation
+- Encrypted memory spine
+- Operational CLI control
+- Advisory reasoning layers
+- Controlled personality rendering
+- Future standalone interface
+
+Principle:
+Deterministic core first.
+Advisory reasoning second.
+Personality last.
+
+Revenue stability first.
+Architecture second.
+Ambition third.
 
 =====================================================================
-CURRENT STATE (VERIFIED LIVE)
+CURRENT STATE — VERIFIED LIVE
 =====================================================================
 
 Deterministic legal engine operational.
 Encrypted storage active (SQLCipher).
 Google Calendar merge hardened and gated.
 Reminder engine stable and verified.
+Reminder cancellation deterministic (ID-based, DB-backed).
 Voice ingestion + case note capture live.
 Semantic recall operational (advisory only).
 Ops CLI control surface active.
 
 Reminder Runner:
-- 3/3 due reminders delivered live (chat_id verified).
+- Due reminders delivered live (chat_id verified).
 - Blocked-user path marks reminder failed without crash.
 - No stuck "sending" rows.
 - due_now returns 0 after delivery.
 - APScheduler stable across restart.
-- Schema verified: due_at_utc authoritative.
+- Schema verified: due_at_utc authoritative (stored UTC, displayed raw).
 
 Isolation:
-- DM + group chat isolation verified (distinct chat_id storage, no leakage in logs).
+- DM + group chat isolation verified.
+- No cross-chat leakage.
 
 Memory Spine (Minimal):
 - memory_entries table present.
-- Insert verified.
+- Deterministic insert verified.
 - Keyword recall verified.
 - Date-range recall verified.
+- Advisory only — never mutates deterministic systems.
 
-No LLM involvement in legal gates.
-No silent DB mutation.
-All merge logic is query-time only.
-All automation auditable via logs.
+Hard Rules:
+- No LLM involvement in legal gates.
+- No silent DB mutation.
+- All merge logic is query-time only.
+- All automation auditable via logs.
 
 Primary control surface:
 val0ctl ops
@@ -80,13 +108,13 @@ Merge is read-only and query-time only.
 MVP 1.3 — DISCIPLINE LAYER (LIVE, STABLE)
 =====================================================================
 
+- Deterministic reminder creation (regex-based)
+- Regex punctuation tolerance
+- Reminder cancellation by ID (DB-backed)
 - Reminder runner (APScheduler stable)
 - Deterministic tick logging
 - Encrypted reminder storage
 - CLI injection testable
-- Scheduler health visible via ops
-- Blocked-user handling hardened (marks failed, no crash)
-- No stuck pending states post-send
 - case_notes table live
 - Active case binding per user
 - Voice-to-note ingestion (text + voice)
@@ -96,6 +124,7 @@ Pending:
 - Overdue escalation tagging
 - Reminder audit table
 - Per-user timezone enforcement
+- Local-time display normalization for reminder list
 
 =====================================================================
 PHASE 0.5 — MEMORY SPINE (ACTIVE)
@@ -106,13 +135,8 @@ Baseline schema operational.
 Live:
 - case_notes (encrypted)
 - chat_prefs (active_case_id, voice_enabled)
-- memory_entries (minimal deterministic store)
+- memory_entries (deterministic advisory store)
 - per-user vault isolation (chat_id partitioning)
-
-Verified:
-- Deterministic insert works.
-- Keyword recall works.
-- Date-range recall works.
 
 Constraints:
 - Advisory only
@@ -132,17 +156,17 @@ Remaining:
 - Structured legal audit tagging
 - Deadline normalization refinement
 - Merge audit table
-- Explicit GCAL conflict surfacing (user-facing optional)
+- Explicit GCAL conflict surfacing (optional user-facing)
 
 Hard rule:
-No new expansion until audit logging exists.
+No expansion until audit logging exists.
 
 =====================================================================
 PHASE 2 — DISCIPLINE AUTOMATION (ACTIVE)
 =====================================================================
 
 Status:
-Reminder engine running.
+Reminder engine running stable.
 
 Remaining:
 - Daily summary auto-push
@@ -152,8 +176,11 @@ Remaining:
 - Per-user timezone enforcement
 - Reminder state audit log
 
+Constraint:
+No mutation outside deterministic rules.
+
 =====================================================================
-PHASE 2.5 — OPERATIONAL CONTROL LAYER
+PHASE 2.5 — OPERATIONAL CONTROL LAYER (LIVE + EXPANDING)
 =====================================================================
 
 Implemented:
@@ -164,7 +191,7 @@ Implemented:
 - Scheduler verification
 
 Planned:
-- val0ctl doctor full
+- val0ctl doctor (full)
 - val0ctl fix reminders
 - val0ctl fix gcal
 - Controlled auto-fix with dry-run mode
@@ -193,11 +220,7 @@ Scope:
 Constraints:
 - No auto-deploy
 - No self-modifying behavior
-- No recursive automation
 - Deterministic core untouched
-
-Rule:ssh val0
-Observability only. Never mutation.
 
 =====================================================================
 PHASE 3 — CONTROLLED SYNC (OPTIONAL)
@@ -217,6 +240,9 @@ Never overwrite DB silently.
 PHASE 4 — MIGUEL UX SIMPLIFICATION
 =====================================================================
 
+Goal:
+Zero-friction courtroom workflow.
+
 - Standardized event title template
 - Simple case-binding instruction sheet
 - One-line quick entry format
@@ -225,55 +251,54 @@ PHASE 4 — MIGUEL UX SIMPLIFICATION
 - Hybrid response mode (text-first + voice)
 - Voice transcription recall command
 
-Goal:
-Zero-friction courtroom workflow.
+Deterministic core never altered.
 
 =====================================================================
-PHASE 5 — VOICE / PERSONALITY ARCHITECTURE (NEW)
+PHASE 5 — VOICE / PERSONALITY ARCHITECTURE
 =====================================================================
 
 Objective:
 Two-pass system.
+
 1) Deterministic factual answer.
 2) Controlled Voice Renderer layer.
 
 Layers:
 
 1. Mode Router
-   - Context classifier (legal/admin/personal)
-   - Risk detection
-   - Tone envelope selection
-
-2. Core Answer Engine
-   - Tool-grounded
-   - DB-first
-   - Deterministic
-   - No personality influence
-
+2. Core Answer Engine (DB-first, tool-grounded)
 3. Validator / Anti-Drift Gate
    - Blocks hallucination
    - Blocks therapy tone in legal mode
-   - Blocks lecturing
    - Blocks moralizing
    - Enforces answer-first
 
-4. Voice Renderer
-   - Adds cadence
-   - Adds sass (bounded)
-   - Adds formatting
-   - No new facts allowed
+4. Strategic Challenge Layer (Founder Mode Only)
 
-5. User Voice Profile Store
-   - Per-user sharpness level
-   - Brevity level
-   - Emoji tolerance
-   - Therapy-mode allowance
-   - Legal strictness override
+Purpose:
+Pre-execution advisory review for major strategic proposals.
 
-6. Safety Caps
-   - Hard sass density limit
-   - Auto-suppress personality in high-risk contexts
-   - Kill-switch per user
+Triggers:
+- Scope expansion
+- Product pivots
+- Architecture deviation
+- Runway misalignment
+
+Returns:
+- GREEN (aligned)
+- YELLOW (risk detected)
+- RED (priority/runway violation)
+
+Constraints:
+- Advisory only
+- No execution blocking
+- No DB mutation
+- No impact on legal workflow
+- Founder Mode only
+
+5. Voice Renderer (output only, no reasoning)
+6. User Voice Profile Store
+7. Safety Caps
 
 Rule:
 Personality is an output renderer, not a reasoning bias.
@@ -314,9 +339,10 @@ Core stack:
 4. Memory spine (advisory)
 5. Scheduler layer
 6. Ops control layer (CLI)
-7. Personality renderer layer
-8. UI layer
-9. Future E2EE client layer
+7. Validator + Strategic advisory layer
+8. Personality renderer layer
+9. UI layer
+10. Future E2EE client layer
 
 =====================================================================
 WHAT WE WILL NOT DO
@@ -329,6 +355,7 @@ WHAT WE WILL NOT DO
 - No admin backdoor into vault.
 - No uncontrolled feature creep.
 - No personality influencing legal determinism.
+- No execution blocking without Founder authorization.
 
 =====================================================================
 CURRENT PRIORITY

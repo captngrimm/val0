@@ -34,6 +34,7 @@ import time
 # --- MIGUEL MVP: gates wiring (do not remove) ---
 try:
     from core.case_mvp import try_case_summary, try_due_today, try_due_range  # preferred
+    from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
     pass
     # Fallback stubs: keep bot stable even if module isn't present yet
@@ -1176,10 +1177,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     # --------------------------------------------------
-    # Reminder Creator (DM only) — deterministic
+    # Reminder Creator + Cancel (DM only) — deterministic
     # --------------------------------------------------
     try:
-        from core.reminders_mvp import try_create_reminder
+        from core.reminders_mvp import try_create_reminder, try_cancel_reminder
 
         _audit(
             chat_id,
@@ -1191,11 +1192,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         if int(chat_id) > 0:
+            # Cancel FIRST (so "cancela 25" doesn't fall through to model)
+            if await try_cancel_reminder(update, chat_id, text, audit_fn=_audit):
+                return
             if await try_create_reminder(update, chat_id, text, audit_fn=_audit):
                 return
 
     except Exception as e:
-        logger.exception(f"[GATE] try_create_reminder failed: {e}")
+        logger.exception(f"[GATE] reminder gate failed: {e}")
 
     # --------------------------------------------------
     # MIGUEL MVP — GATES (must run BEFORE model call)
@@ -1941,11 +1945,11 @@ def main():
 
     # Commands
     app.add_handler(CommandHandler("start", start))
-# HOTFIX disable ops handler (ops_cmd NameError)
-#    app.add_handler(CommandHandler("ops", ops_cmd))
-# HOTFIX disable health handler (health_cmd NameError)
-#     app.add_handler(CommandHandler("health", health_cmd))
-#     app.add_handler(CommandHandler("reminders", reminders_cmd))
+    app.add_handler(CommandHandler("ops", ops_cmd))
+    app.add_handler(CommandHandler("health", health_cmd))
+    app.add_handler(CommandHandler("reminders", reminders_cmd))
+    #app.add_handler(CommandHandler("cancel", rmd_cmd))
+    app.add_handler(CommandHandler("rmd", reminders_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("note", note_cmd))
@@ -1975,7 +1979,7 @@ if __name__ == "__main__":
 # OPS COMMANDS: /ops /health /reminders
 # =========================
 from datetime import datetime
-from memory_store import reminder_stats, list_reminders
+from memory_store import reminder_stats, list_reminders, cancel_reminder
 from memory_store import get_chat_voice_enabled, set_chat_voice_enabled
 
 
@@ -2020,7 +2024,14 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     n = max(1, min(50, n))
 
     try:
-        rows = list_reminders(statuses=["pending", "sending"], limit=n)
+        chat_id = update.effective_chat.id if update.effective_chat else None
+        if chat_id is None:
+            await update.message.reply_text("REMINDERS\n- error: no chat_id")
+            return
+
+        from memory_store import list_reminders_for_chat
+        rows = list_reminders_for_chat(int(chat_id), statuses=["pending", "sending"], limit=n)
+
         if not rows:
             await update.message.reply_text("REMINDERS\n- none (pending/sending)")
             return
@@ -2037,6 +2048,47 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("\n".join(lines))
     except Exception as e:
         await update.message.reply_text(f"REMINDERS\n- error: {e}")
+
+async def rmd_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Cancel a reminder.
+    Usage:
+      /rmd <id>
+    """
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if chat_id is None:
+        return
+
+    parts = (update.message.text or "").strip().split()
+    if len(parts) < 2:
+        await update.message.reply_text("Uso: /rmd <id>  (ej: /rmd 27)")
+        return
+
+    try:
+        rid = int(parts[1])
+    except Exception:
+        await update.message.reply_text("Ese id no parece número. Ej: /rmd 27")
+        return
+
+    try:
+        from memory_store import cancel_reminder
+        ok = bool(cancel_reminder(int(chat_id), int(rid)))
+        if ok:
+            _audit(
+                int(chat_id),
+                action="CMD_REMINDER_CANCEL",
+                entity_type="reminder",
+                entity_id=str(rid),
+                payload=f"rid={rid}",
+                source="dm" if int(chat_id) >= 0 else "group",
+            )
+            await update.message.reply_text(f"Listo, Boss. Cancelado #{rid}.")
+        else:
+            await update.message.reply_text("No lo pude cancelar. Puede que no exista, no sea tuyo, o ya esté enviado.")
+    except Exception as e:
+        logger.exception(f"rmd_cmd failed: {e}")
+        await update.message.reply_text("Se cayó el cancel. Intenta otra vez.")
+
 
 async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     interval = _reminder_poll_seconds()

@@ -484,9 +484,14 @@ def reminder_stats() -> Dict[str, int]:
     }
 
 
-def list_reminders(statuses: Optional[List[str]] = None, limit: int = 25) -> List[Dict[str, Any]]:
+def list_reminders(
+    statuses: Optional[List[str]] = None,
+    limit: int = 25,
+    chat_id: Optional[int] = None,
+) -> List[Dict[str, Any]]:
     """
     List reminders filtered by statuses (default pending+sending).
+    If chat_id is provided, only return reminders for that chat_id.
     """
     if statuses is None:
         statuses = ["pending", "sending"]
@@ -496,14 +501,23 @@ def list_reminders(statuses: Optional[List[str]] = None, limit: int = 25) -> Lis
     cur = conn.cursor()
 
     placeholders = ",".join(["?"] * len(statuses))
+
+    where_chat = ""
+    params = [*statuses]
+    if chat_id is not None:
+        where_chat = " AND chat_id = ?"
+        params.append(int(chat_id))
+
     sql = f"""
       SELECT id, chat_id, due_at_utc, status, created_at, sent_at, channel, target, text
       FROM reminders
-      WHERE status IN ({placeholders})
+      WHERE status IN ({placeholders}){where_chat}
       ORDER BY due_at_utc ASC
       LIMIT ?
     """
-    cur.execute(sql, [*statuses, limit])
+    params.append(limit)
+
+    cur.execute(sql, params)
     rows = cur.fetchall() or []
 
     out: List[Dict[str, Any]] = []
@@ -525,6 +539,97 @@ def list_reminders(statuses: Optional[List[str]] = None, limit: int = 25) -> Lis
                 }
             )
     return out
+
+def list_reminders_for_chat(chat_id: int, statuses: Optional[List[str]] = None, limit: int = 25) -> List[Dict[str, Any]]:
+    """
+    List reminders for a single chat_id filtered by statuses (default pending+sending).
+    This is what user-facing commands should use.
+    """
+    if statuses is None:
+        statuses = ["pending", "sending"]
+    limit = max(1, min(100, int(limit or 25)))
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    placeholders = ",".join(["?"] * len(statuses))
+    sql = f"""
+      SELECT id, chat_id, due_at_utc, status, created_at, sent_at, channel, target, text
+      FROM reminders
+      WHERE chat_id = ?
+        AND status IN ({placeholders})
+      ORDER BY due_at_utc ASC
+      LIMIT ?
+    """
+    cur.execute(sql, [int(chat_id), *statuses, limit])
+    rows = cur.fetchall() or []
+
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        if hasattr(r, "keys"):
+            out.append({k: r[k] for k in r.keys()})
+        else:
+            out.append(
+                {
+                    "id": r[0],
+                    "chat_id": r[1],
+                    "due_at_utc": r[2],
+                    "status": r[3],
+                    "created_at": r[4],
+                    "sent_at": r[5],
+                    "channel": r[6],
+                    "target": r[7],
+                    "text": r[8],
+                }
+            )
+    return out
+
+def cancel_reminder(chat_id: int, rid: int) -> bool:
+    """
+    Cancel a reminder by id, only if it belongs to chat_id
+    and is currently pending or sending.
+    """
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT status
+            FROM reminders
+            WHERE id = ? AND chat_id = ?
+            """,
+            (int(rid), int(chat_id)),
+        )
+        row = cur.fetchone()
+        if not row:
+            return False
+
+        status = (row[0] or "").lower().strip()
+        if status not in ("pending", "sending"):
+            return False
+
+        cur.execute(
+            """
+            UPDATE reminders
+            SET status = 'cancelled'
+            WHERE id = ? AND chat_id = ?
+            """,
+            (int(rid), int(chat_id)),
+        )
+        conn.commit()
+        return cur.rowcount == 1
+
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 # =========================
 # CHAT PREFS (Voice mode)
