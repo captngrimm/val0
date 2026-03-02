@@ -44,6 +44,43 @@ import logging
 import unicodedata
 from typing import List, Dict, Any, Optional
 
+from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
+
+import os
+from datetime import datetime, timezone
+
+try:
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
+
+
+def format_local_time(utc_str: str) -> str:
+    """
+    Stored UTC: 'YYYY-MM-DD HH:MM:SS'  -> Local display in VAL0_TZ, AM/PM.
+    Fallback: return original utc_str.
+    """
+    try:
+        if not utc_str:
+            return utc_str
+
+        # Parse as UTC
+        dt_utc = datetime.strptime(utc_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+
+        tz_name = os.getenv("VAL0_TZ", "America/Panama")
+        if ZoneInfo:
+            dt_local = dt_utc.astimezone(ZoneInfo(tz_name))
+            # Example: "Mar 02 05:27 PM"
+            return dt_local.strftime("%b %d %I:%M %p")
+
+        return utc_str
+    except Exception:
+        return utc_str
+
 from dotenv import load_dotenv
 import openai
 
@@ -1949,7 +1986,7 @@ def main():
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CommandHandler("reminders", reminders_cmd))
     #app.add_handler(CommandHandler("cancel", rmd_cmd))
-    app.add_handler(CommandHandler("rmd", reminders_cmd))
+    app.add_handler(CommandHandler("rmd", rmd_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("note", note_cmd))
@@ -2039,7 +2076,8 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = ["REMINDERS (pending/sending)"]
         for r in rows:
             rid = r.get("id")
-            due = r.get("due_at_utc")
+            due_utc = r.get("due_at_utc") or ""
+            due = format_local_time(due_utc)
             st = r.get("status")
             txt = (r.get("text") or "").replace("\n", " ").strip()
             if len(txt) > 60:
