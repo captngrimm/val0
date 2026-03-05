@@ -44,43 +44,6 @@ import logging
 import unicodedata
 from typing import List, Dict, Any, Optional
 
-from datetime import datetime, timezone
-try:
-    from zoneinfo import ZoneInfo
-except Exception:
-    ZoneInfo = None
-
-import os
-from datetime import datetime, timezone
-
-try:
-    from zoneinfo import ZoneInfo
-except Exception:
-    ZoneInfo = None
-
-
-def format_local_time(utc_str: str) -> str:
-    """
-    Stored UTC: 'YYYY-MM-DD HH:MM:SS'  -> Local display in VAL0_TZ, AM/PM.
-    Fallback: return original utc_str.
-    """
-    try:
-        if not utc_str:
-            return utc_str
-
-        # Parse as UTC
-        dt_utc = datetime.strptime(utc_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-
-        tz_name = os.getenv("VAL0_TZ", "America/Panama")
-        if ZoneInfo:
-            dt_local = dt_utc.astimezone(ZoneInfo(tz_name))
-            # Example: "Mar 02 05:27 PM"
-            return dt_local.strftime("%b %d %I:%M %p")
-
-        return utc_str
-    except Exception:
-        return utc_str
-
 from dotenv import load_dotenv
 import openai
 
@@ -2008,8 +1971,7 @@ def main():
 
     app.run_polling(drop_pending_updates=True)
 
-if __name__ == "__main__":
-    main()
+
 
 
 # =========================
@@ -2076,8 +2038,7 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = ["REMINDERS (pending/sending)"]
         for r in rows:
             rid = r.get("id")
-            due_utc = r.get("due_at_utc") or ""
-            due = format_local_time(due_utc)
+            due = r.get("due_at_utc")
             st = r.get("status")
             txt = (r.get("text") or "").replace("\n", " ").strip()
             if len(txt) > 60:
@@ -2165,3 +2126,6 @@ async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"- last_tick_age_seconds: {age}  last_tick_due: {_VAL0_LAST_TICK_DUE}")
 
     await update.message.reply_text("\n".join(lines))
+
+if __name__ == "__main__":
+    main()
