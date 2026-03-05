@@ -2,8 +2,8 @@
 VAL0 — COGNITIVE OPERATIONS CORE
 =====================================================================
 
-Operational Roadmap  
-Last Updated: 2026-03-02
+Operational Roadmap
+Last Updated: 2026-03-05
 
 Mission:
 Val0 is a deterministic cognitive operations engine.
@@ -46,7 +46,7 @@ Reminder Runner:
 - No stuck "sending" rows.
 - due_now returns 0 after delivery.
 - APScheduler stable across restart.
-- Schema verified: due_at_utc authoritative (stored UTC, displayed raw).
+- Schema verified: due_at_utc authoritative (stored UTC, displayed local).
 
 Isolation:
 - DM + group chat isolation verified.
@@ -109,6 +109,7 @@ Merge is read-only and query-time only.
 MVP 1.3 — DISCIPLINE LAYER (LIVE, STABLE)
 =====================================================================
 
+Live:
 - Deterministic reminder creation (regex-based)
 - Regex punctuation tolerance
 - Reminder cancellation by ID (DB-backed)
@@ -120,13 +121,43 @@ MVP 1.3 — DISCIPLINE LAYER (LIVE, STABLE)
 - Active case binding per user
 - Voice-to-note ingestion (text + voice)
 - /reminders is chat-scoped (no cross-chat listing)
+- Deterministic dedupe enforced (unique index for active reminders)
+- Multi-reminder VN splitting supported (deterministic)
+
+Design principle:
+Reminders are short-term operational nudges.
+Calendar is the system of record for long-term commitments.
+
+Operational boundary:
+Reminders should normally not exceed ~7 days.
+Longer commitments should migrate to calendar events.
 
 Pending:
 - Daily 08:00 summary push
 - Overdue escalation tagging
 - Reminder state audit log (state-change timeline)
 - Per-user timezone enforcement
-- Local-time display normalization for reminder list
+- Local-time display normalization in all user-facing outputs
+- Per-user friendly address/nickname store (optional)
+
+=====================================================================
+PHASE 0.4 — ORCHESTRATION SURFACE (ACTIVE)
+=====================================================================
+
+Objective:
+Stop founder drift and create a stable operational truth layer.
+
+Scope:
+- Case Cockpit view (CASE:<id> snapshot)
+- State Board (LIVE / PARTIAL / PLANNED)
+- Bug Intake pipeline
+- Repro Capture Template
+- Timeline view for case/chat history
+
+Rules:
+- Storage deterministic
+- LLM may phrase summaries but cannot author facts
+- All entries must map to DB rows and audit logs
 
 =====================================================================
 PHASE 0.5 — MEMORY SPINE (ACTIVE)
@@ -135,58 +166,125 @@ PHASE 0.5 — MEMORY SPINE (ACTIVE)
 Baseline schema operational.
 
 Live:
-- case_notes (encrypted)
-- chat_prefs (active_case_id, voice_enabled)
-- memory_entries (deterministic advisory store)
-- per-user vault isolation (chat_id partitioning)
+- case_notes
+- chat_prefs
+- memory_entries
 
 Constraints:
-- Advisory only
-- Never auto-modifies deadlines
-- Never overrides deterministic gates
+Advisory only.
+Never overrides deterministic systems.
 
 Pending:
-- Memory audit visibility in ops runner
-- Memory health verification command (val0ctl doctor phase)
+- Memory audit visibility
+- Memory health verification
+
+=====================================================================
+PHASE 0.7 — PRIME BRIDGE (DEV LEVERAGE MODULE)
+=====================================================================
+
+Objective:
+Introduce VAL PRIME as an optional local compute accelerator.
+
+VAL0 (VPS):
+- production assistant
+- deterministic workflows
+- legal execution
+- reminders
+- user interaction
+
+VAL PRIME (Local machine / 4080 "Forge"):
+- project monitoring
+- nightly ingestion jobs
+- transcript processing
+- embeddings generation
+- long-term memory consolidation
+
+Operational Modes:
+
+Prime Lite
+- runs without GPU
+- tracks roadmap progress
+- monitors project drift
+- generates developer briefings
+
+Prime Forge
+- GPU available
+- speech-to-text
+- embeddings
+- clustering
+- bug aggregation
+
+Non-negotiables:
+
+VAL0 must remain fully operational without PRIME.
+
+PRIME may:
+- generate summaries
+- produce bug clusters
+- propose memory entries
+- generate development reports
+
+PRIME may NOT:
+- modify deterministic tables
+- mutate legal deadlines
+- alter reminders directly
+
+Integration Model:
+
+Prime → Export Packets → Val0
+
+Export Packet v1 schema:
+
+- packet_id
+- chat_id / user scope
+- sources[]
+- facts[]
+- summaries[]
+- bug_reports[]
+- open_questions[]
+
+Val0 ingestion rules:
+
+- packets stored in advisory tables only
+- ingestion logged via audit_log
+- no deterministic mutation allowed
+
+Purpose:
+
+Allow local compute acceleration without introducing system dependency.
 
 =====================================================================
 PHASE 1 — HARDENING (ACTIVE)
 =====================================================================
 
 Live:
-- audit_log table exists and is populated (IN/OUT/MODEL_CALL + reminder actions)
-- legal_audit_log table present (legal tagging path)
+- audit_log populated
+- legal_audit_log present
+- reminder dedupe enforced
 
 Remaining:
-- Structured legal audit tagging expansion (user-facing optional)
-- Deadline normalization refinement
-- Merge audit table (calendar)
-- Explicit GCAL conflict surfacing (optional user-facing)
-- Reminder state audit timeline (sent/cancelled/failed per reminder)
+- Reminder state audit timeline
+- Merge audit table
+- GCAL conflict surfacing
+- Deadline normalization guardrails
+- Founder rollback playbook
 
 Hard rule:
 No scope expansion that risks deterministic stability.
 
 =====================================================================
-PHASE 2 — DISCIPLINE AUTOMATION (ACTIVE)
+PHASE 2 — DISCIPLINE AUTOMATION
 =====================================================================
-
-Status:
-Reminder engine running stable.
 
 Remaining:
 - Daily summary auto-push
 - Overdue detection engine
-- Escalation tagging rules
-- Push toggle per user
-- Per-user timezone enforcement
-- Reminder state audit log (state transitions)
-
-Constraint:
-No mutation outside deterministic rules.
+- Escalation tagging
+- Push toggles
+- Timezone enforcement
 
 =====================================================================
-PHASE 2.5 — OPERATIONAL CONTROL LAYER (LIVE + EXPANDING)
+PHASE 2.5 — OPERATIONAL CONTROL LAYER
 =====================================================================
 
 Implemented:
@@ -194,186 +292,115 @@ Implemented:
 - DB integrity check
 - Git dirty detection
 - Service health verification
-- Scheduler verification
 
 Planned:
-- val0ctl doctor (full)
+- val0ctl doctor
 - val0ctl fix reminders
 - val0ctl fix gcal
-- Controlled auto-fix with dry-run mode
-- Memory health diagnostics
-
-Purpose:
-Reduce manual ops drift.
-Everything scriptable.
-Everything verifiable.
+- controlled dry-run repair tools
 
 =====================================================================
-PHASE 2.6 — MAINTENANCE HARNESS (PLANNED)
+PHASE 2.6 — MAINTENANCE HARNESS
 =====================================================================
 
-Objective:
-Observability layer for reliability tracking.
+Observability layer:
 
-Scope:
-- Tool success rate metrics
-- Token spend logging
-- Workflow latency tracking
-- User correction event capture
-- Weekly snapshot review mode
-- Metrics + repo snapshot (manual review only)
-
-Constraints:
-- No auto-deploy
-- No self-modifying behavior
-- Deterministic core untouched
+- token spend metrics
+- latency tracking
+- correction capture
+- weekly system snapshot
 
 =====================================================================
 PHASE 3 — CONTROLLED SYNC (OPTIONAL)
 =====================================================================
 
-- Background sync job
-- Snapshot Google events into case_events
-- Preserve source metadata (gcal_event_id)
-- Immutable audit record
-- Conflict detection on modified events
-- Deletion detection
-- Sync enable flag
-
-Never overwrite DB silently.
+Calendar event snapshot system.
 
 =====================================================================
 PHASE 4 — MIGUEL UX SIMPLIFICATION
 =====================================================================
 
 Goal:
-Zero-friction courtroom workflow.
-
-- Standardized event title template
-- Simple case-binding instruction sheet
-- One-line quick entry format
-- Voice-first case capture
-- Auto-digit parsing for expediente numbers
-- Hybrid response mode (text-first + voice)
-- Voice transcription recall command
-
-Deterministic core never altered.
+Zero friction courtroom workflow.
 
 =====================================================================
 PHASE 5 — VOICE / PERSONALITY ARCHITECTURE
 =====================================================================
 
-Objective:
 Two-pass system.
 
-1) Deterministic factual answer.
-2) Controlled Voice Renderer layer.
+1) Deterministic answer
+2) Renderer layer
 
-Layers:
+Renderer Contract:
 
-1. Mode Router
-2. Core Answer Engine (DB-first, tool-grounded)
-3. Validator / Anti-Drift Gate
-   - Blocks hallucination
-   - Blocks therapy tone in legal mode
-   - Blocks moralizing
-   - Enforces answer-first
+Val0 produces a structured Response Pack containing:
 
-4. Strategic Challenge Layer (Founder Mode Only)
+- grounded_facts
+- memory_refs
+- actions_taken
+- constraints
+- risk_flags
+- options
+- next_questions
+- tone_mode
+- formatting
+
+LLM Renderer Rules:
+
+- May NOT introduce operational facts outside grounded_facts
+- Must cite memory_refs when referencing stored data
+- May add tone/personality only
+- Must surface risk_flags explicitly
 
 Purpose:
-Pre-execution advisory review for major strategic proposals.
-
-Triggers:
-- Scope expansion
-- Product pivots
-- Architecture deviation
-- Runway misalignment
-
-Returns:
-- GREEN (aligned)
-- YELLOW (risk detected)
-- RED (priority/runway violation)
-
-Constraints:
-- Advisory only
-- No execution blocking
-- No DB mutation
-- No impact on legal workflow
-- Founder Mode only
-
-5. Voice Renderer (output only, no reasoning)
-6. User Voice Profile Store
-7. Safety Caps
-
-Rule:
-Personality is an output renderer, not a reasoning bias.
+Maintain conversational voice without allowing hallucination to alter system truth.
 
 =====================================================================
 PHASE 6 — STANDALONE VAL INTERFACE
 =====================================================================
 
-Precondition:
-Operational layer deterministic + scriptable.
-
-- Dedicated web UI
-- Timeline visualization
-- Vault viewer
-- Activity log viewer
-- Auth layer
-- Multi-user support
-- Preparation for client-side encryption
+Dedicated UI layer.
 
 =====================================================================
-PHASE 7 — CAPSULE NETWORK (FUTURE)
+PHASE 7 — CAPSULE NETWORK
 =====================================================================
 
-- Opt-in trust circles
-- Permission-based vault sharing
-- Share-by-capsule only
-- Zero implicit exposure
+Future trust-circle vault sharing.
 
 =====================================================================
-LONG-TERM ARCHITECTURE
+LONG TERM ARCHITECTURE
 =====================================================================
 
-Core stack:
-
-1. Encrypted storage (SQLCipher)
-2. Deterministic legal engine
+1. Encrypted storage
+2. Deterministic engine
 3. Merge layer
-4. Memory spine (advisory)
-5. Scheduler layer
-6. Ops control layer (CLI)
-7. Validator + Strategic advisory layer
-8. Personality renderer layer
-9. UI layer
-10. Future E2EE client layer
+4. Memory spine
+5. Scheduler
+6. Ops CLI
+7. Orchestration surface
+8. Validator + advisory layer
+9. Renderer layer
+10. UI
+11. Client E2EE
 
 =====================================================================
 WHAT WE WILL NOT DO
 =====================================================================
 
-- No auto-deleting deadlines.
-- No model-generated legal facts.
-- No hidden sync.
-- No silent schema mutation.
-- No admin backdoor into vault.
-- No uncontrolled feature creep.
-- No personality influencing legal determinism.
-- No execution blocking without Founder authorization.
+No model-generated legal facts.
+No silent DB mutation.
+No uncontrolled feature creep.
 
 =====================================================================
 CURRENT PRIORITY
 =====================================================================
 
-1. Finish Phase 1 hardening.
-2. Expand audit visibility (state transitions, merge audit).
-3. Complete Phase 2 automation (daily + overdue).
-4. Expand ops runner into structured doctor.
-5. Stabilize hybrid voice/text UX.
-6. Begin controlled Personality Renderer implementation.
-7. Do not expand UI prematurely.
+1. Finish Phase 1 hardening
+2. Phase 0.4 orchestration surface
+3. Phase 2 automation
+4. Ops doctor tooling
+5. Hybrid voice/text stability
 
 Revenue stability first.
 Architecture second.
@@ -385,9 +412,7 @@ CHANGE CONTROL
 
 Every structural modification must:
 
-1. Be reflected here.
-2. Be committed clearly.
-3. Preserve determinism.
-4. Be testable via CLI.
-
-END OF ROADMAP
+1. Be reflected here
+2. Be committed clearly
+3. Preserve determinism
+4. Be CLI-testable

@@ -11,6 +11,7 @@ Focus:
 * human-readable time display
 * deterministic state audit
 * guardrails preventing long-term reminder misuse
+* storage integrity of reminder text
 
 Reminder system is now operational; this sprint makes it **production-grade and debuggable.**
 
@@ -64,11 +65,11 @@ Record deterministic state transitions.
 
 States:
 
-pending
-sending
-sent
-cancelled
-failed
+pending  
+sending  
+sent  
+cancelled  
+failed  
 
 ## Requirements
 
@@ -76,24 +77,25 @@ Every state change must generate an immutable audit entry.
 
 Example transitions:
 
-pending → sending
-sending → sent
-sending → failed
-pending → cancelled
+pending → sending  
+sending → sent  
+sending → failed  
+pending → cancelled  
 
 ### Audit Entry Format
 
 action: REMINDER_STATE_CHANGE
+
 payload:
 
-rid=<id>
-old=<state>
-new=<state>
-timestamp=<utc>
+rid=<id>  
+old=<state>  
+new=<state>  
+timestamp=<utc>  
 
 ### Files Likely Affected
 
-ReminderRunner module
+ReminderRunner module  
 memory_store.py (if helper added)
 
 ### Tests
@@ -124,7 +126,7 @@ If requested reminder exceeds **7 days**, Val0 must refuse deterministic creatio
 
 Example:
 
-Eso está a más de 7 días.
+Eso está a más de 7 días.  
 Por ahora los recordatorios son para tareas cercanas.
 
 ### Implementation
@@ -151,6 +153,73 @@ No reminder inserted in DB.
 
 ---
 
+# D) Reminder Text Storage Guardrail
+
+## Problem
+
+Earlier reminder bugs allowed newline fragments (`\n`, `\r`) to be stored in
+`reminders.text`.
+
+This caused:
+
+* broken `/reminders` list rendering
+* multi-line rows inside the database
+* confusing debugging output
+
+## Rule
+
+Reminder text must be stored as **single-line normalized text**.
+
+Newline fragments must never persist in the database.
+
+## Implementation
+
+Sanitization occurs at the **single write boundary**:
+
+memory_store.insert_reminder()
+
+Before executing the SQL insert:
+text = sanitize_reminder_text(text)
+
+
+Sanitization behavior:
+
+* convert CR/LF to spaces
+* collapse repeated whitespace
+* strip leading and trailing spaces
+* reject residual newline fragments
+
+Reminder pipeline:
+
+Telegram message  
+→ bot.py  
+→ try_create_reminder()  
+→ insert_reminder()  
+→ sanitize_reminder_text()  
+→ SQLCipher database
+
+This guarantees reminder text stored in the DB is always normalized.
+
+---
+
+## Legacy Data Cleanup
+
+Historical rows containing newline fragments were normalized using:
+
+
+UPDATE reminders
+SET text = REPLACE(REPLACE(text, char(10), ' '), char(13), ' ')
+WHERE text LIKE '%'||char(10)||'%'
+OR text LIKE '%'||char(13)||'%';
+
+
+Verification queries confirmed:
+
+* newline fragments removed
+* sanitizer prevents future corruption
+
+---
+
 # Definition of Done
 
 Reminder confirmations show consistent local time.
@@ -158,6 +227,8 @@ Reminder confirmations show consistent local time.
 State transitions recorded in audit log.
 
 Reminder creation rejected when >7 days.
+
+Reminder text stored as normalized single-line strings.
 
 Service remains stable (no crash loops).
 

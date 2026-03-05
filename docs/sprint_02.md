@@ -1,5 +1,5 @@
 # Sprint 02 — Reminder Hardening + Cancel + Chat-Scoped Listing
-Updated: 2026-03-02
+Updated: 2026-03-05 - Completed
 
 ## Scope
 A) Deterministic Reminder Creator (DM only) — expanded grammar + punctuation tolerance  
@@ -96,3 +96,13 @@ D) Fix reminder listing isolation (no cross-chat bleed)
 - Local-time display normalization for reminder list (currently shows due_at_utc raw)
 - Telemetry counters (sent/cancelled/failed per tick)
 - Multi-line / multi-command parsing (single message -> multiple reminders)
+
+What we added beyond Sprint 02:
+
+✅ deterministic dedupe (unique index)
+
+✅ multi-reminder VN splitting
+
+✅ tomorrow default time (9:00)
+
+✅ “already exists” behavior

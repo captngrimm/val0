@@ -3,6 +3,33 @@ import threading
 import logging
 from typing import List, Dict, Optional, Any
 
+import re
+
+_WS_RE = re.compile(r"[ \t\f\v]+")
+_LIT_ESC_RE = re.compile(r"\\[nrt]")  # literal \n \r \t sequences
+
+def sanitize_reminder_text(s: str) -> str:
+    if s is None:
+        return ""
+    if not isinstance(s, str):
+        s = str(s)
+
+    # normalize CRLF/CR then remove actual newlines
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    s = s.replace("\n", " ")
+
+    # remove literal escape fragments like "\\n"
+    s = _LIT_ESC_RE.sub(" ", s)
+
+    # collapse whitespace + trim
+    s = _WS_RE.sub(" ", s).strip()
+
+    # hard guard
+    if "\n" in s or "\r" in s:
+        raise ValueError("sanitize_reminder_text failed: newline fragment remains")
+
+    return s
+
 logger = logging.getLogger("val0-memory")
 
 def _log_db_mode():
@@ -203,6 +230,7 @@ def insert_reminder(chat_id: int, due_at_utc: str, text: str, status: str = "pen
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
+        text = sanitize_reminder_text(text)
         cur.execute(
             "INSERT INTO reminders(chat_id, due_at_utc, text, status) VALUES(?,?,?,?)",
             (chat_id, due_at_utc, text, status),
