@@ -152,7 +152,7 @@ def init_db() -> None:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_legal_audit_chat_id ON legal_audit_log(chat_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_legal_audit_gate ON legal_audit_log(gate_name);")
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_legal_audit_created_at ON legal_audit_log(created_at);")        
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_legal_audit_created_at ON legal_audit_log(created_at);")
 
         # chat_prefs: per-chat toggles (voice mode, etc)
         cur.execute("""
@@ -261,6 +261,23 @@ def insert_audit(
         conn.commit()
         conn.close()
 
+def log_reminder_state_change(chat_id: int, rid: int, old_state: str, new_state: str, source: str = "reminder_state") -> None:
+    """
+    Immutable audit entry for reminder state transitions.
+    """
+    from datetime import datetime, timezone
+
+    ts = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    payload = f"rid={int(rid)}\nold={old_state}\nnew={new_state}\ntimestamp={ts}"
+    insert_audit(
+        chat_id=int(chat_id),
+        action="REMINDER_STATE_CHANGE",
+        entity_type="reminder",
+        entity_id=str(int(rid)),
+        payload=payload,
+        source=source,
+    )
+
 def fetch_due_reminders(limit: int = 10) -> List[Dict[str, Any]]:
     with _lock:
         conn = _get_conn()
@@ -278,27 +295,78 @@ def fetch_due_reminders(limit: int = 10) -> List[Dict[str, Any]]:
 
 
 def mark_reminder_sent(reminder_id: int) -> None:
+    audit_chat_id = None
+    audit_old_state = None
+    changed = False
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
+
+        cur.execute(
+            "SELECT chat_id, status FROM reminders WHERE id=?",
+            (reminder_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            audit_chat_id = int(row[0])
+            audit_old_state = (row[1] or "").strip().lower()
+
         cur.execute(
             "UPDATE reminders SET status='sent', sent_at=datetime('now') WHERE id=?",
             (reminder_id,),
         )
+        changed = (cur.rowcount == 1)
+
         conn.commit()
         conn.close()
 
+    if changed and audit_chat_id is not None:
+        log_reminder_state_change(
+            chat_id=audit_chat_id,
+            rid=reminder_id,
+            old_state=audit_old_state or "sending",
+            new_state="sent",
+            source="mark_reminder_sent",
+        )
+
 
 def mark_reminder_failed(reminder_id: int, reason: str = "failed") -> None:
+    audit_chat_id = None
+    audit_old_state = None
+    changed = False
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
+
+        cur.execute(
+            "SELECT chat_id, status FROM reminders WHERE id=?",
+            (reminder_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            audit_chat_id = int(row[0])
+            audit_old_state = (row[1] or "").strip().lower()
+
         cur.execute(
             "UPDATE reminders SET status='failed', sent_at=datetime('now') WHERE id=?",
             (reminder_id,),
         )
+        changed = (cur.rowcount == 1)
+
         conn.commit()
         conn.close()
+
+    if changed and audit_chat_id is not None:
+        src = f"mark_reminder_failed:{reason}" if reason else "mark_reminder_failed"
+        log_reminder_state_change(
+            chat_id=audit_chat_id,
+            rid=reminder_id,
+            old_state=audit_old_state or "sending",
+            new_state="failed",
+            source=src,
+        )
 
 def _ensure_user_facts_table(cur) -> None:
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_facts';")
@@ -426,9 +494,21 @@ def claim_reminder(reminder_id: int) -> bool:
     Atomically claim a pending reminder so only one runner instance sends it.
     Returns True if claimed, False otherwise.
     """
+    audit_chat_id = None
+    changed = False
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
+
+        cur.execute(
+            "SELECT chat_id, status FROM reminders WHERE id=?",
+            (reminder_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            audit_chat_id = int(row[0])
+
         cur.execute(
             """
             UPDATE reminders
@@ -439,20 +519,58 @@ def claim_reminder(reminder_id: int) -> bool:
             """,
             (reminder_id,),
         )
+        changed = (cur.rowcount == 1)
+
         conn.commit()
-        return cur.rowcount == 1
+        conn.close()
+
+    if changed and audit_chat_id is not None:
+        log_reminder_state_change(
+            chat_id=audit_chat_id,
+            rid=reminder_id,
+            old_state="pending",
+            new_state="sending",
+            source="claim_reminder",
+        )
+
+    return changed
     
 
 def revert_reminder_pending(reminder_id: int):
+    audit_chat_id = None
+    audit_old_state = None
+    changed = False
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
+
+        cur.execute(
+            "SELECT chat_id, status FROM reminders WHERE id=?",
+            (reminder_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            audit_chat_id = int(row[0])
+            audit_old_state = (row[1] or "").strip().lower()
+
         cur.execute(
             "UPDATE reminders SET status='pending', sent_at=NULL WHERE id=?",
             (reminder_id,),
         )
+        changed = (cur.rowcount == 1)
+
         conn.commit()
         conn.close()
+
+    if changed and audit_chat_id is not None:
+        log_reminder_state_change(
+            chat_id=audit_chat_id,
+            rid=reminder_id,
+            old_state=audit_old_state or "sending",
+            new_state="pending",
+            source="revert_reminder_pending",
+        )
 
 # ==========================================================
 # MISSING EXPORT SHIMS — bot.py expects these names
@@ -632,8 +750,8 @@ def cancel_reminder(chat_id: int, rid: int) -> bool:
         if not row:
             return False
 
-        status = (row[0] or "").lower().strip()
-        if status not in ("pending", "sending"):
+        old_state = (row[0] or "").lower().strip()
+        if old_state not in ("pending", "sending"):
             return False
 
         cur.execute(
@@ -644,8 +762,19 @@ def cancel_reminder(chat_id: int, rid: int) -> bool:
             """,
             (int(rid), int(chat_id)),
         )
+        changed = (cur.rowcount == 1)
         conn.commit()
-        return cur.rowcount == 1
+
+        if changed:
+            log_reminder_state_change(
+                chat_id=int(chat_id),
+                rid=int(rid),
+                old_state=old_state,
+                new_state="cancelled",
+                source="cancel_reminder",
+            )
+
+        return changed
 
     except Exception:
         try:
