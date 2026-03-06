@@ -124,23 +124,40 @@ def merge_due_items(
     db_items: List[Dict[str, Any]],
     range_start_utc: datetime,
     range_end_utc: datetime,
-) -> List[Dict[str, Any]]:
+) -> Dict[str, List[Dict[str, Any]]]:
     """
-    Merge deterministic DB due items with optional Google Calendar events (deterministically normalized).
-    Output schema:
-      {
-        "due_ts": int,
-        "due_local": "YYYY-MM-DD HH:MM",
-        "due_date": "YYYY-MM-DD",
-        "title": str,
-        "case_id": Optional[str],
-        "source": "db" | "gcal",
-        "external_id": Optional[str],
-      }
+    Merge deterministic DB due items with optional Google Calendar events.
 
-    Phase 1: no user-visible behavior change — only adds structured audit logs.
+    Returns:
+    {
+      "items": [...],
+      "conflicts": [...]
+    }
+
+    items schema:
+    {
+      "due_ts": int,
+      "due_local": "YYYY-MM-DD HH:MM",
+      "due_date": "YYYY-MM-DD",
+      "title": str,
+      "case_id": Optional[str],
+      "source": "db" | "gcal",
+      "external_id": Optional[str],
+    }
+
+    conflicts schema:
+    {
+      "case_id": str,
+      "due_date": str,
+      "db_due_local": str,
+      "gcal_due_local": str,
+      "db_title": str,
+      "gcal_title": str,
+      "kind": "time" | "title" | "both",
+    }
     """
     out: List[Dict[str, Any]] = []
+    conflicts: List[Dict[str, Any]] = []
 
     # --- Normalize DB items first ---
     # Build an index for conflict detection: (case_id, due_date) -> list[db_item]
@@ -151,7 +168,6 @@ def merge_due_items(
         it.setdefault("source", "db")
         it.setdefault("external_id", None)
         it["due_ts"] = int(it.get("due_ts") or 0)
-
         it.setdefault("due_local", _local_label(datetime.fromtimestamp(it["due_ts"], tz=timezone.utc)))
         it.setdefault("due_date", it["due_local"][:10] if it.get("due_local") else "")
         it.setdefault("case_id", it.get("case_id"))
@@ -164,14 +180,20 @@ def merge_due_items(
             db_index.setdefault((case_id, due_date), []).append(it)
 
     if not gcal_enabled():
-        return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
+        return {
+            "items": sorted(out, key=lambda x: int(x.get("due_ts") or 0)),
+            "conflicts": [],
+        }
 
     # Pull GCAL events (normalized)
     try:
         from core.gcal_client import get_events_between
     except Exception as e:
         logger.info("[MERGE] gcal_import_fail err=%s", type(e).__name__)
-        return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
+        return {
+            "items": sorted(out, key=lambda x: int(x.get("due_ts") or 0)),
+            "conflicts": [],
+        }
 
     start_utc = _to_utc(range_start_utc)
     end_utc = _to_utc(range_end_utc)
@@ -180,7 +202,10 @@ def merge_due_items(
         events = get_events_between(start_utc, end_utc, limit=250)
     except Exception as e:
         logger.info("[MERGE] gcal_fetch_fail err=%s", type(e).__name__)
-        return sorted(out, key=lambda x: int(x.get("due_ts") or 0))
+        return {
+            "items": sorted(out, key=lambda x: int(x.get("due_ts") or 0)),
+            "conflicts": [],
+        }
 
     # Phase 1: strict unbound handling + merge stats
     allow_unbound = include_unbound_events()
@@ -214,11 +239,13 @@ def merge_due_items(
         title = (ev.get("summary") or "(no title)").strip()
         case_id = _extract_case_id_from_title(title)
         if total_ev <= 5:
-            logger.info("[MERGE] ev_dbg start=%s titleh=%s bound=%s",
+            logger.info(
+                "[MERGE] ev_dbg start=%s titleh=%s bound=%s",
                 start_str,
                 _title_hash(title),
-                case_id or "-")
-    
+                case_id or "-",
+            )
+
         due_date = _local_label(due_dt_utc)[:10]
 
         if case_id is None:
@@ -229,34 +256,52 @@ def merge_due_items(
         else:
             kept_bound += 1
 
-            # --- Conflict detection (Phase 1): if DB has same case_id + due_date, compare ---
-            db_candidates = db_index.get((case_id, due_date)) or []
-            if db_candidates:
-                # Compare against the first DB candidate deterministically (sorted by due_ts then id-ish stable fields if present)
-                db_sorted = sorted(db_candidates, key=lambda x: (int(x.get("due_ts") or 0), _norm_title(str(x.get("title") or ""))))
-                db_it = db_sorted[0]
+        # --- Conflict detection (Phase 1): if DB has same case_id + due_date, compare ---
+        db_candidates = db_index.get((case_id, due_date)) or []
+        if db_candidates:
+            # Compare against the first DB candidate deterministically
+            db_sorted = sorted(
+                db_candidates,
+                key=lambda x: (int(x.get("due_ts") or 0), _norm_title(str(x.get("title") or ""))),
+            )
+            db_it = db_sorted[0]
 
-                db_ts = int(db_it.get("due_ts") or 0)
-                g_ts = int(due_ts)
-                delta_min = abs(db_ts - g_ts) // 60
+            db_ts = int(db_it.get("due_ts") or 0)
+            g_ts = int(due_ts)
+            delta_min = abs(db_ts - g_ts) // 60
 
-                db_th = _title_hash(str(db_it.get("title") or ""))
-                g_th = _title_hash(title)
+            db_title = str(db_it.get("title") or "(evento)")
+            gcal_title = title
 
-                time_mismatch = (db_ts != g_ts)
-                title_mismatch = (db_th != g_th)
+            db_th = _title_hash(db_title)
+            g_th = _title_hash(gcal_title)
 
-                if time_mismatch or title_mismatch:
-                    conflict_total += 1
-                    if time_mismatch:
-                        conflict_time += 1
-                    if title_mismatch:
-                        conflict_title += 1
+            time_mismatch = (db_ts != g_ts)
+            title_mismatch = (db_th != g_th)
 
-                    if len(conflict_samples) < 3:
-                        conflict_samples.append(
-                            f"case={case_id} date={due_date} dmin={delta_min} db_titleh={db_th} gcal_titleh={g_th}"
-                        )
+            if time_mismatch or title_mismatch:
+                conflict_total += 1
+                if time_mismatch:
+                    conflict_time += 1
+                if title_mismatch:
+                    conflict_title += 1
+
+                if len(conflict_samples) < 3:
+                    conflict_samples.append(
+                        f"case={case_id} date={due_date} dmin={delta_min} db_titleh={db_th} gcal_titleh={g_th}"
+                    )
+
+                conflicts.append(
+                    {
+                        "case_id": str(case_id or ""),
+                        "due_date": due_date,
+                        "db_due_local": _local_label(datetime.fromtimestamp(db_ts, tz=timezone.utc)),
+                        "gcal_due_local": _local_label(due_dt_utc),
+                        "db_title": db_title,
+                        "gcal_title": gcal_title,
+                        "kind": "both" if (time_mismatch and title_mismatch) else ("time" if time_mismatch else "title"),
+                    }
+                )
 
         out.append(
             {
@@ -306,7 +351,7 @@ def merge_due_items(
                 gcal_skipped_collisions += 1
                 if len(collision_samples) < 3:
                     collision_samples.append(_dedupe_key_public(it))
-                continue
+            continue
         seen.add(k)
         deduped.append(it)
 
@@ -316,4 +361,7 @@ def merge_due_items(
         collision_samples,
     )
 
-    return sorted(deduped, key=lambda x: int(x.get("due_ts") or 0))
+    return {
+        "items": sorted(deduped, key=lambda x: int(x.get("due_ts") or 0)),
+        "conflicts": conflicts,
+    }

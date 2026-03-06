@@ -130,8 +130,49 @@ def _render_due_grouped(
 
     return "\n".join(lines)
 
+def _render_due_conflicts(conflicts: List[Dict[str, Any]]) -> str:
+    """
+    Render deterministic user-facing conflict warnings.
+    """
+    if not conflicts:
+        return ""
 
+    lines: List[str] = ["\n⚠️ Ojo: encontré discrepancias entre expediente y calendario"]
 
+    for c in conflicts:
+        case_id = (c.get("case_id") or "—").strip()
+        db_due = (c.get("db_due_local") or "—").strip()
+        gcal_due = (c.get("gcal_due_local") or "—").strip()
+        db_title = (c.get("db_title") or "(evento)").strip()
+        gcal_title = (c.get("gcal_title") or "(evento)").strip()
+
+        lines.append(f"\nCASE:{case_id}")
+        lines.append(f"• expediente: {db_due} — {db_title}")
+        lines.append(f"• calendario: {gcal_due} — {gcal_title}")
+
+    return "\n".join(lines)
+
+def _render_due_conflicts(conflicts: List[Dict[str, Any]]) -> str:
+    """
+    Render deterministic user-facing conflict warnings.
+    """
+    if not conflicts:
+        return ""
+
+    lines: List[str] = ["\n⚠️ Ojo: encontré discrepancias entre expediente y calendario"]
+
+    for c in conflicts:
+        case_id = (c.get("case_id") or "—").strip()
+        db_due = (c.get("db_due_local") or "—").strip()
+        gcal_due = (c.get("gcal_due_local") or "—").strip()
+        db_title = (c.get("db_title") or "(evento)").strip()
+        gcal_title = (c.get("gcal_title") or "(evento)").strip()
+
+        lines.append(f"\nCASE:{case_id}")
+        lines.append(f"• expediente: {db_due} — {db_title}")
+        lines.append(f"• calendario: {gcal_due} — {gcal_title}")
+
+    return "\n".join(lines)
 
 def _audit_merge(*, gate: str, chat_id: int, label: str, items: list) -> None:
     """Phase 1 audit: read-only per-query merge summary."""
@@ -292,12 +333,16 @@ async def try_due_today(update, chat_id, text) -> bool:
         start_local = datetime(y, m, d, 0, 0, 0, tzinfo=tz)
         end_local = datetime(y, m, d, 23, 59, 59, tzinfo=tz)
 
-        items = merge_due_items(
+        
+        merged = merge_due_items(
             db_items=db_items,
             range_start_utc=start_local.astimezone(timezone.utc),
             range_end_utc=end_local.astimezone(timezone.utc),
         )
-        _audit_merge(gate="due_today", chat_id=int(chat_id), label=f"{today}", items=items)        
+        items = merged["items"]
+        conflicts = merged["conflicts"]
+
+        _audit_merge(gate="due_today", chat_id=int(chat_id), label=f"{today}", items=items)
         if not items:
             await update.message.reply_text("Hoy no tengo vencimientos registrados.")
             return True
@@ -307,6 +352,22 @@ async def try_due_today(update, chat_id, text) -> bool:
             items=items,
             tz=tz,
         )
+
+        if conflicts:
+            msg = msg + "\n" + _render_due_conflicts(conflicts)
+
+        await update.message.reply_text(msg)
+        return True
+
+        msg = _render_due_grouped(
+            header=f"⏰ Vence hoy ({today}):",
+            items=items,
+            tz=tz,
+        )
+
+        if conflicts:
+            msg = msg + "\n" + _render_due_conflicts(conflicts)
+
         await update.message.reply_text(msg)
         return True
 
@@ -422,11 +483,14 @@ async def try_due_range(update, chat_id, text) -> bool:
         start_local = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0, tzinfo=tz)
         end_local = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59, tzinfo=tz)
 
-        items = merge_due_items(
+        merged = merge_due_items(
             db_items=db_items,
             range_start_utc=start_local.astimezone(timezone.utc),
             range_end_utc=end_local.astimezone(timezone.utc),
         )
+        items = merged["items"]
+        conflicts = merged["conflicts"]
+
         _audit_merge(gate="due_range", chat_id=int(chat_id), label=f"{start_s}->{end_s}", items=items)
         if not items:
             await update.message.reply_text(f"No tengo vencimientos registrados para {label}.")
@@ -437,6 +501,10 @@ async def try_due_range(update, chat_id, text) -> bool:
             items=items,
             tz=tz,
         )
+
+        if conflicts:
+            msg = msg + "\n" + _render_due_conflicts(conflicts)
+
         await update.message.reply_text(msg)
         return True
 
