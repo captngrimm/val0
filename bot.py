@@ -157,10 +157,15 @@ def _extract_deadline_date(text: str) -> str:
     tz = ZoneInfo("America/Panama")
     today = datetime.now(tz).date()
 
-    if "vence hoy" in t:
+    if "vence hoy" in t or "audiencia hoy" in t:
         return today.isoformat()
 
-    if "vence mañana" in t or "vence manana" in t:
+    if (
+        "vence mañana" in t
+        or "vence manana" in t
+        or "audiencia mañana" in t
+        or "audiencia manana" in t
+    ):
         return (today + timedelta(days=1)).isoformat()
 
     m = re.search(r"vence\s+el\s+(\d{4}-\d{2}-\d{2})", t)
@@ -257,6 +262,45 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         logger.info(
             f"[CASE_EVENT] inserted id={event_id} case_id={active} deadline_date={deadline_date} source={source}"
         )
+
+        # --- Sprint09: conflict detection ---
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
+
+            cur.execute(
+                """
+                SELECT ce.event_text, ce.deadline_date, c.expediente
+                FROM case_events ce
+                JOIN cases c ON c.id = ce.case_id
+                WHERE ce.chat_id = ?
+                AND ce.deadline_date = ?
+                AND ce.id != ?
+                ORDER BY ce.id ASC
+                LIMIT 5
+                """,
+                (int(chat_id), deadline_date, int(event_id)),
+            )
+
+            conflicts = cur.fetchall()
+            conn.close()
+
+            if conflicts:
+                lines = []
+                for r in conflicts:
+                    exp = r["expediente"] if hasattr(r, "keys") else r[2]
+                    txt = r["event_text"] if hasattr(r, "keys") else r[0]
+                    lines.append(f"• Expediente {exp} — {txt}")
+
+                msg = (
+                    f"⚠️ Boss, ya tienes otra diligencia ese mismo día ({deadline_date}):\n\n"
+                    + "\n".join(lines)
+                )
+
+                await update.message.reply_text(msg)
+
+        except Exception as e:
+            logger.exception(f"[CASE_CONFLICT_CHECK] failed: {e}")
 
     except Exception as e:
         logger.exception(f"[CASE_EVENT] insert failed case_id={active} err={e}")
