@@ -917,6 +917,26 @@ def insert_case_event(
         has_chat = "chat_id" in cols
         has_principal = "principal_id" in cols
 
+        # Idempotency guard: if same logical event already exists, return it
+        if has_chat and has_event_text and "deadline_date" in cols:
+            cur.execute(
+                """
+                SELECT id
+                FROM case_events
+                WHERE chat_id = ?
+                  AND case_id = ?
+                  AND COALESCE(event_text, '') = ?
+                  AND COALESCE(deadline_date, '') = COALESCE(?, '')
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(chat_id), int(case_id), txt, deadline_date),
+            )
+            existing = cur.fetchone()
+            if existing:
+                conn.close()
+                return int(existing["id"] if hasattr(existing, "keys") else existing[0])    
+
         if has_chat and has_event_text and has_desc and has_principal:
             cur.execute("""
             INSERT INTO case_events(chat_id, case_id, event_text, description, term_days, start_date, deadline_date, raw_text, principal_id)
