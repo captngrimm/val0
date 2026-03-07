@@ -43,6 +43,7 @@ import os
 import logging
 import unicodedata
 import datetime
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 from typing import List, Dict, Any, Optional
 from datetime import time as dt_time
@@ -134,14 +135,55 @@ def _extract_case_id(text: str) -> str:
     m = _CASE_RE.search(text)
     return (m.group(1) or "").strip() if m else ""
 
+# --- Sprint08 deterministic deadline extractor ---
+def _extract_deadline_date(text: str) -> str:
+    """
+    Deterministic deadline extractor for Sprint08.
+    Supports:
+    - vence hoy
+    - vence mañana
+    - vence el YYYY-MM-DD
+    Returns ISO date string or "".
+    """
+    import re
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    if not text:
+        return ""
+
+    t = text.strip().lower()
+
+    tz = ZoneInfo("America/Panama")
+    today = datetime.now(tz).date()
+
+    if "vence hoy" in t:
+        return today.isoformat()
+
+    if "vence mañana" in t or "vence manana" in t:
+        return (today + timedelta(days=1)).isoformat()
+
+    m = re.search(r"vence\s+el\s+(\d{4}-\d{2}-\d{2})", t)
+    if m:
+        return m.group(1)
+
+    return ""
+
 async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str):
     """
     Phase B0 behavior:
     - If text contains an expediente/case number => set as active case
     - If there is an active case => store the note to case_notes
+    - If text clearly contains a deadline phrase => also create a case_event
     """
     try:
-        from memory_store import get_active_case_id, set_active_case_id, insert_case_note
+        from memory_store import (
+            get_active_case_id,
+            set_active_case_id,
+            insert_case_note,
+            insert_case_event,
+            _get_conn,
+        )
     except Exception:
         return
 
@@ -152,20 +194,72 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
     except Exception:
         tg_msg_id = None
 
-    found = _extract_case_id(text)
+    raw_text = str(text or "").strip()
+    if not raw_text:
+        return
+
+    found = _extract_case_id(raw_text)
     if found:
         set_active_case_id(int(chat_id), found)
 
     active = get_active_case_id(int(chat_id)) or found
-    if active:
-        note_id = insert_case_note(
-            chat_id=int(chat_id),
-            case_id=str(active),
-            note_text=str(text or "").strip(),
-            source=str(source or "text"),
-            telegram_message_id=tg_msg_id,
+    if not active:
+        return
+
+    # Always capture note
+    note_id = insert_case_note(
+        chat_id=int(chat_id),
+        case_id=str(active),
+        note_text=raw_text,
+        source=str(source or "text"),
+        telegram_message_id=tg_msg_id,
+    )
+    logger.info(f"[CASE_NOTE] inserted id={note_id} case_id={active} source={source}")
+
+    # Deterministic event capture (Sprint08 minimal scope)
+    deadline_date = _extract_deadline_date(raw_text)
+    if not deadline_date:
+        return
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, expediente
+            FROM cases
+            WHERE chat_id=? AND lower(expediente)=lower(?)
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(chat_id), str(active)),
         )
-        logger.info(f"[CASE_NOTE] inserted id={note_id} case_id={active} source={source}")
+        row = cur.fetchone()
+        conn.close()
+
+        if not row:
+            logger.warning(f"[CASE_EVENT] no case row found for expediente={active} chat_id={chat_id}")
+            return
+
+        case_row_id = int(row["id"] if hasattr(row, "keys") else row[0])
+
+        event_id = insert_case_event(
+            chat_id=int(chat_id),
+            case_id=case_row_id,
+            event_text=raw_text,
+            term_days=None,
+            start_date=None,
+            deadline_date=deadline_date,
+            raw_text=raw_text,
+            principal_id=None,
+        )
+
+        logger.info(
+            f"[CASE_EVENT] inserted id={event_id} case_id={active} deadline_date={deadline_date} source={source}"
+        )
+
+    except Exception as e:
+        logger.exception(f"[CASE_EVENT] insert failed case_id={active} err={e}")
 
 import asyncio
 
