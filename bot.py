@@ -42,8 +42,10 @@ except Exception:
 import os
 import logging
 import unicodedata
+import datetime
+from zoneinfo import ZoneInfo
 from typing import List, Dict, Any, Optional
-
+from datetime import time as dt_time
 from dotenv import load_dotenv
 import openai
 
@@ -1555,6 +1557,84 @@ async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("ReminderRunner tick crashed: %s", e)
 
+async def evening_brief_tick(context):
+    """
+    Sends a short briefing for tomorrow.
+    """
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import _get_conn
+    from core.due_merge import merge_due_items
+    from core.case_mvp import _render_due_grouped
+
+    tz = ZoneInfo("America/Panama")
+
+    tomorrow = datetime.now(tz).date() + timedelta(days=1)
+    y, m, d = tomorrow.year, tomorrow.month, tomorrow.day
+
+    start_local = datetime(y, m, d, 0, 0, 0, tzinfo=tz)
+    end_local = datetime(y, m, d, 23, 59, 59, tzinfo=tz)
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT DISTINCT chat_id FROM cases"
+    )
+
+    users = cur.fetchall()
+
+    for u in users:
+
+        chat_id = int(u["chat_id"])
+
+        cur.execute(
+            """
+            SELECT c.expediente, ce.event_text, ce.deadline_date
+            FROM case_events ce
+            JOIN cases c ON c.id = ce.case_id
+            WHERE ce.chat_id=? AND ce.deadline_date=?
+            """,
+            (chat_id, tomorrow.isoformat()),
+        )
+
+        rows = cur.fetchall()
+
+        db_items = []
+
+        for r in rows:
+            local_dt = datetime(y, m, d, 9, 0, 0, tzinfo=tz)
+            due_ts = int(local_dt.astimezone(timezone.utc).timestamp())
+
+            db_items.append({
+                "due_ts": due_ts,
+                "title": (r["event_text"] or "(evento)").strip(),
+                "case_id": r["expediente"],
+                "source": "db",
+                "external_id": None,
+            })
+
+        merged = merge_due_items(
+            db_items=db_items,
+            range_start_utc=start_local.astimezone(timezone.utc),
+            range_end_utc=end_local.astimezone(timezone.utc),
+        )
+
+        items = merged["items"]
+
+        if not items:
+            continue
+
+        msg = _render_due_grouped(
+            header=f"🌙 Mañana ({tomorrow.isoformat()}):",
+            items=items,
+            tz=tz,
+        )
+
+        await context.bot.send_message(chat_id=chat_id, text=msg)
+
+    conn.close()
+
 async def _handle_group_deterministic(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     """
     Group chats (chat_id < 0) are deterministic-only.
@@ -1939,6 +2019,12 @@ def main():
         interval=interval,
         first=10,
         name=REMINDER_JOB_NAME,
+    )
+
+    app.job_queue.run_daily(
+        evening_brief_tick,
+        time=dt_time(hour=21, minute=0),
+        name="EVENING_BRIEF_JOB",
     )
 
     app.add_error_handler(_error_handler)

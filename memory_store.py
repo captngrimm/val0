@@ -867,6 +867,86 @@ def set_active_case_id(chat_id: int, case_id: str) -> None:
         conn.commit()
         conn.close()
 
+def insert_case_event(
+    chat_id: int,
+    case_id: int,
+    event_text: str,
+    term_days: int | None = None,
+    start_date: str | None = None,
+    deadline_date: str | None = None,
+    raw_text: str | None = None,
+    principal_id: str | None = None,
+) -> int:
+    """
+    Insert a case event in a schema-compatible way across legacy deployments.
+    Returns case_events.id
+    """
+    txt = (event_text or "").strip()
+    if not txt:
+        raise ValueError("insert_case_event: event_text required")
+
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        # Ensure table exists (init_db should do this, but keep helper self-safe)
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS case_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER,
+            case_id INTEGER NOT NULL,
+            event_text TEXT,
+            description TEXT,
+            term_days INTEGER,
+            start_date TEXT,
+            deadline_date TEXT,
+            raw_text TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            principal_id TEXT,
+            FOREIGN KEY(case_id) REFERENCES cases(id)
+        );
+        """)
+
+        cols = set()
+        cur.execute("PRAGMA table_info(case_events)")
+        for r in cur.fetchall() or []:
+            cols.add(r[1] if not hasattr(r, "keys") else r["name"])
+
+        has_desc = "description" in cols
+        has_event_text = "event_text" in cols
+        has_chat = "chat_id" in cols
+        has_principal = "principal_id" in cols
+
+        if has_chat and has_event_text and has_desc and has_principal:
+            cur.execute("""
+            INSERT INTO case_events(chat_id, case_id, event_text, description, term_days, start_date, deadline_date, raw_text, principal_id)
+            VALUES(?,?,?,?,?,?,?,?,?)
+            """, (chat_id, case_id, txt, txt, term_days, start_date, deadline_date, raw_text, principal_id))
+        elif has_chat and has_event_text and has_principal:
+            cur.execute("""
+            INSERT INTO case_events(chat_id, case_id, event_text, term_days, start_date, deadline_date, raw_text, principal_id)
+            VALUES(?,?,?,?,?,?,?,?)
+            """, (chat_id, case_id, txt, term_days, start_date, deadline_date, raw_text, principal_id))
+        elif has_chat and has_event_text:
+            cur.execute("""
+            INSERT INTO case_events(chat_id, case_id, event_text, term_days, start_date, deadline_date, raw_text)
+            VALUES(?,?,?,?,?,?,?)
+            """, (chat_id, case_id, txt, term_days, start_date, deadline_date, raw_text))
+        elif has_desc and has_chat:
+            cur.execute("""
+            INSERT INTO case_events(chat_id, case_id, description, term_days, start_date, deadline_date)
+            VALUES(?,?,?,?,?,?)
+            """, (chat_id, case_id, txt, term_days, start_date, deadline_date))
+        else:
+            cur.execute("""
+            INSERT INTO case_events(case_id, description, created_at)
+            VALUES(?, ?, datetime('now'))
+            """, (case_id, txt))
+
+        eid = cur.lastrowid
+        conn.commit()
+        conn.close()
+        return int(eid)
 
 def insert_case_note(
     chat_id: int,
