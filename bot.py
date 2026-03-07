@@ -190,7 +190,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
             _get_conn,
         )
     except Exception:
-        return
+        return False
 
     tg_msg_id = None
     try:
@@ -201,7 +201,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
     raw_text = str(text or "").strip()
     if not raw_text:
-        return
+        return False
 
     found = _extract_case_id(raw_text)
     if found:
@@ -209,7 +209,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
     active = get_active_case_id(int(chat_id)) or found
     if not active:
-        return
+        return False
 
     # Always capture note
     note_id = insert_case_note(
@@ -224,7 +224,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
     # Deterministic event capture (Sprint08 minimal scope)
     deadline_date = _extract_deadline_date(raw_text)
     if not deadline_date:
-        return
+        return False
 
     try:
         conn = _get_conn()
@@ -244,7 +244,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
         if not row:
             logger.warning(f"[CASE_EVENT] no case row found for expediente={active} chat_id={chat_id}")
-            return
+            return False
 
         case_row_id = int(row["id"] if hasattr(row, "keys") else row[0])
 
@@ -298,7 +298,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
                 )
 
                 await update.message.reply_text(msg)
-
+                return True
         except Exception as e:
             logger.exception(f"[CASE_CONFLICT_CHECK] failed: {e}")
 
@@ -1092,7 +1092,9 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
-    await _maybe_capture_case_note(update, chat_id, text, source="text")
+    case_note_handled = await _maybe_capture_case_note(update, chat_id, text, source="text")
+    if case_note_handled:
+        return
     # Store user msg
     try:
         insert_message(
@@ -1844,12 +1846,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if int(chat_id) < 0:
             return await _handle_group_deterministic(update, context, text)
-        # Phase B0: capture active case + case note (text path)
-        try:
-            chat_id = update.effective_chat.id
-            await _maybe_capture_case_note(update, chat_id, text, source="text")
-        except Exception:
-            pass
 
         await _process_text_pipeline(update, context, text)
 
