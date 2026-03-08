@@ -3,15 +3,20 @@ VAL0 — COGNITIVE OPERATIONS CORE
 =====================================================================
 
 Operational Roadmap
-Last Updated: 2026-03-05
+Last Updated: 2026-03-08
 
 Mission:
 Val0 is a deterministic cognitive operations engine.
-It began with legal workflow hardening, but its scope includes:
+
+It began with legal workflow hardening, but its architecture is designed
+to support a broader class of entity-linked cognitive workflows.
+
+Core scope includes:
 
 - Deterministic legal execution
-- Discipline automation
 - Encrypted memory spine
+- Unified timeline retrieval
+- Discipline automation
 - Operational CLI control
 - Advisory reasoning layers
 - Controlled personality rendering
@@ -25,6 +30,32 @@ Personality last.
 Revenue stability first.
 Architecture second.
 Ambition third.
+
+=====================================================================
+SYSTEM PHILOSOPHY
+=====================================================================
+
+Val0 is not a chatbot-first system.
+
+Val0 is:
+
+1. deterministic storage
+2. deterministic retrieval
+3. deterministic operations
+4. optional advisory reasoning on top
+5. controlled rendering last
+
+The model may help:
+- phrase
+- summarize
+- ask clarifying questions
+- generate advisory analysis
+
+The model may NOT:
+- create legal facts
+- silently mutate deterministic records
+- alter deadlines or reminders
+- override DB truth
 
 =====================================================================
 CURRENT STATE — VERIFIED LIVE
@@ -41,235 +72,296 @@ Semantic recall operational (advisory only).
 Ops CLI control surface active.
 
 Reminder Runner:
-- Due reminders delivered live (chat_id verified).
-- Blocked-user path marks reminder failed without crash.
-- No stuck "sending" rows.
-- due_now returns 0 after delivery.
-- APScheduler stable across restart.
-- Schema verified: due_at_utc authoritative (stored UTC, displayed local).
+- Due reminders delivered live (chat_id verified)
+- Blocked-user path marks reminder failed without crash
+- No stuck "sending" rows
+- due_now returns 0 after delivery
+- APScheduler stable across restart
 
 Isolation:
-- DM + group chat isolation verified.
-- /reminders is chat-scoped (no cross-chat leakage).
-
-Memory Spine (Minimal):
-- memory_entries table present.
-- Deterministic insert verified.
-- Keyword recall verified.
-- Date-range recall verified.
-- Advisory only — never mutates deterministic systems.
-
-Hard Rules:
-- No LLM involvement in legal gates.
-- No silent DB mutation.
-- All merge logic is query-time only.
-- All automation auditable via logs/audit tables.
-
-Primary control surface:
-val0ctl ops
-
-Systemd:
-sudo systemctl status val0-bot.service
+- DM + group chat isolation verified
+- /reminders is chat-scoped
 
 =====================================================================
 MVP 1.1 — DETERMINISTIC LEGAL GATES (LIVE)
 =====================================================================
+
+Implemented:
 
 - Case summary gate (DB deterministic)
 - Due today gate
 - Due range gate
 - Strict CASE:<id> enforcement
 - SQLCipher encrypted DB
-- Short-circuit pipeline confirmed
-- Conflict detection logging
 - Deterministic dedupe
-- Log-safe hashing
+- Conflict detection logging
 - No LLM participation
 
-Hard rule:
 Legal gates never depend on model reasoning.
 
 =====================================================================
-MVP 1.2 — GOOGLE CALENDAR MERGE (LIVE, HARDENED)
+MVP 1.2 — GOOGLE CALENDAR MERGE (LIVE)
 =====================================================================
 
+Implemented:
+
 - Feature flag: VAL0_GCAL_ENABLED
-- Timezone control: VAL0_TZ
-- Unbound GCAL events disabled by default
 - Deterministic DB + GCAL merge
 - Conflict detection logging
 - DB priority on collisions
 - No database mutation
-- No model involvement
 - OAuth isolated under /etc/val0/gcal
 
 Merge is read-only and query-time only.
 
 =====================================================================
-MVP 1.3 — DISCIPLINE LAYER (LIVE, STABLE)
+MVP 1.3 — DISCIPLINE LAYER (LIVE)
 =====================================================================
 
-Live:
-- Deterministic reminder creation (regex-based)
-- Regex punctuation tolerance
-- Reminder cancellation by ID (DB-backed)
-- Reminder runner (APScheduler stable)
-- Deterministic tick logging
+Implemented:
+
+- Regex-based reminder creation
+- Reminder cancellation by ID
+- Reminder runner stable
 - Encrypted reminder storage
-- CLI injection testable
+- CLI injection tests
 - case_notes table live
-- Active case binding per user
-- Voice-to-note ingestion (text + voice)
-- /reminders is chat-scoped (no cross-chat listing)
-- Deterministic dedupe enforced (unique index for active reminders)
-- Multi-reminder VN splitting supported (deterministic)
+- Voice-to-note ingestion
+- Deterministic dedupe index
 
-Design principle:
-Reminders are short-term operational nudges.
-Calendar is the system of record for long-term commitments.
-
-Operational boundary:
-Reminders should normally not exceed ~7 days.
-Longer commitments should migrate to calendar events.
+Reminders are short-term nudges.
+Calendar is the system of record.
 
 Pending:
+
 - Daily 08:00 summary push
 - Overdue escalation tagging
-- Reminder state audit log (state-change timeline)
-- Per-user timezone enforcement
-- Local-time display normalization in all user-facing outputs
-- Per-user friendly address/nickname store (optional)
+- Reminder state audit timeline
+- Timezone enforcement
+
+=====================================================================
+SPRINT 10 — COURT DAY TIMELINE (LIVE)
+=====================================================================
+
+Implemented:
+
+- Natural query support:
+  - qué tengo mañana
+  - mañana tribunales
+
+- Deterministic timeline rendering
+- Case event grouping
+
+Remaining cleanup:
+
+- formatting normalization
+- clearer source labels
+
+=====================================================================
+SPRINT 12 — ENTITY TIMELINE BACKBONE (LIVE)
+=====================================================================
+
+Core primitive introduced:
+
+parent_ref
+
+Example:
+
+parent_ref = CASE:524242024
+
+Capabilities:
+
+- entity-linked reminders
+- entity-linked notes
+- timeline retrieval by entity
+- timeline retrieval by day
+
+Supported queries:
+
+qué tengo mañana
+qué tengo del caso 524242024
+
+Timeline assembled at query time.
+
+No persistent timeline table created.
+
+Design rules:
+
+- read-only merge
+- deterministic retrieval
+- no model mutation
+
+=====================================================================
+SPRINT 12.1 — TIMELINE OUTPUT NORMALIZATION (NEXT)
+=====================================================================
+
+Goal:
+
+Improve timeline readability.
+
+Example target format:
+
+📅 2026-03-08
+- 09:00 | evento     | audiencia
+- 12:30 | nota       | juez sugirió conciliación
+- 15:00 | recordatorio | revisar expediente
+
+Rendering only.
+
+No storage changes.
+
+=====================================================================
+SPRINT 12.2 — CASE NOTE WRITE PATH
+=====================================================================
+
+Goal:
+
+Allow deterministic case notes linked to entity timelines.
+
+Example command:
+
+nota caso 524242024: juez sugirió conciliación
+
+Stored as:
+
+entity_type = note
+parent_ref  = CASE:<id>
+
+Visible in:
+
+qué tengo del caso <id>
+
+=====================================================================
+SPRINT 12.3 — SOURCE TRACE
+=====================================================================
+
+Goal:
+
+Expose origin of timeline entries.
+
+Example:
+
+- event
+- reminder
+- note
+- transcript
+
+This improves trust and supports advisory reasoning.
 
 =====================================================================
 PHASE 0.4 — ORCHESTRATION SURFACE (ACTIVE)
 =====================================================================
 
-Objective:
-Stop founder drift and create a stable operational truth layer.
+Goal:
 
-Scope:
-- Case Cockpit view (CASE:<id> snapshot)
-- State Board (LIVE / PARTIAL / PLANNED)
-- Bug Intake pipeline
-- Repro Capture Template
-- Timeline view for case/chat history
+Prevent founder drift and maintain operational truth.
 
-Rules:
-- Storage deterministic
-- LLM may phrase summaries but cannot author facts
-- All entries must map to DB rows and audit logs
+Includes:
+
+- Case cockpit
+- State board
+- Bug intake pipeline
+- Timeline snapshot view
+
+LLM may summarize but cannot author facts.
 
 =====================================================================
 PHASE 0.5 — MEMORY SPINE (ACTIVE)
 =====================================================================
 
-Baseline schema operational.
+Live tables:
 
-Live:
 - case_notes
 - chat_prefs
 - memory_entries
+- reminders.entity_type
+- reminders.parent_ref
 
-Constraints:
-Advisory only.
-Never overrides deterministic systems.
-
-Pending:
-- Memory audit visibility
-- Memory health verification
+Memory is advisory only.
 
 =====================================================================
-PHASE 0.7 — PRIME BRIDGE (DEV LEVERAGE MODULE)
+PHASE 0.7 — PRIME BRIDGE (PARALLEL TRACK)
 =====================================================================
 
-Objective:
-Introduce VAL PRIME as an optional local compute accelerator.
+Prime introduces a founder-focused AI layer.
 
-VAL0 (VPS):
-- production assistant
-- deterministic workflows
-- legal execution
-- reminders
-- user interaction
+Architecture:
 
-VAL PRIME (Local machine / 4080 "Forge"):
-- project monitoring
-- nightly ingestion jobs
-- transcript processing
-- embeddings generation
-- long-term memory consolidation
+Frank
+ ↓
+ValPrime (Forge RTX 4080)
+ ↓
+Val0 (VPS)
 
-Operational Modes:
+Val0 remains the production assistant.
 
-Prime Lite
-- runs without GPU
-- tracks roadmap progress
-- monitors project drift
-- generates developer briefings
+Prime is optional.
 
-Prime Forge
-- GPU available
+Prime must never be required for Val0 to operate.
+
+---------------------------------------------------------------------
+Prime Responsibilities
+---------------------------------------------------------------------
+
+Founder copilot
+Voice interface
+AI worker node
+Development monitor
+
+---------------------------------------------------------------------
+Prime Implementation Stages
+---------------------------------------------------------------------
+
+Prime v0 — Voice Shell
+
+- push-to-talk
 - speech-to-text
-- embeddings
-- clustering
-- bug aggregation
+- LLM response
+- voice output
 
-Non-negotiables:
+Prime v1 — Dev Copilot
 
-VAL0 must remain fully operational without PRIME.
+- sprint monitoring
+- roadmap reminders
+- drift detection
+- daily dev briefing
 
-PRIME may:
-- generate summaries
-- produce bug clusters
-- propose memory entries
-- generate development reports
+Prime v2 — Worker Node
 
-PRIME may NOT:
-- modify deterministic tables
-- mutate legal deadlines
-- alter reminders directly
+Forge jobs:
 
-Integration Model:
+- transcription
+- embeddings generation
+- document indexing
+- memory consolidation
 
-Prime → Export Packets → Val0
+Prime v3 — Packet Export
 
-Export Packet v1 schema:
+Prime generates advisory packets:
 
-- packet_id
-- chat_id / user scope
-- sources[]
-- facts[]
-- summaries[]
-- bug_reports[]
-- open_questions[]
+packet_id
+sources[]
+facts[]
+summaries[]
+open_questions[]
 
-Val0 ingestion rules:
+Val0 ingests packets into advisory tables only.
 
-- packets stored in advisory tables only
-- ingestion logged via audit_log
-- no deterministic mutation allowed
-
-Purpose:
-
-Allow local compute acceleration without introducing system dependency.
+Prime may never mutate deterministic tables.
 
 =====================================================================
 PHASE 1 — HARDENING (ACTIVE)
 =====================================================================
 
-Live:
-- audit_log populated
-- legal_audit_log present
-- reminder dedupe enforced
+Remaining tasks:
 
-Remaining:
-- Reminder state audit timeline
-- Merge audit table
+- reminder state audit timeline
 - GCAL conflict surfacing
-- Deadline normalization guardrails
-- Founder rollback playbook
+- deadline normalization guardrails
+- rollback playbook
 
 Hard rule:
+
 No scope expansion that risks deterministic stability.
 
 =====================================================================
@@ -277,134 +369,98 @@ PHASE 2 — DISCIPLINE AUTOMATION
 =====================================================================
 
 Remaining:
-- Daily summary auto-push
-- Overdue detection engine
-- Escalation tagging
-- Push toggles
-- Timezone enforcement
+
+- daily summary push
+- overdue detection
+- escalation tagging
+- timezone enforcement
 
 =====================================================================
-PHASE 2.5 — OPERATIONAL CONTROL LAYER
+PHASE 2.5 — OPS CONTROL LAYER
 =====================================================================
 
 Implemented:
+
 - val0ctl ops
 - DB integrity check
-- Git dirty detection
-- Service health verification
+- service health check
 
 Planned:
+
 - val0ctl doctor
-- val0ctl fix reminders
-- val0ctl fix gcal
-- controlled dry-run repair tools
-
-=====================================================================
-PHASE 2.6 — MAINTENANCE HARNESS
-=====================================================================
-
-Observability layer:
-
-- token spend metrics
-- latency tracking
-- correction capture
-- weekly system snapshot
-
-=====================================================================
-PHASE 3 — CONTROLLED SYNC (OPTIONAL)
-=====================================================================
-
-Calendar event snapshot system.
+- automated repair tools
 
 =====================================================================
 PHASE 4 — MIGUEL UX SIMPLIFICATION
 =====================================================================
 
 Goal:
+
 Zero friction courtroom workflow.
+
+Needs:
+
+- clean case timeline
+- case notes
+- daily brief
+- quick case query
 
 =====================================================================
 PHASE 5 — VOICE / PERSONALITY ARCHITECTURE
 =====================================================================
 
-Two-pass system.
+Two-pass response system.
 
-1) Deterministic answer
-2) Renderer layer
+1) deterministic response pack
+2) LLM renderer
 
-Renderer Contract:
-
-Val0 produces a structured Response Pack containing:
-
-- grounded_facts
-- memory_refs
-- actions_taken
-- constraints
-- risk_flags
-- options
-- next_questions
-- tone_mode
-- formatting
-
-LLM Renderer Rules:
-
-- May NOT introduce operational facts outside grounded_facts
-- Must cite memory_refs when referencing stored data
-- May add tone/personality only
-- Must surface risk_flags explicitly
-
-Purpose:
-Maintain conversational voice without allowing hallucination to alter system truth.
+Renderer may add tone but not facts.
 
 =====================================================================
-PHASE 6 — STANDALONE VAL INTERFACE
+PHASE 8 — TRANSCRIPT INGESTION
 =====================================================================
 
-Dedicated UI layer.
+Future pipeline:
+
+recording
+→ transcription
+→ linked note
+→ advisory extraction
+
+Potential entities:
+
+CASE
+PERSON
+CLIENT
+PROJECT
 
 =====================================================================
-PHASE 7 — CAPSULE NETWORK
+PHASE 9 — ADVISORY ANALYSIS LAYER
 =====================================================================
 
-Future trust-circle vault sharing.
+Allows pattern detection and hypothesis generation.
 
-=====================================================================
-LONG TERM ARCHITECTURE
-=====================================================================
+Outputs must separate:
 
-1. Encrypted storage
-2. Deterministic engine
-3. Merge layer
-4. Memory spine
-5. Scheduler
-6. Ops CLI
-7. Orchestration surface
-8. Validator + advisory layer
-9. Renderer layer
-10. UI
-11. Client E2EE
+FACTS
+UNKNOWN
+INFERENCE
+OPTIONS
+NEXT QUESTIONS
 
-=====================================================================
-WHAT WE WILL NOT DO
-=====================================================================
-
-No model-generated legal facts.
-No silent DB mutation.
-No uncontrolled feature creep.
+Advisory layer cannot modify deterministic records.
 
 =====================================================================
 CURRENT PRIORITY
 =====================================================================
 
-1. Finish Phase 1 hardening
-2. Phase 0.4 orchestration surface
-3. Phase 2 automation
-4. Ops doctor tooling
-5. Hybrid voice/text stability
+1. Sprint 12.1 timeline formatting
+2. Sprint 12.2 case notes
+3. Sprint 12.3 source trace
+4. Phase 1 hardening
+5. Phase 4 Miguel UX simplification
 
-Revenue stability first.
-Architecture second.
-Ambition third.
+Prime development must not delay these tasks.
 
 =====================================================================
 CHANGE CONTROL
