@@ -27,7 +27,7 @@ _RE_HOUR = re.compile(
 _TIME_TOKEN = r"(?P<t>(?:\d{1,2}:\d{2})|(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)))"
 
 _RE_TODAY_AT = re.compile(
-    rf"(?is)^\s*{_VERB}\s+(?P<what>.+?)\s+(?:hoy\s+)?a\s+las?\s+{_TIME_TOKEN}\s*$"
+    rf"(?is)^\s*{_VERB}\s+(?P<what>(?:(?!\bma[nñ]ana\b).)+?)\s+(?:hoy\s+)?a\s+las?\s+{_TIME_TOKEN}\s*$"
 )
 
 # allow both: "mañana a las 3pm" and "mañana 15:30"
@@ -40,6 +40,25 @@ _RE_CANCEL = re.compile(
     r"(?is)^\s*(?:olvida|cancela|borra)\s+(?:el\s+)?(?:recordatorio\s+)?#?(?P<rid>\d{1,9})\s*$"
 )
 
+_CASE_RE = re.compile(r"\b(?:expediente|exp|caso|case)\s*[:#]?\s*(?P<cid>\d{4,})\b", re.IGNORECASE)
+
+def _extract_case_parent_ref(text: str) -> str | None:
+    """
+    If the reminder text mentions a case/expediente number, link it as CASE:<id>.
+    """
+    t = (text or "").strip()
+    if not t:
+        return None
+
+    m = _CASE_RE.search(t)
+    if not m:
+        return None
+
+    cid = (m.group("cid") or "").strip()
+    if not cid:
+        return None
+
+    return f"CASE:{cid}"
 
 def _tz_local():
     tz_name = "America/Panama"
@@ -193,7 +212,15 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
         due_utc = datetime.now(timezone.utc) + timedelta(minutes=n)
         due_str = _to_utc_iso(due_utc)
-        rid = insert_reminder(chat_id=int(chat_id), due_at_utc=due_str, text=what, status="pending")
+        parent_ref = _extract_case_parent_ref(what)
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
 
         if audit_fn:
             audit_fn(
@@ -222,7 +249,15 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
         due_utc = datetime.now(timezone.utc) + timedelta(hours=n)
         due_str = _to_utc_iso(due_utc)
-        rid = insert_reminder(chat_id=int(chat_id), due_at_utc=due_str, text=what, status="pending")
+        parent_ref = _extract_case_parent_ref(what)
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
 
         if audit_fn:
             audit_fn(
@@ -254,7 +289,15 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         nowL = _now_local()
         dueL = (nowL + timedelta(days=1)).replace(hour=h, minute=minute, second=0, microsecond=0)
         due_str = _to_utc_iso(dueL)
-        rid = insert_reminder(chat_id=int(chat_id), due_at_utc=due_str, text=what, status="pending")
+        parent_ref = _extract_case_parent_ref(what)
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
 
         if audit_fn:
             audit_fn(
@@ -292,7 +335,15 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
             return True
 
         due_str = _to_utc_iso(dueL)
-        rid = insert_reminder(chat_id=int(chat_id), due_at_utc=due_str, text=what, status="pending")
+        parent_ref = _extract_case_parent_ref(what)
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
 
         if audit_fn:
             audit_fn(

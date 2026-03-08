@@ -1092,6 +1092,64 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+
+    # --------------------------------------------------
+    # Reminder Creator + Cancel (DM only) — deterministic
+    # --------------------------------------------------
+    try:
+        from core.reminders_mvp import try_create_reminder, try_cancel_reminder
+
+        _audit(
+            chat_id,
+            action="DEBUG_REMINDER_GATE_ENTER",
+            entity_type="debug",
+            entity_id=None,
+            payload=(text or "")[:200],
+            source="dm",
+        )
+
+        if int(chat_id) > 0:
+            # Cancel FIRST (so "cancela 25" doesn't fall through)
+            cancel_handled = await try_cancel_reminder(update, chat_id, text, audit_fn=_audit)
+            logger.info(f"[REMINDER_GATE] cancel_handled={cancel_handled} text={text!r}")
+            if cancel_handled:
+                return
+
+            create_handled = await try_create_reminder(update, chat_id, text, audit_fn=_audit)
+            logger.info(f"[REMINDER_GATE] create_handled={create_handled} text={text!r}")
+            if create_handled:
+                return
+
+    except Exception as e:
+        logger.exception(f"[GATE] reminder gate failed: {e}")
+    
+    # --- Sprint10: court-day timeline queries ---
+    try:
+        from core.case_mvp import try_timeline_for_case, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
+
+        handled = await try_timeline_for_case(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_timeline_today(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_due_today(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_due_tomorrow(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_due_range(update, chat_id, text)
+        if handled:
+            return
+
+    except Exception as e:
+        logger.exception(f"[CASE_TIMELINE] failed: {e}")
+
     case_note_handled = await _maybe_capture_case_note(update, chat_id, text, source="text")
     if case_note_handled:
         return

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Dict, List, Any, Optional, Tuple
 
-from memory_store import _get_conn
+from memory_store import _get_conn, fetch_timeline_between, fetch_timeline_for_parent, list_reminders_for_chat
 
 logger = logging.getLogger("val0-bot")
 
@@ -275,6 +275,151 @@ async def try_case_summary(update, chat_id, text) -> bool:
         await update.message.reply_text("Se cayó el resumen del expediente. Reviso logs.")
         return True
 
+async def try_timeline_for_case(update, chat_id, text) -> bool:
+    """
+    Handles: 'qué tengo del caso 524242024'
+    Reads linked timeline rows from reminders via parent_ref = CASE:<id>.
+    Returns True if it responded and should short-circuit the pipeline.
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    cleaned = _clean(text)
+    m = re.search(r"\b(que|qué)\s+tengo\s+del\s+(caso|expediente)\s+(\d{4,})\b", cleaned)
+    if not m:
+        return False
+
+    case_id = m.group(3).strip()
+    parent_ref = f"CASE:{case_id}"
+
+    try:
+        rows = fetch_timeline_for_parent(
+            chat_id=int(chat_id),
+            parent_ref=parent_ref,
+            entity_types=["reminder", "task"],
+            statuses=["pending", "sending"],
+            limit=50,
+        )
+
+        if not rows:
+            await update.message.reply_text(f"No tengo recordatorios o tareas ligados a {parent_ref}.")
+            return True
+
+        tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+
+        items: List[Dict[str, Any]] = []
+        for r in rows:
+            due_str = (r.get("due_at_utc") or "").strip()
+            if not due_str:
+                continue
+
+            due_dt_utc = datetime.strptime(due_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            due_ts = int(due_dt_utc.timestamp())
+
+            entity_type = (r.get("entity_type") or "reminder").strip().lower()
+            src = "task" if entity_type == "task" else "reminder"
+
+            items.append(
+                {
+                    "due_ts": due_ts,
+                    "title": (r.get("text") or "").strip() or "(sin texto)",
+                    "case_id": case_id,
+                    "source": src,
+                    "external_id": str(r.get("id")),
+                }
+            )
+
+        if not items:
+            await update.message.reply_text(f"No tengo recordatorios o tareas ligados a {parent_ref}.")
+            return True
+
+        msg = _render_due_grouped(
+            header=f"🗂️ {parent_ref}:",
+            items=items,
+            tz=tz,
+        )
+
+        await update.message.reply_text(msg)
+        return True
+
+    except Exception as e:
+        logger.exception(f"[CASE MVP] try_timeline_for_case failed: {e}")
+        await update.message.reply_text("Se cayó el timeline ligado al caso. Reviso logs.")
+        return True
+
+async def try_timeline_today(update, chat_id, text) -> bool:
+    """
+    Handles: 'qué tengo hoy'
+    Unified read path from reminders table (reminders + tasks).
+    Returns True if it responded and should short-circuit the pipeline.
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    cleaned = _clean(text)
+    if not re.search(r"\b(que|qué)\s+tengo\s+hoy\b", cleaned):
+        return False
+
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+    today_date = datetime.now(tz).date()
+    start_local = datetime(today_date.year, today_date.month, today_date.day, 0, 0, 0, tzinfo=tz)
+    end_local = datetime(today_date.year, today_date.month, today_date.day, 23, 59, 59, tzinfo=tz)
+
+    start_utc = start_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    end_utc = end_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        rows = fetch_timeline_between(
+            chat_id=int(chat_id),
+            start_utc=start_utc,
+            end_utc=end_utc,
+            entity_types=["reminder", "task"],
+            statuses=["pending", "sending"],
+        )
+
+        if not rows:
+            await update.message.reply_text("Hoy no tengo recordatorios o tareas registrados.")
+            return True
+
+        items: List[Dict[str, Any]] = []
+        for r in rows:
+            due_str = (r.get("due_at_utc") or "").strip()
+            if not due_str:
+                continue
+
+            due_dt_utc = datetime.strptime(due_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            due_ts = int(due_dt_utc.timestamp())
+
+            entity_type = (r.get("entity_type") or "reminder").strip().lower()
+            src = "task" if entity_type == "task" else "reminder"
+
+            items.append(
+                {
+                    "due_ts": due_ts,
+                    "title": (r.get("text") or "").strip() or "(sin texto)",
+                    "case_id": None,
+                    "source": src,
+                    "external_id": str(r.get("id")),
+                }
+            )
+
+        if not items:
+            await update.message.reply_text("Hoy no tengo recordatorios o tareas registrados.")
+            return True
+
+        msg = _render_due_grouped(
+            header="🗓️ Hoy:",
+            items=items,
+            tz=tz,
+        )
+
+        await update.message.reply_text(msg)
+        return True
+
+    except Exception as e:
+        logger.exception(f"[CASE MVP] try_timeline_today failed: {e}")
+        await update.message.reply_text("Se cayó el timeline de hoy. Reviso logs.")
+        return True
 
 async def try_due_today(update, chat_id, text) -> bool:
     """
@@ -285,7 +430,7 @@ async def try_due_today(update, chat_id, text) -> bool:
         return False
 
     cleaned = _clean(text)
-    if not re.search(r"\b(que|qué)\s+vence\s+hoy\b", cleaned):
+    if not re.search(r"\b(que|qué)\s+(vence|tengo)\s+hoy\b", cleaned):
         return False
 
     tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
@@ -376,6 +521,95 @@ async def try_due_today(update, chat_id, text) -> bool:
         await update.message.reply_text("Se cayó el chequeo de vencimientos de hoy. Reviso logs.")
         return True
 
+async def try_due_tomorrow(update, chat_id, text) -> bool:
+    """
+    Handles: 'qué tengo mañana', 'qué vence mañana', 'agenda mañana'
+    Returns True if it responded and should short-circuit the pipeline.
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    cleaned = _clean(text)
+    if not re.search(r"\b(mañana|manana)\b", cleaned):
+        return False
+
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+    tomorrow = (datetime.now(tz).date() + timedelta(days=1)).isoformat()
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT c.expediente, ce.event_text, ce.deadline_date "
+            "FROM case_events ce "
+            "JOIN cases c ON c.id = ce.case_id "
+            "WHERE ce.chat_id=? AND ce.deadline_date=? "
+            "ORDER BY c.expediente ASC, ce.id ASC",
+            (int(chat_id), tomorrow),
+        )
+
+        rows = cur.fetchall() or []
+        conn.close()
+
+        from core.due_merge import merge_due_items
+
+        y, m, d = map(int, tomorrow.split("-"))
+
+        db_items: List[Dict[str, Any]] = []
+        for r in rows:
+            exp = r["expediente"]
+            et = (r["event_text"] or "").strip() or "(evento)"
+
+            local_dt = datetime(y, m, d, 9, 0, 0, tzinfo=tz)
+            due_ts = int(local_dt.astimezone(timezone.utc).timestamp())
+
+            db_items.append({
+                "due_ts": due_ts,
+                "title": et,
+                "case_id": exp,
+                "source": "db",
+                "external_id": None,
+            })
+
+        start_local = datetime(y, m, d, 0, 0, 0, tzinfo=tz)
+        end_local = datetime(y, m, d, 23, 59, 59, tzinfo=tz)
+
+        merged = merge_due_items(
+            db_items=db_items,
+            range_start_utc=start_local.astimezone(timezone.utc),
+            range_end_utc=end_local.astimezone(timezone.utc),
+        )
+
+        items = merged["items"]
+        conflicts = merged["conflicts"]
+
+        _audit_merge(gate="due_tomorrow", chat_id=int(chat_id), label=f"{tomorrow}", items=items)
+
+        if not items:
+            await update.message.reply_text("Mañana no tengo diligencias registradas.")
+            return True
+
+        weekday = datetime.now(tz).date() + timedelta(days=1)
+        WEEKDAY_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+        weekday_name = WEEKDAY_ES[weekday.weekday()]
+
+        msg = _render_due_grouped(
+            header=f"📅 {weekday_name.capitalize()}:",
+            items=items,
+            tz=tz,
+        )
+
+        if conflicts:
+            msg = msg + "\n" + _render_due_conflicts(conflicts)
+
+        await update.message.reply_text(msg)
+        return True
+
+    except Exception as e:
+        logger.exception(f"[CASE MVP] try_due_tomorrow failed: {e}")
+        await update.message.reply_text("Se cayó el chequeo de diligencias de mañana. Reviso logs.")
+        return True
 
 async def try_due_range(update, chat_id, text) -> bool:
     """

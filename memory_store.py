@@ -164,6 +164,10 @@ def init_db() -> None:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(status, due_at_utc);")
 
+        # timeline extension (unified reminders/tasks/events)
+        # Columns migrated manually via SQLCipher ALTER TABLE for now.
+        pass
+
         # audit_log: immutable operational trace
         cur.execute("""
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -226,19 +230,54 @@ def fetch_recent_messages(chat_id: int, limit: int = 30) -> List[Dict[str, Any]]
 
 # bot.py expects this name
 
-def insert_reminder(chat_id: int, due_at_utc: str, text: str, status: str = "pending") -> int:
+def insert_reminder(
+    chat_id: int,
+    due_at_utc: str,
+    text: str,
+    status: str = "pending",
+    entity_type: str = "reminder",
+    parent_ref: str | None = None,
+) -> int:
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
         text = sanitize_reminder_text(text)
-        cur.execute(
-            "INSERT INTO reminders(chat_id, due_at_utc, text, status) VALUES(?,?,?,?)",
-            (chat_id, due_at_utc, text, status),
-        )
-        conn.commit()
-        rid = cur.lastrowid
-        conn.close()
-        return rid
+
+        try:
+            cur.execute(
+                "INSERT INTO reminders(chat_id, due_at_utc, text, status, entity_type, parent_ref) VALUES(?,?,?,?,?,?)",
+                (chat_id, due_at_utc, text, status, entity_type, parent_ref),
+            )
+            conn.commit()
+            rid = cur.lastrowid
+            conn.close()
+            return rid
+
+        except Exception as e:
+            msg = str(e or "")
+            if "UNIQUE constraint failed" not in msg:
+                conn.close()
+                raise
+
+            cur.execute(
+                """
+                SELECT id
+                FROM reminders
+                WHERE chat_id = ?
+                  AND due_at_utc = ?
+                  AND text = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (chat_id, due_at_utc, text),
+            )
+            row = cur.fetchone()
+            conn.close()
+
+            if row is None:
+                raise
+
+            return int(row["id"] if hasattr(row, "keys") else row[0])
 
 def insert_audit(
     chat_id: int,
@@ -283,9 +322,11 @@ def fetch_due_reminders(limit: int = 10) -> List[Dict[str, Any]]:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, chat_id, due_at_utc, text, status, sent_at "
+            "SELECT id, chat_id, due_at_utc, text, status, sent_at, entity_type, parent_ref "
             "FROM reminders "
-            "WHERE status='pending' AND due_at_utc <= datetime('now') "
+            "WHERE status='pending' "
+            "AND COALESCE(entity_type, 'reminder')='reminder' "
+            "AND due_at_utc <= datetime('now') "
             "ORDER BY due_at_utc ASC LIMIT ?",
             (limit,),
         )
@@ -516,6 +557,7 @@ def claim_reminder(reminder_id: int) -> bool:
             WHERE id=?
               AND status='pending'
               AND sent_at IS NULL
+              AND COALESCE(entity_type, 'reminder')='reminder'
             """,
             (reminder_id,),
         )
@@ -682,6 +724,162 @@ def list_reminders(
                     "channel": r[6],
                     "target": r[7],
                     "text": r[8],
+                }
+            )
+    return out
+
+def fetch_timeline_between(
+    chat_id: int,
+    start_utc: str,
+    end_utc: str,
+    entity_types: list[str] | None = None,
+    statuses: list[str] | None = None,
+) -> list[dict]:
+    """
+    Unified timeline read from reminders table.
+    Temporary MVP base for reminders + tasks.
+    """
+    if entity_types is None:
+        entity_types = ["reminder", "task"]
+    if statuses is None:
+        statuses = ["pending", "sending"]
+
+    entity_types = [str(x).strip() for x in entity_types if str(x).strip()]
+    statuses = [str(x).strip() for x in statuses if str(x).strip()]
+    if not entity_types or not statuses:
+        return []
+
+    et_placeholders = ",".join("?" for _ in entity_types)
+    st_placeholders = ",".join("?" for _ in statuses)
+
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT
+              id,
+              chat_id,
+              due_at_utc,
+              status,
+              created_at,
+              sent_at,
+              channel,
+              target,
+              text,
+              COALESCE(entity_type, 'reminder') AS entity_type,
+              parent_ref
+            FROM reminders
+            WHERE chat_id = ?
+              AND due_at_utc >= ?
+              AND due_at_utc <= ?
+              AND COALESCE(entity_type, 'reminder') IN ({et_placeholders})
+              AND status IN ({st_placeholders})
+            ORDER BY due_at_utc ASC, id ASC
+            """,
+            [int(chat_id), str(start_utc), str(end_utc), *entity_types, *statuses],
+        )
+        rows = cur.fetchall() or []
+        conn.close()
+
+    out = []
+    for r in rows:
+        if isinstance(r, dict):
+            out.append(dict(r))
+        else:
+            out.append(
+                {
+                    "id": r[0],
+                    "chat_id": r[1],
+                    "due_at_utc": r[2],
+                    "status": r[3],
+                    "created_at": r[4],
+                    "sent_at": r[5],
+                    "channel": r[6],
+                    "target": r[7],
+                    "text": r[8],
+                    "entity_type": r[9],
+                    "parent_ref": r[10],
+                }
+            )
+    return out
+
+def fetch_timeline_for_parent(
+    chat_id: int,
+    parent_ref: str,
+    entity_types: list[str] | None = None,
+    statuses: list[str] | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """
+    Unified timeline read for a linked entity via parent_ref.
+    Temporary MVP base for reminders + tasks.
+    """
+    if entity_types is None:
+        entity_types = ["reminder", "task"]
+    if statuses is None:
+        statuses = ["pending", "sending"]
+
+    parent_ref = (parent_ref or "").strip()
+    if not parent_ref:
+        return []
+
+    entity_types = [str(x).strip() for x in entity_types if str(x).strip()]
+    statuses = [str(x).strip() for x in statuses if str(x).strip()]
+    if not entity_types or not statuses:
+        return []
+
+    et_placeholders = ",".join("?" for _ in entity_types)
+    st_placeholders = ",".join("?" for _ in statuses)
+
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            f"""
+            SELECT
+              id,
+              chat_id,
+              due_at_utc,
+              status,
+              created_at,
+              sent_at,
+              channel,
+              target,
+              text,
+              COALESCE(entity_type, 'reminder') AS entity_type,
+              parent_ref
+            FROM reminders
+            WHERE chat_id = ?
+              AND parent_ref = ?
+              AND COALESCE(entity_type, 'reminder') IN ({et_placeholders})
+              AND status IN ({st_placeholders})
+            ORDER BY due_at_utc ASC, id ASC
+            LIMIT ?
+            """,
+            [int(chat_id), parent_ref, *entity_types, *statuses, int(limit)],
+        )
+        rows = cur.fetchall() or []
+        conn.close()
+
+    out = []
+    for r in rows:
+        if isinstance(r, dict):
+            out.append(dict(r))
+        else:
+            out.append(
+                {
+                    "id": r[0],
+                    "chat_id": r[1],
+                    "due_at_utc": r[2],
+                    "status": r[3],
+                    "created_at": r[4],
+                    "sent_at": r[5],
+                    "channel": r[6],
+                    "target": r[7],
+                    "text": r[8],
+                    "entity_type": r[9],
+                    "parent_ref": r[10],
                 }
             )
     return out
