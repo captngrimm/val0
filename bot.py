@@ -206,9 +206,11 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
     low = raw_text.lower()
 
-    # Do NOT store case status / summary queries as notes
+    # Do NOT store deterministic commands / status queries as notes
     if (
-        low.startswith("nota caso")
+        low.startswith("registrar caso")
+        or low.startswith("registrar expediente")
+        or low.startswith("nota caso")
         or low.startswith("nota expediente")
         or low.startswith("cómo va el caso")
         or low.startswith("como va el caso")
@@ -1144,6 +1146,47 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[GATE] reminder gate failed: {e}")
     
+    # --------------------------------------------------
+    # Case registration command — deterministic
+    # Example:
+    # registrar caso 524242024 cliente Leticia
+    # --------------------------------------------------
+    try:
+        m = re.match(
+            r"(?is)^\s*registrar\s+(?:el\s+)?(?:caso|expediente)\s+(\d{4,})\s+cliente\s+(.+?)\s*$",
+            text or "",
+        )
+        if m:
+            expediente = (m.group(1) or "").strip()
+            client_name = (m.group(2) or "").strip()
+
+            if expediente and client_name:
+                from memory_store import upsert_case
+
+                row_id = upsert_case(
+                    chat_id=int(chat_id),
+                    expediente=expediente,
+                    client_name=client_name,
+                    client_alias=None,
+                )
+
+                _audit(
+                    chat_id,
+                    action="CMD_CASE_REGISTER",
+                    entity_type="case",
+                    entity_id=str(row_id),
+                    payload=f"expediente={expediente} | client_name={client_name}"[:500],
+                    source="dm",
+                )
+
+                await update.message.reply_text(
+                    f"Listo, Boss. Registré CASE:{expediente} para cliente {client_name}."
+                )
+                return
+
+    except Exception as e:
+        logger.exception(f"[CASE_REGISTER_CMD] failed: {e}")
+
     # --------------------------------------------------
     # Case note command — deterministic
     # Example:

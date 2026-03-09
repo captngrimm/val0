@@ -314,6 +314,7 @@ async def try_case_status(update, chat_id, text) -> bool:
 
     cleaned = _clean(text)
 
+    # First try direct expediente-based status queries
     m = re.search(
         r"\b("
         r"resumen|"
@@ -329,12 +330,55 @@ async def try_case_status(update, chat_id, text) -> bool:
         r"(\d{4,})\b",
         cleaned,
     )
-    if not m:
-        return False
 
-    case_id = m.group(2).strip()
+    case_id = None
+
+    if m:
+        case_id = m.group(2).strip()
+    else:
+        # Then try client-name based queries:
+        # cómo va el caso de Leticia
+        # estado del caso de Leticia
+        # resumen del caso de Leticia
+        m_name = re.search(
+            r"\b("
+            r"resumen|"
+            r"dame\s+un\s+resumen|"
+            r"estado|status|"
+            r"como\s+va|cómo\s+va|"
+            r"como\s+vamos\s+con|cómo\s+vamos\s+con|"
+            r"por\s+donde\s+va|por\s+dónde\s+va|"
+            r"situacion\s+actual|situación\s+actual"
+            r")\s+"
+            r"(?:del\s+|el\s+|de[l]?\s+|con\s+)?"
+            r"(?:caso|expediente)\s+de\s+(.+?)\s*$",
+            cleaned,
+        )
+        if not m_name:
+            return False
+
+        client_name = (m_name.group(2) or "").strip()
+        if not client_name:
+            return False
+
+        from memory_store import get_case_by_client_name
+
+        row = get_case_by_client_name(int(chat_id), client_name)
+        if not row:
+            await update.message.reply_text(
+                f"No encontré un caso registrado para cliente {client_name}."
+            )
+            return True
+
+        case_id = str(row.get("expediente") or "").strip()
+        if not case_id:
+            await update.message.reply_text(
+                f"Encontré un registro para {client_name}, pero no tiene expediente usable."
+            )
+            return True
+
     parent_ref = f"CASE:{case_id}"
-    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))\
 
     conn = _get_conn()
     cur = conn.cursor()
@@ -360,7 +404,9 @@ async def try_case_status(update, chat_id, text) -> bool:
         low = txt.lower()
 
         if (
-            low.startswith("cómo va el caso")
+            low.startswith("registrar caso")
+            or low.startswith("registrar expediente")
+            or low.startswith("cómo va el caso")
             or low.startswith("como va el caso")
             or low.startswith("cómo vamos con el caso")
             or low.startswith("como vamos con el caso")

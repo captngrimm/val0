@@ -279,6 +279,91 @@ def insert_reminder(
 
             return int(row["id"] if hasattr(row, "keys") else row[0])
 
+def upsert_case(chat_id: int, expediente: str, client_name: str = None, client_alias: str = None) -> int:
+    """
+    Create or update a case registry row for this chat.
+    """
+    expediente = (expediente or "").strip()
+    client_name = (client_name or "").strip() or None
+    client_alias = (client_alias or "").strip() or None
+
+    if not expediente:
+        raise ValueError("expediente is required")
+
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT id
+            FROM cases
+            WHERE chat_id=? AND expediente=?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(chat_id), expediente),
+        )
+        row = cur.fetchone()
+
+        if row:
+            case_id = int(row["id"] if hasattr(row, "keys") else row[0])
+            cur.execute(
+                """
+                UPDATE cases
+                SET client_name = COALESCE(?, client_name),
+                    client_alias = COALESCE(?, client_alias)
+                WHERE id = ?
+                """,
+                (client_name, client_alias, case_id),
+            )
+            conn.commit()
+            conn.close()
+            return case_id
+
+        cur.execute(
+            """
+            INSERT INTO cases(chat_id, expediente, client_name, client_alias)
+            VALUES(?,?,?,?)
+            """,
+            (int(chat_id), expediente, client_name, client_alias),
+        )
+        conn.commit()
+        case_id = cur.lastrowid
+        conn.close()
+        return int(case_id)
+
+
+def get_case_by_client_name(chat_id: int, client_name: str):
+    """
+    Resolve a case by client_name or client_alias inside the same chat.
+    Returns dict row or None.
+    """
+    name = (client_name or "").strip()
+    if not name:
+        return None
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, expediente, client_name, client_alias, created_at
+        FROM cases
+        WHERE chat_id=?
+          AND (
+            lower(client_name)=lower(?)
+            OR lower(client_alias)=lower(?)
+          )
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (int(chat_id), name, name),
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    return dict(row) if row else None
+
 def insert_audit(
     chat_id: int,
     action: str,
