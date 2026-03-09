@@ -378,7 +378,30 @@ async def try_case_status(update, chat_id, text) -> bool:
             return True
 
     parent_ref = f"CASE:{case_id}"
-    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))\
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+
+    # Fetch client name for cockpit display
+    client_name = None
+    try:
+        from memory_store import _get_conn
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT client_name
+            FROM cases
+            WHERE chat_id=? AND expediente=?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(chat_id), case_id),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            client_name = row["client_name"] if hasattr(row, "keys") else row[0]
+    except Exception:
+        client_name = None
 
     conn = _get_conn()
     cur = conn.cursor()
@@ -396,7 +419,7 @@ async def try_case_status(update, chat_id, text) -> bool:
     )
     rows = cur.fetchall() or []
 
-    last_note = None
+    recent_notes = []
     for row in rows:
         txt = (row["note_text"] if hasattr(row, "keys") else row[0]) or ""
         ts = (row["created_at"] if hasattr(row, "keys") else row[1]) or ""
@@ -423,10 +446,11 @@ async def try_case_status(update, chat_id, text) -> bool:
         if txt and ts:
             try:
                 dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                last_note = (dt.astimezone(tz).strftime("%H:%M"), txt)
-                break
+                recent_notes.append((dt.astimezone(tz).strftime("%H:%M"), txt))
             except Exception:
                 continue
+
+    last_note = recent_notes[0] if recent_notes else None
 
     # next pending reminder
     cur.execute(
@@ -476,7 +500,14 @@ async def try_case_status(update, chat_id, text) -> bool:
         await update.message.reply_text(f"No tengo actividad registrada para CASE:{case_id}.")
         return True
 
-    lines = [f"🗂️ CASE:{case_id}", "", "Resumen del caso"]
+    lines = [f"🗂️ CASE:{case_id}", ""]
+
+    if client_name:
+        lines.append("Cliente")
+        lines.append(f"- {client_name}")
+        lines.append("")
+
+    lines.append("Resumen del caso")
 
     if last_note:
         lines.append(f"- última nota: {last_note[1]}")
@@ -487,6 +518,12 @@ async def try_case_status(update, chat_id, text) -> bool:
         lines.append(f"- próximo pendiente: {next_rem[0]} | {next_rem[1]}")
     else:
         lines.append("- próximo pendiente: —")
+
+    if recent_notes:
+        lines.append("")
+        lines.append("Actividad reciente")
+        for hhmm, txt in recent_notes[:3]:
+            lines.append(f"- {hhmm} | {txt}")
 
     lines.append("")
     lines.append("Conteo rápido")
