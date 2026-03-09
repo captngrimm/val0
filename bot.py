@@ -49,6 +49,7 @@ from typing import List, Dict, Any, Optional
 from datetime import time as dt_time
 from dotenv import load_dotenv
 import openai
+import re
 
 from telegram import Update
 from telegram.constants import ChatAction
@@ -201,6 +202,11 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
     raw_text = str(text or "").strip()
     if not raw_text:
+        return False
+
+    low = raw_text.lower()
+    # Do not intercept deterministic case-note commands
+    if low.startswith("nota caso") or low.startswith("nota expediente"):
         return False
 
     found = _extract_case_id(raw_text)
@@ -1123,6 +1129,44 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[GATE] reminder gate failed: {e}")
     
+    # --------------------------------------------------
+    # Case note command — deterministic
+    # Example:
+    # nota caso 524242024: juez sugirió conciliación
+    # --------------------------------------------------
+    try:
+        m = re.match(r"(?is)^\s*nota\s+(?:del\s+)?(?:caso|expediente)\s+(\d{4,})\s*:\s*(.+?)\s*$", text or "")
+        if m:
+            case_id = (m.group(1) or "").strip()
+            note_text = (m.group(2) or "").strip()
+
+            if case_id and note_text:
+                from memory_store import insert_case_note, set_active_case_id
+
+                set_active_case_id(int(chat_id), case_id)
+                note_id = insert_case_note(
+                    chat_id=int(chat_id),
+                    case_id=case_id,
+                    note_text=note_text,
+                    source="text",
+                    telegram_message_id=tg_msg_id,
+                )
+
+                _audit(
+                    chat_id,
+                    action="CMD_CASE_NOTE_CREATE",
+                    entity_type="case_note",
+                    entity_id=str(note_id),
+                    payload=f"case_id={case_id} | text={note_text}"[:500],
+                    source="dm",
+                )
+
+                await update.message.reply_text(f"Listo, Boss. Guardé la nota en CASE:{case_id}.")
+                return
+
+    except Exception as e:
+        logger.exception(f"[CASE_NOTE_CMD] failed: {e}")
+
     # --- Sprint10: court-day timeline queries ---
     try:
         from core.case_mvp import try_timeline_for_case, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow

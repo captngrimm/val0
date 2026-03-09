@@ -97,36 +97,60 @@ def _render_due_grouped(
 ) -> str:
     """
     Render grouped-by-date, deterministic.
-    DB items show: expediente/case_id + title.
-    GCAL items show: HH:MM | title (and optional case_id if present).
+
+    Normalized display:
+    - HH:MM | evento       | vence mañana
+    - HH:MM | nota         | juez sugirió conciliación
+    - HH:MM | recordatorio | revisar el caso 524242024
     """
+    def _normalize_title(src: str, title: str, case_id: str) -> str:
+        t = (title or "").strip()
+
+        # Strip obvious CASE / expediente duplication from event rows
+        if src == "event":
+            if case_id:
+                t = re.sub(rf"(?i)^\s*{re.escape(case_id)}\s*:\s*", "", t)
+                t = re.sub(rf"(?i)\bCASE\s*:\s*{re.escape(case_id)}\s*", "", t)
+                t = re.sub(rf"(?i)\bcaso\s*:?[\s#]*{re.escape(case_id)}\s*", "", t)
+                t = re.sub(rf"(?i)\bexpediente\s*:?[\s#]*{re.escape(case_id)}\s*", "", t)
+            t = re.sub(r"\s{2,}", " ", t).strip(" :-|")
+            return t or "(evento)"
+
+        # Notes/reminders/tasks should display raw useful text only
+        if src in ("note", "reminder", "task"):
+            if case_id:
+                t = re.sub(rf"(?i)^\s*{re.escape(case_id)}\s*:\s*", "", t)
+            t = re.sub(r"\s{2,}", " ", t).strip(" :-|")
+            return t or "(sin texto)"
+
+        return t or "(evento)"
+
+    def _label_for_source(src: str) -> str:
+        if src == "note":
+            return "nota"
+        if src == "reminder":
+            return "recordatorio"
+        if src == "task":
+            return "tarea"
+        if src == "event":
+            return "evento"
+        return src or "item"
+
     lines: List[str] = [header]
 
     grouped = _group_items_by_local_date(items, tz)
     for day, group in grouped:
         lines.append(f"\n📅 {day}")
         for it in group:
-            src = (it.get("source") or "db").strip()
-            title = (it.get("title") or "").strip() or "(evento)"
+            src = (it.get("source") or "db").strip().lower()
             case_id = (it.get("case_id") or "").strip()
+            title = _normalize_title(src, (it.get("title") or "").strip(), case_id)
 
             dt_local = _dt_local_from_item(it, tz)
-            hhmm = dt_local.strftime("%H:%M") if dt_local else ""
+            hhmm = dt_local.strftime("%H:%M") if dt_local else "--:--"
+            label = _label_for_source(src)
 
-            if src == "db":
-                # DB: case_id is your expediente (stable identifier)
-                if case_id:
-                    lines.append(f"- {case_id}: {title}")
-                else:
-                    lines.append(f"- {title}")
-            else:
-                # GCAL/unbound: show time + title, optionally case binding if present
-                if hhmm and case_id:
-                    lines.append(f"- {hhmm} | {case_id}: {title}")
-                elif hhmm:
-                    lines.append(f"- {hhmm} | {title}")
-                else:
-                    lines.append(f"- {title}")
+            lines.append(f"- {hhmm} | {label:<12} | {title}")
 
     return "\n".join(lines)
 
@@ -301,10 +325,6 @@ async def try_timeline_for_case(update, chat_id, text) -> bool:
             limit=50,
         )
 
-        if not rows:
-            await update.message.reply_text(f"No tengo recordatorios o tareas ligados a {parent_ref}.")
-            return True
-
         tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
 
         items: List[Dict[str, Any]] = []
@@ -329,8 +349,64 @@ async def try_timeline_for_case(update, chat_id, text) -> bool:
                 }
             )
 
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, note_text, created_at
+            FROM case_notes
+            WHERE chat_id = ?
+              AND case_id = ?
+            ORDER BY id DESC
+            LIMIT 20
+            """,
+            (int(chat_id), str(case_id)),
+        )
+        note_rows = cur.fetchall() or []
+        conn.close()
+
+        for r in note_rows:
+            note_id = r["id"] if hasattr(r, "keys") else r[0]
+            note_text = (r["note_text"] if hasattr(r, "keys") else r[1]) or ""
+            created_at = (r["created_at"] if hasattr(r, "keys") else r[2]) or ""
+            if not note_text or not created_at:
+                continue
+
+            note_text = note_text.strip()
+            low = note_text.lower()
+
+            # Filter polluted historical rows captured by older generic note path
+            if (
+                low.startswith("case:")
+                or low.startswith("qué tengo")
+                or low.startswith("que tengo")
+                or low.startswith("recuérdame")
+                or low.startswith("recuerdame")
+                or low.startswith("acuérdame")
+                or low.startswith("acuerdame")
+                or low.startswith("recordame")
+                or low.startswith("nota caso")
+                or low.startswith("nota expediente")
+            ):
+                continue
+
+            try:
+                note_dt_utc = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+
+            items.append(
+                {
+                    "due_ts": int(note_dt_utc.timestamp()),
+                    "title": note_text,
+                    "case_id": case_id,
+                    "source": "note",
+                    "external_id": str(note_id),
+                }
+            )
+
         if not items:
-            await update.message.reply_text(f"No tengo recordatorios o tareas ligados a {parent_ref}.")
+            await update.message.reply_text(f"No tengo recordatorios, tareas o notas ligadas a {parent_ref}.")
             return True
 
         msg = _render_due_grouped(
