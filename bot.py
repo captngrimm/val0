@@ -205,9 +205,24 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         return False
 
     low = raw_text.lower()
-    # Do not intercept deterministic case-note commands
-    if low.startswith("nota caso") or low.startswith("nota expediente"):
-        return False
+
+    # Do NOT store case status / summary queries as notes
+    if (
+        low.startswith("nota caso")
+        or low.startswith("nota expediente")
+        or low.startswith("cómo va el caso")
+        or low.startswith("como va el caso")
+        or low.startswith("cómo vamos con el caso")
+        or low.startswith("como vamos con el caso")
+        or low.startswith("por donde va el caso")
+        or low.startswith("por dónde va el caso")
+        or low.startswith("resumen del caso")
+        or low.startswith("dame un resumen del caso")
+        or low.startswith("estado del caso")
+        or low.startswith("situacion actual del caso")
+        or low.startswith("situación actual del caso")
+    ):
+        return False   
 
     found = _extract_case_id(raw_text)
     if found:
@@ -1169,8 +1184,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # --- Sprint10: court-day timeline queries ---
     try:
-        from core.case_mvp import try_timeline_for_case, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
+        from core.case_mvp import try_case_status, try_timeline_for_case, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
 
+        handled = await try_case_status(update, chat_id, text)
+        if handled:
+            return
         handled = await try_timeline_for_case(update, chat_id, text)
         if handled:
             return

@@ -299,6 +299,157 @@ async def try_case_summary(update, chat_id, text) -> bool:
         await update.message.reply_text("Se cayó el resumen del expediente. Reviso logs.")
         return True
 
+async def try_case_status(update, chat_id, text) -> bool:
+    """
+    Handles natural-language case status / summary requests, e.g.:
+    - resumen del caso 524242024
+    - dame un resumen del caso 524242024
+    - estado del caso 524242024
+    - cómo va el caso 524242024
+    - por donde va el caso 524242024
+    - situación actual del caso 524242024
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    cleaned = _clean(text)
+
+    m = re.search(
+        r"\b("
+        r"resumen|"
+        r"dame\s+un\s+resumen|"
+        r"estado|status|"
+        r"como\s+va|cómo\s+va|"
+        r"como\s+vamos\s+con|cómo\s+vamos\s+con|"
+        r"por\s+donde\s+va|por\s+dónde\s+va|"
+        r"situacion\s+actual|situación\s+actual"
+        r")\s+"
+        r"(?:del\s+|el\s+|de[l]?\s+|con\s+)?"
+        r"(?:caso|expediente)\s+"
+        r"(\d{4,})\b",
+        cleaned,
+    )
+    if not m:
+        return False
+
+    case_id = m.group(2).strip()
+    parent_ref = f"CASE:{case_id}"
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    # latest note (skip polluted old query-like rows)
+    cur.execute(
+        """
+        SELECT note_text, created_at
+        FROM case_notes
+        WHERE chat_id=? AND case_id=?
+        ORDER BY id DESC
+        LIMIT 10
+        """,
+        (int(chat_id), case_id),
+    )
+    rows = cur.fetchall() or []
+
+    last_note = None
+    for row in rows:
+        txt = (row["note_text"] if hasattr(row, "keys") else row[0]) or ""
+        ts = (row["created_at"] if hasattr(row, "keys") else row[1]) or ""
+        txt = txt.strip()
+        low = txt.lower()
+
+        if (
+            low.startswith("cómo va el caso")
+            or low.startswith("como va el caso")
+            or low.startswith("cómo vamos con el caso")
+            or low.startswith("como vamos con el caso")
+            or low.startswith("por donde va el caso")
+            or low.startswith("por dónde va el caso")
+            or low.startswith("resumen del caso")
+            or low.startswith("dame un resumen del caso")
+            or low.startswith("estado del caso")
+            or low.startswith("situacion actual del caso")
+            or low.startswith("situación actual del caso")
+        ):
+            continue
+
+        if txt and ts:
+            try:
+                dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                last_note = (dt.astimezone(tz).strftime("%H:%M"), txt)
+                break
+            except Exception:
+                continue
+
+    # next pending reminder
+    cur.execute(
+        """
+        SELECT text, due_at_utc
+        FROM reminders
+        WHERE chat_id=? AND parent_ref=? AND status='pending'
+        ORDER BY due_at_utc ASC
+        LIMIT 1
+        """,
+        (int(chat_id), parent_ref),
+    )
+    row = cur.fetchone()
+
+    next_rem = None
+    if row:
+        txt = (row["text"] if hasattr(row, "keys") else row[0]) or ""
+        ts = (row["due_at_utc"] if hasattr(row, "keys") else row[1]) or ""
+        txt = txt.strip()
+        if txt and ts:
+            try:
+                dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                next_rem = (dt.astimezone(tz).strftime("%H:%M"), txt)
+            except Exception:
+                pass
+
+    # counts
+    cur.execute(
+        "SELECT COUNT(*) FROM case_notes WHERE chat_id=? AND case_id=?",
+        (int(chat_id), case_id),
+    )
+    note_count = cur.fetchone()[0]
+
+    cur.execute(
+        """
+        SELECT COUNT(*)
+        FROM reminders
+        WHERE chat_id=? AND parent_ref=? AND status='pending'
+        """,
+        (int(chat_id), parent_ref),
+    )
+    rem_count = cur.fetchone()[0]
+
+    conn.close()
+
+    if not last_note and not next_rem and note_count == 0 and rem_count == 0:
+        await update.message.reply_text(f"No tengo actividad registrada para CASE:{case_id}.")
+        return True
+
+    lines = [f"🗂️ CASE:{case_id}", "", "Resumen del caso"]
+
+    if last_note:
+        lines.append(f"- última nota: {last_note[1]}")
+    else:
+        lines.append("- última nota: —")
+
+    if next_rem:
+        lines.append(f"- próximo pendiente: {next_rem[0]} | {next_rem[1]}")
+    else:
+        lines.append("- próximo pendiente: —")
+
+    lines.append("")
+    lines.append("Conteo rápido")
+    lines.append(f"- notas: {note_count}")
+    lines.append(f"- recordatorios pendientes: {rem_count}")
+
+    await update.message.reply_text("\n".join(lines))
+    return True
+
 async def try_timeline_for_case(update, chat_id, text) -> bool:
     """
     Handles: 'qué tengo del caso 524242024'
