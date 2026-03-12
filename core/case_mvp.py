@@ -126,15 +126,29 @@ def _render_due_grouped(
         return t or "(evento)"
 
     def _label_for_source(src: str) -> str:
-        if src == "note":
+        """
+        Deterministic source labeling for timeline entries.
+        Ensures stable UX and supports Sprint 12.3 source trace.
+        """
+
+        src = (src or "").strip().lower()
+
+        if src in ("note", "case_note"):
             return "nota"
-        if src == "reminder":
+
+        if src in ("reminder", "reminders"):
             return "recordatorio"
-        if src == "task":
+
+        if src in ("task", "tasks"):
             return "tarea"
-        if src == "event":
+
+        if src in ("event", "case_event", "calendar"):
             return "evento"
-        return src or "item"
+
+        if src in ("transcript", "voice"):
+            return "transcripción"
+
+        return "item"
 
     lines: List[str] = [header]
 
@@ -150,7 +164,7 @@ def _render_due_grouped(
             hhmm = dt_local.strftime("%H:%M") if dt_local else "--:--"
             label = _label_for_source(src)
 
-            lines.append(f"- {hhmm} | {label:<12} | {title}")
+            lines.append(f"- {hhmm} | {label:<11} | {title}")
 
     return "\n".join(lines)
 
@@ -656,6 +670,81 @@ async def try_timeline_for_case(update, chat_id, text) -> bool:
         logger.exception(f"[CASE MVP] try_timeline_for_case failed: {e}")
         await update.message.reply_text("Se cayó el timeline ligado al caso. Reviso logs.")
         return True
+
+async def try_case_timeline_for_case(update, chat_id, text) -> bool:
+    """
+    Handles: 'qué tengo del caso <expediente>'
+    Reads only pending reminders linked by:
+    parent_ref = CASE:<expediente>
+
+    Output format:
+
+    📅 CASE TIMELINE: <expediente>
+
+    - <due time> | <reminder text>
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    cleaned = _clean(text)
+    m = re.search(r"\b(que|qué)\s+tengo\s+del\s+(caso|expediente)\s+(\d{4,})\b", cleaned)
+    if not m:
+        return False
+
+    expediente = (m.group(3) or "").strip()
+    if not expediente:
+        return False
+
+    parent_ref = f"CASE:{expediente}"
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT text, due_at_utc
+            FROM reminders
+            WHERE chat_id = ?
+              AND status = 'pending'
+              AND parent_ref = ?
+            ORDER BY due_at_utc ASC, id ASC
+            """,
+            (int(chat_id), parent_ref),
+        )
+        rows = cur.fetchall() or []
+        conn.close()
+
+        lines: List[str] = [f"📅 CASE TIMELINE: {expediente}", ""]
+
+        if not rows:
+            lines.append("- sin recordatorios pendientes")
+            await update.message.reply_text("\n".join(lines))
+            return True
+
+        for row in rows:
+            reminder_text = (row["text"] if hasattr(row, "keys") else row[0]) or ""
+            due_at_utc = (row["due_at_utc"] if hasattr(row, "keys") else row[1]) or ""
+
+            reminder_text = reminder_text.strip() or "(sin texto)"
+
+            try:
+                due_dt_utc = datetime.strptime(due_at_utc, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                due_local = due_dt_utc.astimezone(tz).strftime("%H:%M")
+            except Exception:
+                due_local = "--:--"
+
+            lines.append(f"- {due_local} | {reminder_text}")
+
+        await update.message.reply_text("\n".join(lines))
+        return True
+
+    except Exception as e:
+        logger.exception(f"[CASE MVP] try_case_timeline_for_case failed: {e}")
+        await update.message.reply_text("Se cayó el timeline del caso. Reviso logs.")
+        return True
+    
 
 async def try_timeline_today(update, chat_id, text) -> bool:
     """

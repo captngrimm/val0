@@ -60,6 +60,40 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     n = max(1, min(50, n))
 
     try:
+                # --- Reminder state audit (Phase 1 hardening) ---
+        from memory_store import _get_conn
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        import os
+
+        tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM reminders WHERE status='pending'")
+        pending = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM reminders WHERE status='sending'")
+        sending = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM reminders WHERE status='failed'")
+        failed = cur.fetchone()[0]
+
+        today = datetime.now(tz).date().isoformat()
+
+        cur.execute(
+            """
+            SELECT COUNT(*) FROM reminders
+            WHERE status='sent'
+            AND DATE(sent_at_utc)=?
+            """,
+            (today,)
+        )
+        sent_today = cur.fetchone()[0]
+
+        conn.close()
+        
         rows = list_reminders(statuses=["pending", "sending"], limit=n)
         if not rows:
             await update.message.reply_text("REMINDERS\n- none (pending/sending)")

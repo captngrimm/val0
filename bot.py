@@ -1074,6 +1074,10 @@ async def ssearch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Core Message Pipeline
 # --------------------------------------------------
 async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
+    # --- Phase 1 Hardening: slash commands bypass text pipeline ---
+    if text and text.strip().startswith("/"):
+        logger.info("[PIPELINE] slash command bypass: %s", text)
+        return
     if not update.message:
         return
 
@@ -1227,11 +1231,16 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # --- Sprint10: court-day timeline queries ---
     try:
-        from core.case_mvp import try_case_status, try_timeline_for_case, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
+        from core.case_mvp import try_case_status, try_case_timeline_for_case, try_timeline_for_case, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
 
         handled = await try_case_status(update, chat_id, text)
         if handled:
             return
+
+        handled = await try_case_timeline_for_case(update, chat_id, text)
+        if handled:
+            return
+
         handled = await try_timeline_for_case(update, chat_id, text)
         if handled:
             return
@@ -1561,6 +1570,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # C3 gate: don't inject semantic memory for ultra-short / control chatter
     tclean = (text or "").strip()
+
     if len(tclean) < 8 or _is_control_ack(tclean):
         semantic_block = ""
 
@@ -1609,6 +1619,7 @@ except Exception:
     ZoneInfo = None
 
 VAL0_TZ = os.getenv("VAL0_TZ", "America/Panama")
+VAL0_TZINFO = ZoneInfo(VAL0_TZ) if ZoneInfo else None
 
 def _today_ymd() -> str:
     if ZoneInfo:
@@ -1694,7 +1705,8 @@ def _daily_auto_generate(chat_id: int, date: str) -> str:
         merged_facts = (merged_facts + "\n\n" + notes_block).strip() if merged_facts else notes_block
 
     out = call_val_openai(
-        user_text,
+        chat_id=chat_id,
+        user_text=user_text,
         context_block=context_block,
         facts_block=merged_facts,
         semantic_block=semantic_block,
@@ -1804,6 +1816,14 @@ def _reminder_batch_limit() -> int:
 
 async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
     try:
+        # --- Phase 1 Hardening: reset reminders stuck in 'sending' ---
+        try:
+            from memory_store import watchdog_reset_stuck_reminders
+            reset_count = int(watchdog_reset_stuck_reminders(max_age_seconds=300) or 0)
+            if reset_count > 0:
+                logger.warning("ReminderWatchdog: reset stuck reminders=%d", reset_count)
+        except Exception as e:
+            logger.exception("ReminderWatchdog failed: %s", e)
         due = fetch_due_reminders(limit=_reminder_batch_limit())
 
         # tick telemetry for /health
@@ -1937,6 +1957,44 @@ async def evening_brief_tick(context):
         await context.bot.send_message(chat_id=chat_id, text=msg)
 
     conn.close()
+
+async def morning_daily_tick(context):
+    """
+    Sends an automatic DAILY briefing at 08:00 local time.
+    Read-only. Uses existing _daily_auto_generate().
+    """
+    from memory_store import _get_conn
+
+    date = _today_ymd()
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("SELECT DISTINCT chat_id FROM cases")
+        users = cur.fetchall() or []
+        conn.close()
+
+        for u in users:
+            chat_id = int(u["chat_id"] if hasattr(u, "keys") else u[0])
+
+            try:
+                summary = _daily_auto_generate(chat_id=chat_id, date=date)
+            except Exception as e:
+                logger.exception(f"[MORNING_DAILY] generate failed chat_id={chat_id} err={e}")
+                continue
+
+            if not summary:
+                continue
+
+            msg = f"📋 Daily ({date})\n\n{summary}"
+            try:
+                await context.bot.send_message(chat_id=chat_id, text=msg)
+            except Exception as e:
+                logger.exception(f"[MORNING_DAILY] send failed chat_id={chat_id} err={e}")
+
+    except Exception as e:
+        logger.exception(f"[MORNING_DAILY] tick failed: {e}")    
 
 async def _handle_group_deterministic(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     """
@@ -2320,8 +2378,14 @@ def main():
 
     app.job_queue.run_daily(
         evening_brief_tick,
-        time=dt_time(hour=21, minute=0),
+        time=dt_time(hour=21, minute=0, tzinfo=VAL0_TZINFO),
         name="EVENING_BRIEF_JOB",
+    )
+    
+    app.job_queue.run_daily(
+        morning_daily_tick,
+        time=dt_time(hour=8, minute=0, tzinfo=VAL0_TZINFO),
+        name="MORNING_DAILY_JOB",
     )
 
     app.add_error_handler(_error_handler)

@@ -813,6 +813,38 @@ def list_reminders(
             )
     return out
 
+def watchdog_reset_stuck_reminders(max_age_seconds: int = 300) -> int:
+    """
+    Reset reminders stuck in 'sending' state.
+
+    If a reminder has been 'sending' longer than max_age_seconds,
+    it is assumed the worker crashed and the reminder should be retried.
+    """
+
+    from datetime import datetime, timedelta, timezone
+
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        UPDATE reminders
+        SET status='pending'
+        WHERE status='sending'
+        AND updated_at_utc < ?
+        """,
+        (cutoff.strftime("%Y-%m-%d %H:%M:%S"),)
+    )
+
+    reset_count = cur.rowcount
+
+    conn.commit()
+    conn.close()
+
+    return reset_count    
+
 def fetch_timeline_between(
     chat_id: int,
     start_utc: str,
