@@ -14,7 +14,7 @@ except Exception:
 # - "en N minutos" / "en N horas"
 # - "hoy a las HH:MM" / "a las 6pm"
 # - "mañana a las HH:MM" / "mañana 3pm"
-_VERB = r"(?:recu[eé]rdame|acu[eé]rdame|acuerdame|recordame)"
+_VERB = r"(?:recu[eé]rdame|acu[eé]rdame|acuerdame|recordame|recordatorio)"
 
 _RE_MIN = re.compile(
     rf"(?is)^\s*{_VERB}\s+(?P<what>.+?)\s+en\s+(?P<n>\d{{1,4}})\s+minutos?\s*$"

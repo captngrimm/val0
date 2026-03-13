@@ -44,7 +44,7 @@ import logging
 import unicodedata
 import datetime
 from datetime import timedelta
-from zoneinfo import ZoneInfo
+import pytz
 from typing import List, Dict, Any, Optional
 from datetime import time as dt_time
 from dotenv import load_dotenv
@@ -1231,7 +1231,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # --- Sprint10: court-day timeline queries ---
     try:
-        from core.case_mvp import try_case_status, try_case_timeline_for_case, try_timeline_for_case, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
+        from core.case_mvp import try_case_status, try_case_timeline_for_case, try_timeline_for_case, try_pending_list, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
 
         handled = await try_case_status(update, chat_id, text)
         if handled:
@@ -1242,6 +1242,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         handled = await try_timeline_for_case(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_pending_list(update, chat_id, text)
         if handled:
             return
 
@@ -1619,7 +1623,7 @@ except Exception:
     ZoneInfo = None
 
 VAL0_TZ = os.getenv("VAL0_TZ", "America/Panama")
-VAL0_TZINFO = ZoneInfo(VAL0_TZ) if ZoneInfo else None
+VAL0_TZINFO = pytz.timezone(VAL0_TZ)
 
 def _today_ymd() -> str:
     if ZoneInfo:
@@ -2378,13 +2382,13 @@ def main():
 
     app.job_queue.run_daily(
         evening_brief_tick,
-        time=dt_time(hour=21, minute=0, tzinfo=VAL0_TZINFO),
+        time=dt_time(hour=21, minute=0, tzinfo=pytz.timezone(VAL0_TZ)),
         name="EVENING_BRIEF_JOB",
     )
     
     app.job_queue.run_daily(
         morning_daily_tick,
-        time=dt_time(hour=8, minute=0, tzinfo=VAL0_TZINFO),
+        time=dt_time(hour=8, minute=0, tzinfo=pytz.timezone(VAL0_TZ)),
         name="MORNING_DAILY_JOB",
     )
 

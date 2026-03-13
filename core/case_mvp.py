@@ -687,13 +687,16 @@ async def try_case_timeline_for_case(update, chat_id, text) -> bool:
         return False
 
     cleaned = _clean(text)
-    m = re.search(r"\b(que|qué)\s+tengo\s+del\s+(caso|expediente)\s+(\d{4,})\b", cleaned)
+
+    m = re.search(
+        r"\b((que|qué)\s+tengo\s+del\s+|(que|qué)\s+ha\s+pasado\s+en\s+(el\s+)?)(caso|expediente)\s+(\d{4,})\b",
+        cleaned,
+    )
+
     if not m:
         return False
 
-    expediente = (m.group(3) or "").strip()
-    if not expediente:
-        return False
+    expediente = (m.group(6) or "").strip()
 
     parent_ref = f"CASE:{expediente}"
     tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
@@ -745,6 +748,62 @@ async def try_case_timeline_for_case(update, chat_id, text) -> bool:
         await update.message.reply_text("Se cayó el timeline del caso. Reviso logs.")
         return True
     
+async def try_pending_list(update, chat_id, text) -> bool:
+    """
+    Handles:
+      - qué pendientes tengo
+      - que pendientes tengo
+      - pendientes
+
+    Reads only pending reminders for the current chat.
+    Deterministic, no model.
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    cleaned = _clean(text)
+
+    if not (
+        re.search(r"\b(que|qué)\s+pendientes\s+tengo\b", cleaned)
+        or cleaned == "pendientes"
+    ):
+        return False
+
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+
+    try:
+        rows = list_reminders_for_chat(
+            int(chat_id),
+            statuses=["pending"],
+            limit=50,
+        )
+
+        lines: List[str] = ["📌 Pendientes", ""]
+
+        if not rows:
+            lines.append("- no tienes pendientes")
+            await update.message.reply_text("\n".join(lines))
+            return True
+
+        for r in rows:
+            txt = (r.get("text") or "").strip() or "(sin texto)"
+            due_at_utc = (r.get("due_at_utc") or "").strip()
+
+            try:
+                due_dt_utc = datetime.strptime(due_at_utc, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                hhmm = due_dt_utc.astimezone(tz).strftime("%H:%M")
+            except Exception:
+                hhmm = "--:--"
+
+            lines.append(f"- {hhmm} | {txt}")
+
+        await update.message.reply_text("\n".join(lines))
+        return True
+
+    except Exception as e:
+        logger.exception(f"[CASE MVP] try_pending_list failed: {e}")
+        await update.message.reply_text("Se cayó la lista de pendientes. Reviso logs.")
+        return True
 
 async def try_timeline_today(update, chat_id, text) -> bool:
     """

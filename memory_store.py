@@ -1357,3 +1357,36 @@ def fetch_case_notes(chat_id: int, case_id: str, limit: int = 20) -> list[dict]:
         rows = cur.fetchall() or []
         conn.close()
     return [dict(r) for r in rows]
+
+def get_recent_messages(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    Returns the most recent messages for a chat in chronological order.
+    Used by bot.py for prompt context assembly.
+    """
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT role, content
+        FROM messages
+        WHERE chat_id = ?
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (int(chat_id), int(limit)),
+    )
+
+    rows = cur.fetchall()
+    conn.close()
+
+    # Reverse so oldest → newest for prompt assembly
+    rows = list(rows)[::-1]
+
+    return [
+        {
+            "role": r["role"],
+            "content": r["content"],
+        }
+        for r in rows
+    ]
