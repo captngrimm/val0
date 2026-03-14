@@ -1132,7 +1132,7 @@ async def try_due_tomorrow(update, chat_id, text) -> bool:
         _audit_merge(gate="due_tomorrow", chat_id=int(chat_id), label=f"{tomorrow}", items=items)
 
         if not items:
-            await update.message.reply_text("Mañana no tengo diligencias registradas.")
+            await update.message.reply_text("Mañana no tengo vencimientos registrados.")
             return True
 
         weekday = datetime.now(tz).date() + timedelta(days=1)

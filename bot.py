@@ -1252,9 +1252,22 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         if handled:
             return
 
+        handled = await try_due_today_natural(update, chat_id, text)
+        if handled:
+            return 
+        
+        handled = await try_agenda_tomorrow_natural(update, chat_id, text)
+        if handled:
+            return 
+        
         handled = await try_due_tomorrow(update, chat_id, text)
         if handled:
             return
+        
+        handled = await try_due_tomorrow_natural(update, chat_id, text)
+        if handled:
+            return
+
 
         handled = await try_due_range(update, chat_id, text)
         if handled:
@@ -1264,9 +1277,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         if handled:
             return
         
-        handled = await try_due_tomorrow_natural(update, chat_id, text)
-        if handled:
-            return
+        
+            
 
     except Exception as e:
         logger.exception(f"[CASE_TIMELINE] failed: {e}")
@@ -1982,11 +1994,11 @@ async def try_week_horizon(update, chat_id, text) -> bool:
 
     out = _generate_week_horizon(int(chat_id))
     await update.message.reply_text(out)
-    return True
+    return True  
 
 async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
     """
-    Natural-language gate for tomorrow deadlines.
+    Natural-language gate for tomorrow deadlines only.
     """
     if not update or not getattr(update, "message", None):
         return False
@@ -1994,22 +2006,79 @@ async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
     import re
 
     t = (text or "").strip().lower()
-    t = re.sub(r'^\s*(?:oye\s+)?(?:val|valeria)[,:]?\s+', '', t)
 
     patterns = [
-        r"^que vence manana$",
-        r"^que vence mañana$",
-        r"^que tengo manana$",
+        r"^\s*qué\s+vence\s+mañana\s*$",
+        r"^\s*que\s+vence\s+mañana\s*$",
+        r"^\s*qué\s+t[eé]rminos\s+vencen\s+mañana\s*$",
+        r"^\s*que\s+terminos\s+vencen\s+mañana\s*$",
+    ]
+
+    if not any(re.match(p, t) for p in patterns):
+        return False
+
+    return await try_due_tomorrow(update, chat_id, text)
+
+
+async def try_due_today_natural(update, chat_id, text) -> bool:
+    """
+    Natural-language gate for today's agenda.
+    """
+    import re
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+
+    patterns = [
+        r"^que tengo hoy$",
+        r"^que vence hoy$",
+        r"^que audiencias tengo hoy$",
+        r"^que diligencias tengo hoy$",
+    ]
+
+    for p in patterns:
+        if re.match(p, t):
+            return await try_due_today(update, chat_id, text)
+
+    return False
+
+async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
+    """
+    Natural-language gate for tomorrow agenda.
+    """
+    import re
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+
+    patterns = [
         r"^que tengo mañana$",
-        r"^que audiencias tengo manana$",
+        r"^qué tengo mañana$",
+        r"^que tengo manana$",
+        r"^qué audiencias tengo mañana$",
         r"^que audiencias tengo mañana$",
     ]
 
     for p in patterns:
         if re.match(p, t):
-            return await try_due_tomorrow(update, chat_id, text)
+            tz = ZoneInfo("America/Panama")
+            tomorrow = (datetime.now(tz) + timedelta(days=1)).date().isoformat()
 
-    return False    
+            out = _generate_morning_brief_det(int(chat_id), tomorrow)
+
+            if not out:
+                out = "Mañana no tengo agenda registrada."
+
+            await update.message.reply_text(out)
+            return True
+
+    return False
 
 async def semana_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
