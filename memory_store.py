@@ -1300,6 +1300,8 @@ def insert_case_note(
     if not note_text:
         raise ValueError("insert_case_note requires note_text")
 
+    parent_ref = f"CASE:{str(case_id).strip()}"
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
@@ -1308,10 +1310,17 @@ def insert_case_note(
         if telegram_message_id is not None:
             cur.execute(
                 """
-                INSERT OR IGNORE INTO case_notes(chat_id, case_id, note_text, source, telegram_message_id)
-                VALUES(?,?,?,?,?)
+                INSERT OR IGNORE INTO case_notes(chat_id, case_id, parent_ref, note_text, source, telegram_message_id)
+                VALUES(?,?,?,?,?,?)
                 """,
-                (int(chat_id), str(case_id), note_text, str(source or "text"), int(telegram_message_id)),
+                (
+                    int(chat_id),
+                    str(case_id),
+                    parent_ref,
+                    note_text,
+                    str(source or "text"),
+                    int(telegram_message_id),
+                ),
             )
             conn.commit()
 
@@ -1330,8 +1339,18 @@ def insert_case_note(
 
         # Fallback path (no message id): regular insert
         cur.execute(
-            "INSERT INTO case_notes(chat_id, case_id, note_text, source, telegram_message_id) VALUES(?,?,?,?,?)",
-            (int(chat_id), str(case_id), note_text, str(source or "text"), None),
+            """
+            INSERT INTO case_notes(chat_id, case_id, parent_ref, note_text, source, telegram_message_id)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (
+                int(chat_id),
+                str(case_id),
+                parent_ref,
+                note_text,
+                str(source or "text"),
+                None,
+            ),
         )
         conn.commit()
         rid = cur.lastrowid
@@ -1342,17 +1361,27 @@ def insert_case_note(
 def fetch_case_notes(chat_id: int, case_id: str, limit: int = 20) -> list[dict]:
     """
     Fetch recent notes for a case, newest first.
+    Uses parent_ref when available, with legacy fallback to case_id.
     """
     case_id = (case_id or "").strip()
     if not case_id:
         return []
+
+    parent_ref = f"CASE:{case_id}"
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, chat_id, case_id, note_text, source, telegram_message_id, created_at "
-            "FROM case_notes WHERE chat_id=? AND case_id=? ORDER BY id DESC LIMIT ?",
-            (int(chat_id), case_id, int(limit)),
+            """
+            SELECT id, chat_id, case_id, parent_ref, note_text, source, telegram_message_id, created_at
+            FROM case_notes
+            WHERE chat_id=?
+              AND (parent_ref=? OR case_id=?)
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(chat_id), parent_ref, case_id, int(limit)),
         )
         rows = cur.fetchall() or []
         conn.close()
