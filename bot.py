@@ -1111,7 +1111,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 await update.message.reply_text(f"{preferred_name}: water + stretch for 30 seconds. 💧")
     except Exception:
         pass
-
+    text = _strip_smalltalk_prefix(text)    
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
 
@@ -1257,6 +1257,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         handled = await try_due_range(update, chat_id, text)
+        if handled:
+            return
+        
+        handled = await try_week_horizon(update, chat_id, text)
+        if handled:
+            return
+        
+        handled = await try_due_tomorrow_natural(update, chat_id, text)
         if handled:
             return
 
@@ -1824,6 +1832,189 @@ def _generate_morning_brief_det(chat_id: int, date: str) -> str:
         items=items,
         tz=tz,
     )
+
+def _generate_week_horizon(chat_id: int, days: int = 7) -> str:
+    """
+    Deterministic horizon view for the next N days.
+    Used for "qué términos vencen esta semana".
+    """
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import _get_conn
+    from core.case_mvp import _render_due_grouped
+
+    tz = ZoneInfo("America/Panama")
+
+    now = datetime.now(tz)
+    start_local = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=tz)
+    end_local = start_local + timedelta(days=days)
+
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    items = []
+
+    cur.execute(
+        """
+        SELECT id, text, due_at_utc, parent_ref
+        FROM reminders
+        WHERE chat_id=?
+          AND status IN ('pending','sent')
+          AND due_at_utc >= ?
+          AND due_at_utc <= ?
+        ORDER BY due_at_utc ASC
+        """,
+        (
+            int(chat_id),
+            start_utc.strftime("%Y-%m-%d %H:%M:%S"),
+            end_utc.strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+
+    rows = cur.fetchall() or []
+    conn.close()
+
+    for r in rows:
+        rid = r["id"] if hasattr(r, "keys") else r[0]
+        txt = r["text"] if hasattr(r, "keys") else r[1]
+        due_at_utc = r["due_at_utc"] if hasattr(r, "keys") else r[2]
+        parent_ref = r["parent_ref"] if hasattr(r, "keys") else r[3]
+
+        try:
+            due_dt = datetime.strptime(
+                due_at_utc, "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone.utc)
+
+            due_ts = int(due_dt.timestamp())
+        except Exception:
+            due_ts = 0
+
+        case_id = ""
+        if parent_ref and parent_ref.startswith("CASE:"):
+            case_id = parent_ref.split("CASE:", 1)[1]
+
+        items.append(
+            {
+                "due_ts": due_ts,
+                "title": (txt or "(sin texto)").strip(),
+                "case_id": case_id,
+                "source": "reminder",
+                "external_id": str(rid),
+            }
+        )
+
+    if not items:
+        return "No hay términos ni recordatorios en los próximos 7 días."
+
+    return _render_due_grouped(
+        header="📅 Próximos 7 días",
+        items=items,
+        tz=tz,
+    )    
+
+def _strip_smalltalk_prefix(text: str) -> str:
+    """
+    Removes conversational prefixes so deterministic gates
+    can match commands naturally.
+    """
+    import re
+
+    t = (text or "").strip().lower()
+
+    prefixes = [
+        r"hola",
+        r"oye",
+        r"por favor",
+        r"mi amor",
+        r"amor",
+        r"val",
+        r"valeria",
+        r"lucia",
+        r"lucía",
+    ]
+
+    pattern = r"^\s*(?:" + "|".join(prefixes) + r")[,:]?\s+"
+
+    while re.match(pattern, t):
+        t = re.sub(pattern, "", t)
+
+    return t
+
+async def try_week_horizon(update, chat_id, text) -> bool:
+    """
+    Natural-language weekly horizon gate.
+    Examples:
+    - qué términos vencen esta semana
+    - que vence esta semana
+    - qué tengo esta semana
+    - qué audiencias tengo esta semana
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+
+    # allow natural address prefixes
+    import re
+    t = re.sub(r'^\s*(?:oye\s+)?(?:val|valeria)[,:]?\s+', '', t)
+
+    # allow addressing Val naturally
+    import re
+    t = re.sub(r'^\s*(val|valeria)[,:]?\s+', '', t)
+
+    patterns = [
+        r"^\s*qué\s+t[eé]rminos\s+vencen\s+esta\s+semana\s*$",
+        r"^\s*que\s+terminos\s+vencen\s+esta\s+semana\s*$",
+        r"^\s*qué\s+vence\s+esta\s+semana\s*$",
+        r"^\s*que\s+vence\s+esta\s+semana\s*$",
+        r"^\s*qué\s+tengo\s+esta\s+semana\s*$",
+        r"^\s*que\s+tengo\s+esta\s+semana\s*$",
+        r"^\s*qué\s+audiencias\s+tengo\s+esta\s+semana\s*$",
+        r"^\s*que\s+audiencias\s+tengo\s+esta\s+semana\s*$",
+    ]
+
+    import re
+    if not any(re.match(p, t) for p in patterns):
+        return False
+
+    out = _generate_week_horizon(int(chat_id))
+    await update.message.reply_text(out)
+    return True
+
+async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
+    """
+    Natural-language gate for tomorrow deadlines.
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    import re
+
+    t = (text or "").strip().lower()
+    t = re.sub(r'^\s*(?:oye\s+)?(?:val|valeria)[,:]?\s+', '', t)
+
+    patterns = [
+        r"^que vence manana$",
+        r"^que vence mañana$",
+        r"^que tengo manana$",
+        r"^que tengo mañana$",
+        r"^que audiencias tengo manana$",
+        r"^que audiencias tengo mañana$",
+    ]
+
+    for p in patterns:
+        if re.match(p, t):
+            return await try_due_tomorrow(update, chat_id, text)
+
+    return False    
+
+async def semana_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    out = _generate_week_horizon(chat_id)
+    await update.message.reply_text(out)
 
 async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -2513,6 +2704,7 @@ def main():
     app.add_handler(CommandHandler("note", note_cmd))
     app.add_handler(CommandHandler("notes", notes_cmd))
     app.add_handler(CommandHandler("daily", daily_cmd))
+    app.add_handler(CommandHandler("semana", semana_cmd))
     app.add_handler(CommandHandler("dailies", dailies_cmd))
     app.add_handler(CommandHandler("dsearch", dsearch_cmd))
     app.add_handler(CommandHandler("search", search_cmd))

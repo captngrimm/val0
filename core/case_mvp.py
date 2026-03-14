@@ -89,6 +89,16 @@ def _group_items_by_local_date(
     return grouped
 
 
+SPANISH_WEEKDAYS = [
+    "Lunes", "Martes", "Miércoles", "Jueves",
+    "Viernes", "Sábado", "Domingo",
+]
+
+SPANISH_MONTHS = [
+    "", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+    "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+]
+
 def _render_due_grouped(
     *,
     header: str,
@@ -154,7 +164,34 @@ def _render_due_grouped(
 
     grouped = _group_items_by_local_date(items, tz)
     for day, group in grouped:
-        lines.append(f"\n📅 {day}")
+        count = len(group)
+
+        if day == "—":
+            pretty_day = "Sin fecha"
+        else:
+            try:
+                dt_day = datetime.strptime(day, "%Y-%m-%d").date()
+                today_local = datetime.now(tz).date()
+                tomorrow_local = today_local + timedelta(days=1)
+
+                weekday = SPANISH_WEEKDAYS[dt_day.weekday()]
+                month = SPANISH_MONTHS[dt_day.month]
+                base_day = f"{weekday} {dt_day.day} {month}"
+
+                if dt_day == today_local:
+                    pretty_day = f"Hoy ({base_day})"
+                elif dt_day == tomorrow_local:
+                    pretty_day = f"Mañana ({base_day})"
+                else:
+                    pretty_day = base_day
+            except Exception:
+                pretty_day = day
+
+        lines.append(f"\n📅 {pretty_day}")
+
+        if count >= 2:
+            lines.append(f"⚠️ {count} términos / eventos ese día")
+
         for it in group:
             src = (it.get("source") or "db").strip().lower()
             case_id = (it.get("case_id") or "").strip()
