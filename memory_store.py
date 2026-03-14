@@ -833,7 +833,7 @@ def watchdog_reset_stuck_reminders(max_age_seconds: int = 300) -> int:
         UPDATE reminders
         SET status='pending'
         WHERE status='sending'
-        AND updated_at_utc < ?
+        AND created_at < ?
         """,
         (cutoff.strftime("%Y-%m-%d %H:%M:%S"),)
     )

@@ -1713,6 +1713,118 @@ def _daily_auto_generate(chat_id: int, date: str) -> str:
     )
     return (out or "").strip()
 
+def _generate_morning_brief_det(chat_id: int, date: str) -> str:
+    """
+    Deterministic 08:00 briefing.
+    No LLM, no semantic recall, no chat-history reasoning.
+
+    Sources:
+    - case_events due that day
+    - reminders due that day (pending or sent, if still same-day)
+    """
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import _get_conn
+    from core.case_mvp import _render_due_grouped
+
+    tz = ZoneInfo("America/Panama")
+
+    y, m, d = map(int, date.split("-"))
+    start_local = datetime(y, m, d, 0, 0, 0, tzinfo=tz)
+    end_local = datetime(y, m, d, 23, 59, 59, tzinfo=tz)
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    items = []
+
+    cur.execute(
+        """
+        SELECT c.expediente, ce.event_text, ce.deadline_date
+        FROM case_events ce
+        JOIN cases c ON c.id = ce.case_id
+        WHERE ce.chat_id=? AND ce.deadline_date=?
+        """,
+        (int(chat_id), date),
+    )
+    event_rows = cur.fetchall() or []
+
+    for r in event_rows:
+        local_dt = datetime(y, m, d, 9, 0, 0, tzinfo=tz)
+        due_ts = int(local_dt.astimezone(timezone.utc).timestamp())
+
+        expediente = r["expediente"] if hasattr(r, "keys") else r[0]
+        event_text = r["event_text"] if hasattr(r, "keys") else r[1]
+
+        items.append(
+            {
+                "due_ts": due_ts,
+                "title": (event_text or "(evento)").strip(),
+                "case_id": str(expediente or "").strip(),
+                "source": "event",
+                "external_id": None,
+            }
+        )
+
+    cur.execute(
+        """
+        SELECT id, text, due_at_utc, parent_ref
+        FROM reminders
+        WHERE chat_id=?
+          AND status IN ('pending', 'sent')
+          AND due_at_utc >= ?
+          AND due_at_utc <= ?
+        ORDER BY due_at_utc ASC, id ASC
+        """,
+        (
+            int(chat_id),
+            start_utc.strftime("%Y-%m-%d %H:%M:%S"),
+            end_utc.strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    reminder_rows = cur.fetchall() or []
+    conn.close()
+
+    for r in reminder_rows:
+        rid = r["id"] if hasattr(r, "keys") else r[0]
+        txt = r["text"] if hasattr(r, "keys") else r[1]
+        due_at_utc = r["due_at_utc"] if hasattr(r, "keys") else r[2]
+        parent_ref = r["parent_ref"] if hasattr(r, "keys") else r[3]
+
+        txt = (txt or "").strip() or "(sin texto)"
+        parent_ref = (parent_ref or "").strip()
+
+        case_id = ""
+        if parent_ref.startswith("CASE:"):
+            case_id = parent_ref.split("CASE:", 1)[1].strip()
+
+        try:
+            due_dt_utc = datetime.strptime(due_at_utc, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            due_ts = int(due_dt_utc.timestamp())
+        except Exception:
+            due_ts = 0
+
+        items.append(
+            {
+                "due_ts": due_ts,
+                "title": txt,
+                "case_id": case_id,
+                "source": "reminder",
+                "external_id": str(rid),
+            }
+        )
+
+    if not items:
+        return ""
+
+    return _render_due_grouped(
+        header=f"📋 Hoy ({date}):",
+        items=items,
+        tz=tz,
+    )
+
 async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     /daily <summary>
@@ -1732,7 +1844,7 @@ async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # AUTO MODE
     if arg.lower() == "auto":
         try:
-            summary = _daily_auto_generate(chat_id=chat_id, date=date)
+            summary = _generate_morning_brief_det(chat_id=chat_id, date=date)
         except Exception as e:
             await update.message.reply_text(f"No pude generar el daily auto: {e}")
             return
@@ -1978,7 +2090,7 @@ async def morning_daily_tick(context):
             chat_id = int(u["chat_id"] if hasattr(u, "keys") else u[0])
 
             try:
-                summary = _daily_auto_generate(chat_id=chat_id, date=date)
+                summary = _generate_morning_brief_det(chat_id=chat_id, date=date)
             except Exception as e:
                 logger.exception(f"[MORNING_DAILY] generate failed chat_id={chat_id} err={e}")
                 continue
