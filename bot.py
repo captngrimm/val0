@@ -234,15 +234,10 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
     if not active:
         return False
 
-    # Always capture note
-    note_id = insert_case_note(
-        chat_id=int(chat_id),
-        case_id=str(active),
-        note_text=raw_text,
-        source=str(source or "text"),
-        telegram_message_id=tg_msg_id,
-    )
-    logger.info(f"[CASE_NOTE] inserted id={note_id} case_id={active} source={source}")
+    # Auto note capture disabled.
+    # Case notes must be created explicitly with:
+    # nota caso <expediente>: <texto>
+    pass
 
     # Deterministic event capture (Sprint08 minimal scope)
     deadline_date = _extract_deadline_date(raw_text)

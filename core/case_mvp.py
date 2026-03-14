@@ -673,15 +673,14 @@ async def try_timeline_for_case(update, chat_id, text) -> bool:
 
 async def try_case_timeline_for_case(update, chat_id, text) -> bool:
     """
-    Handles: 'qué tengo del caso <expediente>'
-    Reads only pending reminders linked by:
-    parent_ref = CASE:<expediente>
+    Handles:
+      - qué tengo del caso <expediente>
+      - qué ha pasado en el caso <expediente>
 
-    Output format:
+    Reads entity-linked reminders + notes for:
+      parent_ref = CASE:<expediente>
 
-    📅 CASE TIMELINE: <expediente>
-
-    - <due time> | <reminder text>
+    Renders via _render_due_grouped().
     """
     if not update or not getattr(update, "message", None):
         return False
@@ -692,11 +691,12 @@ async def try_case_timeline_for_case(update, chat_id, text) -> bool:
         r"\b((que|qué)\s+tengo\s+del\s+|(que|qué)\s+ha\s+pasado\s+en\s+(el\s+)?)(caso|expediente)\s+(\d{4,})\b",
         cleaned,
     )
-
     if not m:
         return False
 
     expediente = (m.group(6) or "").strip()
+    if not expediente:
+        return False
 
     parent_ref = f"CASE:{expediente}"
     tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
@@ -705,9 +705,11 @@ async def try_case_timeline_for_case(update, chat_id, text) -> bool:
         conn = _get_conn()
         cur = conn.cursor()
 
+        items: List[Dict[str, Any]] = []
+
         cur.execute(
             """
-            SELECT text, due_at_utc
+            SELECT id, text, due_at_utc
             FROM reminders
             WHERE chat_id = ?
               AND status = 'pending'
@@ -716,31 +718,79 @@ async def try_case_timeline_for_case(update, chat_id, text) -> bool:
             """,
             (int(chat_id), parent_ref),
         )
-        rows = cur.fetchall() or []
-        conn.close()
+        reminder_rows = cur.fetchall() or []
 
-        lines: List[str] = [f"📅 CASE TIMELINE: {expediente}", ""]
+        for row in reminder_rows:
+            rid = row["id"] if hasattr(row, "keys") else row[0]
+            txt = row["text"] if hasattr(row, "keys") else row[1]
+            due_at_utc = row["due_at_utc"] if hasattr(row, "keys") else row[2]
 
-        if not rows:
-            lines.append("- sin recordatorios pendientes")
-            await update.message.reply_text("\n".join(lines))
-            return True
-
-        for row in rows:
-            reminder_text = (row["text"] if hasattr(row, "keys") else row[0]) or ""
-            due_at_utc = (row["due_at_utc"] if hasattr(row, "keys") else row[1]) or ""
-
-            reminder_text = reminder_text.strip() or "(sin texto)"
+            txt = (txt or "").strip() or "(sin texto)"
+            due_at_utc = due_at_utc or ""
 
             try:
                 due_dt_utc = datetime.strptime(due_at_utc, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                due_local = due_dt_utc.astimezone(tz).strftime("%H:%M")
+                due_ts = int(due_dt_utc.timestamp())
             except Exception:
-                due_local = "--:--"
+                due_ts = 0
 
-            lines.append(f"- {due_local} | {reminder_text}")
+            items.append(
+                {
+                    "title": txt,
+                    "due_ts": due_ts,
+                    "case_id": expediente,
+                    "source": "reminder",
+                    "external_id": str(rid),
+                }
+            )
 
-        await update.message.reply_text("\n".join(lines))
+        cur.execute(
+            """
+            SELECT id, note_text, created_at
+            FROM case_notes
+            WHERE chat_id = ?
+              AND case_id = ?
+            ORDER BY id ASC
+            """,
+            (int(chat_id), expediente),
+        )
+        note_rows = cur.fetchall() or []
+        conn.close()
+
+        for row in note_rows:
+            nid = row["id"] if hasattr(row, "keys") else row[0]
+            txt = row["note_text"] if hasattr(row, "keys") else row[1]
+            created_at = row["created_at"] if hasattr(row, "keys") else row[2]
+
+            txt = (txt or "").strip() or "(sin texto)"
+            created_at = created_at or ""
+
+            try:
+                note_dt_utc = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                due_ts = int(note_dt_utc.timestamp())
+            except Exception:
+                due_ts = 0
+
+            items.append(
+                {
+                    "title": txt,
+                    "due_ts": due_ts,
+                    "case_id": expediente,
+                    "source": "note",
+                    "external_id": str(nid),
+                }
+            )
+
+        if not items:
+            await update.message.reply_text(f"No tengo recordatorios, tareas o notas ligadas a {parent_ref}.")
+            return True
+
+        msg = _render_due_grouped(
+            header=f"📅 CASE TIMELINE: {expediente}",
+            items=items,
+            tz=tz,
+        )
+        await update.message.reply_text(msg)
         return True
 
     except Exception as e:

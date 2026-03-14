@@ -3,7 +3,7 @@ VAL0 — COGNITIVE OPERATIONS CORE
 =====================================================================
 
 Operational Roadmap
-Last Updated: 2026-03-08
+Last Updated: 2026-03-13
 
 Mission:
 Val0 is a deterministic cognitive operations engine.
@@ -46,16 +46,48 @@ Val0 is:
 5. controlled rendering last
 
 The model may help:
+
 - phrase
 - summarize
 - ask clarifying questions
 - generate advisory analysis
 
 The model may NOT:
+
 - create legal facts
 - silently mutate deterministic records
 - alter deadlines or reminders
 - override DB truth
+
+=====================================================================
+ARCHITECTURAL DIRECTION — S.O.U.L.
+=====================================================================
+
+S.O.U.L. = Synthetic Organic Universal Link
+
+Concept:
+
+A persistent cognitive layer connecting humans,
+structured data, and machine reasoning.
+
+Val0 acts as the operational S.O.U.L. instance
+for a specific user.
+
+Responsibilities:
+
+- capture intent
+- preserve memory
+- link entities
+- coordinate workflows
+- assist reasoning
+
+Val0 remains deterministic at its core.
+
+Advisory intelligence may operate on top,
+but must never mutate operational records.
+
+Future systems may allow multiple S.O.U.L. instances
+connected through shared modules and services.
 
 =====================================================================
 CURRENT STATE — VERIFIED LIVE
@@ -72,6 +104,7 @@ Semantic recall operational (advisory only).
 Ops CLI control surface active.
 
 Reminder Runner:
+
 - Due reminders delivered live (chat_id verified)
 - Blocked-user path marks reminder failed without crash
 - No stuck "sending" rows
@@ -79,6 +112,7 @@ Reminder Runner:
 - APScheduler stable across restart
 
 Isolation:
+
 - DM + group chat isolation verified
 - /reminders is chat-scoped
 
@@ -132,7 +166,7 @@ Implemented:
 Reminders are short-term nudges.
 Calendar is the system of record.
 
-Pending:
+Pending polish:
 
 - Daily 08:00 summary push
 - Overdue escalation tagging
@@ -145,14 +179,15 @@ SPRINT 10 — COURT DAY TIMELINE (LIVE)
 
 Implemented:
 
-- Natural query support:
-  - qué tengo mañana
-  - mañana tribunales
+Natural query support:
 
-- Deterministic timeline rendering
-- Case event grouping
+- qué tengo mañana
+- mañana tribunales
 
-Remaining cleanup:
+Deterministic timeline rendering.
+Case event grouping.
+
+Remaining polish:
 
 - formatting normalization
 - clearer source labels
@@ -178,7 +213,7 @@ Capabilities:
 
 Supported queries:
 
-qué tengo mañana
+qué tengo mañana  
 qué tengo del caso 524242024
 
 Timeline assembled at query time.
@@ -192,31 +227,32 @@ Design rules:
 - no model mutation
 
 =====================================================================
-SPRINT 12.1 — TIMELINE OUTPUT NORMALIZATION (NEXT)
+NEXT SPRINT TARGETS
 =====================================================================
+
+Sprint 12.1 — Timeline Formatting
 
 Goal:
 
-Improve timeline readability.
+Improve readability of timeline output.
 
-Example target format:
+Example:
 
 📅 2026-03-08
-- 09:00 | evento     | audiencia
-- 12:30 | nota       | juez sugirió conciliación
+- 09:00 | evento       | audiencia
+- 12:30 | nota         | juez sugirió conciliación
 - 15:00 | recordatorio | revisar expediente
 
 Rendering only.
-
 No storage changes.
 
-=====================================================================
-SPRINT 12.2 — CASE NOTE WRITE PATH
-=====================================================================
+---------------------------------------------------------------------
+
+Sprint 12.2 — Case Note Write Path
 
 Goal:
 
-Allow deterministic case notes linked to entity timelines.
+Allow deterministic notes attached to case timelines.
 
 Example command:
 
@@ -224,35 +260,76 @@ nota caso 524242024: juez sugirió conciliación
 
 Stored as:
 
-entity_type = note
+entity_type = note  
 parent_ref  = CASE:<id>
 
 Visible in:
 
 qué tengo del caso <id>
 
-=====================================================================
-SPRINT 12.3 — SOURCE TRACE
-=====================================================================
+---------------------------------------------------------------------
 
-Goal:
+Sprint 12.3 — Source Trace
 
 Expose origin of timeline entries.
 
-Example:
+Sources:
 
 - event
 - reminder
 - note
 - transcript
 
-This improves trust and supports advisory reasoning.
+Improves user trust and advisory reasoning clarity.
 
 =====================================================================
-PHASE 0.4 — ORCHESTRATION SURFACE (ACTIVE)
+APRIL LAUNCH TARGET — MIGUEL MVP
 =====================================================================
+
+Target Window:
+
+April 1 – April 10, 2026
 
 Goal:
+
+Ship the first stable operational assistant
+for Miguel's daily legal workflow.
+
+Launch Criteria:
+
+Required:
+
+- deterministic case timeline
+- reminder engine stable
+- case note write path
+- timeline source labels
+- daily briefing (08:00)
+- encrypted DB stable
+- Google Calendar merge stable
+- CLI health + ops checks
+
+Nice to Have:
+
+- overdue escalation tagging
+- formatting polish
+- advisory argument builder
+
+Non-blocking:
+
+- Prime bridge
+- advanced advisory analysis
+- transcript ingestion
+
+Launch is defined as:
+
+Miguel successfully using Val0 as
+a daily operational assistant.
+
+=====================================================================
+PHASE 0.4 — ORCHESTRATION SURFACE
+=====================================================================
+
+Purpose:
 
 Prevent founder drift and maintain operational truth.
 
@@ -266,7 +343,7 @@ Includes:
 LLM may summarize but cannot author facts.
 
 =====================================================================
-PHASE 0.5 — MEMORY SPINE (ACTIVE)
+PHASE 0.5 — MEMORY SPINE
 =====================================================================
 
 Live tables:
@@ -277,7 +354,7 @@ Live tables:
 - reminders.entity_type
 - reminders.parent_ref
 
-Memory is advisory only.
+Memory remains advisory only.
 
 =====================================================================
 PHASE 0.7 — PRIME BRIDGE (PARALLEL TRACK)
@@ -287,180 +364,91 @@ Prime introduces a founder-focused AI layer.
 
 Architecture:
 
-Frank
- ↓
-ValPrime (Forge RTX 4080)
- ↓
+Frank  
+ ↓  
+ValPrime (Forge RTX 4080)  
+ ↓  
 Val0 (VPS)
 
 Val0 remains the production assistant.
 
 Prime is optional.
 
-Prime must never be required for Val0 to operate.
+Prime must never be required for Val0 operation.
 
 ---------------------------------------------------------------------
+
 Prime Responsibilities
+
+- founder copilot
+- voice interface
+- AI worker node
+- development monitor
+
 ---------------------------------------------------------------------
 
-Founder copilot
-Voice interface
-AI worker node
-Development monitor
-
----------------------------------------------------------------------
 Prime Implementation Stages
----------------------------------------------------------------------
 
-Prime v0 — Voice Shell
-
-- push-to-talk
-- speech-to-text
-- LLM response
-- voice output
-
-Prime v1 — Dev Copilot
-
-- sprint monitoring
-- roadmap reminders
-- drift detection
-- daily dev briefing
-
-Prime v2 — Worker Node
-
-Forge jobs:
-
-- transcription
-- embeddings generation
-- document indexing
-- memory consolidation
-
+Prime v0 — Voice Shell  
+Prime v1 — Dev Copilot  
+Prime v2 — Worker Node  
 Prime v3 — Packet Export
 
-Prime generates advisory packets:
+Prime packets may include:
 
-packet_id
-sources[]
-facts[]
-summaries[]
+packet_id  
+sources[]  
+facts[]  
+summaries[]  
 open_questions[]
 
-Val0 ingests packets into advisory tables only.
+Val0 may ingest packets only into advisory tables.
 
-Prime may never mutate deterministic tables.
-
-=====================================================================
-PHASE 1 — HARDENING (ACTIVE)
-=====================================================================
-
-Remaining tasks:
-
-- reminder state audit timeline
-- GCAL conflict surfacing
-- deadline normalization guardrails
-- rollback playbook
-
-Hard rule:
-
-No scope expansion that risks deterministic stability.
-
-=====================================================================
-PHASE 2 — DISCIPLINE AUTOMATION
-=====================================================================
-
-Remaining:
-
-- daily summary push
-- overdue detection
-- escalation tagging
-- timezone enforcement
-
-=====================================================================
-PHASE 2.5 — OPS CONTROL LAYER
-=====================================================================
-
-Implemented:
-
-- val0ctl ops
-- DB integrity check
-- service health check
-
-Planned:
-
-- val0ctl doctor
-- automated repair tools
-
-=====================================================================
-PHASE 4 — MIGUEL UX SIMPLIFICATION
-=====================================================================
-
-Goal:
-
-Zero friction courtroom workflow.
-
-Needs:
-
-- clean case timeline
-- case notes
-- daily brief
-- quick case query
-
-=====================================================================
-PHASE 5 — VOICE / PERSONALITY ARCHITECTURE
-=====================================================================
-
-Two-pass response system.
-
-1) deterministic response pack
-2) LLM renderer
-
-Renderer may add tone but not facts.
-
-=====================================================================
-PHASE 8 — TRANSCRIPT INGESTION
-=====================================================================
-
-Future pipeline:
-
-recording
-→ transcription
-→ linked note
-→ advisory extraction
-
-Potential entities:
-
-CASE
-PERSON
-CLIENT
-PROJECT
+Prime may never mutate deterministic records.
 
 =====================================================================
 PHASE 9 — ADVISORY ANALYSIS LAYER
 =====================================================================
 
-Allows pattern detection and hypothesis generation.
+Purpose:
 
-Outputs must separate:
+Pattern detection and reasoning assistance.
 
-FACTS
-UNKNOWN
-INFERENCE
-OPTIONS
+Outputs must clearly separate:
+
+FACTS  
+UNKNOWN  
+INFERENCE  
+OPTIONS  
 NEXT QUESTIONS
 
 Advisory layer cannot modify deterministic records.
 
 =====================================================================
-CURRENT PRIORITY
+PHASE 9.2 — ARGUMENT BUILDER
 =====================================================================
 
-1. Sprint 12.1 timeline formatting
-2. Sprint 12.2 case notes
-3. Sprint 12.3 source trace
-4. Phase 1 hardening
-5. Phase 4 Miguel UX simplification
+Purpose:
 
-Prime development must not delay these tasks.
+Assist professionals constructing structured arguments.
+
+Example input:
+
+"arguments for changing school closer to mother"
+
+Expected structure:
+
+FACTORS  
+ARGUMENTS  
+COUNTERPOINTS  
+QUESTIONS
+
+Rules:
+
+- advisory only
+- no legal facts invented
+- no case record mutation
+- supports legal drafting workflows
 
 =====================================================================
 CHANGE CONTROL
@@ -468,7 +456,7 @@ CHANGE CONTROL
 
 Every structural modification must:
 
-1. Be reflected here
-2. Be committed clearly
-3. Preserve determinism
-4. Be CLI-testable
+1. be reflected here
+2. be committed clearly
+3. preserve determinism
+4. be CLI-testable
