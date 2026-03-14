@@ -2073,7 +2073,15 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
             out = _generate_morning_brief_det(int(chat_id), tomorrow)
 
             if not out:
-                out = "Mañana no tengo agenda registrada."
+                tz = ZoneInfo("America/Panama")
+                tomorrow_dt = datetime.now(tz) + timedelta(days=1)
+
+                weekday = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][tomorrow_dt.weekday()]
+                month = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][tomorrow_dt.month]
+
+                pretty = f"{weekday} {tomorrow_dt.day} {month}"
+
+                out = f"📅 Mañana ({pretty})\n\n— No tengo nada agendado —"
 
             await update.message.reply_text(out)
             return True
