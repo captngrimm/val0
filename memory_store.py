@@ -1337,7 +1337,25 @@ def insert_case_note(
             conn.close()
             return int(row[0]) if row else 0
 
-        # Fallback path (no message id): regular insert
+        # Fallback path (no message id): dedupe within last 60 seconds
+        cur.execute(
+            """
+            SELECT id
+            FROM case_notes
+            WHERE chat_id=?
+            AND case_id=?
+            AND note_text=?
+            AND created_at >= datetime('now','-60 seconds')
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(chat_id), str(case_id), note_text),
+        )
+        row = cur.fetchone()
+        if row:
+            conn.close()
+            return int(row[0]) if not hasattr(row, "keys") else int(row["id"])
+
         cur.execute(
             """
             INSERT INTO case_notes(chat_id, case_id, parent_ref, note_text, source, telegram_message_id)

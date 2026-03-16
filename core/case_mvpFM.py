@@ -366,210 +366,51 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
     """
     Builds a compact cockpit summary for a case.
     """
+
+    from memory_store import fetch_case_notes
+    from memory_store import get_reminders_range
+
     case_id = (case_id or "").strip()
     if not case_id:
         return "No puedo identificar el caso."
 
-    tz = ZoneInfo("America/Panama")
-    parent_ref = f"CASE:{case_id}"
+    notes = fetch_case_notes(chat_id, case_id, limit=3)
 
-    # client name
-    client_name = None
+    notes_lines = []
+    for n in notes:
+        txt = (n.get("note_text") or "").strip()
+        if txt:
+            notes_lines.append(f"- {txt}")
+
+    if not notes_lines:
+        notes_lines.append("- sin notas registradas")
+
+    # next tasks/events
     try:
-        conn = _get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT client_name
-            FROM cases
-            WHERE chat_id=?
-              AND expediente=?
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (int(chat_id), str(case_id)),
-        )
-        row = cur.fetchone()
-        conn.close()
-        if row:
-            client_name = (row["client_name"] if hasattr(row, "keys") else row[0]) or None
+        tasks = get_reminders_range(chat_id, limit=3)
     except Exception:
-        client_name = None
+        tasks = []
 
-    # notes
-    notes_rows = fetch_case_notes(chat_id, case_id, limit=20)
-    recent_notes = []
+    task_lines = []
+    for t in tasks:
+        txt = (t.get("text") or "").strip()
+        if txt:
+            task_lines.append(f"- {txt}")
 
-    for row in notes_rows:
-        txt = (row.get("note_text") or "").strip()
-        ts = (row.get("created_at") or "").strip()
-        if not txt or not ts:
-            continue
+    if not task_lines:
+        task_lines.append("- ninguno")
 
-        try:
-            dt_utc = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-            dt_local = dt_utc.astimezone(tz)
-        except Exception:
-            continue
+    out = []
 
-        txt = txt.replace("desde harness", "").strip()
-        recent_notes.append((dt_local, txt))
+    out.append(f"📁 Caso {case_id}")
+    out.append("")
+    out.append("Notas recientes")
+    out.extend(notes_lines)
+    out.append("")
+    out.append("Próximos eventos / tareas")
+    out.extend(task_lines)
 
-    recent_notes.sort(key=lambda x: x[0], reverse=True)
-
-    # next reminder / tasks from linked timeline
-    next_rem = None
-    try:
-        timeline_rows = fetch_timeline_for_parent(
-            chat_id=int(chat_id),
-            parent_ref=parent_ref,
-            entity_types=["reminder", "task"],
-            statuses=["pending", "sent"],
-            limit=20,
-        )
-    except Exception:
-        timeline_rows = []
-
-    pending_rows = []
-    for row in timeline_rows:
-        txt = (row.get("text") or "").strip()
-        due_ts = row.get("due_ts")
-        if not txt or due_ts is None:
-            continue
-        try:
-            dt_local = datetime.fromtimestamp(int(due_ts), tz=timezone.utc).astimezone(tz)
-            pending_rows.append((dt_local, txt))
-        except Exception:
-            continue
-
-    pending_rows.sort(key=lambda x: x[0])
-
-    if pending_rows:
-        dt_local, txt = pending_rows[0]
-        due_label = dt_local.strftime("%Y-%m-%d")
-        next_rem = (due_label, txt)
-
-    # active terms
-    active_terms = []
-    try:
-        conn = _get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT event_text, deadline_date, created_at
-            FROM case_events
-            WHERE chat_id=?
-              AND case_id=?
-              AND deadline_date IS NOT NULL
-            ORDER BY deadline_date ASC
-            LIMIT 3
-            """,
-            (int(chat_id), int(case_id)),
-        )
-        active_terms = cur.fetchall() or []
-        conn.close()
-    except Exception:
-        active_terms = []
-
-    # health
-    latest_dt = recent_notes[0][0] if recent_notes else None
-    if latest_dt is None:
-        health_icon = "⚪"
-        health_label = "Sin actividad"
-    else:
-        days_idle = (datetime.now(tz).date() - latest_dt.date()).days
-        if days_idle <= 3:
-            health_icon = "🟢"
-            health_label = "Normal"
-        elif days_idle <= 14:
-            health_icon = "🟡"
-            health_label = "Atención"
-        else:
-            health_icon = "🔴"
-            health_label = "Inactivo"
-
-    lines = [f"🗂️ <b>CASE:{case_id}</b>", ""]
-
-    if client_name:
-        lines.append("👤 <u>Cliente</u>")
-        lines.append(f"{client_name}")
-        lines.append("")
-
-    lines.append("📊 <u>Salud</u>")
-    lines.append(f"{health_icon} {health_label}")
-    lines.append("")
-
-    lines.append("📌 <u>Resumen</u>")
-
-    if recent_notes:
-        lines.append(f"• Última nota: {recent_notes[0][1]}")
-    else:
-        lines.append("• Última nota: —")
-
-    if active_terms:
-        first_term = active_terms[0]
-        term_text = (first_term["event_text"] if hasattr(first_term, "keys") else first_term[0]) or "—"
-        term_deadline = (first_term["deadline_date"] if hasattr(first_term, "keys") else first_term[1]) or "—"
-        lines.append(f"• Próximo término: {term_text} ({term_deadline})")
-    else:
-        lines.append("• Próximo término: —")
-
-    if next_rem:
-        lines.append(f"• Próximo recordatorio: {next_rem[0]} | {next_rem[1]}")
-    else:
-        lines.append("• Próximo recordatorio: —")
-
-    if active_terms:
-        lines.append("")
-        lines.append("⏳ <u>Términos activos</u>")
-        for row in active_terms:
-            term_text = (row["event_text"] if hasattr(row, "keys") else row[0]) or "—"
-            term_deadline = (row["deadline_date"] if hasattr(row, "keys") else row[1]) or "—"
-            lines.append(f"• {term_deadline} | {term_text}")
-
-    if recent_notes:
-        today_rows = []
-        week_rows = []
-
-        for dt_local, txt in recent_notes[:5]:
-            weekdays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
-            months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-                      "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-
-            time_str = dt_local.strftime("%I:%M %p").lstrip("0")
-            if dt_local.date() == datetime.now(tz).date():
-                label = time_str
-            else:
-                weekday = weekdays[dt_local.weekday()]
-                month = months[dt_local.month - 1]
-                label = f"{weekday} {dt_local.day} {month} · {time_str}"
-
-            if "·" not in label:
-                today_rows.append((label, txt))
-            else:
-                week_rows.append((label, txt))
-
-        lines.append("")
-        lines.append("🕒 <u>Actividad reciente</u>")
-
-        if today_rows:
-            lines.append("")
-            lines.append("Hoy")
-            for label, txt in today_rows:
-                lines.append(f"• 📝 {label} | {txt}")
-
-        if week_rows:
-            lines.append("")
-            lines.append("Esta semana")
-            for label, txt in week_rows:
-                lines.append(f"• 📝 {label} | {txt}")
-
-    lines.append("")
-    lines.append("📊 <u>Estado</u>")
-    lines.append(f"• Notas: {len(notes_rows)}")
-    lines.append(f"• Pendientes: {len(pending_rows)}")
-
-    return "\n".join(lines)
+    return "\n".join(out)
 
 def format_human_timestamp(ts: str) -> str:
     """
@@ -718,36 +559,14 @@ def generate_case_timeline_window(chat_id: int, case_id: str, window: str) -> st
         lines.append("Hoy")
         for label, txt, kind in today_rows:
             icon = "📝" if kind == "note" else "⏰"
-
-            txt_clean = txt
-            low = _clean(txt)
-
-            if any(x in low for x in ("audiencia", "vista", "hearing")):
-                txt_clean = f"⚖️ {txt_clean}"
-            elif any(x in low for x in ("termino", "término", "plazo", "vence", "vencimiento")):
-                txt_clean = f"⏳ {txt_clean}"
-            elif any(x in low for x in ("fallo", "sentencia", "auto", "recurso")):
-                txt_clean = f"📄 {txt_clean}"
-
-            lines.append(f"• {icon} {label} | {txt_clean}")
+            lines.append(f"• {icon} {label} | {txt}")
         lines.append("")
 
     if week_rows:
         lines.append("Esta semana")
         for label, txt, kind in week_rows:
             icon = "📝" if kind == "note" else "⏰"
-
-            txt_clean = txt
-            low = _clean(txt)
-
-            if any(x in low for x in ("audiencia", "vista", "hearing")):
-                txt_clean = f"⚖️ {txt_clean}"
-            elif any(x in low for x in ("termino", "término", "plazo", "vence", "vencimiento")):
-                txt_clean = f"⏳ {txt_clean}"
-            elif any(x in low for x in ("fallo", "sentencia", "auto", "recurso")):
-                txt_clean = f"📄 {txt_clean}"
-
-            lines.append(f"• {icon} {label} | {txt_clean}")
+            lines.append(f"• {icon} {label} | {txt}")
 
     return "\n".join(lines)
 
@@ -824,91 +643,259 @@ async def try_case_summary(update, chat_id, text) -> bool:
 
 async def try_case_status(update, chat_id, text) -> bool:
     """
-    Handles:
-    - cómo va el caso 524242024
-    - como va el caso 524242024
-    - estado del caso 524242024
+    Handles natural-language case status / summary requests, e.g.:
     - resumen del caso 524242024
-    - cómo va el caso de Leticia
-    - estado del caso de Leticia
+    - dame un resumen del caso 524242024
+    - estado del caso 524242024
+    - cómo va el caso 524242024
+    - por donde va el caso 524242024
+    - situación actual del caso 524242024
     """
     if not update or not getattr(update, "message", None):
         return False
 
-    t = _clean(text or "")
+    cleaned = _clean(text)
 
-    logger.info(f"[CASE_STATUS] raw={text!r}")
-    logger.info(f"[CASE_STATUS] cleaned={t!r}")
-
-    if "caso" not in t:
-        return False
-
-    if not any(x in t for x in (
-        "como va el caso",
-        "cómo va el caso",
-        "estado del caso",
-        "resumen del caso",
-        "situacion actual del caso",
-        "situación actual del caso",
-        "por donde va el caso",
-        "por dónde va el caso",
-    )):
-        return False
+    # First try direct expediente-based status queries
+    m = re.search(
+        r"\b("
+        r"resumen|"
+        r"dame\s+un\s+resumen|"
+        r"estado|status|"
+        r"como\s+va|cómo\s+va|"
+        r"como\s+vamos\s+con|cómo\s+vamos\s+con|"
+        r"por\s+donde\s+va|por\s+dónde\s+va|"
+        r"situacion\s+actual|situación\s+actual"
+        r")\s+"
+        r"(?:del\s+|el\s+|de[l]?\s+|con\s+)?"
+        r"(?:caso|expediente)\s+"
+        r"(\d{4,})\b",
+        cleaned,
+    )
 
     case_id = None
 
-    # numeric expediente
-    m = re.search(r"caso\s+(\d{4,})", t)
     if m:
-        case_id = (m.group(1) or "").strip()
-
-    # client name path
-    if not case_id and ("caso de " in t or "del caso de " in t):
-        if "del caso de " in t:
-            client_name = t.split("del caso de ", 1)[1]
-        else:
-            client_name = t.split("caso de ", 1)[1]
-
-        client_name = re.sub(
-            r"\b(como va|cómo va|estado|resumen|situacion actual|situación actual|por donde va|por dónde va|del caso|caso)\b",
-            "",
-            client_name,
+        case_id = m.group(2).strip()
+    else:
+        # Then try client-name based queries:
+        # cómo va el caso de Leticia
+        # estado del caso de Leticia
+        # resumen del caso de Leticia
+        m_name = re.search(
+            r"\b("
+            r"resumen|"
+            r"dame\s+un\s+resumen|"
+            r"estado|status|"
+            r"como\s+va|cómo\s+va|"
+            r"como\s+vamos\s+con|cómo\s+vamos\s+con|"
+            r"por\s+donde\s+va|por\s+dónde\s+va|"
+            r"situacion\s+actual|situación\s+actual"
+            r")\s+"
+            r"(?:del\s+|el\s+|de[l]?\s+|con\s+)?"
+            r"(?:caso|expediente)\s+de\s+(.+?)\s*$",
+            cleaned,
         )
-        client_name = re.sub(r"[^\w\s]", "", client_name).strip()
+        if not m_name:
+            return False
 
-        if client_name:
+        client_name = (m_name.group(2) or "").strip()
+        if not client_name:
+            return False
+
+        from memory_store import get_case_by_client_name
+
+        row = get_case_by_client_name(int(chat_id), client_name)
+        if not row:
+            await update.message.reply_text(
+                f"No encontré un caso registrado para cliente {client_name}."
+            )
+            return True
+
+        case_id = str(row.get("expediente") or "").strip()
+        if not case_id:
+            await update.message.reply_text(
+                f"Encontré un registro para {client_name}, pero no tiene expediente usable."
+            )
+            return True
+
+    parent_ref = f"CASE:{case_id}"
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+
+    # Fetch client name for cockpit display
+    client_name = None
+    try:
+        from memory_store import _get_conn
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT client_name
+            FROM cases
+            WHERE chat_id=? AND expediente=?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(chat_id), case_id),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            client_name = row["client_name"] if hasattr(row, "keys") else row[0]
+    except Exception:
+        client_name = None
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    # latest note (skip polluted old query-like rows)
+    cur.execute(
+        """
+        SELECT note_text, created_at
+        FROM case_notes
+        WHERE chat_id=? AND case_id=?
+        ORDER BY id DESC
+        LIMIT 10
+        """,
+        (int(chat_id), case_id),
+    )
+    rows = cur.fetchall() or []
+
+    recent_notes = []
+    for row in rows:
+        txt = (row["note_text"] if hasattr(row, "keys") else row[0]) or ""
+        ts = (row["created_at"] if hasattr(row, "keys") else row[1]) or ""
+        txt = txt.strip()
+        low = txt.lower()
+
+        if (
+            low.startswith("registrar caso")
+            or low.startswith("registrar expediente")
+            or low.startswith("cómo va el caso")
+            or low.startswith("como va el caso")
+            or low.startswith("cómo vamos con el caso")
+            or low.startswith("como vamos con el caso")
+            or low.startswith("por donde va el caso")
+            or low.startswith("por dónde va el caso")
+            or low.startswith("resumen del caso")
+            or low.startswith("dame un resumen del caso")
+            or low.startswith("estado del caso")
+            or low.startswith("situacion actual del caso")
+            or low.startswith("situación actual del caso")
+        ):
+            continue
+
+        if txt and ts:
             try:
-                conn = _get_conn()
-                cur = conn.cursor()
-                cur.execute(
-                    """
-                    SELECT expediente
-                    FROM cases
-                    WHERE chat_id=?
-                      AND lower(client_name) LIKE lower(?)
-                    ORDER BY id DESC
-                    LIMIT 1
-                    """,
-                    (int(chat_id), f"%{client_name}%"),
-                )
-                row = cur.fetchone()
-                conn.close()
-
-                if row:
-                    case_id = (row["expediente"] if hasattr(row, "keys") else row[0]) or ""
-                    case_id = str(case_id).strip()
+                dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                recent_notes.append((format_human_timestamp(ts), txt, ts))
             except Exception:
-                case_id = None
+                continue
 
-    logger.info(f"[CASE_STATUS] resolved_case_id={case_id!r}")
+    last_note = recent_notes[0] if recent_notes else None
 
-    if not case_id:
-        await update.message.reply_text("No encuentro ese caso en tu base de datos.")
+    # next pending reminder
+    cur.execute(
+        """
+        SELECT text, due_at_utc
+        FROM reminders
+        WHERE chat_id=? AND parent_ref=? AND status='pending'
+        ORDER BY due_at_utc ASC
+        LIMIT 1
+        """,
+        (int(chat_id), parent_ref),
+    )
+    row = cur.fetchone()
+
+    next_rem = None
+    if row:
+        txt = (row["text"] if hasattr(row, "keys") else row[0]) or ""
+        ts = (row["due_at_utc"] if hasattr(row, "keys") else row[1]) or ""
+        txt = txt.strip()
+        if txt and ts:
+            try:
+                dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                next_rem = (dt.astimezone(tz).strftime("%H:%M"), txt)
+            except Exception:
+                pass
+
+    # counts
+    cur.execute(
+        "SELECT COUNT(*) FROM case_notes WHERE chat_id=? AND case_id=?",
+        (int(chat_id), case_id),
+    )
+    note_count = cur.fetchone()[0]
+
+    cur.execute(
+        """
+        SELECT COUNT(*)
+        FROM reminders
+        WHERE chat_id=? AND parent_ref=? AND status='pending'
+        """,
+        (int(chat_id), parent_ref),
+    )
+    rem_count = cur.fetchone()[0]
+
+    conn.close()
+
+    if not last_note and not next_rem and note_count == 0 and rem_count == 0:
+        await update.message.reply_text(
+            f"No tengo actividad registrada para CASE:{case_id}.",
+            parse_mode="Markdown",
+        )
         return True
 
-    logger.info("[CASE_STATUS] HIT")
-    out = generate_case_cockpit(int(chat_id), case_id)
-    await update.message.reply_text(out, parse_mode="HTML")
+    lines = [f"🗂️ <b>CASE:{case_id}</b>", ""]
+
+    if client_name:
+        lines.append("👤 <u>Cliente</u>")
+        lines.append(f"{client_name}")
+        lines.append("")
+
+    lines.append("📌 <u>Resumen</u>")
+
+    if last_note:
+        lines.append(f"• Última nota: {last_note[1]}")
+    else:
+        lines.append("• Última nota: —")
+
+    if next_rem:
+        lines.append(f"• Próximo pendiente: {next_rem[0]} | {next_rem[1]}")
+    else:
+        lines.append("• Próximo pendiente: —")
+
+    if recent_notes:
+        lines.append("")
+        lines.append("🕒 <u>Actividad reciente</u>")
+
+        grouped = {"Hoy": [], "Esta semana": [], "Anterior": []}
+
+        for hhmm, txt, raw_ts in recent_notes[:5]:
+            txt = txt.replace("desde harness", "").strip()
+            bucket = classify_human_recency(raw_ts)
+            grouped[bucket].append(f"• {hhmm} | {txt}")
+
+        if grouped["Hoy"]:
+            lines.append("")
+            lines.append("Hoy")
+            lines.extend(grouped["Hoy"])
+
+        if grouped["Esta semana"]:
+            lines.append("")
+            lines.append("Esta semana")
+            lines.extend(grouped["Esta semana"])
+
+        if grouped["Anterior"]:
+            lines.append("")
+            lines.append("Anterior")
+            lines.extend(grouped["Anterior"])
+
+    lines.append("")
+    lines.append("📊 <u>Estado</u>")
+    lines.append(f"• Notas: {note_count}")
+    lines.append(f"• Pendientes: {rem_count}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     return True
 
 async def try_case_cockpit(update, chat_id, text) -> bool:
@@ -936,147 +923,6 @@ async def try_case_cockpit(update, chat_id, text) -> bool:
 
     return False
 
-async def try_case_create(update, chat_id, text) -> bool:
-    """
-    crea el caso 524242024 para Leticia
-    crear caso 524242024 para Leticia
-    """
-    if not update or not getattr(update, "message", None):
-        return False
-
-    t = (text or "").strip()
-    low = _clean(t)
-
-    if not (low.startswith("crea el caso ") or low.startswith("crear caso ")):
-        return False
-
-    m = re.search(r"(?:crea el caso|crear caso)\s+(\d{4,})\s+para\s+(.+)$", low)
-    if not m:
-        await update.message.reply_text("Usa: crea el caso <expediente> para <cliente>")
-        return True
-
-    expediente = (m.group(1) or "").strip()
-    client_name = (m.group(2) or "").strip()
-
-    if not expediente or not client_name:
-        await update.message.reply_text("Usa: crea el caso <expediente> para <cliente>")
-        return True
-
-    try:
-        from memory_store import upsert_case
-
-        row_id = upsert_case(
-            chat_id=int(chat_id),
-            expediente=expediente,
-            client_name=client_name.title(),
-            client_alias=None,
-        )
-
-        await update.message.reply_text(
-            f"🗂️ Caso creado\n\nExpediente: {expediente}\nCliente: {client_name.title()}"
-        )
-        return True
-
-    except Exception:
-        await update.message.reply_text("No pude crear el caso.")
-        return True
-
-async def try_case_register_term(update, chat_id, text) -> bool:
-    """
-    registra termino en el caso de Leticia: vence contestacion el 20 de marzo
-    registra término en el caso 524242024: vence apelación el 21 de marzo
-    """
-    if not update or not getattr(update, "message", None):
-        return False
-
-    t = (text or "").strip()
-    low = _clean(t)
-
-    # allow natural prefixes like "val ..."
-    if "registra termino en el caso" not in low:
-        return False
-
-    parts = t.split(":", 1)
-    if len(parts) != 2:
-        await update.message.reply_text("Usa: registra término en el caso ... : <detalle>")
-        return True
-
-    left, event_text = parts
-    event_text = event_text.strip()
-
-    case_id = None
-
-    m = re.search(r"caso\s+(\d{4,})", left, re.IGNORECASE)
-    if m:
-        case_id = m.group(1)
-
-    if not case_id and "caso de " in left.lower():
-        client_name = left.lower().split("caso de ", 1)[1].strip()
-        try:
-            conn = _get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT expediente
-                FROM cases
-                WHERE chat_id=?
-                  AND lower(client_name)=lower(?)
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (int(chat_id), client_name),
-            )
-            row = cur.fetchone()
-            conn.close()
-            if row:
-                case_id = row["expediente"] if hasattr(row, "keys") else row[0]
-        except Exception:
-            case_id = None
-
-    if not case_id:
-        await update.message.reply_text("No encuentro ese caso.")
-        return True
-
-    deadline_date = None
-
-    m_date = re.search(
-        r"\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b",
-        low,
-    )
-    if m_date:
-        day = int(m_date.group(1))
-        month_name = m_date.group(2)
-
-        month_map = {
-            "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
-            "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
-            "septiembre": 9, "setiembre": 9, "octubre": 10,
-            "noviembre": 11, "diciembre": 12,
-        }
-        month = month_map[month_name]
-        year = datetime.now(ZoneInfo("America/Panama")).year
-        deadline_date = f"{year:04d}-{month:02d}-{day:02d}"
-
-    try:
-        from memory_store import insert_case_event
-
-        insert_case_event(
-            chat_id=int(chat_id),
-            case_id=int(case_id),
-            event_text=event_text,
-            deadline_date=deadline_date,
-        )
-
-        msg = f"⏳ Término registrado en CASE:{case_id}"
-        if deadline_date:
-            msg += f"\nVence: {deadline_date}"
-        await update.message.reply_text(msg)
-        return True
-
-    except Exception:
-        await update.message.reply_text("No pude registrar el término.")
-        return True
-
 async def try_case_add_note(update, chat_id, text) -> bool:
     """
     Handles:
@@ -1089,7 +935,6 @@ async def try_case_add_note(update, chat_id, text) -> bool:
 
     import re
     t = (text or "").strip()
-    logger.info(f"[CASE_ADD_NOTE] raw={text!r}")
 
     if "guarda esto en el caso" not in t.lower():
         return False
@@ -1103,9 +948,6 @@ async def try_case_add_note(update, chat_id, text) -> bool:
     left, note_text = parts
     note_text = note_text.strip()
 
-    logger.info(f"[CASE_ADD_NOTE] left={left!r}")
-    logger.info(f"[CASE_ADD_NOTE] note_text={note_text!r}")
-
     case_id = None
 
     # numeric expediente
@@ -1114,86 +956,39 @@ async def try_case_add_note(update, chat_id, text) -> bool:
         case_id = m.group(1)
 
     # client name
-    if not case_id:
-        m = re.search(r"caso\s+de\s+(.+)$", left, re.IGNORECASE)
-        if m:
-            client_name = m.group(1)
-            logger.info(f"[CASE_ADD_NOTE] client_name_raw={client_name!r}")
+    if not case_id and "caso de " in left.lower():
+        client_name = left.lower().split("caso de ", 1)[1].strip()
 
-            client_name = _clean(client_name)
-            client_name = re.sub(r"[^\w\s]", "", client_name).strip()
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
 
-            logger.info(f"[CASE_ADD_NOTE] client_name_clean={client_name!r}")
+            cur.execute(
+                """
+                SELECT expediente
+                FROM cases
+                WHERE chat_id=?
+                AND lower(client_name)=lower(?)
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(chat_id), client_name),
+            )
 
-            try:
-                conn = _get_conn()
-                cur = conn.cursor()
+            row = cur.fetchone()
+            conn.close()
 
-                cur.execute(
-                    """
-                    SELECT expediente, client_name
-                    FROM cases
-                    WHERE chat_id=?
-                    AND lower(client_name) LIKE lower(?)
-                    ORDER BY id DESC
-                    LIMIT 5
-                    """,
-                    (int(chat_id), f"%{client_name}%"),
-                )
+            if row:
+                case_id = row["expediente"] if hasattr(row, "keys") else row[0]
 
-                rows = cur.fetchall() or []
-                conn.close()
-
-                logger.info(f"[CASE_ADD_NOTE] match_count={len(rows)}")
-                for r in rows:
-                    expediente = r["expediente"] if hasattr(r, "keys") else r[0]
-                    cname = r["client_name"] if hasattr(r, "keys") else r[1]
-                    logger.info(f"[CASE_ADD_NOTE] candidate expediente={expediente!r} client_name={cname!r}")
-
-                if rows:
-                    row = rows[0]
-                    case_id = row["expediente"] if hasattr(row, "keys") else row[0]
-
-            except Exception as e:
-                logger.exception(f"[CASE_ADD_NOTE] lookup failed: {e}")
-                case_id = None
-
-    logger.info(f"[CASE_ADD_NOTE] resolved_case_id={case_id!r}")
+        except Exception:
+            case_id = None
 
     if not case_id:
         await update.message.reply_text("No encuentro ese caso.")
         return True
 
     from memory_store import insert_case_note
-
-    # Duplicate check before insert
-    dup = False
-    try:
-        conn = _get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT id
-            FROM case_notes
-            WHERE chat_id=?
-            AND case_id=?
-            AND note_text=?
-            AND created_at >= datetime('now','-60 seconds')
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (int(chat_id), str(case_id), note_text),
-        )
-        row = cur.fetchone()
-        conn.close()
-        if row:
-            dup = True
-    except Exception:
-        dup = False
-
-    if dup:
-        await update.message.reply_text(f"⚠️ Nota duplicada detectada. Ya existía en CASE:{case_id}.")
-        return True
 
     insert_case_note(
         chat_id=int(chat_id),
@@ -1280,7 +1075,7 @@ def generate_case_timeline_since_last_hearing(chat_id: int, case_id: str) -> str
         now_local = datetime.now(tz)
         weekdays = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"]
         months = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-                "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+                  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
         time_str = dt_local.strftime("%I:%M %p").lstrip("0")
         if dt_local.date() == now_local.date():
@@ -1291,18 +1086,7 @@ def generate_case_timeline_since_last_hearing(chat_id: int, case_id: str) -> str
             label = f"{weekday} {dt_local.day} {month} · {time_str}"
 
         icon = "📝" if kind == "note" else "⏰"
-
-        txt_clean = txt
-        low = _clean(txt)
-
-        if any(x in low for x in ("audiencia", "vista", "hearing")):
-            txt_clean = f"⚖️ {txt_clean}"
-        elif any(x in low for x in ("termino", "término", "plazo", "vence", "vencimiento")):
-            txt_clean = f"⏳ {txt_clean}"
-        elif any(x in low for x in ("fallo", "sentencia", "auto", "recurso")):
-            txt_clean = f"📄 {txt_clean}"
-
-        lines.append(f"• {icon} {label} | {txt_clean}")
+        lines.append(f"• {icon} {label} | {txt}")
 
     return "\n".join(lines)
 
@@ -1377,20 +1161,14 @@ def generate_case_health(chat_id: int, case_id: str) -> str:
         month = months[latest_dt.month - 1]
         latest_label = f"{weekday} {latest_dt.day} {month} · {time_str}"
 
-    status_map = {
-        "normal": "🟢 Normal",
-        "atención": "🟡 Atención",
-        "inactivo": "🔴 Inactivo",
-    }
-
     lines = [
         "⚠️ <b>Salud del caso</b>",
         "",
         f"• Última actividad: {latest_label}",
         f"• Días sin actividad: {days_idle}",
         "",
-        "📊 <b>Estado sugerido</b>",
-        f"{status_map.get(status, status)}",
+        "Estado sugerido",
+        f"• {status}",
     ]
 
     return "\n".join(lines)    
@@ -1453,9 +1231,9 @@ def generate_cases_requiring_attention(chat_id: int) -> str:
                 pass
 
         if latest_dt is None:
-            continue
-
-        days_idle = (datetime.now(tz).date() - latest_dt.date()).days
+            days_idle = 999
+        else:
+            days_idle = (datetime.now(tz).date() - latest_dt.date()).days
 
         if days_idle <= 3:
             status = "normal"
@@ -1720,24 +1498,6 @@ async def try_case_health_legend(update, chat_id, text) -> bool:
         "15 días o más sin actividad.",
     ])
 
-    await update.message.reply_text(out, parse_mode="HTML")
-    return True
-
-async def try_cases_requiring_attention(update, chat_id, text) -> bool:
-    if not update or not getattr(update, "message", None):
-        return False
-
-    t = _clean(text or "")
-
-    if not any(x in t for x in (
-        "que casos requieren atencion",
-        "qué casos requieren atención",
-        "casos que requieren atencion",
-        "casos que requieren atención",
-    )):
-        return False
-
-    out = generate_cases_requiring_attention(int(chat_id))
     await update.message.reply_text(out, parse_mode="HTML")
     return True
 
@@ -2448,254 +2208,4 @@ async def try_due_range(update, chat_id, text) -> bool:
         logger.exception(f"[CASE MVP] try_due_range failed: {e}")
         await update.message.reply_text("Se cayó el chequeo de vencimientos por rango. Reviso logs.")
         return True
-
-async def try_terms_due_this_week(update, chat_id, text) -> bool:
-    """
-    Handles:
-    - qué vence esta semana
-    - que vence esta semana
-    - términos que vencen esta semana
-    """
-
-    if not update or not getattr(update, "message", None):
-        return False
-
-    t = _clean(text or "")
-
-    if "vence esta semana" not in t and "vencen esta semana" not in t:
-        return False
-
-    try:
-        conn = _get_conn()
-        cur = conn.cursor()
-
-        cur.execute(
-            """
-            SELECT c.client_name, e.deadline_date, e.event_text
-            FROM case_events e
-            JOIN cases c ON c.expediente = CAST(e.case_id AS TEXT)
-            WHERE c.chat_id=?
-              AND e.deadline_date BETWEEN date('now') AND date('now','+7 days')
-            ORDER BY e.deadline_date ASC
-            """,
-            (int(chat_id),),
-        )
-
-        rows = cur.fetchall() or []
-        conn.close()
-
-    except Exception as e:
-        logger.exception(f"[TERMS_WEEK] failed: {e}")
-        await update.message.reply_text("No pude consultar los vencimientos.")
-        return True
-
-    if not rows:
-        await update.message.reply_text("🟢 No hay vencimientos esta semana.")
-        return True
-
-    lines = ["⏳ <b>Vencimientos esta semana</b>", ""]
-
-    for r in rows:
-        client = r["client_name"] if hasattr(r, "keys") else r[0]
-        deadline = r["deadline_date"] if hasattr(r, "keys") else r[1]
-        event_text = r["event_text"] if hasattr(r, "keys") else r[2]
-
-        lines.append(f"• {deadline} | {client} | {event_text}")
-
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-    return True 
-
-async def try_terms_due_this_week_for_case(update, chat_id, text) -> bool:
-    """
-    Handles:
-    - qué vence esta semana en el caso de X
-    """
-
-    if not update or not getattr(update, "message", None):
-        return False
-
-    t = _clean(text or "")
-
-    if "vence esta semana en el caso" not in t:
-        return False
-
-    import re
-
-    m = re.search(r"caso\s+de\s+(.+)$", t)
-    if not m:
-        return False
-
-    client_name = re.sub(r"[^\w\s]", "", m.group(1)).strip()
-
-    try:
-        conn = _get_conn()
-        cur = conn.cursor()
-
-        cur.execute(
-            """
-            SELECT expediente, client_name
-            FROM cases
-            WHERE chat_id=?
-            AND lower(client_name) LIKE lower(?)
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (int(chat_id), f"%{client_name}%"),
-        )
-
-        case = cur.fetchone()
-
-        if not case:
-            conn.close()
-            await update.message.reply_text("No encuentro ese caso.")
-            return True
-
-        case_id = case["expediente"]
-        client_name = case["client_name"]
-
-        cur.execute(
-            """
-            SELECT deadline_date, event_text
-            FROM case_events
-            WHERE case_id=?
-            AND deadline_date BETWEEN date('now') AND date('now','+7 days')
-            ORDER BY deadline_date ASC
-            """,
-            (str(case_id),),
-        )
-
-        rows = cur.fetchall()
-        conn.close()
-
-    except Exception as e:
-        logger.exception(f"[TERMS_WEEK_CASE] failed: {e}")
-        await update.message.reply_text("No pude consultar los vencimientos.")
-        return True
-
-    if not rows:
-        await update.message.reply_text(
-            f"🟢 No hay vencimientos esta semana en el caso de {client_name}."
-        )
-        return True
-
-    lines = [f"⏳ <b>Vencimientos esta semana — {client_name}</b>", ""]
-
-    for r in rows:
-        deadline = r["deadline_date"]
-        event_text = r["event_text"]
-
-        lines.append(f"• {deadline} | {event_text}")
-
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-
-    return True
-
-async def try_terms_due_today(update, chat_id, text) -> bool:
-    """
-    Handles:
-    - qué vence hoy
-    - que vence hoy
-    """
-
-    if not update or not getattr(update, "message", None):
-        return False
-
-    t = _clean(text or "")
-
-    if "vence hoy" not in t:
-        return False
-
-    try:
-        conn = _get_conn()
-        cur = conn.cursor()
-
-        cur.execute(
-            """
-            SELECT c.client_name, e.deadline_date, e.event_text
-            FROM case_events e
-            JOIN cases c ON c.expediente = CAST(e.case_id AS TEXT)
-            WHERE c.chat_id=?
-              AND e.deadline_date = date('now')
-            ORDER BY e.deadline_date ASC
-            """,
-            (int(chat_id),),
-        )
-
-        rows = cur.fetchall() or []
-        conn.close()
-
-    except Exception as e:
-        logger.exception(f"[TERMS_TODAY] failed: {e}")
-        await update.message.reply_text("No pude consultar los vencimientos de hoy.")
-        return True
-
-    if not rows:
-        await update.message.reply_text("🟢 No hay vencimientos hoy.")
-        return True
-
-    lines = ["⏳ <b>Vencimientos hoy</b>", ""]
-
-    for r in rows:
-        client = r["client_name"] if hasattr(r, "keys") else r[0]
-        deadline = r["deadline_date"] if hasattr(r, "keys") else r[1]
-        event_text = r["event_text"] if hasattr(r, "keys") else r[2]
-
-        lines.append(f"• {deadline} | {client} | {event_text}")
-
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-    return True
-
-async def try_terms_due_tomorrow(update, chat_id, text) -> bool:
-    """
-    Handles:
-    - qué vence mañana
-    - que vence mañana
-    """
-
-    if not update or not getattr(update, "message", None):
-        return False
-
-    t = _clean(text or "")
-
-    if "vence manana" not in t and "vence mañana" not in t:
-        return False
-
-    try:
-        conn = _get_conn()
-        cur = conn.cursor()
-
-        cur.execute(
-            """
-            SELECT c.client_name, e.deadline_date, e.event_text
-            FROM case_events e
-            JOIN cases c ON c.expediente = CAST(e.case_id AS TEXT)
-            WHERE c.chat_id=?
-              AND e.deadline_date = date('now','+1 day')
-            ORDER BY e.deadline_date ASC
-            """,
-            (int(chat_id),),
-        )
-
-        rows = cur.fetchall() or []
-        conn.close()
-
-    except Exception as e:
-        logger.exception(f"[TERMS_TOMORROW] failed: {e}")
-        await update.message.reply_text("No pude consultar los vencimientos de mañana.")
-        return True
-
-    if not rows:
-        await update.message.reply_text("🟢 No hay vencimientos mañana.")
-        return True
-
-    lines = ["⏳ <b>Vencimientos mañana</b>", ""]
-
-    for r in rows:
-        client = r["client_name"] if hasattr(r, "keys") else r[0]
-        deadline = r["deadline_date"] if hasattr(r, "keys") else r[1]
-        event_text = r["event_text"] if hasattr(r, "keys") else r[2]
-
-        lines.append(f"• {deadline} | {client} | {event_text}")
-
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-    return True       
+    

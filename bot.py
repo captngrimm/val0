@@ -1226,9 +1226,67 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # --- Sprint10: court-day timeline queries ---
     try:
-        from core.case_mvp import try_case_status, try_case_timeline_for_case, try_timeline_for_case, try_pending_list, try_timeline_today, try_due_today, try_due_range, try_due_tomorrow
+        from core.case_mvp import (
+            try_case_add_note,
+            try_case_register_term,
+            try_case_create,
+            try_case_status,
+            try_case_cockpit,
+            try_case_health,
+            try_case_health_legend,
+            try_cases_requiring_attention,
+            try_case_timeline_window,
+            try_case_timeline_since_last_hearing,
+            try_case_timeline_for_case,
+            try_timeline_for_case,
+            try_pending_list,
+            try_timeline_today,
+            try_due_today,
+            try_due_range,
+            try_due_tomorrow,
+            try_terms_due_this_week,
+            try_terms_due_this_week_for_case,
+            try_terms_due_today,
+            try_terms_due_tomorrow,
+        )
+
+        handled = await try_case_add_note(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_case_register_term(update, chat_id, text)
+        if handled:
+            return    
+
+        handled = await try_case_create(update, chat_id, text)
+        if handled:
+            return
 
         handled = await try_case_status(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_case_cockpit(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_case_health_legend(update, chat_id, text)
+        if handled:
+            return    
+
+        handled = await try_case_health(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_cases_requiring_attention(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_case_timeline_window(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_case_timeline_since_last_hearing(update, chat_id, text)
         if handled:
             return
 
@@ -1254,28 +1312,53 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         handled = await try_due_today_natural(update, chat_id, text)
         if handled:
-            return 
-        
+            return
+
         handled = await try_agenda_tomorrow_natural(update, chat_id, text)
         if handled:
-            return 
-        
+            return
+
         handled = await try_due_tomorrow(update, chat_id, text)
         if handled:
             return
-        
+
         handled = await try_due_tomorrow_natural(update, chat_id, text)
         if handled:
             return
 
+        handled = await try_terms_due_this_week_for_case(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_terms_due_today(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_terms_due_tomorrow(update, chat_id, text)
+        if handled:
+            return
+
+        handled = await try_terms_due_this_week(update, chat_id, text)
+        if handled:
+            return  
 
         handled = await try_due_range(update, chat_id, text)
         if handled:
             return
-        
+
         handled = await try_week_horizon(update, chat_id, text)
         if handled:
             return
+
+        # --- CASE SAFETY GUARD ---
+        text_lower = (text or "").lower()
+
+        if "caso" in text_lower:
+            await update.message.reply_text(
+                "No encuentro ese caso en tu base de datos."
+            )
+            return
+        # --- END CASE SAFETY GUARD ---
         
         
             
