@@ -1248,6 +1248,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_terms_due_this_week_for_case,
             try_terms_due_today,
             try_terms_due_tomorrow,
+            try_daily_work_summary,
+            try_cases_due_this_week,
         )
 
         handled = await try_case_add_note(update, chat_id, text)
@@ -1275,6 +1277,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return    
 
         handled = await try_case_health(update, chat_id, text)
+        if handled:
+            return
+        
+        handled = await try_daily_work_summary(update, chat_id, text)
         if handled:
             return
 
@@ -1330,17 +1336,25 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         if handled:
             return
 
+        handled = await try_cases_due_this_week(update, chat_id, text)
+        if handled:
+            return
+        
         handled = await try_terms_due_today(update, chat_id, text)
         if handled:
             return
-
+        
         handled = await try_terms_due_tomorrow(update, chat_id, text)
         if handled:
             return
-
+        
         handled = await try_terms_due_this_week(update, chat_id, text)
         if handled:
             return  
+
+        handled = await try_cases_due_this_week(update, chat_id, text)
+        if handled:
+            return    
 
         handled = await try_due_range(update, chat_id, text)
         if handled:
@@ -1351,9 +1365,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         # --- CASE SAFETY GUARD ---
-        text_lower = (text or "").lower()
+        text_lower = (text or "").lower().strip()
 
-        if "caso" in text_lower:
+        # only guard singular case-style queries, not plural dashboard queries like "casos ..."
+        if "caso" in text_lower and "casos" not in text_lower:
             await update.message.reply_text(
                 "No encuentro ese caso en tu base de datos."
             )

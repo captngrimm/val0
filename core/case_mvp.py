@@ -2505,6 +2505,118 @@ async def try_terms_due_this_week(update, chat_id, text) -> bool:
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     return True 
 
+async def try_cases_due_this_week(update, chat_id, text) -> bool:
+    """
+    Handles:
+    - qué casos tienen vencimientos esta semana
+    """
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = _clean(text or "")
+
+    if "casos" not in t or "esta semana" not in t:
+        return False
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT c.client_name, e.deadline_date, e.event_text
+            FROM case_events e
+            JOIN cases c ON c.expediente = CAST(e.case_id AS TEXT)
+            WHERE c.chat_id=?
+              AND e.deadline_date BETWEEN date('now') AND date('now','+7 days')
+            ORDER BY e.deadline_date ASC
+            """,
+            (int(chat_id),),
+        )
+
+        rows = cur.fetchall() or []
+        conn.close()
+
+    except Exception as e:
+        logger.exception(f"[CASES_WEEK] failed: {e}")
+        await update.message.reply_text("No pude consultar los vencimientos.")
+        return True
+
+    if not rows:
+        await update.message.reply_text("🟢 No veo casos con vencimientos esta semana.")
+        return True
+
+    lines = ["⏳ <b>Casos con vencimientos esta semana</b>", ""]
+
+    for r in rows:
+        client = r["client_name"]
+        deadline = r["deadline_date"]
+        event_text = r["event_text"]
+
+        lines.append(f"• {client} — {deadline} | {event_text}")
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+    return True
+
+async def try_daily_work_summary(update, chat_id, text) -> bool:
+    """
+    Handles:
+    - resumen de trabajo de hoy
+    """
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = _clean(text or "")
+
+    if "resumen de trabajo" not in t:
+        return False
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        # vencimientos esta semana
+        cur.execute(
+            """
+            SELECT c.client_name, e.deadline_date, e.event_text
+            FROM case_events e
+            JOIN cases c ON c.expediente = CAST(e.case_id AS TEXT)
+            WHERE c.chat_id=?
+              AND e.deadline_date BETWEEN date('now') AND date('now','+7 days')
+            ORDER BY e.deadline_date ASC
+            LIMIT 5
+            """,
+            (int(chat_id),),
+        )
+
+        due = cur.fetchall() or []
+
+        conn.close()
+
+    except Exception as e:
+        logger.exception(f"[WORK_SUMMARY] failed: {e}")
+        await update.message.reply_text("No pude preparar el resumen.")
+        return True
+
+    lines = ["⚖️ <b>Trabajo de hoy</b>", ""]
+
+    lines.append("⏳ <b>Vencimientos próximos</b>")
+
+    if not due:
+        lines.append("• ninguno")
+
+    for r in due:
+        lines.append(
+            f"• {r['client_name']} — {r['deadline_date']} | {r['event_text']}"
+        )
+
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
+
+    return True
+
 async def try_terms_due_this_week_for_case(update, chat_id, text) -> bool:
     """
     Handles:
