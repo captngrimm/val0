@@ -1261,127 +1261,54 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_daily_work_summary,
         )
 
-        handled = await try_debug_mode(update, chat_id, text)
-        if handled:
-            return
+        HANDLERS = [
+            try_debug_mode,
 
-        # try_set_mode REMOVED (handled in handle_text)
+            # reports / control
+            try_idle_cases,
+            try_daily_work_summary,
 
-        handled = await try_idle_cases(update, chat_id, text)
-        if handled:
-            return
+            # case mutations
+            try_case_add_note,
+            try_case_register_term,
+            try_case_create,
 
-        handled = await try_case_add_note(update, chat_id, text)
-        if handled:
-            return
+            # case views
+            try_case_status,
+            try_case_cockpit,
+            try_case_health_legend,
+            try_case_health,
 
-        handled = await try_case_register_term(update, chat_id, text)
-        if handled:
-            return    
+            # dashboards
+            try_cases_requiring_attention,
 
-        handled = await try_case_create(update, chat_id, text)
-        if handled:
-            return
+            # timelines
+            try_case_timeline_window,
+            try_case_timeline_since_last_hearing,
+            try_case_timeline_for_case,
+            try_timeline_for_case,
+            try_pending_list,
+            try_timeline_today,
 
-        handled = await try_case_status(update, chat_id, text)
-        if handled:
-            return
+            # due / agenda
+            try_due_today,
+            try_due_today_natural,
+            try_agenda_tomorrow_natural,
+            try_due_tomorrow,
+            try_due_tomorrow_natural,
+            try_terms_due_this_week_for_case,
+            try_cases_due_this_week,
+            try_terms_due_today,
+            try_terms_due_tomorrow,
+            try_terms_due_this_week,
+            try_cases_due_this_week,
+            try_due_range,
+            try_week_horizon,
+        ]
 
-        handled = await try_case_cockpit(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_case_health_legend(update, chat_id, text)
-        if handled:
-            return    
-
-        handled = await try_case_health(update, chat_id, text)
-        if handled:
-            return
-        
-        handled = await try_daily_work_summary(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_cases_requiring_attention(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_case_timeline_window(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_case_timeline_since_last_hearing(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_case_timeline_for_case(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_timeline_for_case(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_pending_list(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_timeline_today(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_due_today(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_due_today_natural(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_agenda_tomorrow_natural(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_due_tomorrow(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_due_tomorrow_natural(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_terms_due_this_week_for_case(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_cases_due_this_week(update, chat_id, text)
-        if handled:
-            return
-        
-        handled = await try_terms_due_today(update, chat_id, text)
-        if handled:
-            return
-        
-        handled = await try_terms_due_tomorrow(update, chat_id, text)
-        if handled:
-            return
-        
-        handled = await try_terms_due_this_week(update, chat_id, text)
-        if handled:
-            return  
-
-        handled = await try_cases_due_this_week(update, chat_id, text)
-        if handled:
-            return    
-
-        handled = await try_due_range(update, chat_id, text)
-        if handled:
-            return
-
-        handled = await try_week_horizon(update, chat_id, text)
-        if handled:
-            return
+        for handler in HANDLERS:
+            if await handler(update, chat_id, text):
+                return
 
         # --- CASE SAFETY GUARD ---
         text_lower = (text or "").lower().strip()
@@ -1392,7 +1319,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
         # --- END CASE SAFETY GUARD ---
-        
 
     except Exception as e:
         logger.exception(f"[CASE_TIMELINE] failed: {e}")
