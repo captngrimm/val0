@@ -33,7 +33,8 @@ import time
 
 # --- MIGUEL MVP: gates wiring (do not remove) ---
 try:
-    from core.case_mvp import try_case_summary, try_due_today, try_due_range  # preferred
+    # === CASE HANDLERS IMPORTS (deterministic routing layer) ===
+    from core.case_mvp import try_case_summary, try_due_today, try_due_range, try_idle_cases  # preferred
     from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
     pass
@@ -1227,6 +1228,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # --- Sprint10: court-day timeline queries ---
     try:
         from core.case_mvp import (
+            try_debug_mode,
             try_case_add_note,
             try_case_register_term,
             try_case_create,
@@ -1251,6 +1253,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_daily_work_summary,
             try_cases_due_this_week,
         )
+
+        handled = await try_debug_mode(update, chat_id, text)
+        if handled:
+            return
+        
+        handled = await try_idle_cases(update, chat_id, text)
+        if handled:
+            return
 
         handled = await try_case_add_note(update, chat_id, text)
         if handled:
@@ -2301,6 +2311,7 @@ async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
                 logger.warning("ReminderWatchdog: reset stuck reminders=%d", reset_count)
         except Exception as e:
             logger.exception("ReminderWatchdog failed: %s", e)
+
         due = fetch_due_reminders(limit=_reminder_batch_limit())
 
         # tick telemetry for /health
@@ -2314,49 +2325,58 @@ async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
         if _VAL0_LAST_TICK_LOG_TS is None or (now_ts - _VAL0_LAST_TICK_LOG_TS) >= 600:
             logger.info("ReminderRunner tick: due=%d", len(due))
             _VAL0_LAST_TICK_LOG_TS = now_ts
-        if not due:
-            return
 
-        for r in due:
-            rid = int(r.get("id"))
-            chat_id = int(r.get("chat_id"))
-            text = (r.get("text") or "").strip()
+        if due:
+            for r in due:
+                rid = int(r.get("id"))
+                chat_id = int(r.get("chat_id"))
+                text = (r.get("text") or "").strip()
 
-            # empty reminder text -> mark sent to avoid clogging
-            if not text:
-                if claim_reminder(rid):
+                # empty reminder text -> mark sent to avoid clogging
+                if not text:
+                    if claim_reminder(rid):
+                        mark_reminder_sent(rid)
+                    continue
+
+                # claim the reminder first to prevent double-send
+                if not claim_reminder(rid):
+                    continue
+
+                try:
+                    await context.bot.send_message(chat_id=chat_id, text=text)
                     mark_reminder_sent(rid)
-                continue
+                    logger.info("ReminderRunner: sent id=%s chat_id=%s", rid, chat_id)
+                except Exception as e:
+                    from telegram.error import Forbidden
 
-            # claim the reminder first to prevent double-send
-            if not claim_reminder(rid):
-                continue
+                    if isinstance(e, Forbidden):
+                        logger.warning(
+                            "ReminderRunner: user blocked bot id=%s chat_id=%s",
+                            rid,
+                            chat_id,
+                        )
+                        mark_reminder_failed(rid, reason="blocked")
+                    else:
+                        logger.exception(
+                            "ReminderRunner: send failed id=%s chat_id=%s err=%s",
+                            rid,
+                            chat_id,
+                            e,
+                        )
+                        revert_reminder_pending(rid)
 
-            try:
-                await context.bot.send_message(chat_id=chat_id, text=text)
-                mark_reminder_sent(rid)
-                logger.info("ReminderRunner: sent id=%s chat_id=%s", rid, chat_id)
-            except Exception as e:
-                from telegram.error import Forbidden
-
-                if isinstance(e, Forbidden):
-                    logger.warning(
-                        "ReminderRunner: user blocked bot id=%s chat_id=%s",
-                        rid,
-                        chat_id,
-                    )
-                    mark_reminder_failed(rid, reason="blocked")
-                else:
-                    logger.exception(
-                        "ReminderRunner: send failed id=%s chat_id=%s err=%s",
-                        rid,
-                        chat_id,
-                        e,
-                    )
-                    revert_reminder_pending(rid)
     except Exception as e:
         logger.exception("ReminderRunner tick crashed: %s", e)
 
+    logger.info("[WATCHDOG_CALL] before import")
+    try:
+        from core.case_mvp import deadline_watchdog
+        logger.info("[WATCHDOG_CALL] import ok")
+        await deadline_watchdog(context)
+        logger.info("[WATCHDOG_CALL] after await")
+    except Exception as e:
+        logger.exception("Deadline watchdog crashed: %s", e)
+        
 async def evening_brief_tick(context):
     """
     Sends a short briefing for tomorrow.

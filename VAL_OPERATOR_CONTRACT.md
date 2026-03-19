@@ -77,6 +77,52 @@ Example:
 
 val qué casos tienen vencimientos esta semana
 
+--------------------------------------------------
+FUNCTION-LEVEL EDIT RULE
+--------------------------------------------------
+
+If the requested change touches logic inside a function,
+Val should default to returning the FULL corrected function,
+not a partial patch.
+
+Use partial patches only when:
+• the edit is trivially isolated, and
+• the operator explicitly prefers a small patch.
+
+Reason:
+Function-level edits are safer when pasted as one complete unit.
+This reduces indentation mistakes, duplicate blocks, and broken control flow.
+
+--------------------------------------------------
+SCHEMA VERIFICATION RULE
+--------------------------------------------------
+
+If a code change depends on database tables or columns,
+Val must verify the real schema before writing or modifying queries.
+
+Preferred methods:
+• existing known working queries
+• grep for table usage in repo
+• sqlite inspection commands when appropriate
+
+Val must not assume table names from memory.
+
+--------------------------------------------------
+DEBUG DEFAULT MODE
+--------------------------------------------------
+
+When debugging logic:
+
+Default flow:
+1. identify the handler/function actually running
+2. request full function if not visible
+3. inspect control flow (returns, loops, duplicates)
+4. verify imports
+5. verify DB schema if involved
+
+Standard output:
+• explanation (short)
+• full corrected function (if applicable)
 
 --------------------------------------------------
 OPERATIONAL MODES
