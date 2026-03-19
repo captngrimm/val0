@@ -34,7 +34,8 @@ import time
 # --- MIGUEL MVP: gates wiring (do not remove) ---
 try:
     # === CASE HANDLERS IMPORTS (deterministic routing layer) ===
-    from core.case_mvp import try_case_summary, try_due_today, try_due_range, try_idle_cases, try_set_mode  
+    from core.case_mvp import try_case_summary, try_due_today, try_due_range, try_idle_cases
+    from core.mode import try_set_mode
     from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
     pass
