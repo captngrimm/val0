@@ -34,7 +34,9 @@ import time
 # --- MIGUEL MVP: gates wiring (do not remove) ---
 try:
     # === CASE HANDLERS IMPORTS (deterministic routing layer) ===
-    from core.case_mvp import try_case_summary, try_due_today, try_due_range, try_idle_cases
+    from core.case_mvp import try_case_summary, try_due_today, try_due_range
+    from core.mode import try_set_mode
+    from core.case_reports import try_idle_cases, try_daily_work_summary
     from core.mode import try_set_mode
     from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
@@ -1229,7 +1231,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # --- Sprint10: court-day timeline queries ---
     try:
         from core.case_mvp import (
-            try_debug_mode,
             try_case_add_note,
             try_case_register_term,
             try_case_create,
@@ -1251,8 +1252,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_terms_due_this_week_for_case,
             try_terms_due_today,
             try_terms_due_tomorrow,
-            try_daily_work_summary,
             try_cases_due_this_week,
+        )
+        from core.control import try_debug_mode
+
+        from core.case_reports import (
+            try_idle_cases,
+            try_daily_work_summary,
         )
 
         handled = await try_debug_mode(update, chat_id, text)
