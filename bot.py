@@ -2370,7 +2370,7 @@ async def _reminder_tick(context: ContextTypes.DEFAULT_TYPE):
 
     logger.info("[WATCHDOG_CALL] before import")
     try:
-        from core.case_mvp import deadline_watchdog
+        from core.watchdog import deadline_watchdog
         logger.info("[WATCHDOG_CALL] import ok")
         await deadline_watchdog(context)
         logger.info("[WATCHDOG_CALL] after await")
