@@ -1231,6 +1231,13 @@ def insert_case_event(
         );
         """)
 
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            chat_id INTEGER PRIMARY KEY,
+            proactive_mode TEXT NOT NULL DEFAULT 'tactical'
+        );
+        """)
+
         cols = set()
         cur.execute("PRAGMA table_info(case_events)")
         for r in cur.fetchall() or []:
@@ -1291,6 +1298,57 @@ def insert_case_event(
         conn.commit()
         conn.close()
         return int(eid)
+
+def get_proactive_mode(chat_id: int) -> str:
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT proactive_mode FROM user_settings WHERE chat_id=?",
+        (chat_id,),
+    )
+    row = cur.fetchone()
+    conn.close()
+
+    if row:
+        return row[0] if not hasattr(row, "keys") else row["proactive_mode"]
+
+    return "tactical"
+
+
+def set_proactive_mode(chat_id: int, mode: str):
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    # ensure table exists
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            chat_id INTEGER PRIMARY KEY,
+            proactive_mode TEXT,
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # SAFE UPSERT (no ON CONFLICT syntax issues)
+    cur.execute("""
+        SELECT chat_id FROM user_settings WHERE chat_id = ?
+    """, (chat_id,))
+    row = cur.fetchone()
+
+    if row:
+        cur.execute("""
+            UPDATE user_settings
+            SET proactive_mode = ?, updated_at = datetime('now')
+            WHERE chat_id = ?
+        """, (mode, chat_id))
+    else:
+        cur.execute("""
+            INSERT INTO user_settings (chat_id, proactive_mode)
+            VALUES (?, ?)
+        """, (chat_id, mode))
+
+    conn.commit()
+    conn.close()
 
 def insert_case_note(
     chat_id: int,

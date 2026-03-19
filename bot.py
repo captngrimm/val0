@@ -34,7 +34,7 @@ import time
 # --- MIGUEL MVP: gates wiring (do not remove) ---
 try:
     # === CASE HANDLERS IMPORTS (deterministic routing layer) ===
-    from core.case_mvp import try_case_summary, try_due_today, try_due_range, try_idle_cases  # preferred
+    from core.case_mvp import try_case_summary, try_due_today, try_due_range, try_idle_cases, try_set_mode  
     from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
     pass
@@ -1257,7 +1257,9 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         handled = await try_debug_mode(update, chat_id, text)
         if handled:
             return
-        
+
+        # try_set_mode REMOVED (handled in handle_text)
+
         handled = await try_idle_cases(update, chat_id, text)
         if handled:
             return
@@ -1377,7 +1379,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         # --- CASE SAFETY GUARD ---
         text_lower = (text or "").lower().strip()
 
-        # only guard singular case-style queries, not plural dashboard queries like "casos ..."
         if "caso" in text_lower and "casos" not in text_lower:
             await update.message.reply_text(
                 "No encuentro ese caso en tu base de datos."
@@ -1385,8 +1386,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
         # --- END CASE SAFETY GUARD ---
         
-        
-            
 
     except Exception as e:
         logger.exception(f"[CASE_TIMELINE] failed: {e}")
@@ -2548,25 +2547,47 @@ def _audit(chat_id: int, action: str, entity_type: str = None, entity_id: str = 
 # Text handler
 # --------------------------------------------------
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message and update.message.text:
-        text = update.message.text.strip()
-        chat_id = update.effective_chat.id
-        tg_msg_id = getattr(update.message, "message_id", None)
+    if not (update.message and update.message.text):
+        return
 
-        _audit(
-            chat_id,
-            action="IN_TEXT",
-            entity_type="tg_msg",
-            entity_id=str(tg_msg_id) if tg_msg_id is not None else None,
-            payload=text[:500],
-            source="group" if int(chat_id) < 0 else "dm",
-        )
+    text = update.message.text.strip()
+    chat_id = update.effective_chat.id
+    tg_msg_id = getattr(update.message, "message_id", None)
 
-        if int(chat_id) < 0:
-            return await _handle_group_deterministic(update, context, text)
+    _audit(
+        chat_id,
+        action="IN_TEXT",
+        entity_type="tg_msg",
+        entity_id=str(tg_msg_id) if tg_msg_id is not None else None,
+        payload=text[:500],
+        source="group" if int(chat_id) < 0 else "dm",
+    )
 
-        await _process_text_pipeline(update, context, text)
+    # ---------------------------------------
+    # 1. HARD COMMANDS (ALWAYS FIRST)
+    # ---------------------------------------
+    if await try_set_mode(update, chat_id, text):
+        return
 
+    # ---------------------------------------
+    # 2. GROUP LOGIC
+    # ---------------------------------------
+    if int(chat_id) < 0:
+        if await _handle_group_deterministic(update, context, text):
+            return
+        return  # do NOT fall through to pipeline
+
+    # ---------------------------------------
+    # 3. DM DETERMINISTIC (future expansion)
+    # ---------------------------------------
+    # (placeholder if you add more later)
+
+    # ---------------------------------------
+    # 4. PIPELINE (LLM LAST)
+    # ---------------------------------------
+    await _process_text_pipeline(update, context, text)
+
+    
 # --------------------------------------------------
 # Main
 # --------------------------------------------------

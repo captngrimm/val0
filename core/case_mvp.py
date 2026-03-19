@@ -1205,6 +1205,30 @@ async def try_debug_mode(update, chat_id, text) -> bool:
 
     return True
 
+async def try_set_mode(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = _clean(text or "")
+
+    if not t.startswith("val modo"):
+        return False
+
+    if "quiet" in t:
+        mode = "quiet"
+    elif "war" in t:
+        mode = "war"
+    else:
+        mode = "tactical"
+
+    from memory_store import set_proactive_mode
+    set_proactive_mode(int(chat_id), mode)
+
+    # HARD DETERMINISTIC RESPONSE (no personality layer)
+    await update.message.reply_text(f"Modo cambiado a: {mode.upper()}")
+
+    return True
+
 async def try_case_add_note(update, chat_id, text) -> bool:
     """
     Handles:
@@ -2584,10 +2608,18 @@ async def deadline_watchdog(context):
     Runs every scheduler tick.
     Alerts when deadlines are within 48h.
     Persists sent alerts in DB so restarts do not resend them.
+    Respects proactive mode: quiet / tactical / war.
     """
     logger.info("[WATCHDOG] deadline_watchdog tick")
 
     try:
+        from memory_store import get_proactive_mode
+
+        mode = get_proactive_mode(1789350565)
+
+        if mode == "quiet":
+            return
+
         conn = _get_conn()
         cur = conn.cursor()
 
