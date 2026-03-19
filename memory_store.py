@@ -1222,6 +1222,15 @@ def insert_case_event(
         );
         """)
 
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS watchdog_alerts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alert_key TEXT NOT NULL UNIQUE,
+            alert_type TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """)
+
         cols = set()
         cur.execute("PRAGMA table_info(case_events)")
         for r in cur.fetchall() or []:

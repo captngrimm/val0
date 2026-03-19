@@ -2578,13 +2578,12 @@ async def try_due_range(update, chat_id, text) -> bool:
         return True
 
 # GLOBAL (put this near top of file, once)
-WATCHDOG_SENT = set()
-
 
 async def deadline_watchdog(context):
     """
     Runs every scheduler tick.
     Alerts when deadlines are within 48h.
+    Persists sent alerts in DB so restarts do not resend them.
     """
     logger.info("[WATCHDOG] deadline_watchdog tick")
 
@@ -2605,7 +2604,6 @@ async def deadline_watchdog(context):
         )
 
         rows = cur.fetchall() or []
-        conn.close()
 
         now = datetime.now(ZoneInfo("America/Panama"))
         limit = now + timedelta(hours=48)
@@ -2627,25 +2625,50 @@ async def deadline_watchdog(context):
             except Exception:
                 continue
 
-            if now <= due_dt <= limit:
-                key = f"{client_name}|{deadline_date}|{event_text}"
+            if not (now <= due_dt <= limit):
+                continue
 
-                if key in WATCHDOG_SENT:
-                    continue
+            alert_key = f"deadline_48h|{client_name}|{deadline_date}|{event_text}"
 
-                WATCHDOG_SENT.add(key)
-                alerts.append((client_name, deadline_date, event_text))
+            cur.execute(
+                """
+                SELECT 1
+                FROM watchdog_alerts
+                WHERE alert_key=?
+                LIMIT 1
+                """,
+                (alert_key,),
+            )
+            already_sent = cur.fetchone()
+
+            if already_sent:
+                continue
+
+            alerts.append((client_name, deadline_date, event_text, alert_key))
 
         if not alerts:
+            conn.close()
             return
 
         logger.info(f"[WATCHDOG] alerts_found={len(alerts)}")
 
         msg = "⚠️ Boss — términos por vencer (48h)\n\n"
-        for client_name, deadline_date, event_text in alerts:
+        for client_name, deadline_date, event_text, _alert_key in alerts:
             msg += f"• {client_name} — {deadline_date} | {event_text}\n"
 
         await context.bot.send_message(chat_id=1789350565, text=msg)
+
+        for _client_name, _deadline_date, _event_text, alert_key in alerts:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO watchdog_alerts(alert_key, alert_type)
+                VALUES(?, ?)
+                """,
+                (alert_key, "deadline_48h"),
+            )
+
+        conn.commit()
+        conn.close()
 
     except Exception as e:
         logger.exception(f"[WATCHDOG] failed: {e}")
