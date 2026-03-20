@@ -31,13 +31,14 @@ SOURCE OF TRUTH:
 
 import time
 
-# --- MIGUEL MVP: gates wiring (do not remove) ---
+# === CORE DB ACCESS (must ALWAYS exist) ===
+from memory_store import _get_conn
+
+# --- MIGUEL MVP: gates wiring (safe optional imports) ---
 try:
-    # === CASE HANDLERS IMPORTS (deterministic routing layer) ===
     from core.case_mvp import try_case_summary, try_due_today, try_due_range
     from core.mode import try_set_mode
     from core.case_reports import try_idle_cases, try_daily_work_summary, try_priority_dashboard
-    from core.mode import try_set_mode
     from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
     pass
@@ -119,6 +120,7 @@ def _places_session_get(chat_id: int):
 # --------------------------------------------------
 _CO_SESSION = {}  # chat_id -> {"start": epoch, "nudged": bool}
 _PENDING_TERM_CONFIRM = {}
+_PENDING_CASE_DISAMBIG = {}
 # --------------------------------------------------
 # Logging
 # --------------------------------------------------
@@ -186,13 +188,13 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
     Natural note capture v1.
 
     Goal:
-    If the user writes a normal sentence mentioning exactly one known case/client,
+    If the user writes a normal sentence mentioning a known case/client,
     save it as a note automatically.
 
     Safety rules:
     - never capture explicit commands
-    - never capture if 0 or >1 case matches
     - never capture very short junk
+    - if multiple cases match, ask user which one
     """
 
     if not update or not getattr(update, "message", None):
@@ -223,6 +225,20 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         "vencimiento en ",
         "como va el caso",
         "cómo va el caso",
+        "estado del caso",
+        "resumen del caso",
+        "situacion actual del caso",
+        "situación actual del caso",
+        "por donde va el caso",
+        "por dónde va el caso",
+        "que tienes del caso",
+        "qué tienes del caso",
+        "dame todo del caso",
+        "ver caso",
+        "ver expediente",
+        "info del caso",
+        "informacion del caso",
+        "información del caso",
         "casos sin movimiento",
         "resumen de trabajo",
         "que debo hacer",
@@ -243,18 +259,6 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
     if len(raw) < 8:
         return False
 
-    # local normalizer
-    def _norm(s: str) -> str:
-        s = (s or "").lower().strip()
-        s = unicodedata.normalize("NFKD", s)
-        s = "".join(ch for ch in s if not unicodedata.combining(ch))
-        s = re.sub(r"[^\w\s]", " ", s)
-        s = re.sub(r"\s+", " ", s).strip()
-        return s
-
-    text_norm = _norm(raw)
-
-    # --- find exactly one matching case/client ---
     try:
         conn = _get_conn()
         cur = conn.cursor()
@@ -273,7 +277,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         logger.exception(f"[NATURAL_NOTE] case lookup failed: {e}")
         return False
 
-    # --- FORCE SIMPLE MATCH (demo-safe) ---
+    # --- simple match (demo-safe) ---
     matches = []
 
     for r in rows:
@@ -305,11 +309,89 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         logger.info("[NATURAL_NOTE] FAIL no match")
         return False
 
-    # Demo-safe rule: if multiple matches exist, use the most recent one
-    case_id, client_name = matches[0]
     if len(matches) > 1:
-        logger.info(f"[NATURAL_NOTE] MULTI_MATCH using latest case_id={case_id} client={client_name}")
+        _PENDING_CASE_DISAMBIG[int(chat_id)] = {
+            "type": "note",
+            "candidates": matches,
+            "payload": {
+                "note_text": raw,
+                "source": source or "text",
+            },
+        }
 
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
+
+            option_lines = []
+            for idx, (cid, name) in enumerate(matches, start=1):
+                context_line = None
+
+                # prefer next term first
+                cur.execute(
+                    """
+                    SELECT deadline_date, event_text
+                    FROM case_events
+                    WHERE chat_id=?
+                        AND case_id=?
+                        AND deadline_date IS NOT NULL
+                    ORDER BY deadline_date ASC, id DESC
+                    LIMIT 1
+                    """,
+                    (int(chat_id), int(cid)),
+                )
+                row_term = cur.fetchone()
+
+                if row_term:
+                    d = row_term["deadline_date"] if hasattr(row_term, "keys") else row_term[0]
+                    ev = row_term["event_text"] if hasattr(row_term, "keys") else row_term[1]
+                    if d and ev:
+                        context_line = f"   • Próximo: {d} | {ev[:60]}"
+
+                # fallback to latest note
+                if not context_line:
+                    cur.execute(
+                        """
+                        SELECT note_text
+                        FROM case_notes
+                        WHERE chat_id=?
+                            AND case_id=?
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (int(chat_id), str(cid)),
+                    )
+                    row_note = cur.fetchone()
+
+                    if row_note:
+                        note_text = row_note["note_text"] if hasattr(row_note, "keys") else row_note[0]
+                        if note_text:
+                            context_line = f"   • Último: {note_text[:80]}"
+
+                line = f"{idx}) CASE:{cid} ({name})"
+                if context_line:
+                    line += f"\n{context_line}"
+
+                option_lines.append(line)
+
+            conn.close()
+
+            options = "\n\n".join(option_lines)
+
+            await update.message.reply_text(
+                f"⚠️ Encontré más de un caso para ese cliente:\n\n"
+                f"{options}\n\n"
+                f"Responde con 1 o 2.\n"
+                f"Escribe \"detalle 1\" o \"detalle 2\" para ver más info.\n"
+                f"También puedes escribir \"cancelar\"."
+            )
+            return True
+
+        except Exception as e:
+            logger.exception(f"[NATURAL_NOTE] disambig build failed: {e}")
+            return False
+
+    case_id, client_name = matches[0]
     logger.info(f"[NATURAL_NOTE] SUCCESS case_id={case_id} client={client_name}")
 
     # --- dedupe exact same natural note in recent window ---
@@ -340,7 +422,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
     try:
         from memory_store import insert_case_note
 
-        logger.info(f"[NATURAL_NOTE] SUCCESS case_id={case_id} client={client_name} text={raw!r}")
+        logger.info(f"[NATURAL_NOTE] INSERT case_id={case_id} client={client_name} text={raw!r}")
 
         insert_case_note(
             chat_id=int(chat_id),
@@ -1128,27 +1210,159 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception:
         preferred_language = None
 
-    # --------------------------------------------------
-    # CO1 — Companion Operator timer nudge (1x per chat session)
-    # Default: 3600s (1 hour). Override with CO1_NUDGE_SECONDS env.
-    # --------------------------------------------------
-    try:
-        now = int(time.time())
-        threshold = int(os.getenv("CO1_NUDGE_SECONDS", "3600"))
-        sess = _CO_SESSION.get(int(chat_id))
-        if not sess:
-            _CO_SESSION[int(chat_id)] = {"start": now, "nudged": False}
-        else:
-            elapsed = now - int(sess.get("start", now))
-            if elapsed >= threshold and not sess.get("nudged", False):
-                _CO_SESSION[int(chat_id)]["nudged"] = True
-                await update.message.reply_text(f"{preferred_name}: water + stretch for 30 seconds. 💧")
-    except Exception:
-        pass
-
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+
+    # --------------------------------------------------
+    # Case disambiguation handler
+    # --------------------------------------------------
+    try:
+        if int(chat_id) in _PENDING_CASE_DISAMBIG:
+            dis = _PENDING_CASE_DISAMBIG[int(chat_id)]
+            choice = (text or "").strip()
+            choice_norm = choice.replace("case:", "").replace("CASE:", "").strip().lower()
+
+            # normalize accents/punctuation lightly
+            choice_norm = unicodedata.normalize("NFKD", choice_norm)
+            choice_norm = "".join(ch for ch in choice_norm if not unicodedata.combining(ch))
+            choice_norm = re.sub(r"[^\w\s]", " ", choice_norm)
+            choice_norm = re.sub(r"\s+", " ", choice_norm).strip()
+
+            # cancel / escape
+            if choice_norm in ("cancelar", "cancel", "salir", "no", "olvidalo", "olvidalo por ahora"):
+                _PENDING_CASE_DISAMBIG.pop(int(chat_id), None)
+                await update.message.reply_text("Entendido. Cancelé la selección.")
+                return
+
+            # detail request: "detalle 1" / "detalle 2"
+            m_detail = re.match(r"^(detalle|ver|info)\s+(\d+)$", choice_norm)
+            logger.info(f"[CASE_DISAMBIG] choice_norm={choice_norm!r} m_detail={bool(m_detail)} candidates={len(dis['candidates'])}")
+            if m_detail:
+                idx = int(m_detail.group(2))
+                if 1 <= idx <= len(dis["candidates"]):
+                    logger.info(f"[CASE_DISAMBIG] DETAIL idx={idx} selected_case={dis['candidates'][idx - 1]}")    
+                    cid, name = dis["candidates"][idx - 1]
+
+                    conn = _get_conn()
+                    cur = conn.cursor()
+
+                    summary_bits = []
+
+                    cur.execute(
+                        """
+                        SELECT note_text
+                        FROM case_notes
+                        WHERE chat_id=?
+                          AND case_id=?
+                        ORDER BY id DESC
+                        LIMIT 3
+                        """,
+                        (int(chat_id), str(cid)),
+                    )
+                    note_rows = cur.fetchall() or []
+
+                    cur.execute(
+                        """
+                        SELECT deadline_date, event_text
+                        FROM case_events
+                        WHERE chat_id=?
+                          AND case_id=?
+                          AND deadline_date IS NOT NULL
+                        ORDER BY deadline_date ASC, id DESC
+                        LIMIT 3
+                        """,
+                        (int(chat_id), int(cid)),
+                    )
+                    term_rows = cur.fetchall() or []
+                    conn.close()
+
+                    msg = f"🗂️ CASE:{cid} ({name})\n\n"
+
+                    if term_rows:
+                        msg += "⏳ Próximos términos\n"
+                        for row in term_rows:
+                            d = row["deadline_date"] if hasattr(row, "keys") else row[0]
+                            ev = row["event_text"] if hasattr(row, "keys") else row[1]
+                            msg += f"• {d} | {ev}\n"
+                        msg += "\n"
+
+                    if note_rows:
+                        msg += "📝 Últimas notas\n"
+                        for row in note_rows:
+                            nt = row["note_text"] if hasattr(row, "keys") else row[0]
+                            msg += f"• {nt[:120]}\n"
+
+                    msg += "\nResponde con 1 o 2.\n"
+                    msg += "Escribe \"detalle 1\" o \"detalle 2\" para ver más info.\n"
+                    msg += "También puedes escribir \"cancelar\"."
+                    logger.info(f"[CASE_DISAMBIG] DETAIL_REPLY case_id={cid} name={name}")
+                    await update.message.reply_text(msg)
+                    return
+
+            selected = None
+
+            if choice_norm.isdigit():
+                idx = int(choice_norm)
+
+                # allow direct case id
+                for cid, name in dis["candidates"]:
+                    if str(cid) == choice_norm:
+                        selected = (cid, name)
+                        break
+
+                # otherwise allow 1/2/3 selection
+                if not selected and 1 <= idx <= len(dis["candidates"]):
+                    selected = dis["candidates"][idx - 1]
+
+            if selected:
+                cid, name = selected
+                _PENDING_CASE_DISAMBIG.pop(int(chat_id), None)
+
+                # ---------------- TERM ----------------
+                if dis["type"] == "term":
+                    _PENDING_TERM_CONFIRM[int(chat_id)] = {
+                        "case_id": int(cid),
+                        "client_name": name,
+                        "event_text": dis["payload"]["event_text"],
+                        "deadline_date": dis["payload"]["deadline_date"],
+                    }
+
+                    await update.message.reply_text(
+                        f"⚠️ Detecté un posible término en CASE:{cid} ({name})\n\n"
+                        f"\"{dis['payload']['event_text']}\"\n\n"
+                        f"¿Quieres que lo registre?"
+                    )
+                    return
+
+                # ---------------- NOTE ----------------
+                elif dis["type"] == "note":
+                    from memory_store import insert_case_note, set_active_case_id
+
+                    set_active_case_id(int(chat_id), str(cid))
+
+                    insert_case_note(
+                        chat_id=int(chat_id),
+                        case_id=str(cid),
+                        note_text=dis["payload"]["note_text"],
+                        source=dis["payload"]["source"],
+                    )
+
+                    await update.message.reply_text(
+                        f"📝 Guardé esto como nota en CASE:{cid} ({name})."
+                    )
+                    return
+
+            await update.message.reply_text(
+                "No entendí la opción.\n"
+                "Responde con 1 o 2.\n"
+                "También puedes escribir \"detalle 1\" o \"detalle 2\" para ver más info,\n"
+                "o \"cancelar\"."
+            )
+            return
+
+    except Exception as e:
+        logger.exception(f"[CASE_DISAMBIG] failed: {e}")
 
     # --------------------------------------------------
     # Pending term confirmation
@@ -1388,7 +1602,19 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
 
             if m_date:
-                from memory_store import _get_conn
+
+                month_map = {
+                    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+                    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+                    "septiembre": 9, "setiembre": 9, "octubre": 10,
+                    "noviembre": 11, "diciembre": 12,
+                }
+
+                day = int(m_date.group(1))
+                month_name = m_date.group(2)
+                month = month_map[month_name]
+                year = datetime.now(ZoneInfo("America/Panama")).year
+                deadline_date = f"{year:04d}-{month:02d}-{day:02d}"
 
                 conn = _get_conn()
                 cur = conn.cursor()
@@ -1414,21 +1640,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     if client_name and client_name.lower() in low:
                         matches.append((str(expediente), client_name))
 
-                if matches:
+                if len(matches) == 1:
                     case_id, client_name = matches[0]
-
-                    month_map = {
-                        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
-                        "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
-                        "septiembre": 9, "setiembre": 9, "octubre": 10,
-                        "noviembre": 11, "diciembre": 12,
-                    }
-
-                    day = int(m_date.group(1))
-                    month_name = m_date.group(2)
-                    month = month_map[month_name]
-                    year = datetime.now(ZoneInfo("America/Panama")).year
-                    deadline_date = f"{year:04d}-{month:02d}-{day:02d}"
 
                     _PENDING_TERM_CONFIRM[int(chat_id)] = {
                         "case_id": int(case_id),
@@ -1436,12 +1649,92 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         "event_text": text.strip(),
                         "deadline_date": deadline_date,
                     }
-                    logger.info(f"[PENDING_TERM_CONFIRM] SET chat_id={chat_id} data={_PENDING_TERM_CONFIRM[int(chat_id)]}")
+                    logger.info(
+                        f"[PENDING_TERM_CONFIRM] SET chat_id={chat_id} "
+                        f"data={_PENDING_TERM_CONFIRM[int(chat_id)]}"
+                    )
 
                     await update.message.reply_text(
                         f"⚠️ Detecté un posible término en CASE:{case_id} ({client_name})\n\n"
                         f"\"{text.strip()}\"\n\n"
                         f"¿Quieres que lo registre?"
+                    )
+                    return
+
+                elif len(matches) > 1:
+                    _PENDING_CASE_DISAMBIG[int(chat_id)] = {
+                        "type": "term",
+                        "candidates": matches,
+                        "payload": {
+                            "event_text": text.strip(),
+                            "deadline_date": deadline_date,
+                        },
+                    }
+
+                    conn = _get_conn()
+                    cur = conn.cursor()
+
+                    option_lines = []
+                    for idx, (cid, name) in enumerate(matches, start=1):
+                        context_line = None
+
+                        # latest note
+                        cur.execute(
+                            """
+                            SELECT note_text
+                            FROM case_notes
+                            WHERE chat_id=?
+                              AND case_id=?
+                            ORDER BY id DESC
+                            LIMIT 1
+                            """,
+                            (int(chat_id), str(cid)),
+                        )
+                        row_note = cur.fetchone()
+
+                        if row_note:
+                            note_text = row_note["note_text"] if hasattr(row_note, "keys") else row_note[0]
+                            if note_text:
+                                context_line = f"   • Último: {note_text[:80]}"
+
+                        # fallback: next term
+                        if not context_line:
+                            cur.execute(
+                                """
+                                SELECT deadline_date, event_text
+                                FROM case_events
+                                WHERE chat_id=?
+                                  AND case_id=?
+                                  AND deadline_date IS NOT NULL
+                                ORDER BY deadline_date ASC, id DESC
+                                LIMIT 1
+                                """,
+                                (int(chat_id), int(cid)),
+                            )
+                            row_term = cur.fetchone()
+
+                            if row_term:
+                                d = row_term["deadline_date"] if hasattr(row_term, "keys") else row_term[0]
+                                ev = row_term["event_text"] if hasattr(row_term, "keys") else row_term[1]
+                                if d and ev:
+                                    context_line = f"   • Próximo: {d} | {ev[:60]}"
+
+                        line = f"{idx}) CASE:{cid} ({name})"
+                        if context_line:
+                            line += f"\n{context_line}"
+
+                        option_lines.append(line)
+
+                    conn.close()
+
+                    options = "\n\n".join(option_lines)
+
+                    await update.message.reply_text(
+                        f"⚠️ Encontré más de un caso para ese cliente:\n\n"
+                        f"{options}\n\n"
+                        f"Responde con 1 o 2.\n"
+                        f"Escribe \"detalle 1\" o \"detalle 2\" para ver más info.\n"
+                        f"También puedes escribir \"cancelar\"."
                     )
                     return
 
@@ -2003,7 +2296,6 @@ def _generate_morning_brief_det(chat_id: int, date: str) -> str:
     """
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
-    from memory_store import _get_conn
     from core.case_mvp import _render_due_grouped
 
     tz = ZoneInfo("America/Panama")
@@ -2111,7 +2403,6 @@ def _generate_week_horizon(chat_id: int, days: int = 7) -> str:
     """
     from datetime import datetime, timedelta, timezone
     from zoneinfo import ZoneInfo
-    from memory_store import _get_conn
     from core.case_mvp import _render_due_grouped
 
     tz = ZoneInfo("America/Panama")
@@ -2462,7 +2753,6 @@ async def evening_brief_tick(context):
     """
     from datetime import datetime, timedelta, timezone
     from zoneinfo import ZoneInfo
-    from memory_store import _get_conn
     from core.due_merge import merge_due_items
     from core.case_mvp import _render_due_grouped
 
@@ -2539,7 +2829,6 @@ async def morning_daily_tick(context):
     Sends an automatic DAILY briefing at 08:00 local time.
     Read-only. Uses existing _daily_auto_generate().
     """
-    from memory_store import _get_conn
 
     date = _today_ymd()
 

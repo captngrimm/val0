@@ -827,13 +827,20 @@ async def try_case_summary(update, chat_id, text) -> bool:
 async def try_case_status(update, chat_id, text) -> bool:
     """
     Handles:
+    - caso 524242024
+    - expediente 524242024
+    - qué tienes del caso 524242024
+    - que tienes del caso 524242024
+    - dame todo del caso 524242024
     - cómo va el caso 524242024
     - como va el caso 524242024
     - estado del caso 524242024
     - resumen del caso 524242024
     - cómo va el caso de Leticia
     - estado del caso de Leticia
+    - dame todo del caso de Leticia
     """
+
     if not update or not getattr(update, "message", None):
         return False
 
@@ -843,37 +850,50 @@ async def try_case_status(update, chat_id, text) -> bool:
     logger.info(f"[CASE_STATUS] raw={text!r}")
     logger.info(f"[CASE_STATUS] cleaned={t!r}")
 
-    if "caso" not in t:
+    # must reference case/expediente somehow
+    if "caso" not in t and "expediente" not in t:
         return False
 
-    if not any(x in t for x in (
+    # allow simple numeric case lookups and natural phrasing
+    allowed_patterns = (
+        "caso ",
+        "expediente ",
         "como va el caso",
-        "cómo va el caso",
         "estado del caso",
         "resumen del caso",
         "situacion actual del caso",
-        "situación actual del caso",
         "por donde va el caso",
-        "por dónde va el caso",
-    )):
+        "que tienes del caso",
+        "qué tienes del caso",
+        "dame todo del caso",
+        "ver caso",
+        "ver expediente",
+        "info del caso",
+        "informacion del caso",
+        "información del caso",
+    )
+
+    if not any(x in t for x in allowed_patterns):
         return False
 
     case_id = None
 
-    # numeric expediente
-    m = re.search(r"caso\s+(\d{4,})", t)
+    # numeric expediente path
+    m = re.search(r"(?:caso|expediente)\s+([0-9][0-9\-]{3,})", t)
     if m:
         case_id = (m.group(1) or "").strip()
 
     # client name path
-    if not case_id and ("caso de " in t or "del caso de " in t):
+    if not case_id and ("caso de " in t or "del caso de " in t or "expediente de " in t):
         if "del caso de " in t:
             client_name = t.split("del caso de ", 1)[1]
+        elif "expediente de " in t:
+            client_name = t.split("expediente de ", 1)[1]
         else:
             client_name = t.split("caso de ", 1)[1]
 
         client_name = re.sub(
-            r"\b(como va|cómo va|estado|resumen|situacion actual|situación actual|por donde va|por dónde va|del caso|caso)\b",
+            r"\b(como va|estado|resumen|situacion actual|por donde va|que tienes|dame todo|ver|info|informacion|del caso|caso|expediente)\b",
             "",
             client_name,
         )
@@ -900,6 +920,7 @@ async def try_case_status(update, chat_id, text) -> bool:
                 if row:
                     case_id = (row["expediente"] if hasattr(row, "keys") else row[0]) or ""
                     case_id = str(case_id).strip()
+
             except Exception:
                 case_id = None
 
@@ -910,8 +931,8 @@ async def try_case_status(update, chat_id, text) -> bool:
         return True
 
     logger.info("[CASE_STATUS] HIT")
-    debug_active = pop_debug_mode(int(chat_id))
 
+    debug_active = pop_debug_mode(int(chat_id))
     if debug_active:
         debug_msg = (
             "🧠 Debug\n\n"
