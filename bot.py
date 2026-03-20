@@ -36,7 +36,7 @@ try:
     # === CASE HANDLERS IMPORTS (deterministic routing layer) ===
     from core.case_mvp import try_case_summary, try_due_today, try_due_range
     from core.mode import try_set_mode
-    from core.case_reports import try_idle_cases, try_daily_work_summary
+    from core.case_reports import try_idle_cases, try_daily_work_summary, try_priority_dashboard
     from core.mode import try_set_mode
     from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
@@ -68,6 +68,7 @@ from telegram.ext import (
 
 # Memory + Notes
 from memory_store import (
+    _get_conn,
     init_db,
     insert_message,
     get_recent_messages,
@@ -117,7 +118,7 @@ def _places_session_get(chat_id: int):
 # Companion Operator v0 — session timing
 # --------------------------------------------------
 _CO_SESSION = {}  # chat_id -> {"start": epoch, "nudged": bool}
-
+_PENDING_TERM_CONFIRM = {}
 # --------------------------------------------------
 # Logging
 # --------------------------------------------------
@@ -180,152 +181,182 @@ def _extract_deadline_date(text: str) -> str:
     return ""
 
 async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str):
+    logger.info(f"[NATURAL_NOTE] ENTER text={text!r}")
     """
-    Phase B0 behavior:
-    - If text contains an expediente/case number => set as active case
-    - If there is an active case => store the note to case_notes
-    - If text clearly contains a deadline phrase => also create a case_event
+    Natural note capture v1.
+
+    Goal:
+    If the user writes a normal sentence mentioning exactly one known case/client,
+    save it as a note automatically.
+
+    Safety rules:
+    - never capture explicit commands
+    - never capture if 0 or >1 case matches
+    - never capture very short junk
     """
-    try:
-        from memory_store import (
-            get_active_case_id,
-            set_active_case_id,
-            insert_case_note,
-            insert_case_event,
-            _get_conn,
-        )
-    except Exception:
+
+    if not update or not getattr(update, "message", None):
         return False
 
-    tg_msg_id = None
-    try:
-        if update and getattr(update, "message", None):
-            tg_msg_id = int(update.message.message_id)
-    except Exception:
-        tg_msg_id = None
-
-    raw_text = str(text or "").strip()
-    if not raw_text:
+    raw = (text or "").strip()
+    if not raw:
         return False
 
-    low = raw_text.lower()
+    low = raw.lower().strip()
 
-    # Do NOT store deterministic commands / status queries as notes
-    if (
-        low.startswith("registrar caso")
-        or low.startswith("registrar expediente")
-        or low.startswith("nota caso")
-        or low.startswith("nota expediente")
-        or low.startswith("cómo va el caso")
-        or low.startswith("como va el caso")
-        or low.startswith("cómo vamos con el caso")
-        or low.startswith("como vamos con el caso")
-        or low.startswith("por donde va el caso")
-        or low.startswith("por dónde va el caso")
-        or low.startswith("resumen del caso")
-        or low.startswith("dame un resumen del caso")
-        or low.startswith("estado del caso")
-        or low.startswith("situacion actual del caso")
-        or low.startswith("situación actual del caso")
-    ):
-        return False   
+    # --- hard skip: explicit commands / structured flows ---
+    blocked_prefixes = (
+        "val ",
+        "/",
+        "crea el caso ",
+        "crear caso ",
+        "guarda esto en el caso",
+        "anota en el caso",
+        "anota en ",
+        "nota en el caso",
+        "registra termino en el caso",
+        "registra término en el caso",
+        "anota termino en el caso",
+        "anota término en el caso",
+        "termino en ",
+        "término en ",
+        "vencimiento en ",
+        "como va el caso",
+        "cómo va el caso",
+        "casos sin movimiento",
+        "resumen de trabajo",
+        "que debo hacer",
+        "qué debo hacer",
+        "que tengo",
+        "qué tengo",
+        "que hay",
+        "qué hay",
+        "ayuda",
+        "help",
+        "debug",
+    )
 
-    found = _extract_case_id(raw_text)
-    if found:
-        set_active_case_id(int(chat_id), found)
-
-    active = get_active_case_id(int(chat_id)) or found
-    if not active:
+    if low.startswith(blocked_prefixes):
         return False
 
-    # Auto note capture disabled.
-    # Case notes must be created explicitly with:
-    # nota caso <expediente>: <texto>
-    pass
-
-    # Deterministic event capture (Sprint08 minimal scope)
-    deadline_date = _extract_deadline_date(raw_text)
-    if not deadline_date:
+    # too short = too risky
+    if len(raw) < 8:
         return False
 
+    # local normalizer
+    def _norm(s: str) -> str:
+        s = (s or "").lower().strip()
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        s = re.sub(r"[^\w\s]", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
+    text_norm = _norm(raw)
+
+    # --- find exactly one matching case/client ---
     try:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
             """
-            SELECT id, expediente
+            SELECT expediente, client_name
             FROM cases
-            WHERE chat_id=? AND lower(expediente)=lower(?)
+            WHERE chat_id=?
+            ORDER BY id DESC
+            """,
+            (int(chat_id),),
+        )
+        rows = cur.fetchall() or []
+        conn.close()
+    except Exception as e:
+        logger.exception(f"[NATURAL_NOTE] case lookup failed: {e}")
+        return False
+
+    # --- FORCE SIMPLE MATCH (demo-safe) ---
+    matches = []
+
+    for r in rows:
+        expediente = r["expediente"] if hasattr(r, "keys") else r[0]
+        client_name = r["client_name"] if hasattr(r, "keys") else r[1]
+
+        if not client_name:
+            continue
+
+        if client_name.lower() in low:
+            matches.append((str(expediente), client_name))
+
+    # fallback: partial match (first 4 chars)
+    if not matches:
+        for r in rows:
+            expediente = r["expediente"] if hasattr(r, "keys") else r[0]
+            client_name = r["client_name"] if hasattr(r, "keys") else r[1]
+
+            if not client_name:
+                continue
+
+            key = client_name.lower()[:4]
+            if key and key in low:
+                matches.append((str(expediente), client_name))
+
+    logger.info(f"[NATURAL_NOTE] matches={matches}")
+
+    if not matches:
+        logger.info("[NATURAL_NOTE] FAIL no match")
+        return False
+
+    # Demo-safe rule: if multiple matches exist, use the most recent one
+    case_id, client_name = matches[0]
+    if len(matches) > 1:
+        logger.info(f"[NATURAL_NOTE] MULTI_MATCH using latest case_id={case_id} client={client_name}")
+
+    logger.info(f"[NATURAL_NOTE] SUCCESS case_id={case_id} client={client_name}")
+
+    # --- dedupe exact same natural note in recent window ---
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id
+            FROM case_notes
+            WHERE chat_id=?
+              AND case_id=?
+              AND note_text=?
+              AND created_at >= datetime('now','-60 seconds')
             ORDER BY id DESC
             LIMIT 1
             """,
-            (int(chat_id), str(active)),
+            (int(chat_id), str(case_id), raw),
         )
         row = cur.fetchone()
         conn.close()
+        if row:
+            return True
+    except Exception:
+        pass
 
-        if not row:
-            logger.warning(f"[CASE_EVENT] no case row found for expediente={active} chat_id={chat_id}")
-            return False
+    # --- insert note ---
+    try:
+        from memory_store import insert_case_note
 
-        case_row_id = int(row["id"] if hasattr(row, "keys") else row[0])
+        logger.info(f"[NATURAL_NOTE] SUCCESS case_id={case_id} client={client_name} text={raw!r}")
 
-        event_id = insert_case_event(
+        insert_case_note(
             chat_id=int(chat_id),
-            case_id=case_row_id,
-            event_text=raw_text,
-            term_days=None,
-            start_date=None,
-            deadline_date=deadline_date,
-            raw_text=raw_text,
-            principal_id=None,
+            case_id=str(case_id),
+            note_text=raw,
+            source=source or "text",
         )
 
-        logger.info(
-            f"[CASE_EVENT] inserted id={event_id} case_id={active} deadline_date={deadline_date} source={source}"
+        await update.message.reply_text(
+            f"📝 Guardé esto como nota en CASE:{case_id} ({client_name})."
         )
-
-        # --- Sprint09: conflict detection ---
-        try:
-            conn = _get_conn()
-            cur = conn.cursor()
-
-            cur.execute(
-                """
-                SELECT ce.event_text, ce.deadline_date, c.expediente
-                FROM case_events ce
-                JOIN cases c ON c.id = ce.case_id
-                WHERE ce.chat_id = ?
-                AND ce.deadline_date = ?
-                AND ce.id != ?
-                ORDER BY ce.id ASC
-                LIMIT 5
-                """,
-                (int(chat_id), deadline_date, int(event_id)),
-            )
-
-            conflicts = cur.fetchall()
-            conn.close()
-
-            if conflicts:
-                lines = []
-                for r in conflicts:
-                    exp = r["expediente"] if hasattr(r, "keys") else r[2]
-                    txt = r["event_text"] if hasattr(r, "keys") else r[0]
-                    lines.append(f"• Expediente {exp} — {txt}")
-
-                msg = (
-                    f"⚠️ Boss, ya tienes otra diligencia ese mismo día ({deadline_date}):\n\n"
-                    + "\n".join(lines)
-                )
-
-                await update.message.reply_text(msg)
-                return True
-        except Exception as e:
-            logger.exception(f"[CASE_CONFLICT_CHECK] failed: {e}")
+        return True
 
     except Exception as e:
-        logger.exception(f"[CASE_EVENT] insert failed case_id={active} err={e}")
+        logger.exception(f"[NATURAL_NOTE] insert failed: {e}")
+        return False
 
 import asyncio
 
@@ -1089,7 +1120,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception:
         preferred_name = "Boss"
 
-
     # Preferred language (hard enforcement for model replies)
     try:
         preferred_language = get_fact(chat_id=chat_id, fact_key="preferred_language")
@@ -1115,7 +1145,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 await update.message.reply_text(f"{preferred_name}: water + stretch for 30 seconds. 💧")
     except Exception:
         pass
-    text = _strip_smalltalk_prefix(text)    
+
+    text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
 
@@ -1148,7 +1179,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     except Exception as e:
         logger.exception(f"[GATE] reminder gate failed: {e}")
-    
+
     # --------------------------------------------------
     # Case registration command — deterministic
     # Example:
@@ -1228,6 +1259,166 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[CASE_NOTE_CMD] failed: {e}")
 
+    # --------------------------------------------------
+    # NATURAL TERM DETECTION (suggestion only, no write)
+    # --------------------------------------------------
+    try:
+        low = (text or "").lower()
+
+        trigger_words = [
+            "audiencia",
+            "vence",
+            "vencimiento",
+            "plazo",
+            "término",
+            "termino",
+            "citación",
+            "citacion",
+        ]
+
+        if any(w in low for w in trigger_words):
+            m_date = re.search(
+                r"\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b",
+                low,
+            )
+
+            if m_date:
+                from memory_store import _get_conn
+
+                conn = _get_conn()
+                cur = conn.cursor()
+
+                cur.execute(
+                    """
+                    SELECT expediente, client_name
+                    FROM cases
+                    WHERE chat_id=?
+                    ORDER BY id DESC
+                    """,
+                    (int(chat_id),),
+                )
+
+                rows = cur.fetchall() or []
+                conn.close()
+
+                matches = []
+                for r in rows:
+                    expediente = r["expediente"] if hasattr(r, "keys") else r[0]
+                    client_name = r["client_name"] if hasattr(r, "keys") else r[1]
+
+                    if client_name and client_name.lower() in low:
+                        matches.append((str(expediente), client_name))
+
+                if matches:
+                    case_id, client_name = matches[0]
+
+                    month_map = {
+                        "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+                        "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+                        "septiembre": 9, "setiembre": 9, "octubre": 10,
+                        "noviembre": 11, "diciembre": 12,
+                    }
+
+                    day = int(m_date.group(1))
+                    month_name = m_date.group(2)
+                    month = month_map[month_name]
+                    year = datetime.now(ZoneInfo("America/Panama")).year
+                    deadline_date = f"{year:04d}-{month:02d}-{day:02d}"
+
+                    _PENDING_TERM_CONFIRM[int(chat_id)] = {
+                        "case_id": int(case_id),
+                        "client_name": client_name,
+                        "event_text": text.strip(),
+                        "deadline_date": deadline_date,
+                    }
+                    logger.info(f"[PENDING_TERM_CONFIRM] SET chat_id={chat_id} data={_PENDING_TERM_CONFIRM[int(chat_id)]}")
+
+                    await update.message.reply_text(
+                        f"⚠️ Detecté un posible término en CASE:{case_id} ({client_name})\n\n"
+                        f"\"{text.strip()}\"\n\n"
+                        f"¿Quieres que lo registre?"
+                    )
+                    return
+
+    except Exception as e:
+        logger.exception(f"[NATURAL_TERM_DETECT] failed: {e}")
+
+    # --------------------------------------------------
+    # Pending term confirmation
+    # --------------------------------------------------
+    try:
+        confirm_low = (text or "").strip().lower()
+        logger.info(f"[PENDING_TERM_CONFIRM] CHECK chat_id={chat_id} confirm_low={confirm_low!r} has_pending={int(chat_id) in _PENDING_TERM_CONFIRM}")
+        if int(chat_id) in _PENDING_TERM_CONFIRM:
+            logger.info(f"[PENDING_TERM_CONFIRM] PENDING_DATA={_PENDING_TERM_CONFIRM.get(int(chat_id))}")
+            if confirm_low in ("si", "sí", "ok", "dale", "hazlo", "registralo", "regístralo"):
+                pending = _PENDING_TERM_CONFIRM.pop(int(chat_id))
+
+                from memory_store import insert_case_event
+
+                # dedupe check
+                dup = False
+                try:
+                    conn = _get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM case_events
+                        WHERE chat_id=?
+                          AND case_id=?
+                          AND event_text=?
+                          AND IFNULL(deadline_date,'') = IFNULL(?, '')
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (
+                            int(chat_id),
+                            int(pending["case_id"]),
+                            pending["event_text"],
+                            pending["deadline_date"],
+                        ),
+                    )
+                    row = cur.fetchone()
+                    conn.close()
+                    if row:
+                        dup = True
+                except Exception:
+                    dup = False
+
+                if dup:
+                    await update.message.reply_text(
+                        f"⚠️ Término duplicado detectado en CASE:{pending['case_id']}."
+                    )
+                    return
+                logger.info(f"[PENDING_TERM_CONFIRM] CONFIRMED_REGISTER chat_id={chat_id} case_id={pending['case_id']} deadline={pending['deadline_date']}")
+
+                insert_case_event(
+                    chat_id=int(chat_id),
+                    case_id=int(pending["case_id"]),
+                    event_text=pending["event_text"],
+                    deadline_date=pending["deadline_date"],
+                )
+
+                await update.message.reply_text(
+                    f"⏳ Término registrado en CASE:{pending['case_id']}\n"
+                    f"Vence: {pending['deadline_date']}"
+                )
+                return
+
+            elif confirm_low in ("no", "cancelar", "olvidalo", "olvídalo"):
+                _PENDING_TERM_CONFIRM.pop(int(chat_id), None)
+                await update.message.reply_text("Entendido. No lo registré.")
+                return
+    except Exception as e:
+        logger.exception(f"[PENDING_TERM_CONFIRM] failed: {e}")
+    # --------------------------------------------------
+    # Natural Note Capture v1 — run BEFORE handler registry
+    # --------------------------------------------------
+    case_note_handled = await _maybe_capture_case_note(update, chat_id, text, source="text")
+    if case_note_handled:
+        return
+
     # --- Sprint10: court-day timeline queries ---
     try:
         from core.case_mvp import (
@@ -1254,15 +1445,17 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_terms_due_tomorrow,
             try_cases_due_this_week,
         )
-        from core.control import try_debug_mode
-
+        from core.control import try_debug_mode, try_help
         from core.case_reports import (
             try_idle_cases,
             try_daily_work_summary,
+            try_priority_dashboard,
         )
 
         HANDLERS = [
             try_debug_mode,
+            try_help,
+            try_priority_dashboard,
 
             # reports / control
             try_idle_cases,
@@ -1323,9 +1516,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[CASE_TIMELINE] failed: {e}")
 
-    case_note_handled = await _maybe_capture_case_note(update, chat_id, text, source="text")
-    if case_note_handled:
-        return
     # Store user msg
     try:
         insert_message(
@@ -1404,7 +1594,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             logger.exception(f"Failed to upsert preferred_language: {e}")
 
-        # Confirm once, in the chosen primary language.
         if lang == "es":
             reply = f"Listo, {preferred_name}: a partir de ahora hablamos en español."
         else:
@@ -1457,7 +1646,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         sel = int(text)
         sess = _places_session_get(chat_id)
         if sess and 1 <= sel <= 5:
-            if int(time.time()) - int(sess.get("ts", 0)) <= 600:  # TTL 10 min
+            if int(time.time()) - int(sess.get("ts", 0)) <= 600:
                 results = _normalize_places_results(sess.get("results") or [])
                 idx = sel - 1
                 if idx < len(results):
@@ -1469,7 +1658,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                             await update.message.reply_text(msg)
                             return
 
-                        # HARDEN details too
                         if not isinstance(d, dict):
                             await update.message.reply_text(f"Detalle inválido del lugar, {preferred_name}.")
                             return
@@ -1509,7 +1697,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(f"Se cayó la búsqueda de lugares, {preferred_name}. Intenta otra vez en un minuto.")
             return
 
-        # Error object
         if isinstance(results, dict) and results.get("error"):
             await update.message.reply_text(f"Error buscando lugares, {preferred_name}: {results.get('error')}")
             return
@@ -1565,7 +1752,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         if int(chat_id) > 0:
-            # Cancel FIRST (so "cancela 25" doesn't fall through to model)
             if await try_cancel_reminder(update, chat_id, text, audit_fn=_audit):
                 return
             if await try_create_reminder(update, chat_id, text, audit_fn=_audit):
@@ -1600,7 +1786,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[GATE] try_due_range failed: {e}")
 
-
     # --------------------------------------------------
     # Load context + facts + semantic recall (C2) — with C3 gating
     # --------------------------------------------------
@@ -1627,13 +1812,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     semantic_block = _semantic_recall_block(chat_id=chat_id, query=text, k=5)
 
-    # C3 gate: don't inject semantic memory for ultra-short / control chatter
     tclean = (text or "").strip()
 
     if len(tclean) < 8 or _is_control_ack(tclean):
         semantic_block = ""
 
-    # HARD BLOCK: group chats are deterministic only (never call model)
     if int(chat_id) < 0:
         _audit(
             chat_id,

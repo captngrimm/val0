@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from memory_store import _get_conn, get_proactive_mode
+from memory_store import _get_conn
 import logging
 
 logger = logging.getLogger(__name__)
@@ -16,12 +16,7 @@ async def deadline_watchdog(context):
     logger.info("[WATCHDOG] deadline_watchdog tick")
 
     try:
-        from memory_store import get_proactive_mode
-
-        mode = get_proactive_mode(1789350565)
-
-        if mode == "quiet":
-            return
+        mode = "normal"
 
         conn = _get_conn()
         cur = conn.cursor()

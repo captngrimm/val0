@@ -953,28 +953,56 @@ async def try_case_cockpit(update, chat_id, text) -> bool:
 
 async def try_case_create(update, chat_id, text) -> bool:
     """
-    crea el caso 524242024 para Leticia
-    crear caso 524242024 para Leticia
+    Supports:
+    crea el caso 12345 para Leticia
+    crear caso 12345 para Leticia
+
+    NEW (natural):
+    crear caso de Leticia expediente 12345
+    crea caso de Leticia expediente 12345
     """
+
     if not update or not getattr(update, "message", None):
         return False
+
+    import re
 
     t = (text or "").strip()
     low = _clean(t)
 
-    if not (low.startswith("crea el caso ") or low.startswith("crear caso ")):
+    # --- quick gate ---
+    if not (
+        low.startswith("crea el caso ")
+        or low.startswith("crear caso ")
+        or low.startswith("crear caso de ")
+        or low.startswith("crea caso de ")
+    ):
         return False
 
-    m = re.search(r"(?:crea el caso|crear caso)\s+(\d{4,})\s+para\s+(.+)$", low)
-    if not m:
-        await update.message.reply_text("Usa: crea el caso <expediente> para <cliente>")
-        return True
+    expediente = None
+    client_name = None
 
-    expediente = (m.group(1) or "").strip()
-    client_name = (m.group(2) or "").strip()
+    # --- pattern 1 (existing) ---
+    # crea el caso 12345 para Leticia
+    m = re.search(r"(?:crea el caso|crear caso)\s+(\d{4,})\s+para\s+(.+)$", low)
+    if m:
+        expediente = m.group(1).strip()
+        client_name = m.group(2).strip()
+
+    # --- pattern 2 (new natural) ---
+    # crear caso de Leticia expediente 12345
+    if not expediente:
+        m = re.search(r"(?:crear|crea)\s+caso\s+de\s+(.+?)\s+expediente\s+(\d{4,})", low)
+        if m:
+            client_name = m.group(1).strip()
+            expediente = m.group(2).strip()
 
     if not expediente or not client_name:
-        await update.message.reply_text("Usa: crea el caso <expediente> para <cliente>")
+        await update.message.reply_text(
+            "Usa:\n"
+            "• crea el caso <expediente> para <cliente>\n"
+            "• crear caso de <cliente> expediente <expediente>"
+        )
         return True
 
     try:
@@ -998,55 +1026,99 @@ async def try_case_create(update, chat_id, text) -> bool:
 
 async def try_case_register_term(update, chat_id, text) -> bool:
     """
+    Supports:
     registra termino en el caso de Leticia: vence contestacion el 20 de marzo
     registra término en el caso 524242024: vence apelación el 21 de marzo
+
+    NEW (natural):
+    anota término en el caso de Leticia: vence contestación el 20 de marzo
+    termino en Leticia: vence contestación el 20 de marzo
+    término en Leticia: vence contestación el 20 de marzo
+    vencimiento en Leticia: vence contestación el 20 de marzo
     """
+
     if not update or not getattr(update, "message", None):
         return False
+
+    import re
 
     t = (text or "").strip()
     low = _clean(t)
 
-    # allow natural prefixes like "val ..."
-    if "registra termino en el caso" not in low:
+    if not (
+        "registra termino en el caso" in low
+        or low.startswith("anota termino en el caso de ")
+        or low.startswith("termino en ")
+        or low.startswith("vencimiento en ")
+        or low.startswith("val termino en ")
+        or low.startswith("val vencimiento en ")
+    ):
         return False
 
     parts = t.split(":", 1)
     if len(parts) != 2:
-        await update.message.reply_text("Usa: registra término en el caso ... : <detalle>")
+        await update.message.reply_text(
+            "Usa:\n"
+            "• registra término en el caso de <cliente>: <detalle>\n"
+            "• término en <cliente>: <detalle>"
+        )
         return True
 
     left, event_text = parts
     event_text = event_text.strip()
 
-    case_id = None
+    left_clean = _clean(left)
 
-    m = re.search(r"caso\s+(\d{4,})", left, re.IGNORECASE)
+    case_id = None
+    client_name = None
+
+    # numeric expediente
+    m = re.search(r"caso\s+(\d{4,})", left_clean, re.IGNORECASE)
     if m:
         case_id = m.group(1)
 
-    if not case_id and "caso de " in left.lower():
-        client_name = left.lower().split("caso de ", 1)[1].strip()
-        try:
-            conn = _get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT expediente
-                FROM cases
-                WHERE chat_id=?
-                  AND lower(client_name)=lower(?)
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (int(chat_id), client_name),
-            )
-            row = cur.fetchone()
-            conn.close()
-            if row:
-                case_id = row["expediente"] if hasattr(row, "keys") else row[0]
-        except Exception:
-            case_id = None
+    # client-name patterns
+    if not case_id:
+        patterns = [
+            r"caso\s+de\s+(.+)$",
+            r"anota\s+termino\s+en\s+el\s+caso\s+de\s+(.+)$",
+            r"termino\s+en\s+(.+)$",
+            r"vencimiento\s+en\s+(.+)$",
+            r"val\s+termino\s+en\s+(.+)$",
+            r"val\s+vencimiento\s+en\s+(.+)$",
+        ]
+
+        for pat in patterns:
+            m = re.search(pat, left_clean, re.IGNORECASE)
+            if m:
+                client_name = m.group(1)
+                break
+
+        if client_name:
+            client_name = re.sub(r"[^\w\s]", "", client_name).strip()
+
+            try:
+                conn = _get_conn()
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT expediente
+                    FROM cases
+                    WHERE chat_id=?
+                      AND lower(client_name) LIKE lower(?)
+                    ORDER BY id DESC
+                    LIMIT 5
+                    """,
+                    (int(chat_id), f"%{client_name}%"),
+                )
+                rows = cur.fetchall() or []
+                conn.close()
+
+                if rows:
+                    row = rows[0]
+                    case_id = row["expediente"] if hasattr(row, "keys") else row[0]
+            except Exception:
+                case_id = None
 
     if not case_id:
         await update.message.reply_text("No encuentro ese caso.")
@@ -1074,6 +1146,57 @@ async def try_case_register_term(update, chat_id, text) -> bool:
 
     try:
         from memory_store import insert_case_event
+
+        # --- DEDUPE CHECK ---
+        dup = False
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id
+                FROM case_events
+                WHERE chat_id=?
+                  AND case_id=?
+                  AND event_text=?
+                  AND IFNULL(deadline_date,'') = IFNULL(?, '')
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (
+                    int(chat_id),
+                    int(case_id),
+                    event_text,
+                    deadline_date,
+                ),
+            )
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                dup = True
+        except Exception:
+            dup = False
+
+        if dup:
+            await update.message.reply_text(
+                f"⚠️ Término duplicado detectado en CASE:{case_id}."
+            )
+            return True
+
+        # --- INSERT ---
+        insert_case_event(
+            chat_id=int(chat_id),
+            case_id=int(case_id),
+            event_text=event_text,
+            deadline_date=deadline_date,
+        )
+
+        msg = f"⏳ Término registrado en CASE:{case_id}"
+        if deadline_date:
+            msg += f"\nVence: {deadline_date}"
+
+        await update.message.reply_text(msg)
+        return True
 
         insert_case_event(
             chat_id=int(chat_id),
@@ -1118,22 +1241,33 @@ async def try_set_mode(update, chat_id, text) -> bool:
 
 async def try_case_add_note(update, chat_id, text) -> bool:
     """
-    Handles:
+    Supports:
     guarda esto en el caso de <cliente>: <nota>
     guarda esto en el caso <expediente>: <nota>
+
+    NEW (natural):
+    anota en el caso de <cliente>: <nota>
+    anota en <cliente>: <nota>
+    nota en el caso de <cliente>: <nota>
     """
 
     if not update or not getattr(update, "message", None):
         return False
 
     import re
+
     t = (text or "").strip()
+    low = _clean(t)
     logger.info(f"[CASE_ADD_NOTE] raw={text!r}")
 
-    if "guarda esto en el caso" not in t.lower():
+    if not (
+        "guarda esto en el caso" in low
+        or low.startswith("anota en el caso de ")
+        or low.startswith("anota en ")
+        or low.startswith("nota en el caso de ")
+    ):
         return False
 
-    # split command
     parts = t.split(":", 1)
     if len(parts) != 2:
         await update.message.reply_text("Falta el texto de la nota.")
@@ -1152,11 +1286,23 @@ async def try_case_add_note(update, chat_id, text) -> bool:
     if m:
         case_id = m.group(1)
 
-    # client name
+    client_name = None
+
     if not case_id:
-        m = re.search(r"caso\s+de\s+(.+)$", left, re.IGNORECASE)
-        if m:
-            client_name = m.group(1)
+        patterns = [
+            r"caso\s+de\s+(.+)$",          # guarda esto en el caso de X
+            r"anota\s+en\s+el\s+caso\s+de\s+(.+)$",
+            r"nota\s+en\s+el\s+caso\s+de\s+(.+)$",
+            r"anota\s+en\s+(.+)$",         # anota en X
+        ]
+
+        for pat in patterns:
+            m = re.search(pat, left, re.IGNORECASE)
+            if m:
+                client_name = m.group(1)
+                break
+
+        if client_name:
             logger.info(f"[CASE_ADD_NOTE] client_name_raw={client_name!r}")
 
             client_name = _clean(client_name)
@@ -1205,7 +1351,6 @@ async def try_case_add_note(update, chat_id, text) -> bool:
 
     from memory_store import insert_case_note
 
-    # Duplicate check before insert
     dup = False
     try:
         conn = _get_conn()
