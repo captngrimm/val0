@@ -1678,46 +1678,46 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     for idx, (cid, name) in enumerate(matches, start=1):
                         context_line = None
 
-                        # latest note
+                        # prefer next term first
                         cur.execute(
                             """
-                            SELECT note_text
-                            FROM case_notes
+                            SELECT deadline_date, event_text
+                            FROM case_events
                             WHERE chat_id=?
                               AND case_id=?
-                            ORDER BY id DESC
+                              AND deadline_date IS NOT NULL
+                            ORDER BY deadline_date ASC, id DESC
                             LIMIT 1
                             """,
-                            (int(chat_id), str(cid)),
+                            (int(chat_id), int(cid)),
                         )
-                        row_note = cur.fetchone()
+                        row_term = cur.fetchone()
 
-                        if row_note:
-                            note_text = row_note["note_text"] if hasattr(row_note, "keys") else row_note[0]
-                            if note_text:
-                                context_line = f"   • Último: {note_text[:80]}"
+                        if row_term:
+                            d = row_term["deadline_date"] if hasattr(row_term, "keys") else row_term[0]
+                            ev = row_term["event_text"] if hasattr(row_term, "keys") else row_term[1]
+                            if d and ev:
+                                context_line = f"   • Próximo: {d} | {ev[:60]}"
 
-                        # fallback: next term
+                        # fallback to latest note
                         if not context_line:
                             cur.execute(
                                 """
-                                SELECT deadline_date, event_text
-                                FROM case_events
+                                SELECT note_text
+                                FROM case_notes
                                 WHERE chat_id=?
                                   AND case_id=?
-                                  AND deadline_date IS NOT NULL
-                                ORDER BY deadline_date ASC, id DESC
+                                ORDER BY id DESC
                                 LIMIT 1
                                 """,
-                                (int(chat_id), int(cid)),
+                                (int(chat_id), str(cid)),
                             )
-                            row_term = cur.fetchone()
+                            row_note = cur.fetchone()
 
-                            if row_term:
-                                d = row_term["deadline_date"] if hasattr(row_term, "keys") else row_term[0]
-                                ev = row_term["event_text"] if hasattr(row_term, "keys") else row_term[1]
-                                if d and ev:
-                                    context_line = f"   • Próximo: {d} | {ev[:60]}"
+                            if row_note:
+                                note_text = row_note["note_text"] if hasattr(row_note, "keys") else row_note[0]
+                                if note_text:
+                                    context_line = f"   • Último: {note_text[:80]}"
 
                         line = f"{idx}) CASE:{cid} ({name})"
                         if context_line:
