@@ -1151,6 +1151,111 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
 
     # --------------------------------------------------
+    # Pending term confirmation
+    # --------------------------------------------------
+    try:
+        if int(chat_id) in _PENDING_TERM_CONFIRM:
+            pending = _PENDING_TERM_CONFIRM.get(int(chat_id))
+
+            confirm_low = (text or "").strip().lower()
+            confirm_low = unicodedata.normalize("NFKD", confirm_low)
+            confirm_low = "".join(ch for ch in confirm_low if not unicodedata.combining(ch))
+            confirm_low = re.sub(r"[^\w\s]", " ", confirm_low)
+            confirm_low = re.sub(r"\s+", " ", confirm_low).strip()
+
+            logger.info(
+                f"[PENDING_TERM_CONFIRM] chat_id={chat_id} "
+                f"confirm_low={confirm_low!r} pending={pending!r}"
+            )
+
+            confirm_yes = (
+                "si",
+                "ok",
+                "dale",
+                "hazlo",
+                "registralo",
+                "guardalo",
+                "si dale",
+                "si hazlo",
+                "si registralo",
+                "si guardalo",
+                "ok dale",
+                "ok hazlo",
+                "ok registralo",
+                "dale hazlo",
+            )
+
+            confirm_no = (
+                "no",
+                "cancelar",
+                "olvidalo",
+                "mejor no",
+                "no lo registres",
+                "no lo registres por ahora",
+            )
+
+            if confirm_low in confirm_yes:
+                _PENDING_TERM_CONFIRM.pop(int(chat_id), None)
+
+                from memory_store import insert_case_event
+
+                dup = False
+                try:
+                    conn = _get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM case_events
+                        WHERE chat_id=?
+                          AND case_id=?
+                          AND event_text=?
+                          AND IFNULL(deadline_date,'') = IFNULL(?, '')
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (
+                            int(chat_id),
+                            int(pending["case_id"]),
+                            pending["event_text"],
+                            pending["deadline_date"],
+                        ),
+                    )
+                    row = cur.fetchone()
+                    conn.close()
+                    if row:
+                        dup = True
+                except Exception:
+                    dup = False
+
+                if dup:
+                    await update.message.reply_text(
+                        f"⚠️ Término duplicado detectado en CASE:{pending['case_id']}."
+                    )
+                    return
+
+                insert_case_event(
+                    chat_id=int(chat_id),
+                    case_id=int(pending["case_id"]),
+                    event_text=pending["event_text"],
+                    deadline_date=pending["deadline_date"],
+                )
+
+                await update.message.reply_text(
+                    f"⏳ Término registrado en CASE:{pending['case_id']}\n"
+                    f"Vence: {pending['deadline_date']}"
+                )
+                return
+
+            if confirm_low in confirm_no:
+                _PENDING_TERM_CONFIRM.pop(int(chat_id), None)
+                await update.message.reply_text("Entendido. No lo registré.")
+                return
+
+    except Exception as e:
+        logger.exception(f"[PENDING_TERM_CONFIRM] failed: {e}")
+
+    # --------------------------------------------------
     # Reminder Creator + Cancel (DM only) — deterministic
     # --------------------------------------------------
     try:
@@ -1343,75 +1448,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[NATURAL_TERM_DETECT] failed: {e}")
 
-    # --------------------------------------------------
-    # Pending term confirmation
-    # --------------------------------------------------
-    try:
-        confirm_low = (text or "").strip().lower()
-        logger.info(f"[PENDING_TERM_CONFIRM] CHECK chat_id={chat_id} confirm_low={confirm_low!r} has_pending={int(chat_id) in _PENDING_TERM_CONFIRM}")
-        if int(chat_id) in _PENDING_TERM_CONFIRM:
-            logger.info(f"[PENDING_TERM_CONFIRM] PENDING_DATA={_PENDING_TERM_CONFIRM.get(int(chat_id))}")
-            if confirm_low in ("si", "sí", "ok", "dale", "hazlo", "registralo", "regístralo"):
-                pending = _PENDING_TERM_CONFIRM.pop(int(chat_id))
-
-                from memory_store import insert_case_event
-
-                # dedupe check
-                dup = False
-                try:
-                    conn = _get_conn()
-                    cur = conn.cursor()
-                    cur.execute(
-                        """
-                        SELECT id
-                        FROM case_events
-                        WHERE chat_id=?
-                          AND case_id=?
-                          AND event_text=?
-                          AND IFNULL(deadline_date,'') = IFNULL(?, '')
-                        ORDER BY id DESC
-                        LIMIT 1
-                        """,
-                        (
-                            int(chat_id),
-                            int(pending["case_id"]),
-                            pending["event_text"],
-                            pending["deadline_date"],
-                        ),
-                    )
-                    row = cur.fetchone()
-                    conn.close()
-                    if row:
-                        dup = True
-                except Exception:
-                    dup = False
-
-                if dup:
-                    await update.message.reply_text(
-                        f"⚠️ Término duplicado detectado en CASE:{pending['case_id']}."
-                    )
-                    return
-                logger.info(f"[PENDING_TERM_CONFIRM] CONFIRMED_REGISTER chat_id={chat_id} case_id={pending['case_id']} deadline={pending['deadline_date']}")
-
-                insert_case_event(
-                    chat_id=int(chat_id),
-                    case_id=int(pending["case_id"]),
-                    event_text=pending["event_text"],
-                    deadline_date=pending["deadline_date"],
-                )
-
-                await update.message.reply_text(
-                    f"⏳ Término registrado en CASE:{pending['case_id']}\n"
-                    f"Vence: {pending['deadline_date']}"
-                )
-                return
-
-            elif confirm_low in ("no", "cancelar", "olvidalo", "olvídalo"):
-                _PENDING_TERM_CONFIRM.pop(int(chat_id), None)
-                await update.message.reply_text("Entendido. No lo registré.")
-                return
-    except Exception as e:
-        logger.exception(f"[PENDING_TERM_CONFIRM] failed: {e}")
     # --------------------------------------------------
     # Natural Note Capture v1 — run BEFORE handler registry
     # --------------------------------------------------
