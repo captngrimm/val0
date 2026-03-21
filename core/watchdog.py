@@ -74,6 +74,10 @@ async def deadline_watchdog(context):
             if already_sent:
                 continue
 
+            # skip reminder-style events; this alert is only for legal/procedural deadlines
+            if (event_text or "").strip().upper().startswith("RECORDATORIO:"):
+                continue
+
             alerts.append((client_name, deadline_date, event_text, alert_key))
 
         if not alerts:

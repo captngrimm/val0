@@ -34,11 +34,25 @@ import time
 # === CORE DB ACCESS (must ALWAYS exist) ===
 from memory_store import _get_conn
 
+# === CORE DB ACCESS (must ALWAYS exist) ===
+from memory_store import _get_conn
+
+# === MODE HANDLER (must ALWAYS exist if referenced later) ===
+from core.mode import try_set_mode
+
 # --- MIGUEL MVP: gates wiring (safe optional imports) ---
 try:
-    from core.case_mvp import try_case_summary, try_due_today, try_due_range
-    from core.mode import try_set_mode
-    from core.case_reports import try_idle_cases, try_daily_work_summary, try_priority_dashboard
+    from core.case_mvp import (
+        try_case_summary,
+        try_due_today,
+        try_due_range,
+        try_delete_last_note,
+    )
+    from core.case_reports import (
+        try_idle_cases,
+        try_daily_work_summary,
+        try_priority_dashboard,
+    )
     from core.ops_cmds import ops_cmd, health_cmd, reminders_cmd, rmd_cmd
 except Exception:
     pass
@@ -121,6 +135,7 @@ def _places_session_get(chat_id: int):
 _CO_SESSION = {}  # chat_id -> {"start": epoch, "nudged": bool}
 _PENDING_TERM_CONFIRM = {}
 _PENDING_CASE_DISAMBIG = {}
+_PENDING_REMINDER_CONFIRM = {}
 # --------------------------------------------------
 # Logging
 # --------------------------------------------------
@@ -223,6 +238,14 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         "termino en ",
         "término en ",
         "vencimiento en ",
+        "borra la ultima nota",
+        "borra la última nota",
+        "borrar la ultima nota",
+        "borrar la última nota",
+        "elimina la ultima nota",
+        "elimina la última nota",
+        "eliminar la ultima nota",
+        "eliminar la última nota",
         "como va el caso",
         "cómo va el caso",
         "estado del caso",
@@ -1352,6 +1375,22 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         f"📝 Guardé esto como nota en CASE:{cid} ({name})."
                     )
                     return
+                # ---------------- REMINDER ----------------
+                elif dis["type"] == "reminder":
+                    _PENDING_REMINDER_CONFIRM[int(chat_id)] = {
+                        "case_id": int(cid),
+                        "client_name": name,
+                        "reminder_text": dis["payload"]["reminder_text"],
+                        "due_date": dis["payload"]["due_date"],
+                    }
+
+                    await update.message.reply_text(
+                        f"⚠️ Detecté un posible recordatorio en CASE:{cid} ({name})\n\n"
+                        f"\"{dis['payload']['reminder_text']}\"\n\n"
+                        f"¿Quieres que lo registre?"
+                    )
+                    return
+
 
             await update.message.reply_text(
                 "No entendí la opción.\n"
@@ -1363,6 +1402,109 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     except Exception as e:
         logger.exception(f"[CASE_DISAMBIG] failed: {e}")
+
+    # --------------------------------------------------
+    # Pending reminder confirmation
+    # --------------------------------------------------
+    try:
+        if int(chat_id) in _PENDING_REMINDER_CONFIRM:
+            pending = _PENDING_REMINDER_CONFIRM.get(int(chat_id))
+
+            confirm_low = (text or "").strip().lower()
+            confirm_low = unicodedata.normalize("NFKD", confirm_low)
+            confirm_low = "".join(ch for ch in confirm_low if not unicodedata.combining(ch))
+            confirm_low = re.sub(r"[^\w\s]", " ", confirm_low)
+            confirm_low = re.sub(r"\s+", " ", confirm_low).strip()
+
+            confirm_yes = (
+                "si",
+                "ok",
+                "dale",
+                "hazlo",
+                "registralo",
+                "guardalo",
+                "si dale",
+                "si hazlo",
+                "si registralo",
+                "si guardalo",
+                "ok dale",
+                "ok hazlo",
+                "ok registralo",
+                "dale hazlo",
+            )
+
+            confirm_no = (
+                "no",
+                "cancelar",
+                "olvidalo",
+                "mejor no",
+                "no lo registres",
+                "no lo registres por ahora",
+            )
+
+            if confirm_low in confirm_yes:
+                _PENDING_REMINDER_CONFIRM.pop(int(chat_id), None)
+
+                # simple deterministic storage as case-linked reminder event
+                from memory_store import insert_case_event
+
+                event_text = f"RECORDATORIO: {pending['reminder_text']}"
+
+                dup = False
+                try:
+                    conn = _get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM case_events
+                        WHERE chat_id=?
+                          AND case_id=?
+                          AND event_text=?
+                          AND IFNULL(deadline_date,'') = IFNULL(?, '')
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (
+                            int(chat_id),
+                            int(pending["case_id"]),
+                            event_text,
+                            pending["due_date"],
+                        ),
+                    )
+                    row = cur.fetchone()
+                    conn.close()
+                    if row:
+                        dup = True
+                except Exception:
+                    dup = False
+
+                if dup:
+                    await update.message.reply_text(
+                        f"⚠️ Recordatorio duplicado detectado en CASE:{pending['case_id']}."
+                    )
+                    return
+
+                insert_case_event(
+                    chat_id=int(chat_id),
+                    case_id=int(pending["case_id"]),
+                    event_text=event_text,
+                    deadline_date=pending["due_date"],
+                )
+
+                await update.message.reply_text(
+                    f"⏰ Recordatorio registrado en CASE:{pending['case_id']}\n"
+                    f"Fecha: {pending['due_date']}"
+                )
+                return
+
+            if confirm_low in confirm_no:
+                _PENDING_REMINDER_CONFIRM.pop(int(chat_id), None)
+                await update.message.reply_text("Entendido. No lo registré.")
+                return
+
+    except Exception as e:
+        logger.exception(f"[PENDING_REMINDER_CONFIRM] failed: {e}")        
 
     # --------------------------------------------------
     # Pending term confirmation
@@ -1578,6 +1720,192 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[CASE_NOTE_CMD] failed: {e}")
 
+        # --------------------------------------------------
+    # NATURAL REMINDER DETECTION (suggestion only, no write)
+    # --------------------------------------------------
+    try:
+        low = (text or "").lower()
+
+        reminder_triggers = (
+            "recuerdame",
+            "recuérdame",
+            "recordarme",
+            "recordatorio",
+            "llamar",
+            "llame",
+            "llamarlo",
+            "llamarla",
+            "darle seguimiento",
+            "seguimiento",
+            "revisar",
+            "escribirle",
+            "responderle",
+        )
+
+        reminder_time_markers = (
+            "mañana",
+            "manana",
+            "hoy",
+            "el lunes",
+            "el martes",
+            "el miercoles",
+            "el miércoles",
+            "el jueves",
+            "el viernes",
+            "el sabado",
+            "el sábado",
+            "el domingo",
+        )
+
+        if any(x in low for x in reminder_triggers) and any(x in low for x in reminder_time_markers):
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT expediente, client_name
+                FROM cases
+                WHERE chat_id=?
+                ORDER BY id DESC
+                """,
+                (int(chat_id),),
+            )
+            rows = cur.fetchall() or []
+            conn.close()
+
+            matches = []
+            for r in rows:
+                expediente = r["expediente"] if hasattr(r, "keys") else r[0]
+                client_name = r["client_name"] if hasattr(r, "keys") else r[1]
+
+                if client_name and client_name.lower() in low:
+                    matches.append((str(expediente), client_name))
+
+            # resolve target date (simple deterministic version)
+            tz = ZoneInfo("America/Panama")
+            now_local = datetime.now(tz)
+            due_date = None
+
+            weekdays = {
+                "lunes": 0,
+                "martes": 1,
+                "miercoles": 2,
+                "miércoles": 2,
+                "jueves": 3,
+                "viernes": 4,
+                "sabado": 5,
+                "sábado": 5,
+                "domingo": 6,
+            }
+
+            if "mañana" in low or "manana" in low:
+                due_date = (now_local + timedelta(days=1)).date().isoformat()
+            elif "hoy" in low:
+                due_date = now_local.date().isoformat()
+            else:
+                for name, target_wd in weekdays.items():
+                    if f"el {name}" in low:
+                        days_ahead = (target_wd - now_local.weekday()) % 7
+                        if days_ahead == 0:
+                            days_ahead = 7
+                        due_date = (now_local + timedelta(days=days_ahead)).date().isoformat()
+                        break
+
+            if due_date:
+                if len(matches) == 1:
+                    case_id, client_name = matches[0]
+
+                    _PENDING_REMINDER_CONFIRM[int(chat_id)] = {
+                        "case_id": int(case_id),
+                        "client_name": client_name,
+                        "reminder_text": text.strip(),
+                        "due_date": due_date,
+                    }
+
+                    await update.message.reply_text(
+                        f"⚠️ Detecté un posible recordatorio en CASE:{case_id} ({client_name})\n\n"
+                        f"\"{text.strip()}\"\n\n"
+                        f"¿Quieres que lo registre?"
+                    )
+                    return
+
+                elif len(matches) > 1:
+                    _PENDING_CASE_DISAMBIG[int(chat_id)] = {
+                        "type": "reminder",
+                        "candidates": matches,
+                        "payload": {
+                            "reminder_text": text.strip(),
+                            "due_date": due_date,
+                        },
+                    }
+
+                    conn = _get_conn()
+                    cur = conn.cursor()
+
+                    option_lines = []
+                    for idx, (cid, name) in enumerate(matches, start=1):
+                        context_line = None
+
+                        # prefer next term first
+                        cur.execute(
+                            """
+                            SELECT deadline_date, event_text
+                            FROM case_events
+                            WHERE chat_id=?
+                              AND case_id=?
+                              AND deadline_date IS NOT NULL
+                            ORDER BY deadline_date ASC, id DESC
+                            LIMIT 1
+                            """,
+                            (int(chat_id), int(cid)),
+                        )
+                        row_term = cur.fetchone()
+
+                        if row_term:
+                            d = row_term["deadline_date"] if hasattr(row_term, "keys") else row_term[0]
+                            ev = row_term["event_text"] if hasattr(row_term, "keys") else row_term[1]
+                            if d and ev:
+                                context_line = f"   • Próximo: {d} | {ev[:60]}"
+
+                        if not context_line:
+                            cur.execute(
+                                """
+                                SELECT note_text
+                                FROM case_notes
+                                WHERE chat_id=?
+                                  AND case_id=?
+                                ORDER BY id DESC
+                                LIMIT 1
+                                """,
+                                (int(chat_id), str(cid)),
+                            )
+                            row_note = cur.fetchone()
+
+                            if row_note:
+                                note_text = row_note["note_text"] if hasattr(row_note, "keys") else row_note[0]
+                                if note_text:
+                                    context_line = f"   • Último: {note_text[:80]}"
+
+                        line = f"{idx}) CASE:{cid} ({name})"
+                        if context_line:
+                            line += f"\n{context_line}"
+
+                        option_lines.append(line)
+
+                    conn.close()
+                    options = "\n\n".join(option_lines)
+
+                    await update.message.reply_text(
+                        f"⚠️ Encontré más de un caso para ese cliente:\n\n"
+                        f"{options}\n\n"
+                        f"Responde con 1 o 2.\n"
+                        f"Escribe \"detalle 1\" o \"detalle 2\" para ver más info.\n"
+                        f"También puedes escribir \"cancelar\"."
+                    )
+                    return
+
+    except Exception as e:
+        logger.exception(f"[NATURAL_REMINDER_DETECT] failed: {e}")
+
     # --------------------------------------------------
     # NATURAL TERM DETECTION (suggestion only, no write)
     # --------------------------------------------------
@@ -1754,6 +2082,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_case_add_note,
             try_case_register_term,
             try_case_create,
+            try_delete_last_note,
             try_case_status,
             try_case_cockpit,
             try_case_health,
@@ -1794,6 +2123,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_case_add_note,
             try_case_register_term,
             try_case_create,
+            try_delete_last_note,
 
             # case views
             try_case_status,

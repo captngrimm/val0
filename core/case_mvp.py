@@ -451,7 +451,7 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
         due_label = dt_local.strftime("%Y-%m-%d")
         next_rem = (due_label, txt)
 
-    # active terms
+    # active terms / dated events
     active_terms = []
     try:
         conn = _get_conn()
@@ -464,7 +464,7 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
               AND case_id=?
               AND deadline_date IS NOT NULL
             ORDER BY deadline_date ASC
-            LIMIT 3
+            LIMIT 10
             """,
             (int(chat_id), int(case_id)),
         )
@@ -508,8 +508,19 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
     else:
         lines.append("• Última nota: —")
 
-    if active_terms:
-        first_term = active_terms[0]
+    # split legal terms vs reminder-style events
+    legal_terms = []
+    reminder_terms = []
+
+    for row in active_terms:
+        term_text = (row["event_text"] if hasattr(row, "keys") else row[0]) or ""
+        if term_text.strip().upper().startswith("RECORDATORIO:"):
+            reminder_terms.append(row)
+        else:
+            legal_terms.append(row)
+
+    if legal_terms:
+        first_term = legal_terms[0]
         term_text = (first_term["event_text"] if hasattr(first_term, "keys") else first_term[0]) or "—"
         term_deadline = (first_term["deadline_date"] if hasattr(first_term, "keys") else first_term[1]) or "—"
         lines.append(f"• Próximo término: {term_text} ({term_deadline})")
@@ -518,13 +529,18 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
 
     if next_rem:
         lines.append(f"• Próximo recordatorio: {next_rem[0]} | {next_rem[1]}")
+    elif reminder_terms:
+        first_rem = reminder_terms[0]
+        rem_text = (first_rem["event_text"] if hasattr(first_rem, "keys") else first_rem[0]) or "—"
+        rem_deadline = (first_rem["deadline_date"] if hasattr(first_rem, "keys") else first_rem[1]) or "—"
+        lines.append(f"• Próximo recordatorio: {rem_deadline} | {rem_text}")
     else:
         lines.append("• Próximo recordatorio: —")
 
-    if active_terms:
+    if legal_terms:
         lines.append("")
         lines.append("⏳ <u>Términos activos</u>")
-        for row in active_terms:
+        for row in legal_terms:
             term_text = (row["event_text"] if hasattr(row, "keys") else row[0]) or "—"
             term_deadline = (row["deadline_date"] if hasattr(row, "keys") else row[1]) or "—"
             lines.append(f"• {term_deadline} | {term_text}")
@@ -2959,4 +2975,99 @@ async def try_terms_due_tomorrow(update, chat_id, text) -> bool:
         lines.append(f"• {deadline} | {client} | {event_text}")
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-    return True       
+    return True 
+
+async def try_delete_last_note(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = _clean(text or "")
+
+    if not any(x in t for x in (
+        "borra la ultima nota",
+        "elimina la ultima nota",
+        "borrar la ultima nota",
+        "eliminar la ultima nota",
+    )):
+        return False
+
+    case_id = None
+
+    # numeric
+    m = re.search(r"caso\s+(\d{4,})", t)
+    if m:
+        case_id = (m.group(1) or "").strip()
+
+    # name
+    if not case_id and ("caso de " in t or "del caso de " in t):
+        if "del caso de " in t:
+            client_name = t.split("del caso de ", 1)[1]
+        else:
+            client_name = t.split("caso de ", 1)[1]
+
+        client_name = re.sub(r"[^\w\s]", "", client_name).strip()
+
+        if client_name:
+            try:
+                conn = _get_conn()
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT expediente
+                    FROM cases
+                    WHERE chat_id=?
+                      AND lower(client_name) LIKE lower(?)
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (int(chat_id), f"%{client_name}%"),
+                )
+                row = cur.fetchone()
+                conn.close()
+
+                if row:
+                    case_id = str(row[0]).strip()
+            except Exception:
+                case_id = None
+
+    if not case_id:
+        await update.message.reply_text("No encontré el caso.")
+        return True
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT id, note_text
+            FROM case_notes
+            WHERE chat_id=?
+              AND case_id=?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(chat_id), str(case_id)),
+        )
+        row = cur.fetchone()
+
+        if not row:
+            conn.close()
+            await update.message.reply_text("No hay notas para borrar.")
+            return True
+
+        note_id, note_text = row[0], row[1]
+
+        cur.execute("DELETE FROM case_notes WHERE id=?", (note_id,))
+        conn.commit()
+        conn.close()
+
+        await update.message.reply_text(
+            f"🗑️ Eliminé la última nota del caso {case_id}:\n\"{note_text[:80]}\""
+        )
+        return True
+
+    except Exception as e:
+        logger.exception(f"[DELETE_LAST_NOTE] failed: {e}")
+        await update.message.reply_text("No pude borrar la nota.")
+        return True          
