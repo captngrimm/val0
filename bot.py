@@ -1302,7 +1302,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             choice = (text or "").strip()
             choice_lower = choice.lower()
 
-            # --- auto-cancel if user sent a new natural sentence ---
+            # auto-cancel if user sent a fresh natural sentence
             if (
                 not choice_lower.isdigit()
                 and not choice_lower.startswith("detalle")
@@ -1314,20 +1314,16 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 disambig_released = True
             else:
                 choice_norm = choice.replace("case:", "").replace("CASE:", "").strip().lower()
-
-                # normalize accents/punctuation lightly
                 choice_norm = unicodedata.normalize("NFKD", choice_norm)
                 choice_norm = "".join(ch for ch in choice_norm if not unicodedata.combining(ch))
                 choice_norm = re.sub(r"[^\w\s]", " ", choice_norm)
                 choice_norm = re.sub(r"\s+", " ", choice_norm).strip()
 
-                # cancel / escape
                 if choice_norm in ("cancelar", "cancel", "salir", "no", "olvidalo", "olvidalo por ahora"):
                     _PENDING_CASE_DISAMBIG.pop(int(chat_id), None)
                     await update.message.reply_text("Entendido. Cancelé la selección.")
                     return
 
-                # detail request
                 m_detail = re.match(r"^(detalle|ver|info)\s+(\d+)$", choice_norm)
                 logger.info(
                     f"[CASE_DISAMBIG] choice_norm={choice_norm!r} "
@@ -1337,24 +1333,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 if m_detail:
                     idx = int(m_detail.group(2))
                     if 1 <= idx <= len(dis["candidates"]):
-                        logger.info(
-                            f"[CASE_DISAMBIG] DETAIL idx={idx} "
-                            f"selected_case={dis['candidates'][idx - 1]}"
-                        )
                         cid, name = dis["candidates"][idx - 1]
-
                         try:
                             from core.case_mvp import generate_case_cockpit
-
                             out = generate_case_cockpit(int(chat_id), str(cid))
-                            logger.info(f"[CASE_DISAMBIG] DETAIL_REPLY case_id={cid} name={name}")
-
                             await update.message.reply_text(out, parse_mode="HTML")
                             await update.message.reply_text(
                                 "Responde con 1 o 2 para seleccionar. También puedes escribir cancelar."
                             )
                             return
-
                         except Exception as e:
                             logger.exception(f"[CASE_DISAMBIG DETAIL] cockpit failed: {e}")
                             await update.message.reply_text("No pude cargar el detalle del caso.")
@@ -1379,7 +1366,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     cid, name = selected
                     _PENDING_CASE_DISAMBIG.pop(int(chat_id), None)
 
-                    # ---------------- TERM ----------------
                     if dis["type"] == "term":
                         _PENDING_TERM_CONFIRM[int(chat_id)] = {
                             "case_id": int(cid),
@@ -1387,7 +1373,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                             "event_text": dis["payload"]["event_text"],
                             "deadline_date": dis["payload"]["deadline_date"],
                         }
-
                         await update.message.reply_text(
                             f"⚠️ Detecté un posible término en CASE:{cid} ({name})\n\n"
                             f"\"{dis['payload']['event_text']}\"\n\n"
@@ -1395,12 +1380,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         )
                         return
 
-                    # ---------------- NOTE ----------------
                     elif dis["type"] == "note":
                         from memory_store import insert_case_note, set_active_case_id
 
                         set_active_case_id(int(chat_id), str(cid))
-
                         note_id = insert_case_note(
                             chat_id=int(chat_id),
                             case_id=str(cid),
@@ -1418,7 +1401,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         )
                         return
 
-                    # ---------------- REMINDER ----------------
                     elif dis["type"] == "reminder":
                         _PENDING_REMINDER_CONFIRM[int(chat_id)] = {
                             "case_id": int(cid),
@@ -1426,7 +1408,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                             "reminder_text": dis["payload"]["reminder_text"],
                             "due_date": dis["payload"]["due_date"],
                         }
-
                         await update.message.reply_text(
                             f"⚠️ Detecté un posible recordatorio en CASE:{cid} ({name})\n\n"
                             f"\"{dis['payload']['reminder_text']}\"\n\n"
@@ -1442,7 +1423,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 )
                 return
 
-        # if we released old disambiguation, continue with this same message normally
         if disambig_released:
             logger.info("[CASE_DISAMBIG] released old state; continuing with fresh pipeline")
 
@@ -1463,35 +1443,18 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             confirm_low = re.sub(r"\s+", " ", confirm_low).strip()
 
             confirm_yes = (
-                "si",
-                "ok",
-                "dale",
-                "hazlo",
-                "registralo",
-                "guardalo",
-                "si dale",
-                "si hazlo",
-                "si registralo",
-                "si guardalo",
-                "ok dale",
-                "ok hazlo",
-                "ok registralo",
-                "dale hazlo",
+                "si", "ok", "dale", "hazlo", "registralo", "guardalo",
+                "si dale", "si hazlo", "si registralo", "si guardalo",
+                "ok dale", "ok hazlo", "ok registralo", "dale hazlo",
             )
-
             confirm_no = (
-                "no",
-                "cancelar",
-                "olvidalo",
-                "mejor no",
-                "no lo registres",
-                "no lo registres por ahora",
+                "no", "cancelar", "olvidalo", "mejor no",
+                "no lo registres", "no lo registres por ahora",
             )
 
             if confirm_low in confirm_yes:
                 _PENDING_REMINDER_CONFIRM.pop(int(chat_id), None)
 
-                # simple deterministic storage as case-linked reminder event
                 from memory_store import insert_case_event
 
                 event_text = f"RECORDATORIO: {pending['reminder_text']}"
@@ -1538,6 +1501,36 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     deadline_date=pending["due_date"],
                 )
 
+                event_id = None
+                try:
+                    conn = _get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM case_events
+                        WHERE chat_id=?
+                          AND case_id=?
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (
+                            int(chat_id),
+                            int(pending["case_id"]),
+                        ),
+                    )
+                    row = cur.fetchone()
+                    conn.close()
+                    if row:
+                        event_id = row["id"] if hasattr(row, "keys") else row[0]
+                except Exception:
+                    pass
+
+                _LAST_ACTION[int(chat_id)] = {
+                    "type": "reminder_insert",
+                    "id": event_id,
+                }
+
                 await update.message.reply_text(
                     f"⏰ Recordatorio registrado en CASE:{pending['case_id']}\n"
                     f"Fecha: {pending['due_date']}"
@@ -1550,7 +1543,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 return
 
     except Exception as e:
-        logger.exception(f"[PENDING_REMINDER_CONFIRM] failed: {e}")        
+        logger.exception(f"[PENDING_REMINDER_CONFIRM] failed: {e}")
 
     # --------------------------------------------------
     # Pending term confirmation
@@ -1571,29 +1564,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
 
             confirm_yes = (
-                "si",
-                "ok",
-                "dale",
-                "hazlo",
-                "registralo",
-                "guardalo",
-                "si dale",
-                "si hazlo",
-                "si registralo",
-                "si guardalo",
-                "ok dale",
-                "ok hazlo",
-                "ok registralo",
-                "dale hazlo",
+                "si", "ok", "dale", "hazlo", "registralo", "guardalo",
+                "si dale", "si hazlo", "si registralo", "si guardalo",
+                "ok dale", "ok hazlo", "ok registralo", "dale hazlo",
             )
-
             confirm_no = (
-                "no",
-                "cancelar",
-                "olvidalo",
-                "mejor no",
-                "no lo registres",
-                "no lo registres por ahora",
+                "no", "cancelar", "olvidalo", "mejor no",
+                "no lo registres", "no lo registres por ahora",
             )
 
             if confirm_low in confirm_yes:
@@ -1643,6 +1620,36 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     deadline_date=pending["deadline_date"],
                 )
 
+                event_id = None
+                try:
+                    conn = _get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM case_events
+                        WHERE chat_id=?
+                          AND case_id=?
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (
+                            int(chat_id),
+                            int(pending["case_id"]),
+                        ),
+                    )
+                    row = cur.fetchone()
+                    conn.close()
+                    if row:
+                        event_id = row["id"] if hasattr(row, "keys") else row[0]
+                except Exception:
+                    pass
+
+                _LAST_ACTION[int(chat_id)] = {
+                    "type": "term_insert",
+                    "id": event_id,
+                }
+
                 await update.message.reply_text(
                     f"⏳ Término registrado en CASE:{pending['case_id']}\n"
                     f"Vence: {pending['deadline_date']}"
@@ -1673,7 +1680,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         if int(chat_id) > 0:
-            # Cancel FIRST (so "cancela 25" doesn't fall through)
             cancel_handled = await try_cancel_reminder(update, chat_id, text, audit_fn=_audit)
             logger.info(f"[REMINDER_GATE] cancel_handled={cancel_handled} text={text!r}")
             if cancel_handled:
@@ -1689,8 +1695,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # --------------------------------------------------
     # Case registration command — deterministic
-    # Example:
-    # registrar caso 524242024 cliente Leticia
     # --------------------------------------------------
     try:
         m = re.match(
@@ -1730,8 +1734,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # --------------------------------------------------
     # Case note command — deterministic
-    # Example:
-    # nota caso 524242024: juez sugirió conciliación
     # --------------------------------------------------
     try:
         m = re.match(r"(?is)^\s*nota\s+(?:del\s+)?(?:caso|expediente)\s+(\d{4,})\s*:\s*(.+?)\s*$", text or "")
@@ -1766,7 +1768,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[CASE_NOTE_CMD] failed: {e}")
 
-        # --------------------------------------------------
+    # --------------------------------------------------
     # NATURAL REMINDER DETECTION (suggestion only, no write)
     # --------------------------------------------------
     try:
@@ -1826,7 +1828,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 if client_name and client_name.lower() in low:
                     matches.append((str(expediente), client_name))
 
-            # resolve target date (simple deterministic version)
             tz = ZoneInfo("America/Panama")
             now_local = datetime.now(tz)
             due_date = None
@@ -1887,11 +1888,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     conn = _get_conn()
                     cur = conn.cursor()
 
-                    option_lines = []
-                    for idx, (cid, name) in enumerate(matches, start=1):
-                        context_line = None
+                    options = []
 
-                        # prefer next term first
+                    for (cid, name) in matches:
+                        context_line = None
+                        score = 0
+
                         cur.execute(
                             """
                             SELECT deadline_date, event_text
@@ -1899,18 +1901,43 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                             WHERE chat_id=?
                               AND case_id=?
                               AND deadline_date IS NOT NULL
-                            ORDER BY deadline_date ASC, id DESC
+                              AND upper(event_text) NOT LIKE 'RECORDATORIO:%'
+                            ORDER BY deadline_date ASC
                             LIMIT 1
                             """,
                             (int(chat_id), int(cid)),
                         )
-                        row_term = cur.fetchone()
+                        row_legal = cur.fetchone()
 
-                        if row_term:
-                            d = row_term["deadline_date"] if hasattr(row_term, "keys") else row_term[0]
-                            ev = row_term["event_text"] if hasattr(row_term, "keys") else row_term[1]
+                        if row_legal:
+                            d = row_legal["deadline_date"] if hasattr(row_legal, "keys") else row_legal[0]
+                            ev = row_legal["event_text"] if hasattr(row_legal, "keys") else row_legal[1]
                             if d and ev:
                                 context_line = f"   • Próximo: {d} | {ev[:60]}"
+                                score = 3
+
+                        if not context_line:
+                            cur.execute(
+                                """
+                                SELECT deadline_date, event_text
+                                FROM case_events
+                                WHERE chat_id=?
+                                  AND case_id=?
+                                  AND deadline_date IS NOT NULL
+                                  AND upper(event_text) LIKE 'RECORDATORIO:%'
+                                ORDER BY deadline_date ASC
+                                LIMIT 1
+                                """,
+                                (int(chat_id), int(cid)),
+                            )
+                            row_rem = cur.fetchone()
+
+                            if row_rem:
+                                d = row_rem["deadline_date"] if hasattr(row_rem, "keys") else row_rem[0]
+                                ev = row_rem["event_text"] if hasattr(row_rem, "keys") else row_rem[1]
+                                if d and ev:
+                                    context_line = f"   • Próximo: {d} | {ev[:60]}"
+                                    score = 2
 
                         if not context_line:
                             cur.execute(
@@ -1930,27 +1957,24 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                                 note_text = row_note["note_text"] if hasattr(row_note, "keys") else row_note[0]
                                 if note_text:
                                     context_line = f"   • Último: {note_text[:80]}"
+                                    score = 1
 
+                        options.append((score, cid, name, context_line))
+
+                    conn.close()
+                    options.sort(key=lambda x: x[0], reverse=True)
+
+                    option_lines = []
+                    for idx, (score, cid, name, context_line) in enumerate(options, start=1):
                         line = f"{idx}) CASE:{cid} ({name})"
                         if context_line:
                             line += f"\n{context_line}"
-
                         option_lines.append(line)
 
-                    conn.close()
-                    options = "\n\n".join(option_lines)
-
-                    if dis["type"] == "note":
-                        header = "⚠️ Encontré más de un caso para esta nota:\n\n"
-                    elif dis["type"] == "term":
-                        header = "⚠️ Encontré más de un caso para este posible término:\n\n"
-                    elif dis["type"] == "reminder":
-                        header = "⚠️ Encontré más de un caso para este posible recordatorio:\n\n"
-                    else:
-                        header = "⚠️ Encontré más de un caso:\n\n"
+                    options_text = "\n\n".join(option_lines)
 
                     await update.message.reply_text(
-                        f"{header}"
+                        f"⚠️ Encontré más de un caso para este posible recordatorio:\n\n"
                         f"{options_text}\n\n"
                         f"Responde con 1 o 2.\n"
                         f"Escribe \"detalle 1\" o \"detalle 2\" para ver más info.\n"
@@ -1966,16 +1990,21 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # --------------------------------------------------
     try:
         low = (text or "").lower()
+        low = unicodedata.normalize("NFKD", low)
+        low = "".join(ch for ch in low if not unicodedata.combining(ch))
 
         trigger_words = [
             "audiencia",
+            "audiencias",
             "vence",
             "vencimiento",
             "plazo",
-            "término",
             "termino",
-            "citación",
+            "término",
+            "cita",
             "citacion",
+            "citación",
+            "fecha",
         ]
 
         if any(w in low for w in trigger_words):
@@ -1985,7 +2014,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
 
             if m_date:
-
                 month_map = {
                     "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
                     "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
@@ -2001,7 +2029,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
                 conn = _get_conn()
                 cur = conn.cursor()
-
                 cur.execute(
                     """
                     SELECT expediente, client_name
@@ -2011,7 +2038,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     """,
                     (int(chat_id),),
                 )
-
                 rows = cur.fetchall() or []
                 conn.close()
 
@@ -2063,7 +2089,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         context_line = None
                         score = 0
 
-                        # --- 1. first real legal term (non-reminder) ---
                         cur.execute(
                             """
                             SELECT deadline_date, event_text
@@ -2086,7 +2111,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                                 context_line = f"   • Próximo: {d} | {ev[:60]}"
                                 score = 3
 
-                        # --- 2. fallback to reminder ---
                         if not context_line:
                             cur.execute(
                                 """
@@ -2110,7 +2134,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                                     context_line = f"   • Próximo: {d} | {ev[:60]}"
                                     score = 2
 
-                        # --- 3. fallback to latest note ---
                         if not context_line:
                             cur.execute(
                                 """
@@ -2134,8 +2157,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         options.append((score, cid, name, context_line))
 
                     conn.close()
-
-                    # highest-value cases first
                     options.sort(key=lambda x: x[0], reverse=True)
 
                     option_lines = []
@@ -2160,7 +2181,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[NATURAL_TERM_DETECT] failed: {e}")
 
     # --------------------------------------------------
-    # Natural Note Capture v1 — run BEFORE handler registry
+    # Natural Note Capture v1 — AFTER term detection
     # --------------------------------------------------
     case_note_handled = await _maybe_capture_case_note(update, chat_id, text, source="text")
     if case_note_handled:
@@ -2173,6 +2194,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_case_register_term,
             try_case_create,
             try_delete_last_note,
+            try_undo_last_action,
             try_case_status,
             try_case_cockpit,
             try_case_health,
@@ -2235,33 +2257,23 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
             # due / agenda
             try_due_today,
-            try_due_today_natural,
-            try_agenda_tomorrow_natural,
             try_due_tomorrow,
-            try_due_tomorrow_natural,
             try_terms_due_this_week_for_case,
             try_cases_due_this_week,
             try_terms_due_today,
             try_terms_due_tomorrow,
             try_terms_due_this_week,
-            try_cases_due_this_week,
             try_due_range,
-            try_week_horizon,
         ]
 
         for handler in HANDLERS:
             if await handler(update, chat_id, text):
                 return
 
-        # --- CASE SAFETY GUARD ---
         text_lower = (text or "").lower().strip()
-
         if "caso" in text_lower and "casos" not in text_lower:
-            await update.message.reply_text(
-                "No encuentro ese caso en tu base de datos."
-            )
+            await update.message.reply_text("No encuentro ese caso en tu base de datos.")
             return
-        # --- END CASE SAFETY GUARD ---
 
     except Exception as e:
         logger.exception(f"[CASE_TIMELINE] failed: {e}")
@@ -2390,7 +2402,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     # --------------------------------------------------
     # Number-to-details (Places)
-    # If the last reply was a Places list, user can respond with "1".."5"
     # --------------------------------------------------
     if text.isdigit():
         sel = int(text)
@@ -2436,7 +2447,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         return
 
     # --------------------------------------------------
-    # Natural language → Google Places (fixed intent gate + control ack gate)
+    # Natural language → Google Places
     # --------------------------------------------------
     if _is_places_intent(text) and _looks_like_places_request(text):
         q = _places_query_from_text(text)
@@ -2444,11 +2455,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             results = places_search(q, limit=5)
         except Exception as e:
             logger.exception(f"Places search failed: {e}")
-            await update.message.reply_text(f"Se cayó la búsqueda de lugares, {preferred_name}. Intenta otra vez en un minuto.")
+            await update.message.reply_text(
+                f"Se cayó la búsqueda de lugares, {preferred_name}. Intenta otra vez en un minuto."
+            )
             return
 
         if isinstance(results, dict) and results.get("error"):
-            await update.message.reply_text(f"Error buscando lugares, {preferred_name}: {results.get('error')}")
+            await update.message.reply_text(
+                f"Error buscando lugares, {preferred_name}: {results.get('error')}"
+            )
             return
 
         results = _normalize_places_results(results)
@@ -2487,57 +2502,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     # --------------------------------------------------
-    # Reminder Creator + Cancel (DM only) — deterministic
-    # --------------------------------------------------
-    try:
-        from core.reminders_mvp import try_create_reminder, try_cancel_reminder
-
-        _audit(
-            chat_id,
-            action="DEBUG_REMINDER_GATE_ENTER",
-            entity_type="debug",
-            entity_id=None,
-            payload=(text or "")[:200],
-            source="dm",
-        )
-
-        if int(chat_id) > 0:
-            if await try_cancel_reminder(update, chat_id, text, audit_fn=_audit):
-                return
-            if await try_create_reminder(update, chat_id, text, audit_fn=_audit):
-                return
-
-    except Exception as e:
-        logger.exception(f"[GATE] reminder gate failed: {e}")
-
-    # --------------------------------------------------
-    # MIGUEL MVP — GATES (must run BEFORE model call)
-    # --------------------------------------------------
-    try:
-        logger.info('[GATE] try_case_summary check')
-        if await try_case_summary(update, chat_id, text):
-            logger.info('[GATE] try_case_summary HIT (short-circuit)')
-            return
-    except Exception as e:
-        logger.exception(f"[GATE] try_case_summary failed: {e}")
-
-    try:
-        logger.info('[GATE] try_due_today check')
-        if await try_due_today(update, chat_id, text):
-            logger.info('[GATE] try_due_today HIT (short-circuit)')
-            return
-    except Exception as e:
-        logger.exception(f"[GATE] try_due_today failed: {e}")
-    try:
-        logger.info('[GATE] try_due_range check')
-        if await try_due_range(update, chat_id, text):
-            logger.info('[GATE] try_due_range HIT (short-circuit)')
-            return
-    except Exception as e:
-        logger.exception(f"[GATE] try_due_range failed: {e}")
-
-    # --------------------------------------------------
-    # Load context + facts + semantic recall (C2) — with C3 gating
+    # Load context + facts + semantic recall
     # --------------------------------------------------
     try:
         recent = get_recent_messages(chat_id=chat_id, limit=12)
@@ -2561,7 +2526,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         facts_block = "\n".join(fact_lines)
 
     semantic_block = _semantic_recall_block(chat_id=chat_id, query=text, k=5)
-
     tclean = (text or "").strip()
 
     if len(tclean) < 8 or _is_control_ack(tclean):
