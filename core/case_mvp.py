@@ -540,10 +540,41 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
     if legal_terms:
         lines.append("")
         lines.append("⏳ <u>Términos activos</u>")
+
+        tz_today = datetime.now(tz).date()
+
+        active_list = []
+        completed_list = []
+
         for row in legal_terms:
             term_text = (row["event_text"] if hasattr(row, "keys") else row[0]) or "—"
-            term_deadline = (row["deadline_date"] if hasattr(row, "keys") else row[1]) or "—"
-            lines.append(f"• {term_deadline} | {term_text}")
+            term_deadline = (row["deadline_date"] if hasattr(row, "keys") else row[1]) or None
+
+            if term_deadline:
+                try:
+                    d = datetime.strptime(term_deadline, "%Y-%m-%d").date()
+                    if d < tz_today:
+                        completed_list.append((term_deadline, term_text))
+                    else:
+                        active_list.append((term_deadline, term_text))
+                except Exception:
+                    active_list.append((term_deadline, term_text))
+            else:
+                active_list.append((term_deadline, term_text))
+
+        # Active terms
+        for d, txt in active_list:
+            lines.append(f"• {d} | {txt}")
+
+        # Completed terms (limit to last 5)
+        if completed_list:
+            lines.append("")
+            lines.append("🕓 <u>Términos cumplidos</u>")
+
+            completed_list.sort(key=lambda x: x[0], reverse=True)
+
+            for d, txt in completed_list[:5]:
+                lines.append(f"• <s>{d} | {txt}</s>")
 
     if recent_notes:
         today_rows = []
