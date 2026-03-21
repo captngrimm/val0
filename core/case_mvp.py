@@ -583,6 +583,23 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
                 lines.append(f"• 📝 {label} | {txt}")
 
     lines.append("")
+    # --- Phase 2: cached summary (non-authoritative, additive) ---
+    try:
+        from memory_store import get_case_summary
+
+        summary_row = get_case_summary(int(chat_id), str(case_id))
+
+        if summary_row:
+            cached_text = (summary_row.get("summary_text") or "").strip()
+
+            if cached_text:
+                lines.append("")
+                lines.append("🧠 <u>Resumen (cache)</u>")
+                lines.append(cached_text)
+
+    except Exception:
+        # Never break cockpit if cache fails
+        pass
     lines.append("📊 <u>Estado</u>")
     lines.append(f"• Notas: {len(notes_rows)}")
     lines.append(f"• Pendientes: {len(pending_rows)}")

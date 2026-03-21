@@ -2311,6 +2311,22 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[CASE_TIMELINE] failed: {e}")
 
+    # --------------------------------------------------
+    # Direct case cockpit trigger (detalle <case_id>)
+    # --------------------------------------------------
+    try:
+        m = re.match(r"(?is)^\s*(detalle|ver|info)\s+(\d{4,})\s*$", text or "")
+        if m:
+            case_id = (m.group(2) or "").strip()
+
+            from core.case_mvp import generate_case_cockpit
+
+            out = generate_case_cockpit(int(chat_id), str(case_id))
+            await update.message.reply_text(out, parse_mode="HTML")
+            return
+    except Exception as e:
+        logger.exception(f"[DIRECT_COCKPIT] failed: {e}")    
+
     # Store user msg
     try:
         insert_message(

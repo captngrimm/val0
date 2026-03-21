@@ -3,7 +3,7 @@ VAL0 — COGNITIVE OPERATIONS CORE
 =====================================================================
 
 Operational Roadmap
-Last Updated: 2026-03-13
+Last Updated: 2026-03-21
 
 Mission:
 Val0 is a deterministic cognitive operations engine.
@@ -13,12 +13,12 @@ to support a broader class of entity-linked cognitive workflows.
 
 Core scope includes:
 
-- Deterministic legal execution
-- Encrypted memory spine
+- Deterministic entity-linked execution
+- Structured memory spine (canonical + derived)
 - Unified timeline retrieval
 - Discipline automation
 - Operational CLI control
-- Advisory reasoning layers
+- Advisory reasoning layers (non-authoritative)
 - Controlled personality rendering
 - Future standalone interface
 
@@ -54,10 +54,16 @@ The model may help:
 
 The model may NOT:
 
-- create legal facts
+- create facts
 - silently mutate deterministic records
 - alter deadlines or reminders
 - override DB truth
+- write to memory
+
+LLM is strictly:
+- last-stage
+- non-authoritative
+- non-mutating
 
 =====================================================================
 ARCHITECTURAL DIRECTION — S.O.U.L.
@@ -76,48 +82,61 @@ for a specific user.
 Responsibilities:
 
 - capture intent
-- preserve memory
+- preserve structured memory
 - link entities
 - coordinate workflows
-- assist reasoning
+- assist reasoning (advisory only)
 
 Val0 remains deterministic at its core.
 
-Advisory intelligence may operate on top,
-but must never mutate operational records.
-
 Future systems may allow multiple S.O.U.L. instances
-connected through shared modules and services.
+connected through controlled, permissioned exchange.
+
+Default:
+NO cross-user data sharing.
+
+=====================================================================
+MULTI-TENANT MODEL
+=====================================================================
+
+Core abstraction:
+
+- chat_id = tenant (user)
+- case_id = unit of work (case, deal, project, etc.)
+
+Rules:
+
+- All operations must be scoped by chat_id
+- No cross-tenant leakage
+- Same client names across tenants are isolated
+
+This enables Val0 to expand beyond legal workflows.
 
 =====================================================================
 CURRENT STATE — VERIFIED LIVE
 =====================================================================
 
-Deterministic legal engine operational.
+Deterministic engine operational.
 Encrypted storage active (SQLCipher).
-Google Calendar merge hardened and gated.
-Reminder engine stable and verified.
-Reminder cancellation deterministic (ID-based, DB-backed).
-Ops commands stable (/ops /health /reminders).
-Voice ingestion + case note capture live.
+Reminder engine stable.
+Reminder cancellation deterministic.
+Case notes + voice ingestion live.
 Semantic recall operational (advisory only).
-Ops CLI control surface active.
-
-Reminder Runner:
-
-- Due reminders delivered live (chat_id verified)
-- Blocked-user path marks reminder failed without crash
-- No stuck "sending" rows
-- due_now returns 0 after delivery
-- APScheduler stable across restart
+Ops CLI stable.
 
 Isolation:
 
-- DM + group chat isolation verified
-- /reminders is chat-scoped
+- DM + group isolation verified
+- chat-scoped operations enforced
+
+Reminder Runner:
+
+- stable delivery
+- no stuck rows
+- restart-safe
 
 =====================================================================
-MVP 1.1 — DETERMINISTIC LEGAL GATES (LIVE)
+MVP 1.1 — DETERMINISTIC GATES (LIVE)
 =====================================================================
 
 Implemented:
@@ -126,161 +145,118 @@ Implemented:
 - Due today gate
 - Due range gate
 - Strict CASE:<id> enforcement
-- SQLCipher encrypted DB
 - Deterministic dedupe
 - Conflict detection logging
 - No LLM participation
-
-Legal gates never depend on model reasoning.
 
 =====================================================================
 MVP 1.2 — GOOGLE CALENDAR MERGE (LIVE)
 =====================================================================
 
-Implemented:
-
-- Feature flag: VAL0_GCAL_ENABLED
-- Deterministic DB + GCAL merge
-- Conflict detection logging
-- DB priority on collisions
-- No database mutation
-- OAuth isolated under /etc/val0/gcal
-
-Merge is read-only and query-time only.
+- Read-only merge
+- DB priority on conflicts
+- No mutation of canonical records
 
 =====================================================================
 MVP 1.3 — DISCIPLINE LAYER (LIVE)
 =====================================================================
 
-Implemented:
-
-- Regex-based reminder creation
-- Reminder cancellation by ID
-- Reminder runner stable
-- Encrypted reminder storage
-- CLI injection tests
-- case_notes table live
-- Voice-to-note ingestion
-- Deterministic dedupe index
-
-Reminders are short-term nudges.
-Calendar is the system of record.
-
-Pending polish:
-
-- Daily 08:00 summary push
-- Overdue escalation tagging
-- Reminder state audit timeline
-- Timezone enforcement
+- Reminder creation + cancellation
+- Voice note ingestion
+- Deterministic dedupe
+- Case-linked notes
 
 =====================================================================
 SPRINT 10 — COURT DAY TIMELINE (LIVE)
 =====================================================================
 
-Implemented:
-
-Natural query support:
-
-- qué tengo mañana
-- mañana tribunales
-
-Deterministic timeline rendering.
-Case event grouping.
-
-Remaining polish:
-
-- formatting normalization
-- clearer source labels
+- Natural query support
+- Deterministic timeline rendering
 
 =====================================================================
 SPRINT 12 — ENTITY TIMELINE BACKBONE (LIVE)
 =====================================================================
 
-Core primitive introduced:
+Primitive:
 
 parent_ref
 
-Example:
-
-parent_ref = CASE:524242024
-
 Capabilities:
 
-- entity-linked reminders
 - entity-linked notes
-- timeline retrieval by entity
-- timeline retrieval by day
+- entity-linked reminders
+- timeline queries by entity/day
 
-Supported queries:
-
-qué tengo mañana  
-qué tengo del caso 524242024
-
-Timeline assembled at query time.
-
-No persistent timeline table created.
-
-Design rules:
-
-- read-only merge
-- deterministic retrieval
-- no model mutation
+No persistent timeline table.
+All timelines built at query time.
 
 =====================================================================
-NEXT SPRINT TARGETS
+PHASE 2 — CASE SUMMARY MEMORY (IN PROGRESS)
 =====================================================================
 
-Sprint 12.1 — Timeline Formatting
+New derived layer:
 
-Goal:
+case_summaries
 
-Improve readability of timeline output.
+Purpose:
 
-Example:
+- fast cockpit rendering
+- structured case snapshot
+- future LLM context injection
 
-📅 2026-03-08
-- 09:00 | evento       | audiencia
-- 12:30 | nota         | juez sugirió conciliación
-- 15:00 | recordatorio | revisar expediente
+Properties:
 
-Rendering only.
-No storage changes.
+- keyed by (chat_id, case_id)
+- deterministic only
+- fully rebuildable
+- NOT source of truth
 
----------------------------------------------------------------------
+Update triggers:
 
-Sprint 12.2 — Case Note Write Path
+- event insert
+- note insert
+- undo/delete operations
 
-Goal:
+NOT updated during:
 
-Allow deterministic notes attached to case timelines.
+- detection
+- suggestion
+- disambiguation
 
-Example command:
+Constraints:
 
-nota caso 524242024: juez sugirió conciliación
+- no pipeline changes
+- no LLM usage
+- no mutation of canonical tables
 
-Stored as:
+=====================================================================
+PIPELINE PROTECTION (CRITICAL)
+=====================================================================
 
-entity_type = note  
-parent_ref  = CASE:<id>
+Must NEVER be altered:
 
-Visible in:
+- routing order in _process_text_pipeline
+- deterministic detection before LLM fallback
+- confirmation flows
+- disambiguation behavior
+- insert semantics
 
-qué tengo del caso <id>
+This is the system's core integrity boundary.
 
----------------------------------------------------------------------
+=====================================================================
+NEXT TARGETS
+=====================================================================
 
-Sprint 12.3 — Source Trace
+Phase 2 Completion:
 
-Expose origin of timeline entries.
+- summary refresh hooks wired everywhere
+- cockpit summary section added
+- undo consistency verified
 
-Sources:
+Sprint — Timeline UX polish:
 
-- event
-- reminder
-- note
-- transcript
-
-Improves user trust and advisory reasoning clarity.
+- formatting clarity
+- source labeling
 
 =====================================================================
 APRIL LAUNCH TARGET — MIGUEL MVP
@@ -292,171 +268,57 @@ April 1 – April 10, 2026
 
 Goal:
 
-Ship the first stable operational assistant
-for Miguel's daily legal workflow.
-
-Launch Criteria:
+Daily operational assistant for real-world use.
 
 Required:
 
-- deterministic case timeline
+- deterministic timelines
 - reminder engine stable
-- case note write path
-- timeline source labels
-- daily briefing (08:00)
+- case notes working
+- summary layer functional
+- daily briefing
 - encrypted DB stable
-- Google Calendar merge stable
-- CLI health + ops checks
 
-Nice to Have:
+Launch definition:
 
-- overdue escalation tagging
-- formatting polish
-- advisory argument builder
-
-Non-blocking:
-
-- Prime bridge
-- advanced advisory analysis
-- transcript ingestion
-
-Launch is defined as:
-
-Miguel successfully using Val0 as
-a daily operational assistant.
+System is used daily without fallback to manual tracking.
 
 =====================================================================
-PHASE 0.4 — ORCHESTRATION SURFACE
+PHASE 0.7 — PRIME BRIDGE (PARALLEL)
 =====================================================================
-
-Purpose:
-
-Prevent founder drift and maintain operational truth.
-
-Includes:
-
-- Case cockpit
-- State board
-- Bug intake pipeline
-- Timeline snapshot view
-
-LLM may summarize but cannot author facts.
-
-=====================================================================
-PHASE 0.5 — MEMORY SPINE
-=====================================================================
-
-Live tables:
-
-- case_notes
-- chat_prefs
-- memory_entries
-- reminders.entity_type
-- reminders.parent_ref
-
-Memory remains advisory only.
-
-=====================================================================
-PHASE 0.7 — PRIME BRIDGE (PARALLEL TRACK)
-=====================================================================
-
-Prime introduces a founder-focused AI layer.
-
-Architecture:
 
 Frank  
  ↓  
-ValPrime (Forge RTX 4080)  
+ValPrime  
  ↓  
-Val0 (VPS)
+Val0
 
-Val0 remains the production assistant.
+Rules:
 
-Prime is optional.
-
-Prime must never be required for Val0 operation.
-
----------------------------------------------------------------------
-
-Prime Responsibilities
-
-- founder copilot
-- voice interface
-- AI worker node
-- development monitor
-
----------------------------------------------------------------------
-
-Prime Implementation Stages
-
-Prime v0 — Voice Shell  
-Prime v1 — Dev Copilot  
-Prime v2 — Worker Node  
-Prime v3 — Packet Export
-
-Prime packets may include:
-
-packet_id  
-sources[]  
-facts[]  
-summaries[]  
-open_questions[]
-
-Val0 may ingest packets only into advisory tables.
-
-Prime may never mutate deterministic records.
+- Prime is optional
+- Prime cannot mutate deterministic records
+- Prime outputs advisory packets only
 
 =====================================================================
-PHASE 9 — ADVISORY ANALYSIS LAYER
+PHASE 9 — ADVISORY LAYER
 =====================================================================
 
-Purpose:
-
-Pattern detection and reasoning assistance.
-
-Outputs must clearly separate:
+Outputs must separate:
 
 FACTS  
 UNKNOWN  
 INFERENCE  
 OPTIONS  
-NEXT QUESTIONS
+NEXT QUESTIONS  
 
-Advisory layer cannot modify deterministic records.
-
-=====================================================================
-PHASE 9.2 — ARGUMENT BUILDER
-=====================================================================
-
-Purpose:
-
-Assist professionals constructing structured arguments.
-
-Example input:
-
-"arguments for changing school closer to mother"
-
-Expected structure:
-
-FACTORS  
-ARGUMENTS  
-COUNTERPOINTS  
-QUESTIONS
-
-Rules:
-
-- advisory only
-- no legal facts invented
-- no case record mutation
-- supports legal drafting workflows
+No mutation allowed.
 
 =====================================================================
 CHANGE CONTROL
 =====================================================================
 
-Every structural modification must:
+All structural changes must:
 
-1. be reflected here
-2. be committed clearly
-3. preserve determinism
-4. be CLI-testable
+1. be documented here first
+2. preserve determinism
+3. remain testable

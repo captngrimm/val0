@@ -18,7 +18,34 @@ If code behavior violates this file, the code is wrong.
 
 ---
 
-## 1) Non-Negotiable Guarantees (Promise-Safe)
+## 1) System Model (Deterministic First)
+
+Val0 is a **deterministic-first system**.
+
+Execution model:
+
+1. Input is processed through a **deterministic pipeline**
+2. Structured actions are handled by:
+   - detection logic (terms, reminders, notes)
+   - confirmation flows
+   - handler registry
+3. Only if no deterministic path handles the input:
+   → LLM is used as a **final-stage mouthpiece**
+
+### LLM Role (Strictly Limited)
+The LLM:
+- does NOT write to memory
+- does NOT decide system actions
+- does NOT modify state
+- is used only to generate natural language responses
+
+If a structured action was expected but not handled:
+→ system must **fail explicitly**, not fall back silently to LLM
+
+---
+
+## 2) Non-Negotiable Guarantees (Promise-Safe)
+
 Val0 MUST:
 
 - Prefer **truth over helpfulness** when uncertain.
@@ -36,130 +63,185 @@ Val0 MUST NOT:
 
 ---
 
-## 2) Privacy Model (Trust First)
-### Core privacy promise
+## 3) Core Data Model (Source of Truth vs Derived)
+
+### Source-of-truth tables
+These define reality:
+
+- `cases`
+- `case_events`
+- `case_notes`
+
+These must NEVER be replaced or bypassed.
+
+### Derived layer (Phase 2)
+Val0 includes a **cache layer**:
+
+- `case_summaries`
+
+Properties:
+
+- keyed by `(chat_id, case_id)`
+- fully rebuildable from source tables
+- NOT canonical
+- NOT authoritative
+- used for:
+  - fast cockpit rendering
+  - future LLM context packaging
+
+### Update rules
+
+`case_summaries` is refreshed ONLY after:
+
+- successful `insert_case_event`
+- successful `insert_case_note`
+- successful undo/delete operations affecting those
+
+It must NEVER be written during:
+- detection phase
+- suggestion phase
+- disambiguation phase
+
+---
+
+## 4) Multi-Tenant Model (chat_id vs case_id)
+
+Val0 is multi-tenant by design:
+
+- `chat_id` = tenant / user
+- `case_id` = unit of work (case, deal, project, etc.)
+
+Rules:
+
+- All reads and writes MUST be scoped by `chat_id`
+- No cross-tenant leakage is allowed
+- Same client name across tenants must remain isolated
+
+This enables Val0 to operate across professions:
+- legal
+- logistics
+- operations
+- personal tracking
+
+---
+
+## 5) In-Memory State Contract
+
+The system uses in-memory coordination state:
+
+- `_PENDING_CASE_DISAMBIG`
+- `_PENDING_TERM_CONFIRM`
+- `_PENDING_REMINDER_CONFIRM`
+- `_LAST_ACTION`
+
+### `_LAST_ACTION` contract
+
+All write operations MUST register:
+
+```python
+{"type": "...", "id": ..., "case_id": ...}
+
+Supported types:
+
+note_insert
+note_delete
+term_insert
+reminder_insert
+
+Rules:
+
+single-step undo only
+state is ephemeral (does not survive restart)
+undo must trigger summary refresh
+6) Privacy Model (Trust First)
+
 Each user’s Val0 instance (their S.O.U.L.) is private by default.
 
-- The operator/admin (including “Boss”) **cannot read** user conversations by default.
-- Access is only possible if the user gives **explicit, revocable permission**.
+No admin/operator access by default
+No silent exposure via logs or dashboards
+Debugging must use redacted data unless user opts in
 
-### Practical rule (implementation-agnostic)
-Val0 must be built so that:
-- User content is **not exposed** via dashboards, logs, admin queries, or “helpful debugging”.
-- If debugging is needed, Val0 uses **redacted telemetry** by default.
-- Any “support mode” requires user opt-in, and the system should capture:
-  - who granted access
-  - what scope (time window / data type)
-  - when it expires
+Any access must be:
 
-### “No surprises” rule
-Val0 must never “quietly change” privacy terms.
-If privacy changes, Val0 must explicitly notify the user and require opt-in.
+explicit
+scoped
+revocable
+7) Memory Rules (Structured Only)
 
----
+Memory is explicit and typed:
 
-## 3) S.O.U.L. Model (Synthetic Organic Universal Link)
-Val0 operates as a S.O.U.L.: a personal, persistent copilot bound to one user identity.
+Recent context (short window)
+Facts (structured key/value)
+Notes (user-saved)
+Dailies (summaries)
+Critical rule
 
-- Each user has their own S.O.U.L. (name is user-chosen; default can be “Val” / “Valerius” etc).
-- A user may later allow **S.O.U.L.-to-S.O.U.L. communication** (e.g., Lynn’s S.O.U.L. talking to Boss’s S.O.U.L.), but ONLY with:
-  - explicit permission from both sides
-  - clear scope of what can be shared
-  - a visible “what was shared” receipt
+Val0 does NOT:
 
-Default: **no cross-user sharing.**
+auto-store everything
+infer long-term memory silently
 
----
+Memory writes require:
 
-## 4) Memory Rules (What Val0 Remembers)
-### Memory types
-Val0 memory is explicit and typed:
+explicit command
+explicit instruction
+documented system rule
+8) Time & Awareness
+Timezone must be known or explicitly assumed
+Relative dates must resolve deterministically
+Reminders must confirm interpretation when ambiguous
+9) Pipeline Protection Rules (DO NOT TOUCH)
 
-1) **Recent context** (short window): last N messages for continuity.
-2) **Facts** (structured): stable preferences / settings (language, timezone, style).
-3) **Notes** (free-form): user-saved items.
-4) **Dailies** (summaries): one-per-day long-term “vitals” log.
+The following must NOT be altered:
 
-### Memory write rules
-Val0 must NOT “auto-store everything forever” silently.
-Memory writes must be one of:
-- user command (/note, /daily, /remember)
-- user explicit instruction (“remember this”)
-- an explicit system rule documented in `docs/VAL0_STATE.md`
+_process_text_pipeline routing order
+deterministic detection before LLM fallback
+confirmation flows (term/reminder/note)
+disambiguation behavior
+insert semantics for:
+case_events
+case_notes
 
-### Memory read rules
-When Val0 uses memory, it should be able to answer:
-- “What are you basing that on?”
-with a clear reference to fact/note/daily, not vague vibes.
+LLM must remain:
 
-### Forgetting rule
-Val0 must provide a way to delete:
-- a fact key
-- a note
-- a daily entry
-- or all memory for the user
-(implementation may be staged, but the promise stands).
+last-stage only
+non-mutating
+non-authoritative
+10) Recovery & Source of Truth
 
----
+System must be reconstructible from:
 
-## 5) Time & Awareness (Copilot Behavior)
-Val0 must be time-aware and location-aware only when configured.
+this file
+VAL0_STATE.md
+database contents
+minimal run instructions
 
-- If timezone is unknown: Val0 asks or uses a safe default and labels it.
-- “Today / tomorrow / last week” must be resolved against a known timezone.
-- For reminders: Val0 must confirm the time interpretation before scheduling.
+Chat history is disposable.
 
-Val0 should behave like a copilot:
-- brief, actionable, minimal steps
-- asks only when truly necessary
-- uses commands and checklists the user can execute
+11) UX Tone Requirements
 
----
-
-## 6) “Never Does” List (Trust Guardrails)
-Val0 never:
-- sells, pitches, or upsells inside help responses by default
-- manipulates users emotionally for engagement
-- hides implementation limits
-- claims private access it doesn’t have
-- logs sensitive content unnecessarily
-
-Monetization is allowed (license/service), but must be **separate from help**:
-- pricing/pitch happens only when the user asks or in an explicit sales context.
-
----
-
-## 7) Recovery & Source of Truth Rules
-- Repo docs define intent; database defines memory; chat history is disposable.
-- All critical behavior must be reconstructible from:
-  - this file
-  - `docs/VAL0_STATE.md`
-  - the database schema + contents
-  - and minimal run instructions
-
----
-
-## 8) UX Tone Requirements (Val0 voice)
 Val0 is:
-- a tactical copilot
-- direct, warm when appropriate, never performative
-- Spanish-first by default unless user preference says otherwise
-- “one action per instruction” when operating in build/debug mode
 
-Val0 avoids:
-- filler reassurance
-- generic “AI-sounding” lines
-- excessive questions
+tactical
+direct
+minimal
+Spanish-first unless overridden
 
----
+Avoids:
 
-## 9) Change Control (Anti-Drift)
-Any change that touches:
-- privacy
-- memory retention
-- cross-user sharing
-- logging/telemetry
-- permissions
-must be documented here FIRST, then implemented.
+filler
+generic AI tone
+unnecessary questions
+12) Change Control (Anti-Drift)
 
-If it’s not written here, it’s not real.
+Any change affecting:
+
+memory model
+privacy
+routing
+data structures
+cross-user behavior
+
+must be defined here FIRST.
+
+If it’s not written here, it is not real.
