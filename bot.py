@@ -1301,6 +1301,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     try:
         disambig_released = False
 
+        logger.info(
+            f"[CASE_DISAMBIG DEBUG] incoming text={text!r} chat_id={chat_id} "
+            f"pending_keys={list(_PENDING_CASE_DISAMBIG.keys())}"
+        )
+
         if int(chat_id) in _PENDING_CASE_DISAMBIG:
             dis = _PENDING_CASE_DISAMBIG[int(chat_id)]
             choice = (text or "").strip()
@@ -1365,6 +1370,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     # otherwise allow 1/2/3 selection
                     if not selected and 1 <= idx <= len(dis["candidates"]):
                         selected = dis["candidates"][idx - 1]
+                logger.info(
+                    f"[CASE_DISAMBIG DEBUG] choice_norm={choice_norm!r} "
+                    f"selected={selected!r} candidates={dis['candidates']!r}"
+                )        
 
                 if selected:
                     cid, name = selected
@@ -1398,7 +1407,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         _LAST_ACTION[int(chat_id)] = {
                             "type": "note_insert",
                             "id": note_id,
+                            "case_id": str(cid),
                         }
+
+                        from core.case_summary import refresh_case_summary
+                        refresh_case_summary(int(chat_id), str(cid))
 
                         await update.message.reply_text(
                             f"📝 Guardé esto como nota en CASE:{cid} ({name})."
@@ -2198,7 +2211,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_case_register_term,
             try_case_create,
             try_delete_last_note,
-            try_undo_last_action,
             try_case_status,
             try_case_cockpit,
             try_case_health,

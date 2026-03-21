@@ -1581,33 +1581,50 @@ def upsert_case_summary(
 
     cur.execute(
         """
-        INSERT INTO case_summaries (
-            chat_id, case_id, summary_text,
-            last_event_at, last_note_at,
-            next_deadline, open_reminders_count,
-            last_summary_refresh, summary_version
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
-        ON CONFLICT(chat_id, case_id) DO UPDATE SET
-            summary_text=excluded.summary_text,
-            last_event_at=excluded.last_event_at,
-            last_note_at=excluded.last_note_at,
-            next_deadline=excluded.next_deadline,
-            open_reminders_count=excluded.open_reminders_count,
+        UPDATE case_summaries
+        SET summary_text=?,
+            last_event_at=?,
+            last_note_at=?,
+            next_deadline=?,
+            open_reminders_count=?,
             last_summary_refresh=datetime('now'),
-            summary_version=excluded.summary_version
+            summary_version=?
+        WHERE chat_id=? AND case_id=?
         """,
         (
-            int(chat_id),
-            case_id,
             summary_text,
             last_event_at,
             last_note_at,
             next_deadline,
             int(open_reminders_count),
             int(summary_version),
+            int(chat_id),
+            case_id,
         ),
     )
+
+    if cur.rowcount == 0:
+        cur.execute(
+            """
+            INSERT INTO case_summaries (
+                chat_id, case_id, summary_text,
+                last_event_at, last_note_at,
+                next_deadline, open_reminders_count,
+                last_summary_refresh, summary_version
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+            """,
+            (
+                int(chat_id),
+                case_id,
+                summary_text,
+                last_event_at,
+                last_note_at,
+                next_deadline,
+                int(open_reminders_count),
+                int(summary_version),
+            ),
+        )
 
     conn.commit()
     conn.close()
