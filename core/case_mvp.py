@@ -1416,12 +1416,18 @@ async def try_case_add_note(update, chat_id, text) -> bool:
         await update.message.reply_text(f"⚠️ Nota duplicada detectada. Ya existía en CASE:{case_id}.")
         return True
 
-    insert_case_note(
+    note_id = insert_case_note(
         chat_id=int(chat_id),
         case_id=str(case_id),
         note_text=note_text,
         source="text"
     )
+
+    from bot import _LAST_ACTION
+    _LAST_ACTION[int(chat_id)] = {
+        "type": "note_insert",
+        "id": note_id,
+    }
 
     await update.message.reply_text(f"Nota guardada en CASE:{case_id}.")
     return True
@@ -3056,7 +3062,19 @@ async def try_delete_last_note(update, chat_id, text) -> bool:
             await update.message.reply_text("No hay notas para borrar.")
             return True
 
-        note_id, note_text = row[0], row[1]
+        import __main__
+
+        note_id = row["id"] if hasattr(row, "keys") else row[0]
+        note_text = row["note_text"] if hasattr(row, "keys") else row[1]
+
+        getattr(__main__, "_LAST_ACTION", {})[int(chat_id)] = {
+            "type": "note_delete",
+            "id": note_id,
+            "note_text": note_text,
+            "chat_id": int(chat_id),
+            "case_id": str(case_id),
+            "source": "text",
+        }
 
         cur.execute("DELETE FROM case_notes WHERE id=?", (note_id,))
         conn.commit()
@@ -3070,4 +3088,73 @@ async def try_delete_last_note(update, chat_id, text) -> bool:
     except Exception as e:
         logger.exception(f"[DELETE_LAST_NOTE] failed: {e}")
         await update.message.reply_text("No pude borrar la nota.")
-        return True          
+        return True
+
+async def try_undo_last_action(update, chat_id, text) -> bool:
+    import __main__
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = _clean(text or "")
+
+    if not any(x in t for x in (
+        "deshacer",
+        "undo",
+    )):
+        return False
+
+    action = getattr(__main__, "_LAST_ACTION", {}).get(int(chat_id))
+    if not action:
+        await update.message.reply_text("No hay nada para deshacer.")
+        return True
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        undo_msg = "↩️ Última acción deshecha."
+
+        # --- NOTE INSERT ---
+        if action["type"] == "note_insert":
+            cur.execute("DELETE FROM case_notes WHERE id=?", (action["id"],))
+            undo_msg = "↩️ Eliminé la última nota que acababas de guardar."
+
+        # --- NOTE DELETE (restore) ---
+        elif action["type"] == "note_delete":
+            cur.execute(
+                """
+                INSERT INTO case_notes (chat_id, case_id, note_text, source)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    action["chat_id"],
+                    action["case_id"],
+                    action["note_text"],
+                    action["source"],
+                ),
+            )
+            undo_msg = "↩️ Restauré la última nota eliminada."
+
+        # --- TERM INSERT ---
+        elif action["type"] == "term_insert":
+            cur.execute("DELETE FROM case_events WHERE id=?", (action["id"],))
+            undo_msg = "↩️ Eliminé el último término registrado."
+
+        # --- REMINDER INSERT ---
+        elif action["type"] == "reminder_insert":
+            cur.execute("DELETE FROM case_events WHERE id=?", (action["id"],))
+            undo_msg = "↩️ Eliminé el último recordatorio registrado."
+
+        conn.commit()
+        conn.close()
+
+        getattr(__main__, "_LAST_ACTION", {}).pop(int(chat_id), None)
+
+        await update.message.reply_text(undo_msg)
+        return True
+
+    except Exception as e:
+        logger.exception(f"[UNDO] failed: {e}")
+        await update.message.reply_text("No pude deshacer la acción.")
+        return True                  
