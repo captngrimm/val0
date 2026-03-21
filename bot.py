@@ -497,7 +497,11 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         _LAST_ACTION[int(chat_id)] = {
             "type": "note_insert",
             "id": note_id,
+            "case_id": str(case_id),
         }
+
+        from core.case_summary import refresh_case_summary
+        refresh_case_summary(int(chat_id), str(case_id))
 
         await update.message.reply_text(
             f"📝 Guardé esto como nota en CASE:{case_id} ({client_name})."

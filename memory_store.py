@@ -184,6 +184,42 @@ def init_db() -> None:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_chat ON audit_log(chat_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);")
 
+        # --------------------------------------------------
+        # Phase 2: case summary cache (derived, non-authoritative)
+        # --------------------------------------------------
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS case_summaries (
+            chat_id INTEGER NOT NULL,
+            case_id TEXT NOT NULL,
+            summary_text TEXT NOT NULL DEFAULT '',
+            last_event_at TEXT,
+            last_note_at TEXT,
+            next_deadline TEXT,
+            open_reminders_count INTEGER NOT NULL DEFAULT 0,
+            last_summary_refresh TEXT,
+            summary_version INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (chat_id, case_id)
+        );
+        """)
+
+        # --------------------------------------------------
+        # Phase 2: case summary cache (derived, non-authoritative)
+        # --------------------------------------------------
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS case_summaries (
+            chat_id INTEGER NOT NULL,
+            case_id TEXT NOT NULL,
+            summary_text TEXT NOT NULL DEFAULT '',
+            last_event_at TEXT,
+            last_note_at TEXT,
+            next_deadline TEXT,
+            open_reminders_count INTEGER NOT NULL DEFAULT 0,
+            last_summary_refresh TEXT,
+            summary_version INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (chat_id, case_id)
+        );
+        """)
+
         conn.commit()
         conn.close()
         logger.info(f"SQLite DB initialized at {DB_PATH}")
@@ -1504,3 +1540,74 @@ def get_recent_messages(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         }
         for r in rows
     ]
+
+
+def get_case_summary(chat_id: int, case_id: str):
+    case_id = (case_id or "").strip()
+    if not case_id:
+        return None
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT *
+        FROM case_summaries
+        WHERE chat_id=? AND case_id=?
+        """,
+        (int(chat_id), case_id),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def upsert_case_summary(
+    chat_id: int,
+    case_id: str,
+    summary_text: str,
+    last_event_at: str | None = None,
+    last_note_at: str | None = None,
+    next_deadline: str | None = None,
+    open_reminders_count: int = 0,
+    summary_version: int = 1,
+):
+    case_id = (case_id or "").strip()
+    if not case_id:
+        return
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO case_summaries (
+            chat_id, case_id, summary_text,
+            last_event_at, last_note_at,
+            next_deadline, open_reminders_count,
+            last_summary_refresh, summary_version
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+        ON CONFLICT(chat_id, case_id) DO UPDATE SET
+            summary_text=excluded.summary_text,
+            last_event_at=excluded.last_event_at,
+            last_note_at=excluded.last_note_at,
+            next_deadline=excluded.next_deadline,
+            open_reminders_count=excluded.open_reminders_count,
+            last_summary_refresh=datetime('now'),
+            summary_version=excluded.summary_version
+        """,
+        (
+            int(chat_id),
+            case_id,
+            summary_text,
+            last_event_at,
+            last_note_at,
+            next_deadline,
+            int(open_reminders_count),
+            int(summary_version),
+        ),
+    )
+
+    conn.commit()
+    conn.close()
