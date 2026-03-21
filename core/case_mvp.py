@@ -3080,6 +3080,9 @@ async def try_delete_last_note(update, chat_id, text) -> bool:
         conn.commit()
         conn.close()
 
+        from core.case_summary import refresh_case_summary
+        refresh_case_summary(int(chat_id), str(case_id))
+
         await update.message.reply_text(
             f"🗑️ Eliminé la última nota del caso {case_id}:\n\"{note_text[:80]}\""
         )
@@ -3098,10 +3101,15 @@ async def try_undo_last_action(update, chat_id, text) -> bool:
 
     t = _clean(text or "")
 
-    if not any(x in t for x in (
+    undo_commands = (
         "deshacer",
+        "deshacer ultima accion",
+        "deshacer última acción",
         "undo",
-    )):
+        "undo last action",
+    )
+
+    if t not in undo_commands:
         return False
 
     action = getattr(__main__, "_LAST_ACTION", {}).get(int(chat_id))
@@ -3150,6 +3158,11 @@ async def try_undo_last_action(update, chat_id, text) -> bool:
         conn.close()
 
         getattr(__main__, "_LAST_ACTION", {}).pop(int(chat_id), None)
+
+        case_id = action.get("case_id")
+        if case_id:
+            from core.case_summary import refresh_case_summary
+            refresh_case_summary(int(chat_id), str(case_id))
 
         await update.message.reply_text(undo_msg)
         return True

@@ -1546,7 +1546,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 _LAST_ACTION[int(chat_id)] = {
                     "type": "reminder_insert",
                     "id": event_id,
+                    "case_id": str(pending["case_id"]),
                 }
+
+                from core.case_summary import refresh_case_summary
+                refresh_case_summary(int(chat_id), str(pending["case_id"]))
 
                 await update.message.reply_text(
                     f"⏰ Recordatorio registrado en CASE:{pending['case_id']}\n"
@@ -1665,7 +1669,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 _LAST_ACTION[int(chat_id)] = {
                     "type": "term_insert",
                     "id": event_id,
+                    "case_id": str(pending["case_id"]),
                 }
+
+                from core.case_summary import refresh_case_summary
+                refresh_case_summary(int(chat_id), str(pending["case_id"]))
 
                 await update.message.reply_text(
                     f"⏳ Término registrado en CASE:{pending['case_id']}\n"
@@ -1778,6 +1786,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     payload=f"case_id={case_id} | text={note_text}"[:500],
                     source="dm",
                 )
+
+                _LAST_ACTION[int(chat_id)] = {
+                    "type": "note_insert",
+                    "id": note_id,
+                    "case_id": str(case_id),
+                }
+
+                from core.case_summary import refresh_case_summary
+                refresh_case_summary(int(chat_id), str(case_id))
 
                 await update.message.reply_text(f"Listo, Boss. Guardé la nota en CASE:{case_id}.")
                 return
