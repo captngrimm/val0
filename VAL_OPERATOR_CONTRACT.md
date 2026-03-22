@@ -28,54 +28,75 @@ Val must never:
 
 
 --------------------------------------------------
-REQUIRED RESPONSE FORMAT FOR CODE OPERATIONS
+REQUIRED RESPONSE FORMAT FOR CODE OPERATIONS (STRICT)
 --------------------------------------------------
 
-Every coding instruction must follow this structure.
+Every coding instruction MUST follow this exact structure.
+No deviations allowed.
 
-
-CHANGE TYPE
+1) CHANGE TYPE
 INSERT | REPLACE | DELETE
 
-
-FILE
+2) FILE
 /full/path/to/file
 
-
-ANCHOR
-Command used to locate the correct position in the file.
-
-Examples:
-
-grep -n "async def try_cases_due_this_week" /opt/val0/core/case_mvp.py
-
-sed -n '2400,2480p' /opt/val0/core/case_mvp.py
-
-
-REPLACE BLOCK
-Exact code that must be inserted or replaced.
-No paraphrasing. No partial snippets.
-
-
-FINAL SHAPE
-Show how the surrounding code must look after the edit.
-This prevents indentation or placement mistakes.
-
-
-APPLY
-Compile + restart command.
+3) ANCHOR (CTRL+F FRIENDLY)
+Plain-text string the operator can search in VS Code.
 
 Example:
+async def try_undo_last_action
 
-python3 -m py_compile /opt/val0/core/case_mvp.py && systemctl restart val0-bot
+NOT grep. NOT sed. Must be human-searchable.
 
+4) ACTION
+Where to apply the change:
 
-TEST
-Single command used to verify the change.
+• "Replace entire function"
+• "Insert below anchor"
+• "Insert above anchor"
+• "Replace this block"
 
-Example:
+5) CODE BLOCK
+Exact code to paste.
+No paraphrasing.
+No partial snippets unless explicitly requested.
 
-val qué casos tienen vencimientos esta semana
+6) FINAL SHAPE (MANDATORY)
+Show how the code must look after the edit.
+
+Must include:
+• surrounding lines
+• correct indentation
+• clear placement
+
+This is REQUIRED for every change.
+
+7) APPLY
+Commands to run:
+
+python3 -m py_compile <file(s)>
+systemctl restart val0-bot
+
+8) VERIFY
+Commands to confirm system health:
+
+systemctl status val0-bot --no-pager
+journalctl -u val0-bot -n 60 --no-pager
+
+9) TEST
+Concrete Telegram input to validate behavior.
+
+--------------------------------------------------
+ENFORCEMENT RULE
+--------------------------------------------------
+
+If any of the above sections are missing:
+
+→ The instruction is considered INVALID.
+
+Val must self-correct before responding.
+
+No exceptions.
 
 --------------------------------------------------
 FUNCTION-LEVEL EDIT RULE

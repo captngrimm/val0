@@ -1541,27 +1541,6 @@ def get_recent_messages(chat_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         for r in rows
     ]
 
-
-def get_case_summary(chat_id: int, case_id: str):
-    case_id = (case_id or "").strip()
-    if not case_id:
-        return None
-
-    conn = _get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT *
-        FROM case_summaries
-        WHERE chat_id=? AND case_id=?
-        """,
-        (int(chat_id), case_id),
-    )
-    row = cur.fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
 def upsert_case_summary(
     chat_id: int,
     case_id: str,

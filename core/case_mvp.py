@@ -616,8 +616,11 @@ def generate_case_cockpit(chat_id: int, case_id: str) -> str:
     lines.append("")
     # --- Phase 2: cached summary (non-authoritative, additive) ---
     try:
+        from core.case_summary import refresh_case_summary
         from memory_store import get_case_summary
 
+        # Force refresh so cockpit always reflects latest canonical data
+        refresh_case_summary(int(chat_id), str(case_id))
         summary_row = get_case_summary(int(chat_id), str(case_id))
 
         if summary_row:

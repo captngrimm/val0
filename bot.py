@@ -255,6 +255,8 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         "cómo va el caso",
         "estado del caso",
         "resumen del caso",
+        "resumen rápido del caso",
+        "resumen rapido del caso",
         "situacion actual del caso",
         "situación actual del caso",
         "por donde va el caso",
@@ -262,6 +264,7 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         "que tienes del caso",
         "qué tienes del caso",
         "dame todo del caso",
+        "detalle ",
         "ver caso",
         "ver expediente",
         "info del caso",
@@ -271,6 +274,18 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         "resumen de trabajo",
         "que debo hacer",
         "qué debo hacer",
+        "que crees que deberiamos hacer",
+        "qué crees que deberíamos hacer",
+        "que opinas del caso",
+        "qué opinas del caso",
+        "que opinas de ",
+        "qué opinas de ",
+        "que estrategia",
+        "qué estrategia",
+        "que harías",
+        "qué harías",
+        "que recomiendas",
+        "qué recomiendas",
         "que tengo",
         "qué tengo",
         "que hay",
@@ -2255,6 +2270,26 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_priority_dashboard,
         )
 
+        advisory_case_prefixes = (
+            "resumen del caso",
+            "resumen rápido del caso",
+            "resumen rapido del caso",
+            "dame un resumen del caso",
+            "dame un resumen rápido del caso",
+            "dame un resumen rapido del caso",
+            "qué opinas del caso",
+            "que opinas del caso",
+            "qué crees que deberíamos hacer",
+            "que crees que deberiamos hacer",
+            "estado del caso",
+            "como va el caso",
+            "cómo va el caso",
+        )
+
+        is_advisory_case_prompt = any(
+            (text or "").lower().strip().startswith(p) for p in advisory_case_prefixes
+        )
+
         HANDLERS = [
             try_debug_mode,
             try_help,
@@ -2300,11 +2335,37 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         ]
 
         for handler in HANDLERS:
+            if is_advisory_case_prompt and handler in (
+                try_case_status,
+                try_case_cockpit,
+            ):
+                continue
+
             if await handler(update, chat_id, text):
                 return
 
         text_lower = (text or "").lower().strip()
-        if "caso" in text_lower and "casos" not in text_lower:
+        advisory_case_prefixes = (
+            "resumen del caso",
+            "resumen rápido del caso",
+            "resumen rapido del caso",
+            "dame un resumen del caso",
+            "dame un resumen rápido del caso",
+            "dame un resumen rapido del caso",
+            "qué opinas del caso",
+            "que opinas del caso",
+            "qué crees que deberíamos hacer",
+            "que crees que deberiamos hacer",
+            "estado del caso",
+            "como va el caso",
+            "cómo va el caso",
+        )
+
+        if (
+            "caso" in text_lower
+            and "casos" not in text_lower
+            and not any(text_lower.startswith(p) for p in advisory_case_prefixes)
+        ):
             await update.message.reply_text("No encuentro ese caso en tu base de datos.")
             return
 
@@ -2575,6 +2636,40 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         facts_block = "\n".join(fact_lines)
 
     semantic_block = _semantic_recall_block(chat_id=chat_id, query=text, k=5)
+
+    # --------------------------------------------------
+    # Phase 3A: inject active case summary into LLM context (read-only)
+    # --------------------------------------------------
+    summary_block = ""
+    try:
+        from memory_store import get_case_summary
+
+        active_case_id = None
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT active_case_id FROM chat_prefs WHERE chat_id=?",
+                (int(chat_id),),
+            )
+            row = cur.fetchone()
+            conn.close()
+
+            if row:
+                active_case_id = row["active_case_id"] if hasattr(row, "keys") else row[0]
+        except Exception:
+            active_case_id = None
+
+        if active_case_id:
+            summary_row = get_case_summary(int(chat_id), str(active_case_id))
+            if summary_row:
+                summary_text = (summary_row.get("summary_text") or "").strip()
+                if summary_text:
+                    summary_block = f"\n[CASE SUMMARY]\n{summary_text}\n"
+
+    except Exception:
+        summary_block = ""
+    
     tclean = (text or "").strip()
 
     if len(tclean) < 8 or _is_control_ack(tclean):
@@ -2591,14 +2686,189 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         )
         return await _send_reply(update, context, "Group mode: commands only (ping, CASE:<id>, note: <text>).")
 
+        advisory_system_rules = None
+
+    try:
+        low = (text or "").lower().strip()
+        advisory_case_prefixes = (
+            "qué opinas del caso",
+            "que opinas del caso",
+            "qué crees que deberíamos hacer",
+            "que crees que deberiamos hacer",
+            "dame un resumen del caso",
+            "dame un resumen rápido del caso",
+            "dame un resumen rapido del caso",
+            "resumen del caso",
+            "resumen rápido del caso",
+            "resumen rapido del caso",
+            "estrategia del caso",
+            "siguiente paso del caso",
+            "next step for the case",
+        )
+
+        if any(low.startswith(p) for p in advisory_case_prefixes):
+            advisory_system_rules = """
+MODO ASESORÍA DE CASO (STRICT)
+
+Responde usando esta estructura exacta:
+
+1. HECHOS CONFIRMADOS
+- Solo hechos presentes en los datos del caso
+- Incluye fechas EXACTAS cuando existan
+- No inventes hechos
+
+2. RIESGOS INMEDIATOS
+- Basados en fechas reales o actividad reciente
+- Si hay un deadline cercano, debes evaluarlo correctamente
+- NO uses expresiones vagas como "pronto", "en menos de un año", etc.
+
+3. SIGUIENTE ACCIÓN CONCRETA
+- UNA acción específica, ejecutable hoy o en el siguiente paso
+- Nada de listas genéricas
+
+4. FALTANTE CRÍTICO
+- SOLO puedes mencionar ausencias visibles directamente en los registros (ej: no hay notas recientes, no hay eventos próximos, no hay actividad)
+- Usa siempre esta forma: "no consta X en registros"
+- X debe ser algo observable, por ejemplo:
+  - "no consta nota de estrategia"
+  - "no consta checklist de contestación"
+  - "no consta documento preparado"
+- NO menciones categorías legales genéricas como:
+  testigos, pruebas, expediente incompleto, defensa, etc.
+  A MENOS que esas palabras existan explícitamente en los datos del caso
+
+5. ANÁLISIS
+- Tu razonamiento
+- Debe estar claramente separado de los hechos
+
+REGLAS ESTRICTAS:
+- NO infieras ausencia de información legal estructural (testigos, pruebas, expediente completo, estrategia) a menos que esos conceptos aparezcan explícitamente en los datos
+- NO inventes testigos, estrategia legal, pruebas o documentos
+- NO uses lenguaje legal genérico sin conexión directa con los datos
+- NO repitas frases tipo "hay que revisar todo"
+- Si hay una fecha, úsala explícitamente
+- Usa los datos de TIEMPO REAL proporcionados (días restantes, estado del término)
+- NO estimes el tiempo si ya tienes el número de días
+- Si la información es insuficiente, dilo claramente
+- Prioriza precisión sobre completitud
+- Responde corto, directo y útil
+
+OBJETIVO:
+Pensar como operador, no como abogado genérico
+""".strip()
+    except Exception:
+        advisory_system_rules = None
+
+    # --------------------------------------------------
+    # DETERMINISTIC URGENCY BLOCK
+    # --------------------------------------------------
+    urgency_block = None
+
+    try:
+        from datetime import datetime, timezone
+        from memory_store import get_case_summary
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/Panama")
+        now_local = datetime.now(tz).date()
+
+        active_case_id = None
+
+        # get active case
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT active_case_id FROM chat_prefs WHERE chat_id=?",
+                (int(chat_id),),
+            )
+            row = cur.fetchone()
+            conn.close()
+            if row:
+                active_case_id = (row[0] or "").strip()
+        except Exception:
+            active_case_id = None
+
+        if active_case_id:
+            summary_row = get_case_summary(int(chat_id), str(active_case_id))
+
+            if summary_row:
+                next_deadline = summary_row.get("next_deadline")
+
+                days_to_deadline = None
+                if next_deadline:
+                    try:
+                        d = datetime.strptime(next_deadline, "%Y-%m-%d").date()
+                        days_to_deadline = (d - now_local).days
+                    except Exception:
+                        days_to_deadline = None
+
+                urgency_lines = []
+                urgency_lines.append(f"Hoy: {now_local}")
+
+                if next_deadline:
+                    urgency_lines.append(f"Próximo término: {next_deadline}")
+
+                if days_to_deadline is not None:
+                    urgency_lines.append(f"Días hasta término: {days_to_deadline}")
+
+                    if days_to_deadline < 0:
+                        urgency_lines.append("Estado del término: vencido")
+                    elif days_to_deadline == 0:
+                        urgency_lines.append("Estado del término: vence hoy")
+                    elif days_to_deadline <= 3:
+                        urgency_lines.append("Estado del término: crítico")
+                    elif days_to_deadline <= 7:
+                        urgency_lines.append("Estado del término: próximo")
+                    else:
+                        urgency_lines.append("Estado del término: lejano")
+
+                urgency_block = "\n".join(urgency_lines)
+
+    except Exception as e:
+        logger.exception(f"[URGENCY_BLOCK] failed: {e}")
+        urgency_block = None
+
+    combined_system_rules = advisory_system_rules
+
+    if urgency_block:
+        extra = f"\n\nDATOS DE TIEMPO REAL:\n{urgency_block}"
+        combined_system_rules = (combined_system_rules or "") + extra
+
     reply = call_val_openai(
         chat_id,
         text,
-        context_block=context_block,
+        context_block=context_block + summary_block,
         facts_block=facts_block,
         semantic_block=semantic_block,
         forced_lang=preferred_language,
+        system_rules=combined_system_rules,
     )
+
+    # --------------------------------------------------
+    # POST-FILTER: remove forbidden legal hallucinations
+    # --------------------------------------------------
+    try:
+        if advisory_system_rules:
+            forbidden_terms = [
+                "testigos",
+                "pruebas",
+                "expediente esté completo",
+                "expediente completo",
+                "defensa",
+                "estrategia legal",
+            ]
+
+            cleaned_lines = []
+            for line in (reply or "").splitlines():
+                if any(term in line.lower() for term in forbidden_terms):
+                    continue
+                cleaned_lines.append(line)
+
+            reply = "\n".join(cleaned_lines).strip()
+
+    except Exception as e:
+        logger.exception(f"[POST_FILTER] failed: {e}")
 
     sent = await _send_reply(update, context, reply)
     try:
