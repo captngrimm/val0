@@ -200,6 +200,44 @@ def _extract_deadline_date(text: str) -> str:
 
     return ""
 
+def classify_user_intent(text: str) -> str:
+    t = (text or "").strip().lower()
+
+    if not t:
+        return "chat"
+
+    # Explicit note command
+    if t.startswith("nota "):
+        return "note"
+
+    # Event / reminder-ish
+    if any(x in t for x in (
+        "recuerdame",
+        "recuérdame",
+        "recordatorio",
+        "mañana",
+        "manana",
+        "hoy",
+    )):
+        return "event"
+
+    # Advisory / analysis prompts
+    advisory_prefixes = (
+        "qué opinas",
+        "que opinas",
+        "qué crees",
+        "que crees",
+        "dame un resumen",
+        "resumen",
+        "estrategia",
+        "siguiente paso",
+    )
+
+    if any(t.startswith(p) for p in advisory_prefixes):
+        return "advisory"
+
+    return "chat"
+
 async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str):
     logger.info(f"[NATURAL_NOTE] ENTER text={text!r}")
     """
@@ -223,6 +261,11 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         return False
 
     low = raw.lower().strip()
+
+    intent = classify_user_intent(raw)
+    if intent != "chat":
+        logger.info(f"[NATURAL_NOTE] SKIP intent={intent}")
+        return False
 
     # --- hard skip: explicit commands / structured flows ---
     blocked_prefixes = (
