@@ -210,17 +210,6 @@ def classify_user_intent(text: str) -> str:
     if t.startswith("nota "):
         return "note"
 
-    # Event / reminder-ish
-    if any(x in t for x in (
-        "recuerdame",
-        "recuérdame",
-        "recordatorio",
-        "mañana",
-        "manana",
-        "hoy",
-    )):
-        return "event"
-
     # Advisory / analysis prompts
     advisory_prefixes = (
         "qué opinas",
@@ -231,10 +220,57 @@ def classify_user_intent(text: str) -> str:
         "resumen",
         "estrategia",
         "siguiente paso",
+        "como va el caso",
+        "cómo va el caso",
+        "estado del caso",
+        "detalle ",
+        "ver caso",
+        "ver expediente",
+        "info del caso",
     )
 
     if any(t.startswith(p) for p in advisory_prefixes):
         return "advisory"
+
+    # Event / reminder-ish
+    reminder_markers = (
+        "recuerdame",
+        "recuérdame",
+        "recordatorio",
+        "mañana",
+        "manana",
+        "hoy",
+        "el lunes",
+        "el martes",
+        "el miercoles",
+        "el miércoles",
+        "el jueves",
+        "el viernes",
+        "el sabado",
+        "el sábado",
+        "el domingo",
+    )
+
+    if any(x in t for x in reminder_markers):
+        return "event"
+
+    # Event / legal-term-ish
+    term_markers = (
+        "audiencia",
+        "audiencias",
+        "vence",
+        "vencimiento",
+        "plazo",
+        "termino",
+        "término",
+        "cita",
+        "citacion",
+        "citación",
+        "fecha",
+    )
+
+    if any(x in t for x in term_markers):
+        return "event"
 
     return "chat"
 
@@ -1866,6 +1902,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     try:
         low = (text or "").lower()
 
+        intent = classify_user_intent(text)
+        if intent == "advisory":
+            logger.info(f"[NATURAL_REMINDER_DETECT] SKIP intent={intent}")
+            raise StopIteration
+
         reminder_triggers = (
             "recuerdame",
             "recuérdame",
@@ -2074,6 +2115,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     )
                     return
 
+    except StopIteration:
+        logger.info("[NATURAL_REMINDER_DETECT] skipped by intent gate")
     except Exception as e:
         logger.exception(f"[NATURAL_REMINDER_DETECT] failed: {e}")
 
@@ -2082,6 +2125,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # --------------------------------------------------
     try:
         low = (text or "").lower()
+
+        intent = classify_user_intent(text)
+        if intent == "advisory":
+            logger.info(f"[NATURAL_TERM_DETECT] SKIP intent={intent}")
+            raise StopIteration
+
         low = unicodedata.normalize("NFKD", low)
         low = "".join(ch for ch in low if not unicodedata.combining(ch))
 
@@ -2269,6 +2318,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     )
                     return
 
+    except StopIteration:
+        logger.info("[NATURAL_TERM_DETECT] skipped by intent gate")
     except Exception as e:
         logger.exception(f"[NATURAL_TERM_DETECT] failed: {e}")
 
@@ -2679,6 +2730,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         facts_block = "\n".join(fact_lines)
 
     semantic_block = _semantic_recall_block(chat_id=chat_id, query=text, k=5)
+    advisory_system_rules = None
 
     # --------------------------------------------------
     # Phase 3A: inject active case summary into LLM context (read-only)
@@ -2795,9 +2847,7 @@ Reglas de estructura obligatoria:
     urgency_block = None
 
     try:
-        from datetime import datetime, timezone
         from memory_store import get_case_summary
-        from zoneinfo import ZoneInfo
 
         tz = ZoneInfo("America/Panama")
         now_local = datetime.now(tz).date()
