@@ -2751,53 +2751,40 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         if any(low.startswith(p) for p in advisory_case_prefixes):
             advisory_system_rules = """
-MODO ASESORÍA DE CASO (STRICT)
+MODO ASESORÍA DE CASO
 
 Responde usando esta estructura exacta:
 
 1. HECHOS CONFIRMADOS
-- Solo hechos presentes en los datos del caso
-- Incluye fechas EXACTAS cuando existan
+- Solo hechos confirmados por los datos del caso
 - No inventes hechos
+- No repitas relleno
 
 2. RIESGOS INMEDIATOS
-- Basados en fechas reales o actividad reciente
-- Si hay un deadline cercano, debes evaluarlo correctamente
-- NO uses expresiones vagas como "pronto", "en menos de un año", etc.
+- Riesgos reales basados en fechas, actividad, recordatorios o vacíos visibles
 
 3. SIGUIENTE ACCIÓN CONCRETA
-- UNA acción específica, ejecutable hoy o en el siguiente paso
-- Nada de listas genéricas
+- Una acción específica y ejecutable
+- No consejos genéricos
 
 4. FALTANTE CRÍTICO
-- SOLO puedes mencionar ausencias visibles directamente en los registros (ej: no hay notas recientes, no hay eventos próximos, no hay actividad)
-- Usa siempre esta forma: "no consta X en registros"
-- X debe ser algo observable, por ejemplo:
-  - "no consta nota de estrategia"
-  - "no consta checklist de contestación"
-  - "no consta documento preparado"
-- NO menciones categorías legales genéricas como:
-  testigos, pruebas, expediente incompleto, defensa, etc.
-  A MENOS que esas palabras existan explícitamente en los datos del caso
+- Qué información importante aún no consta en los datos
 
 5. ANÁLISIS
 - Tu razonamiento
-- Debe estar claramente separado de los hechos
+- Debe estar claramente presentado como análisis, no como hecho confirmado
 
-REGLAS ESTRICTAS:
-- NO infieras ausencia de información legal estructural (testigos, pruebas, expediente completo, estrategia) a menos que esos conceptos aparezcan explícitamente en los datos
-- NO inventes testigos, estrategia legal, pruebas o documentos
-- NO uses lenguaje legal genérico sin conexión directa con los datos
-- NO repitas frases tipo "hay que revisar todo"
-- Si hay una fecha, úsala explícitamente
-- Usa los datos de TIEMPO REAL proporcionados (días restantes, estado del término)
-- NO estimes el tiempo si ya tienes el número de días
-- Si la información es insuficiente, dilo claramente
-- Prioriza precisión sobre completitud
-- Responde corto, directo y útil
+Reglas:
+- No inventes testigos, estrategia legal, pruebas o documentos si no aparecen en el contexto
+- No uses frases genéricas tipo "hay que revisar todo" salvo que las conectes con un hecho concreto
+- Si algo no puede confirmarse, dilo explícitamente
+- Sé breve, específico y útil
 
-OBJETIVO:
-Pensar como operador, no como abogado genérico
+Reglas de estructura obligatoria:
+- TODAS las secciones deben estar presentes SIEMPRE
+- Si no hay suficiente información para una sección, escribir exactamente:
+  "No hay información suficiente en los datos actuales."
+- No omitir ninguna sección bajo ninguna circunstancia
 """.strip()
     except Exception:
         advisory_system_rules = None
@@ -2912,6 +2899,63 @@ Pensar como operador, no como abogado genérico
 
     except Exception as e:
         logger.exception(f"[POST_FILTER] failed: {e}")
+
+        # --------------------------------------------------
+    # ENFORCE ADVISORY STRUCTURE (hard guarantee)
+    # --------------------------------------------------
+    def _ensure_advisory_structure(text: str) -> str:
+        required_sections = [
+            "1. HECHOS CONFIRMADOS",
+            "2. RIESGOS INMEDIATOS",
+            "3. SIGUIENTE ACCIÓN CONCRETA",
+            "4. FALTANTE CRÍTICO",
+            "5. ANÁLISIS",
+        ]
+
+        if not text:
+            return text
+
+        lines = (text or "").splitlines()
+        existing_headers = set()
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped in required_sections:
+                existing_headers.add(stripped)
+
+        out = text
+
+        # Add totally missing sections
+        for section in required_sections:
+            if section not in existing_headers:
+                out += f"\n\n{section}\nNo hay información suficiente en los datos actuales."
+
+        # Fill empty sections
+        fixed_lines = out.splitlines()
+        result_lines = []
+        i = 0
+
+        while i < len(fixed_lines):
+            line = fixed_lines[i]
+            stripped = line.strip()
+            result_lines.append(line)
+
+            if stripped in required_sections:
+                j = i + 1
+
+                # Skip blank lines to inspect actual content
+                while j < len(fixed_lines) and not fixed_lines[j].strip():
+                    j += 1
+
+                if j >= len(fixed_lines) or fixed_lines[j].strip() in required_sections:
+                    result_lines.append("No hay información suficiente en los datos actuales.")
+
+            i += 1
+
+        return "\n".join(result_lines).strip()
+
+    if advisory_system_rules:
+        reply = _ensure_advisory_structure(reply)    
 
     sent = await _send_reply(update, context, reply)
     try:
