@@ -103,6 +103,7 @@ def build_case_summary(chat_id: int, case_id: str) -> dict:
                     id DESC
                 LIMIT 100
             """
+
             cur.execute(query, (int(chat_id), cid_int))
             rows = cur.fetchall() or []
 
@@ -185,6 +186,16 @@ def build_case_summary(chat_id: int, case_id: str) -> dict:
     summary_lines.append(f"Notas totales: {notes_count}")
     summary_lines.append(f"Recordatorios pendientes: {open_reminders_count}")
     summary_lines.append(f"Tareas abiertas: {open_tasks_count}")
+
+    if tasks:
+        summary_lines.append("Tareas detectadas:")
+        for _, task_text in tasks[:3]:
+            clean_task = task_text
+            if clean_task.upper().startswith("TAREA:"):
+                clean_task = clean_task.split(":", 1)[1].strip()
+            summary_lines.append(f"- {clean_task[:160]}")
+    else:
+        summary_lines.append("Tareas detectadas: —")
 
     summary_text = "\n".join(summary_lines)
 

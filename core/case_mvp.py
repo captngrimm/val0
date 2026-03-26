@@ -3205,6 +3205,21 @@ async def try_undo_last_action(update, chat_id, text) -> bool:
             cur.execute("DELETE FROM case_events WHERE id=?", (action["id"],))
             undo_msg = "↩️ Eliminé el último recordatorio registrado."
 
+        # --- TASK DELETE (restore) ---
+        elif action["type"] == "task_delete":
+            cur.execute(
+                """
+                INSERT INTO case_events (chat_id, case_id, event_text, deadline_date)
+                VALUES (?, ?, ?, NULL)
+                """,
+                (
+                    action["chat_id"],
+                    int(action["case_id"]),
+                    action["event_text"],
+                ),
+            )
+            undo_msg = "↩️ Restauré la última tarea completada."
+
         conn.commit()
         conn.close()
 

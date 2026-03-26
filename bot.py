@@ -70,6 +70,10 @@ from datetime import time as dt_time
 from dotenv import load_dotenv
 import openai
 import re
+import smtplib
+import requests
+from email.mime.text import MIMEText
+from email.utils import formataddr
 
 from telegram import Update
 from telegram.constants import ChatAction
@@ -245,6 +249,37 @@ def _get_pending_state_text(chat_id: int) -> str | None:
         return None
 
     return "Tienes esto pendiente:\n" + "\n".join(parts)
+
+# --------------------------------------------------
+# EMAIL (Resend API)
+# --------------------------------------------------
+RESEND_API_KEY = "re_ejZFWV49_9LBYcRNikcaKeLQPg9nGC2e4"  # <-- paste your key here
+VAL_EMAIL_FROM = "Val <val@holaval.com>"
+
+EMAIL_CONTACTS = {
+    "miguel": "franklin.miranda.c@gmail.com",
+}
+
+
+def send_email_resend(to_email: str, subject: str, body: str) -> None:
+    url = "https://api.resend.com/emails"
+
+    headers = {
+        "Authorization": f"Bearer {RESEND_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "from": VAL_EMAIL_FROM,
+        "to": [to_email],
+        "subject": subject,
+        "html": f"<pre>{body}</pre>",
+    }
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=10)
+
+    if resp.status_code >= 300:
+        raise Exception(f"Resend error: {resp.text}")
 
 def classify_user_intent(text: str) -> str:
     t = (text or "").strip().lower()
@@ -1431,6 +1466,171 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
 
     # --------------------------------------------------
+    # HARD DOC MODE OVERRIDE (EARLY EXIT)
+    # --------------------------------------------------
+    try:
+        text_norm = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm = "".join(ch for ch in text_norm if not unicodedata.combining(ch))
+
+        doc_triggers = (
+            "contrato",
+            "hazme un contrato",
+            "generame un contrato",
+            "modelo de",
+            "borrador de",
+            "acuerdo",
+            "convenio",
+        )
+
+        email_triggers = (
+            "envialo",
+            "enviamelo",
+            "mandamelo",
+            "mandamelo por correo",
+            "enviamelo por correo",
+            "send it",
+            "email it",
+        )
+
+        is_doc = any(t in text_norm for t in doc_triggers)
+        wants_email = any(t in text_norm for t in email_triggers)
+
+        if is_doc:
+            # generate WITHOUT any case/advisory context
+            reply = call_val_openai(
+                chat_id,
+                text,
+                context_block="",
+                facts_block="",
+                semantic_block="",
+                forced_lang=preferred_language,
+                system_rules=(
+                    "You are a legal drafting assistant.\n"
+                    "When the user asks for a contract, model, or document:\n"
+                    "- ALWAYS produce a complete first draft immediately.\n"
+                    "- DO NOT ask questions before generating.\n"
+                    "- Use placeholders like [NOMBRE], [FECHA], [MONTO] if data is missing.\n"
+                    "- Keep it clean, structured, and usable.\n"
+                    "- After the draft, optionally add a short note asking for missing details.\n"
+                ),
+            )
+
+            if wants_email:
+                to_email = EMAIL_CONTACTS.get("miguel")
+
+                if to_email and reply:
+                    send_email_resend(
+                        to_email=to_email,
+                        subject="Valeria – Borrador de contrato",
+                        body=reply,
+                    )
+
+                    reply = reply + "\n\n📧 También te lo envié por correo."
+
+            sent = await _send_reply(update, context, reply)
+
+            try:
+                insert_message(
+                    chat_id=chat_id,
+                    role="assistant",
+                    content=reply,
+                    telegram_message_id=sent.message_id,
+                    model_used="gpt-4.1-mini",
+                )
+            except Exception as e:
+                logger.exception(f"[DOC_MODE_INSERT] failed: {e}")
+
+            return
+
+    except Exception as e:
+        logger.exception(f"[DOC_MODE_EARLY] failed: {e}")
+
+    # --------------------------------------------------
+    # Email send command (MVP)
+    # --------------------------------------------------
+    try:
+        text_clean = (text or "").strip().lower()
+
+        # normalize accents
+        text_norm = unicodedata.normalize("NFKD", text_clean)
+        text_norm = "".join(ch for ch in text_norm if not unicodedata.combining(ch))
+
+        standalone_email_commands = (
+            "envialo",
+            "enviamelo",
+            "mandamelo",
+            "mandamelo por correo",
+            "enviamelo por correo",
+            "send it",
+            "email it",
+        )
+
+        who = None
+
+        # exact standalone commands only
+        if text_norm in standalone_email_commands:
+            who = "miguel"
+
+        # allow exact "envialo a X"
+        else:
+            m_send = re.match(r"^\s*envialo\s+a\s+([a-z0-9_.-]+)\s*$", text_norm)
+            if m_send:
+                who = (m_send.group(1) or "").strip().lower()
+
+        if who:
+
+            to_email = EMAIL_CONTACTS.get(who)
+
+            if not to_email:
+                await update.message.reply_text(f"No tengo correo configurado para '{who}'.")
+                return
+
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT content
+                FROM messages
+                WHERE chat_id=?
+                  AND role='assistant'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (int(chat_id),),
+            )
+            row = cur.fetchone()
+            conn.close()
+
+            if not row:
+                await update.message.reply_text("No encontré una respuesta reciente para enviar.")
+                return
+
+            last_reply = row["content"] if hasattr(row, "keys") else row[0]
+            if not last_reply:
+                await update.message.reply_text("La última respuesta está vacía; no tengo nada que enviar.")
+                return
+
+            reply_lower = (last_reply or "").lower()
+
+            if "guion" in reply_lower or "llamada" in reply_lower:
+                subject = "Valeria – Guion de llamada"
+            elif "contrato" in reply_lower and "guion" not in reply_lower:
+                subject = "Valeria – Borrador de contrato"
+            elif "resumen" in reply_lower:
+                subject = "Valeria – Resumen del caso"
+            else:
+                subject = "Valeria – Documento generado"
+            send_email_resend(to_email=to_email, subject=subject, body=last_reply)
+
+            await update.message.reply_text(f"📧 Listo. Envié el último contenido a {who}.")
+            return
+
+    except Exception as e:
+        logger.exception(f"[EMAIL_SEND_CMD] failed: {e}")
+        await update.message.reply_text(f"Email error: {e}")
+        return
+
+    # --------------------------------------------------
     # Pending state inspector
     # --------------------------------------------------
     try:
@@ -1451,7 +1651,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[PENDING_STATE_INSPECTOR] failed: {e}")
 
-        # --------------------------------------------------
+    # --------------------------------------------------
     # Pending confirm shortcuts (fast confirm / cancel)
     # --------------------------------------------------
     try:
@@ -1948,6 +2148,79 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     except Exception as e:
         logger.exception(f"[CASE_REGISTER_CMD] failed: {e}")
+
+    # --------------------------------------------------
+    # Task close command — deterministic
+    # --------------------------------------------------
+    try:
+        m_task_close = re.match(
+            r"(?is)^\s*(?:completar|cerrar)\s+tarea\s+(?:del\s+)?(?:caso|expediente)\s+(\d{4,})\s*:\s*(.+?)\s*$",
+            text or "",
+        )
+        if m_task_close:
+            case_id = (m_task_close.group(1) or "").strip()
+            task_text = (m_task_close.group(2) or "").strip()
+
+            if case_id and task_text:
+                conn = _get_conn()
+                cur = conn.cursor()
+
+                cur.execute(
+                    """
+                    SELECT id, event_text
+                    FROM case_events
+                    WHERE chat_id=?
+                      AND case_id=?
+                      AND upper(event_text) LIKE 'TAREA:%'
+                    ORDER BY id DESC
+                    """,
+                    (int(chat_id), int(case_id)),
+                )
+                rows = cur.fetchall() or []
+
+                target_id = None
+                target_text = None
+                needle = task_text.lower().strip()
+
+                for row in rows:
+                    event_id = row["id"] if hasattr(row, "keys") else row[0]
+                    event_text_full = row["event_text"] if hasattr(row, "keys") else row[1]
+                    clean_task = event_text_full.split(":", 1)[1].strip() if ":" in event_text_full else event_text_full
+                    if needle in clean_task.lower():
+                        target_id = event_id
+                        target_text = clean_task
+                        break
+
+                if not target_id:
+                    conn.close()
+                    await update.message.reply_text("No encontré una tarea abierta que coincida con eso.")
+                    return
+
+                _LAST_ACTION[int(chat_id)] = {
+                    "type": "task_delete",
+                    "id": target_id,
+                    "event_text": f"TAREA: {target_text}",
+                    "chat_id": int(chat_id),
+                    "case_id": str(case_id),
+                }
+
+                cur.execute("DELETE FROM case_events WHERE id=?", (target_id,))
+                conn.commit()
+                conn.close()
+
+                try:
+                    from core.case_summary import refresh_case_summary
+                    refresh_case_summary(int(chat_id), str(case_id))
+                except Exception:
+                    pass
+
+                await update.message.reply_text(
+                    f"✅ Marqué como completada la tarea en CASE:{case_id}:\n\"{target_text}\""
+                )
+                return
+
+    except Exception as e:
+        logger.exception(f"[TASK_CLOSE_CMD] failed: {e}")    
 
     # --------------------------------------------------
     # Case note command — deterministic
@@ -3086,7 +3359,17 @@ Responde usando esta estructura exacta:
 - No consejos genéricos
 
 4. FALTANTE CRÍTICO
-- Qué información importante aún no consta en los datos
+- SOLO puedes mencionar ausencias directamente inferibles de los registros actuales
+- Si existen tareas detectadas, debes tratarlas como trabajo abierto real
+- Puedes mencionar como faltante crítico una tarea abierta visible en los datos
+- Usa siempre esta forma: "no consta X en registros"
+- X debe ser algo observable, por ejemplo:
+  - "no consta nota de estrategia"
+  - "no consta checklist de contestación"
+  - "no consta documento preparado"
+- NO menciones categorías legales genéricas como:
+  testigos, pruebas, expediente incompleto, defensa, etc.
+  A MENOS que esas palabras existan explícitamente en los datos del caso
 
 5. ANÁLISIS
 - Tu razonamiento
@@ -3175,26 +3458,126 @@ Reglas de estructura obligatoria:
         logger.exception(f"[URGENCY_BLOCK] failed: {e}")
         urgency_block = None
 
-    combined_system_rules = advisory_system_rules
+    # --------------------------------------------------
+    # DOCUMENT GENERATION MODE (HARD OVERRIDE)
+    # --------------------------------------------------
+    text_norm = unicodedata.normalize("NFKD", (text or "").lower())
+    text_norm = "".join(ch for ch in text_norm if not unicodedata.combining(ch))
 
-    if urgency_block:
-        extra = f"\n\nDATOS DE TIEMPO REAL:\n{urgency_block}"
-        combined_system_rules = (combined_system_rules or "") + extra
-
-    effective_context_block = context_block + summary_block
-    if advisory_system_rules:
-        effective_context_block = summary_block
-        semantic_block = ""
-
-    reply = call_val_openai(
-        chat_id,
-        text,
-        context_block=effective_context_block,
-        facts_block=facts_block,
-        semantic_block=semantic_block,
-        forced_lang=preferred_language,
-        system_rules=combined_system_rules,
+    doc_generation_triggers = (
+        "contrato",
+        "hazme un contrato",
+        "generame un contrato",
+        "modelo de",
+        "modelo ",
+        "borrador de",
+        "borrador ",
+        "clausula",
+        "clausulas",
+        "acuerdo",
+        "convenio",
+        "lease",
+        "nda",
     )
+
+    is_doc_mode = any(t in text_norm for t in doc_generation_triggers)
+
+    if is_doc_mode:
+        reply = call_val_openai(
+            chat_id,
+            text,
+            context_block="",
+            facts_block="",
+            semantic_block="",
+            forced_lang=preferred_language,
+            system_rules=(
+                "You are a legal drafting assistant.\n"
+                "When the user asks for a contract, model, or document:\n"
+                "- ALWAYS produce a complete first draft immediately.\n"
+                "- DO NOT ask questions before generating.\n"
+                "- Use placeholders like [NOMBRE], [FECHA], [MONTO] if data is missing.\n"
+                "- Keep it clean, structured, and usable.\n"
+                "- After the draft, optionally add a short note asking for missing details.\n"
+            ),
+        )
+    else:
+        combined_system_rules = advisory_system_rules
+
+        if urgency_block:
+            extra = f"\n\nDATOS DE TIEMPO REAL:\n{urgency_block}"
+            combined_system_rules = (combined_system_rules or "") + extra
+
+        effective_context_block = context_block + summary_block
+        effective_semantic_block = semantic_block
+
+        if advisory_system_rules:
+            effective_context_block = summary_block
+            effective_semantic_block = ""
+
+        reply = call_val_openai(
+            chat_id,
+            text,
+            context_block=effective_context_block,
+            facts_block=facts_block,
+            semantic_block=effective_semantic_block,
+            forced_lang=preferred_language,
+            system_rules=combined_system_rules,
+        )
+
+    # --------------------------------------------------
+    # ENFORCE ADVISORY STRUCTURE (hard guarantee)
+    # --------------------------------------------------
+    def _ensure_advisory_structure(text: str) -> str:
+        required_sections = [
+            "1. HECHOS CONFIRMADOS",
+            "2. RIESGOS INMEDIATOS",
+            "3. SIGUIENTE ACCIÓN CONCRETA",
+            "4. FALTANTE CRÍTICO",
+            "5. ANÁLISIS",
+        ]
+
+        if not text:
+            return text
+
+        lines = (text or "").splitlines()
+        existing_headers = set()
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped in required_sections:
+                existing_headers.add(stripped)
+
+        out = text
+
+        # Add missing sections
+        for section in required_sections:
+            if section not in existing_headers:
+                out += f"\n\n{section}\nNo hay información suficiente en los datos actuales."
+
+        # Fill empty sections
+        fixed_lines = out.splitlines()
+        result_lines = []
+        i = 0
+
+        while i < len(fixed_lines):
+            line = fixed_lines[i]
+            stripped = line.strip()
+            result_lines.append(line)
+
+            if stripped in required_sections:
+                j = i + 1
+                while j < len(fixed_lines) and not fixed_lines[j].strip():
+                    j += 1
+
+                if j >= len(fixed_lines) or fixed_lines[j].strip() in required_sections:
+                    result_lines.append("No hay información suficiente en los datos actuales.")
+
+            i += 1
+
+        return "\n".join(result_lines).strip()
+
+    if advisory_system_rules:
+        reply = _ensure_advisory_structure(reply)
 
     # --------------------------------------------------
     # POST-FILTER: remove forbidden legal hallucinations
@@ -3221,62 +3604,119 @@ Reglas de estructura obligatoria:
     except Exception as e:
         logger.exception(f"[POST_FILTER] failed: {e}")
 
-        # --------------------------------------------------
-    # ENFORCE ADVISORY STRUCTURE (hard guarantee)
     # --------------------------------------------------
-    def _ensure_advisory_structure(text: str) -> str:
-        required_sections = [
-            "1. HECHOS CONFIRMADOS",
-            "2. RIESGOS INMEDIATOS",
-            "3. SIGUIENTE ACCIÓN CONCRETA",
-            "4. FALTANTE CRÍTICO",
-            "5. ANÁLISIS",
-        ]
+    # TASK NUDGE (v2 — relevance gated)
+    # --------------------------------------------------
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
 
-        if not text:
-            return text
+        cur.execute(
+            """
+            SELECT event_text
+            FROM case_events
+            WHERE chat_id=?
+              AND event_text LIKE 'TAREA:%'
+            ORDER BY id DESC
+            LIMIT 5
+            """,
+            (int(chat_id),),
+        )
 
-        lines = (text or "").splitlines()
-        existing_headers = set()
+        rows = cur.fetchall() or []
+        conn.close()
 
-        for line in lines:
-            stripped = line.strip()
-            if stripped in required_sections:
-                existing_headers.add(stripped)
+        tasks = []
+        for r in rows:
+            txt = r["event_text"] if hasattr(r, "keys") else r[0]
+            if txt:
+                clean = txt.split(":", 1)[1].strip() if ":" in txt else txt
+                tasks.append(clean)
 
-        out = text
+        if tasks and not doc_generation_mode:
+            low = (text or "").lower()
 
-        # Add totally missing sections
-        for section in required_sections:
-            if section not in existing_headers:
-                out += f"\n\n{section}\nNo hay información suficiente en los datos actuales."
+            operational_triggers = (
+                "caso",
+                "resumen",
+                "opinas",
+                "estado",
+                "detalle",
+                "situacion",
+            )
 
-        # Fill empty sections
-        fixed_lines = out.splitlines()
-        result_lines = []
-        i = 0
+            trivial_triggers = (
+                "hola",
+                "ok",
+                "dale",
+                "gracias",
+            )
 
-        while i < len(fixed_lines):
-            line = fixed_lines[i]
-            stripped = line.strip()
-            result_lines.append(line)
+            is_operational = any(t in low for t in operational_triggers)
+            is_trivial = low.strip() in trivial_triggers
 
-            if stripped in required_sections:
-                j = i + 1
+            should_nudge = False
 
-                # Skip blank lines to inspect actual content
-                while j < len(fixed_lines) and not fixed_lines[j].strip():
-                    j += 1
+            if len(tasks) >= 2:
+                should_nudge = True
+            elif is_operational:
+                should_nudge = True
+            elif not is_trivial and len(tasks) == 1:
+                should_nudge = True
 
-                if j >= len(fixed_lines) or fixed_lines[j].strip() in required_sections:
-                    result_lines.append("No hay información suficiente en los datos actuales.")
+            if should_nudge:
+                nudge_lines = [f"⚠️ Tienes {len(tasks)} tarea(s) abierta(s):"]
+                for t in tasks[:2]:
+                    nudge_lines.append(f"- {t}")
 
-            i += 1
+                nudge_block = "\n".join(nudge_lines)
+                reply = (reply or "").strip() + "\n\n" + nudge_block
 
-        return "\n".join(result_lines).strip()
+    except Exception as e:
+        logger.exception(f"[TASK_NUDGE] failed: {e}") 
 
-    if advisory_system_rules:
-        reply = _ensure_advisory_structure(reply)    
+    # --------------------------------------------------
+    # AUTO EMAIL (inline intent)
+    # --------------------------------------------------
+    try:
+        text_norm = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm = "".join(ch for ch in text_norm if not unicodedata.combining(ch))
+
+        auto_email_triggers = (
+            "envialo",
+            "enviamelo",
+            "mandamelo",
+            "mandamelo por correo",
+            "enviamelo por correo",
+            "send it",
+            "email it",
+        )
+
+        if any(t in text_norm for t in auto_email_triggers):
+            to_email = EMAIL_CONTACTS.get("miguel")
+
+            if to_email and reply:
+                reply_lower = reply.lower()
+
+                if "guion" in reply_lower or "llamada" in reply_lower:
+                    subject = "Valeria – Guion de llamada"
+                elif "contrato" in reply_lower and "guion" not in reply_lower:
+                    subject = "Valeria – Borrador de contrato"
+                elif "resumen" in reply_lower:
+                    subject = "Valeria – Resumen del caso"
+                else:
+                    subject = "Valeria – Documento generado"
+
+                send_email_resend(
+                    to_email=to_email,
+                    subject=subject,
+                    body=reply,
+                )
+
+                reply = reply + "\n\n📧 También te lo envié por correo."
+
+    except Exception as e:
+        logger.exception(f"[AUTO_EMAIL] failed: {e}")       
 
     sent = await _send_reply(update, context, reply)
     try:
