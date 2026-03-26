@@ -200,6 +200,52 @@ def _extract_deadline_date(text: str) -> str:
 
     return ""
 
+def is_low_signal_case_note(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return True
+
+    blocked_contains = (
+        "router hygiene",
+        "prueba limpia router",
+        "test note",
+        "nota de prueba",
+        "prueba del sistema",
+        "debug",
+        "prueba debug",
+        "smoke test",
+        "tmp",
+        "temporary test",
+    )
+
+    return any(x in t for x in blocked_contains)
+
+def _get_pending_state_text(chat_id: int) -> str | None:
+    parts = []
+
+    if int(chat_id) in _PENDING_CASE_DISAMBIG:
+        dis = _PENDING_CASE_DISAMBIG[int(chat_id)]
+        dtype = dis.get("type", "desconocido")
+        count = len(dis.get("candidates", []) or [])
+        parts.append(f"• Selección pendiente: {dtype} ({count} opción(es))")
+
+    if int(chat_id) in _PENDING_TERM_CONFIRM:
+        p = _PENDING_TERM_CONFIRM[int(chat_id)]
+        parts.append(
+            f"• Término pendiente de confirmar: CASE:{p.get('case_id')} | vence {p.get('deadline_date')}"
+        )
+
+    if int(chat_id) in _PENDING_REMINDER_CONFIRM:
+        p = _PENDING_REMINDER_CONFIRM[int(chat_id)]
+        parts.append(
+            f"• Recordatorio pendiente de confirmar: CASE:{p.get('case_id')} | fecha {p.get('due_date')}"
+        )
+
+    if not parts:
+        return None
+
+    return "Tienes esto pendiente:\n" + "\n".join(parts)
+
 def classify_user_intent(text: str) -> str:
     t = (text or "").strip().lower()
 
@@ -550,6 +596,10 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
     case_id, client_name = matches[0]
     logger.info(f"[NATURAL_NOTE] SUCCESS case_id={case_id} client={client_name}")
+
+    if is_low_signal_case_note(raw):
+        logger.info(f"[NATURAL_NOTE] SKIP low-signal text={raw!r}")
+        return False
 
     # --- dedupe exact same natural note in recent window ---
     try:
@@ -1381,6 +1431,54 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
 
     # --------------------------------------------------
+    # Pending state inspector
+    # --------------------------------------------------
+    try:
+        text_clean = (text or "").strip().lower()
+        if text_clean in (
+            "pendiente",
+            "pendientes",
+            "qué está pendiente",
+            "que esta pendiente",
+            "estado pendiente",
+        ):
+            pending_text = _get_pending_state_text(int(chat_id))
+            if pending_text:
+                await update.message.reply_text(pending_text)
+            else:
+                await update.message.reply_text("No tienes nada pendiente.")
+            return
+    except Exception as e:
+        logger.exception(f"[PENDING_STATE_INSPECTOR] failed: {e}")
+
+        # --------------------------------------------------
+    # Pending confirm shortcuts (fast confirm / cancel)
+    # --------------------------------------------------
+    try:
+        text_clean = (text or "").strip().lower()
+
+        confirm_words = ("ok", "sí", "si", "dale", "yes", "confirmar")
+        cancel_words = ("no", "cancelar", "cancel", "nah")
+
+        has_pending = (
+            int(chat_id) in _PENDING_TERM_CONFIRM
+            or int(chat_id) in _PENDING_REMINDER_CONFIRM
+            or int(chat_id) in _PENDING_CASE_DISAMBIG
+        )
+
+        if has_pending:
+            if text_clean in confirm_words:
+                # simulate confirmation
+                logger.info("[PENDING_SHORTCUT] confirm triggered")
+                text = "ok"
+            elif text_clean in cancel_words:
+                logger.info("[PENDING_SHORTCUT] cancel triggered")
+                text = "cancelar"
+
+    except Exception as e:
+        logger.exception(f"[PENDING_SHORTCUT] failed: {e}")    
+
+    # --------------------------------------------------
     # Undo last action (hard gate)
     # --------------------------------------------------
     try:
@@ -1861,6 +1959,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             note_text = (m.group(2) or "").strip()
 
             if case_id and note_text:
+                if is_low_signal_case_note(note_text):
+                    await update.message.reply_text(
+                        "Esa nota parece meta/dev/test y no la guardaré en memoria del caso. "
+                        "Si de verdad la quieres guardar, usa: forzar nota del caso ..."
+                    )
+                    return
+
                 from memory_store import insert_case_note, set_active_case_id
 
                 set_active_case_id(int(chat_id), case_id)
@@ -1891,6 +1996,44 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 refresh_case_summary(int(chat_id), str(case_id))
 
                 await update.message.reply_text(f"Listo, Boss. Guardé la nota en CASE:{case_id}.")
+                return
+
+        m_force = re.match(r"(?is)^\s*forzar\s+nota\s+(?:del\s+)?(?:caso|expediente)\s+(\d{4,})\s*:\s*(.+?)\s*$", text or "")
+        if m_force:
+            case_id = (m_force.group(1) or "").strip()
+            note_text = (m_force.group(2) or "").strip()
+
+            if case_id and note_text:
+                from memory_store import insert_case_note, set_active_case_id
+
+                set_active_case_id(int(chat_id), case_id)
+                note_id = insert_case_note(
+                    chat_id=int(chat_id),
+                    case_id=case_id,
+                    note_text=note_text,
+                    source="text",
+                    telegram_message_id=tg_msg_id,
+                )
+
+                _audit(
+                    chat_id,
+                    action="CMD_CASE_NOTE_CREATE_FORCED",
+                    entity_type="case_note",
+                    entity_id=str(note_id),
+                    payload=f"case_id={case_id} | text={note_text}"[:500],
+                    source="dm",
+                )
+
+                _LAST_ACTION[int(chat_id)] = {
+                    "type": "note_insert",
+                    "id": note_id,
+                    "case_id": str(case_id),
+                }
+
+                from core.case_summary import refresh_case_summary
+                refresh_case_summary(int(chat_id), str(case_id))
+
+                await update.message.reply_text(f"Listo, Boss. Forcé la nota en CASE:{case_id}.")
                 return
 
     except Exception as e:
@@ -2915,10 +3058,15 @@ Reglas de estructura obligatoria:
         extra = f"\n\nDATOS DE TIEMPO REAL:\n{urgency_block}"
         combined_system_rules = (combined_system_rules or "") + extra
 
+    effective_context_block = context_block + summary_block
+    if advisory_system_rules:
+        effective_context_block = summary_block
+        semantic_block = ""
+
     reply = call_val_openai(
         chat_id,
         text,
-        context_block=context_block + summary_block,
+        context_block=effective_context_block,
         facts_block=facts_block,
         semantic_block=semantic_block,
         forced_lang=preferred_language,
