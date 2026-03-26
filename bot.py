@@ -2043,7 +2043,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # NATURAL REMINDER DETECTION (suggestion only, no write)
     # --------------------------------------------------
     try:
-        low = (text or "").lower()
+        raw_text = (text or "").strip()
+        low = raw_text.lower()
+
+        # Strip only assistant-call prefixes, never real people names
+        low = re.sub(r"^\s*(oye\s+val|hey\s+val|val)\s*[:,]?\s*", "", low).strip()
 
         intent = classify_user_intent(text)
         if intent == "advisory":
@@ -2136,6 +2140,79 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             if due_date:
                 if len(matches) == 1:
                     case_id, client_name = matches[0]
+
+                    explicit_auto_confirm_prefixes = (
+                        "recuérdame",
+                        "recuerdame",
+                        "recordarme",
+                    )
+
+                    is_explicit_reminder = low.strip().startswith(explicit_auto_confirm_prefixes)
+
+                    if is_explicit_reminder:
+                        from memory_store import insert_case_event
+
+                        event_text = f"RECORDATORIO: {text.strip()}"
+
+                        dup = False
+                        try:
+                            conn = _get_conn()
+                            cur = conn.cursor()
+                            cur.execute(
+                                """
+                                SELECT id
+                                FROM case_events
+                                WHERE chat_id=?
+                                  AND case_id=?
+                                  AND event_text=?
+                                  AND IFNULL(deadline_date,'') = IFNULL(?, '')
+                                ORDER BY id DESC
+                                LIMIT 1
+                                """,
+                                (
+                                    int(chat_id),
+                                    int(case_id),
+                                    event_text,
+                                    due_date,
+                                ),
+                            )
+                            row = cur.fetchone()
+                            conn.close()
+                            if row:
+                                dup = True
+                        except Exception:
+                            dup = False
+
+                        if dup:
+                            await update.message.reply_text(
+                                f"⚠️ Recordatorio duplicado detectado en CASE:{case_id}."
+                            )
+                            return
+
+                        event_id = insert_case_event(
+                            chat_id=int(chat_id),
+                            case_id=int(case_id),
+                            event_text=event_text,
+                            deadline_date=due_date,
+                        )
+
+                        _LAST_ACTION[int(chat_id)] = {
+                            "type": "reminder_insert",
+                            "id": event_id,
+                            "case_id": str(case_id),
+                        }
+
+                        try:
+                            from core.case_summary import refresh_case_summary
+                            refresh_case_summary(int(chat_id), str(case_id))
+                        except Exception:
+                            pass
+
+                        await update.message.reply_text(
+                            f"⏰ Recordatorio registrado en CASE:{case_id}\n"
+                            f"Fecha: {due_date}"
+                        )
+                        return
 
                     _PENDING_REMINDER_CONFIRM[int(chat_id)] = {
                         "case_id": int(case_id),
@@ -2267,7 +2344,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # NATURAL TERM DETECTION (suggestion only, no write)
     # --------------------------------------------------
     try:
-        low = (text or "").lower()
+        raw_text = (text or "").strip()
+        low = raw_text.lower()
+
+        # Strip only assistant-call prefixes, never real people names
+        low = re.sub(r"^\s*(oye\s+val|hey\s+val|val)\s*[:,]?\s*", "", low).strip()
 
         intent = classify_user_intent(text)
         if intent == "advisory":
