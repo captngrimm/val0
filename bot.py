@@ -1995,6 +1995,48 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 from core.case_summary import refresh_case_summary
                 refresh_case_summary(int(chat_id), str(case_id))
 
+                # --------------------------------------------------
+                # TASK DETECTION (simple v1)
+                # --------------------------------------------------
+                try:
+                    task_triggers = (
+                        "pendiente",
+                        "por hacer",
+                        "llamar",
+                        "enviar",
+                        "revisar",
+                        "hacer",
+                    )
+
+                    note_low = note_text.lower().strip()
+
+                    if any(t in note_low for t in task_triggers):
+                        from memory_store import insert_case_event
+
+                        task_text = f"TAREA: {note_text}"
+
+                        event_id = insert_case_event(
+                            chat_id=int(chat_id),
+                            case_id=int(case_id),
+                            event_text=task_text,
+                            deadline_date=None,
+                        )
+
+                        _LAST_ACTION[int(chat_id)] = {
+                            "type": "task_insert",
+                            "id": event_id,
+                            "case_id": str(case_id),
+                        }
+
+                        try:
+                            from core.case_summary import refresh_case_summary
+                            refresh_case_summary(int(chat_id), str(case_id))
+                        except Exception:
+                            pass
+
+                except Exception as e:
+                    logger.exception(f"[TASK_DETECT] failed: {e}")
+
                 await update.message.reply_text(f"Listo, Boss. Guardé la nota en CASE:{case_id}.")
                 return
 

@@ -21,6 +21,7 @@ def build_case_summary(chat_id: int, case_id: str) -> dict:
     next_reminder_text = None
     next_reminder_date = None
     open_reminders_count = 0
+    open_tasks_count = 0
     last_event_at = None
 
     # -------------------------
@@ -84,24 +85,32 @@ def build_case_summary(chat_id: int, case_id: str) -> dict:
             cid_int = None
 
         if cid_int is not None:
-            cur.execute(
-                """
+            query = """
                 SELECT event_text, deadline_date, created_at
                 FROM case_events
-                WHERE chat_id=?
-                  AND case_id=?
-                  AND deadline_date IS NOT NULL
-                ORDER BY deadline_date ASC
-                LIMIT 50
-                """,
-                (int(chat_id), cid_int),
-            )
+                WHERE chat_id = ?
+                  AND case_id = ?
+                  AND (
+                        deadline_date IS NOT NULL
+                        OR UPPER(event_text) LIKE 'TAREA:%'
+                  )
+                ORDER BY
+                    CASE
+                        WHEN deadline_date IS NULL THEN 1
+                        ELSE 0
+                    END,
+                    deadline_date ASC,
+                    id DESC
+                LIMIT 100
+            """
+            cur.execute(query, (int(chat_id), cid_int))
             rows = cur.fetchall() or []
 
         conn.close()
 
         legal_terms = []
         reminders = []
+        tasks = []
 
         for r in rows:
             txt = (r["event_text"] if hasattr(r, "keys") else r[0]) or ""
@@ -111,10 +120,16 @@ def build_case_summary(chat_id: int, case_id: str) -> dict:
             if created_at and not last_event_at:
                 last_event_at = created_at
 
+            txt_upper = txt.strip().upper()
+
+            if txt_upper.startswith("TAREA:"):
+                tasks.append((ddl, txt))
+                continue
+
             if not ddl:
                 continue
 
-            if txt.strip().upper().startswith("RECORDATORIO:"):
+            if txt_upper.startswith("RECORDATORIO:"):
                 reminders.append((ddl, txt))
             else:
                 legal_terms.append((ddl, txt))
@@ -126,6 +141,7 @@ def build_case_summary(chat_id: int, case_id: str) -> dict:
             next_reminder_date, next_reminder_text = reminders[0]
 
         open_reminders_count = len(reminders)
+        open_tasks_count = len(tasks)
 
     except Exception:
         pass
@@ -168,6 +184,7 @@ def build_case_summary(chat_id: int, case_id: str) -> dict:
 
     summary_lines.append(f"Notas totales: {notes_count}")
     summary_lines.append(f"Recordatorios pendientes: {open_reminders_count}")
+    summary_lines.append(f"Tareas abiertas: {open_tasks_count}")
 
     summary_text = "\n".join(summary_lines)
 
