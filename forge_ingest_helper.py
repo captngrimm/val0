@@ -8,15 +8,34 @@ from datetime import datetime
 FORGE_HOST = "forge@100.88.212.83"
 REMOTE_TRIGGER = "python3 /opt/valprime/trigger_ingest.py"
 REMOTE_TMP_DIR = "/tmp"
+LOCAL_RESPONSE_DIR = "/opt/val0/forge_responses"
+
+
+def ensure_dirs():
+    os.makedirs(LOCAL_RESPONSE_DIR, exist_ok=True)
+
+
+def save_response_packet(filename_stem, response_text):
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = os.path.join(LOCAL_RESPONSE_DIR, f"{ts}_{filename_stem}_response.json")
+
+    with open(out_path, "w") as f:
+        f.write(response_text.strip() + "\n")
+
+    return out_path
 
 
 def send_audio_to_forge(local_file, chat_id, user_id, case_id=None, notes=None, tags=None):
     if not os.path.exists(local_file):
         raise FileNotFoundError(f"Missing local file: {local_file}")
 
+    ensure_dirs()
+
     filename = os.path.basename(local_file)
+    filename_stem = os.path.splitext(filename)[0]
+
     remote_file = f"{REMOTE_TMP_DIR}/{filename}"
-    remote_request = f"{REMOTE_TMP_DIR}/{os.path.splitext(filename)[0]}_request.json"
+    remote_request = f"{REMOTE_TMP_DIR}/{filename_stem}_request.json"
 
     request = {
         "source": "val0",
@@ -33,7 +52,7 @@ def send_audio_to_forge(local_file, chat_id, user_id, case_id=None, notes=None, 
         }
     }
 
-    local_request = f"/tmp/{os.path.splitext(filename)[0]}_request.json"
+    local_request = f"/tmp/{filename_stem}_request.json"
     with open(local_request, "w") as f:
         json.dump(request, f, indent=2)
 
@@ -47,12 +66,14 @@ def send_audio_to_forge(local_file, chat_id, user_id, case_id=None, notes=None, 
         check=True
     )
 
-    return result.stdout
+    saved_path = save_response_packet(filename_stem, result.stdout)
+    return result.stdout, saved_path
 
 
 if __name__ == "__main__":
     test_file = "/opt/val0/test_audio.mp3"
-    output = send_audio_to_forge(
+
+    output, saved_path = send_audio_to_forge(
         local_file=test_file,
         chat_id="test_chat",
         user_id="test_user",
@@ -60,5 +81,6 @@ if __name__ == "__main__":
         notes="helper module test",
         tags=["test"]
     )
-    print(output)
 
+    print(output)
+    print(f"Saved response packet: {saved_path}")
