@@ -52,6 +52,32 @@ def log_ingest_result(filename, response_text, saved_packet_path):
         f.write(json.dumps(entry) + "\n")
 
 
+def build_user_message(data):
+    status = data.get("status")
+    summary_path = data.get("data", {}).get("summary_path")
+    suggested_tasks = data.get("advisory", {}).get("suggested_tasks", [])
+    errors = data.get("errors", [])
+
+    if status == "success":
+        parts = ["Audio processed successfully."]
+        if summary_path:
+            parts.append(f"Summary saved: {summary_path}")
+        if suggested_tasks:
+            parts.append("Suggested tasks:")
+            parts.extend([f"- {task}" for task in suggested_tasks])
+        return "\n".join(parts)
+
+    if status == "skipped":
+        return "Audio was already processed. No new action taken."
+
+    if status == "error":
+        if errors:
+            return f"Audio processing failed: {errors[0].get('message', 'unknown error')}"
+        return "Audio processing failed."
+
+    return "Unknown response state."
+
+
 def send_audio_to_forge(local_file, chat_id, user_id, case_id=None, notes=None, tags=None):
     if not os.path.exists(local_file):
         raise FileNotFoundError(f"Missing local file: {local_file}")
@@ -96,13 +122,29 @@ def send_audio_to_forge(local_file, chat_id, user_id, case_id=None, notes=None, 
     saved_path = save_response_packet(filename_stem, result.stdout)
     log_ingest_result(filename, result.stdout, saved_path)
 
-    return result.stdout, saved_path
+    try:
+        response_data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        response_data = {
+            "status": "error",
+            "errors": [{"message": "Invalid JSON response from Forge"}],
+            "data": {"summary_path": None},
+            "advisory": {"suggested_tasks": []}
+        }
+
+    user_message = build_user_message(response_data)
+
+    return {
+        "raw_response": result.stdout,
+        "saved_packet_path": saved_path,
+        "user_message": user_message
+    }
 
 
 if __name__ == "__main__":
     test_file = "/opt/val0/test_audio.mp3"
 
-    output, saved_path = send_audio_to_forge(
+    result = send_audio_to_forge(
         local_file=test_file,
         chat_id="test_chat",
         user_id="test_user",
@@ -111,7 +153,8 @@ if __name__ == "__main__":
         tags=["test"]
     )
 
-    print(output)
-    print(f"Saved response packet: {saved_path}")
-    print(f"Log updated: {LOCAL_LOG_PATH}")
+    print(result["raw_response"])
+    print(f"Saved response packet: {result['saved_packet_path']}")
+    print("\n=== USER MESSAGE ===\n")
+    print(result["user_message"])
 
