@@ -84,3 +84,6 @@ tts_models_piper/
 # local scratch
 You
 
+
+forge_ingest_log.jsonl
+create_tasks_table.py
