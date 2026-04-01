@@ -3,8 +3,10 @@
 import os
 import json
 import glob
+import subprocess
 
 RESPONSE_DIR = "/opt/val0/forge_responses"
+FORGE_HOST = "forge@100.88.212.83"
 
 
 def latest_response_file():
@@ -36,6 +38,22 @@ def extract_response_fields(data):
     }
 
 
+def fetch_remote_file_text(remote_path):
+    if not remote_path:
+        return None
+
+    result = subprocess.run(
+        ["ssh", FORGE_HOST, f"cat {remote_path}"],
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        return None
+
+    return result.stdout.strip()
+
+
 def build_user_message(fields):
     status = fields["status"]
     summary_path = fields["summary_path"]
@@ -45,10 +63,16 @@ def build_user_message(fields):
     if status == "success":
         parts = ["Audio processed successfully."]
 
-        if summary_path:
+        summary_text = fetch_remote_file_text(summary_path)
+        if summary_text:
+            parts.append("")
+            parts.append("Summary:")
+            parts.append(summary_text)
+        elif summary_path:
             parts.append(f"Summary saved: {summary_path}")
 
         if suggested_tasks:
+            parts.append("")
             parts.append("Suggested tasks:")
             parts.extend([f"- {task}" for task in suggested_tasks])
 
