@@ -65,19 +65,30 @@ def build_user_message(fields):
 
         summary_text = fetch_remote_file_text(summary_path)
         if summary_text:
-            parts.append("")
-            parts.append("Summary:")
-            parts.append(summary_text)
+            cleaned_summary = summary_text.strip()
+
+            # Avoid duplicate Summary header
+            if cleaned_summary.startswith("Summary:"):
+                parts.append("")
+                parts.append(cleaned_summary)
+            else:
+                parts.append("")
+                parts.append("Summary:")
+                parts.append(cleaned_summary)
+
+            # If summary already contains Suggested tasks, do not append again
+            if "Suggested tasks:" in cleaned_summary:
+                return "\n".join(parts)
+
         elif summary_path:
             parts.append(f"Summary saved: {summary_path}")
 
         if suggested_tasks:
             parts.append("")
             parts.append("Suggested tasks:")
-            parts.extend([f"- {task}" for task in suggested_tasks])
+            parts.extend([f"• {task}" for task in suggested_tasks])
 
         return "\n".join(parts)
-
     if status == "skipped":
         return "Audio was already processed. No new action taken."
 

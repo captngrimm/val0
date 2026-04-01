@@ -30,6 +30,8 @@ SOURCE OF TRUTH:
 
 
 import time
+import shutil
+import asyncio
 
 # === CORE DB ACCESS (must ALWAYS exist) ===
 from memory_store import _get_conn
@@ -64,6 +66,7 @@ import logging
 import unicodedata
 import datetime
 from datetime import timedelta
+from forge_ingest_helper import send_audio_to_forge
 import pytz
 from typing import List, Dict, Any, Optional
 from datetime import time as dt_time
@@ -167,42 +170,39 @@ def _extract_case_id(text: str) -> str:
 
 # --- Sprint08 deterministic deadline extractor ---
 def _extract_deadline_date(text: str) -> str:
-    """
-    Deterministic deadline extractor for Sprint08.
-    Supports:
-    - vence hoy
-    - vence mañana
-    - vence el YYYY-MM-DD
-    Returns ISO date string or "".
-    """
-    import re
-    from datetime import datetime, timedelta
-    from zoneinfo import ZoneInfo
+    raw = (text or "").strip().lower()
+    low = unicodedata.normalize("NFKD", raw)
+    low = "".join(ch for ch in low if not unicodedata.combining(ch))
 
-    if not text:
-        return ""
+    month_map = {
+        "enero": 1,
+        "febrero": 2,
+        "marzo": 3,
+        "abril": 4,
+        "mayo": 5,
+        "junio": 6,
+        "julio": 7,
+        "agosto": 8,
+        "septiembre": 9,
+        "setiembre": 9,
+        "octubre": 10,
+        "noviembre": 11,
+        "diciembre": 12,
+    }
 
-    t = text.strip().lower()
+    m = re.search(
+        r"\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\b",
+        low,
+    )
+    if not m:
+        return None
 
-    tz = ZoneInfo("America/Panama")
-    today = datetime.now(tz).date()
+    day = int(m.group(1))
+    month_name = m.group(2)
+    month = month_map[month_name]
 
-    if "vence hoy" in t or "audiencia hoy" in t:
-        return today.isoformat()
-
-    if (
-        "vence mañana" in t
-        or "vence manana" in t
-        or "audiencia mañana" in t
-        or "audiencia manana" in t
-    ):
-        return (today + timedelta(days=1)).isoformat()
-
-    m = re.search(r"vence\s+el\s+(\d{4}-\d{2}-\d{2})", t)
-    if m:
-        return m.group(1)
-
-    return ""
+    year = datetime.now(ZoneInfo("America/Panama")).year
+    return f"{year:04d}-{month:02d}-{day:02d}"
 
 def is_low_signal_case_note(text: str) -> bool:
     t = (text or "").strip().lower()
@@ -253,13 +253,31 @@ def _get_pending_state_text(chat_id: int) -> str | None:
 # --------------------------------------------------
 # EMAIL (Resend API)
 # --------------------------------------------------
-RESEND_API_KEY = "re_ejZFWV49_9LBYcRNikcaKeLQPg9nGC2e4"  # <-- paste your key here
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+
+if not RESEND_API_KEY:
+    raise RuntimeError("Missing RESEND_API_KEY")
 VAL_EMAIL_FROM = "Val <val@holaval.com>"
 
 EMAIL_CONTACTS = {
     "miguel": "franklin.miranda.c@gmail.com",
 }
 
+# --------------------------------------------------
+# PER-USER EMAIL ROUTING
+# --------------------------------------------------
+EMAIL_BY_CHAT_ID = {
+    1789350565: "franklin.miranda.c@gmail.com",
+    # add Miguel's chat_id later:
+    # 123456789: "miguel@email.com",
+}
+
+
+def get_user_email(chat_id: int, fallback_name: str = "miguel"):
+    if chat_id in EMAIL_BY_CHAT_ID:
+        return EMAIL_BY_CHAT_ID[chat_id]
+
+    return EMAIL_CONTACTS.get(fallback_name)
 
 def send_email_resend(to_email: str, subject: str, body: str) -> None:
     url = "https://api.resend.com/emails"
@@ -355,7 +373,7 @@ def classify_user_intent(text: str) -> str:
 
     return "chat"
 
-async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str):
+async def _maybe_capture_case_note(update, chat_id, text, source="text", silent=False):
     logger.info(f"[NATURAL_NOTE] ENTER text={text!r}")
     """
     Natural note capture v1.
@@ -616,7 +634,8 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
 
             options_text = "\n\n".join(option_lines)
 
-            await update.message.reply_text(
+            if not silent:
+                await update.message.reply_text(
                 f"⚠️ Encontré más de un caso para esta nota:\n\n"
                 f"{options_text}\n\n"
                 f"Responde con 1 o 2.\n"
@@ -682,16 +701,16 @@ async def _maybe_capture_case_note(update, chat_id: int, text: str, source: str)
         from core.case_summary import refresh_case_summary
         refresh_case_summary(int(chat_id), str(case_id))
 
-        await update.message.reply_text(
-            f"📝 Guardé esto como nota en CASE:{case_id} ({client_name})."
-        )
+        if not silent:
+            await update.message.reply_text(
+                f"📝 Guardé esto como nota en CASE:{case_id} ({client_name})."
+            )
         return True
 
     except Exception as e:
         logger.exception(f"[NATURAL_NOTE] insert failed: {e}")
         return False
 
-import asyncio
 
 async def _chat_action_once(context, chat_id: int, action: str):
     try:
@@ -706,6 +725,63 @@ async def _chat_action_keepalive(context, chat_id: int, action: str, done_evt: a
             await asyncio.sleep(every)
     except Exception:
         pass
+
+async def _run_forge_ingestion_background(update, context, transcribed_text, tmp_path, chat_id, user_id):
+    try:
+        from forge_ingest_helper import send_audio_to_forge
+        import json
+
+        loop = asyncio.get_running_loop()
+
+        result = await loop.run_in_executor(
+            None,
+            lambda: send_audio_to_forge(
+                local_file=tmp_path,
+                chat_id=str(chat_id),
+                user_id=str(user_id),
+                case_id=None,
+                notes="telegram voice background ingest",
+                tags=["telegram", "voice", "background_ingest"]
+            )
+        )
+
+        logger.info(
+            f"[FORGE_BG] completed chat_id={chat_id} user_id={user_id} "
+            f"saved_packet={result.get('saved_packet_path')}"
+        )
+
+        # --- DECISION LAYER ---
+        packet_path = result.get("saved_packet_path")
+        if packet_path and os.path.exists(packet_path):
+            with open(packet_path, "r") as f:
+                packet = json.load(f)
+
+            extracted = packet.get("data", {}).get("extracted", {})
+            tasks = extracted.get("tasks", [])
+            confidence = packet.get("advisory", {}).get("confidence", "low")
+
+            if tasks:
+                if confidence == "high":
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            "⚠️ Detecté una tarea importante y ya la registré:\n"
+                            + "\n".join([f"- {t}" for t in tasks])
+                        )
+                    )
+
+                elif confidence == "medium":
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text=(
+                            "Detecté algo que podría ser relevante:\n"
+                            + "\n".join([f"- {t}" for t in tasks])
+                            + "\n\n¿Quieres que lo agregue al caso?"
+                        )
+                    )
+
+    except Exception as e:
+        logger.exception(f"[FORGE_BG] failed: {e}")   
 
 # Phase 1 ops hardening: log-throttle state (module-level)
 _VAL0_LAST_TICK_LOG_TS = None
@@ -1018,6 +1094,16 @@ def extract_preferred_name(text: str) -> Optional[str]:
                 return tail
     return None
 
+def extract_user_email(text: str) -> Optional[str]:
+    if not text:
+        return None
+
+    m = re.search(r"\bmi correo es\s+([a-z0-9_.+-]+@[a-z0-9-]+\.[a-z0-9-.]+)\b", text.lower())
+    if m:
+        return m.group(1).strip()
+
+    return None    
+
 def extract_freeform_note(text: str) -> Optional[str]:
     original = text.strip()
     lowered = original.lower()
@@ -1271,6 +1357,9 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 # Voice handler (Whisper via OpenAI)
 # --------------------------------------------------
+# --------------------------------------------------
+# Voice handler (Whisper via OpenAI)
+# --------------------------------------------------
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.voice:
         return
@@ -1301,6 +1390,24 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "No pude descargar ese mensaje de voz, Boss. Intenta de nuevo."
         )
         return
+
+    # Background Forge ingestion (non-blocking)
+    try:
+        forge_tmp_path = tmp_path + ".forge.ogg"
+        shutil.copy2(tmp_path, forge_tmp_path)
+
+        asyncio.create_task(
+            _run_forge_ingestion_background(
+                update,
+                context,
+                transcribed_text="",
+                tmp_path=forge_tmp_path,
+                chat_id=chat_id,
+                user_id=user.id,
+            )
+        )
+    except Exception as e:
+        logger.exception(f"Forge background ingest scheduling failed: {e}")
 
     # Transcribe (Whisper) + perf log
     transcribed_text = ""
@@ -1334,8 +1441,12 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     # Capture note + continue normal pipeline
-    await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice")
+    await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice", silent=True)
+    # Run normal pipeline first
+    # Fire main reply immediately
     await _process_text_pipeline(update, context, transcribed_text)
+
+
 
 # --------------------------------------------------
 # Semantic Memory (FAISS) — C2: automatic recall
@@ -1448,10 +1559,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     chat_id = chat.id
 
     # Preferred name (defaults)
+    # Preferred name (defaults)
     try:
-        preferred_name = get_fact(chat_id=chat_id, fact_key="preferred_name") or "Boss"
+        preferred_name = get_fact(chat_id=chat_id, fact_key="preferred_name")
+        if not preferred_name:
+            preferred_name = ""
     except Exception:
-        preferred_name = "Boss"
+        preferred_name = ""
 
     # Preferred language (hard enforcement for model replies)
     try:
@@ -1512,11 +1626,18 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     "- Use placeholders like [NOMBRE], [FECHA], [MONTO] if data is missing.\n"
                     "- Keep it clean, structured, and usable.\n"
                     "- After the draft, optionally add a short note asking for missing details.\n"
+                    + name_instruction
                 ),
             )
 
             if wants_email:
-                to_email = EMAIL_CONTACTS.get("miguel")
+                try:
+                    to_email = get_fact(chat_id=chat_id, fact_key="user_email")
+                except Exception:
+                    to_email = None
+
+                if not to_email:
+                    to_email = get_user_email(chat_id)
 
                 if to_email and reply:
                     send_email_resend(
@@ -1526,6 +1647,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     )
 
                     reply = reply + "\n\n📧 También te lo envié por correo."
+
+            if preferred_name and preferred_name.lower() != "boss":
+                reply = re.sub(r"\bBoss\b", preferred_name, reply)
+                reply = re.sub(r"\bboss\b", preferred_name, reply)
 
             sent = await _send_reply(update, context, reply)
 
@@ -1579,7 +1704,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         if who:
 
-            to_email = EMAIL_CONTACTS.get(who)
+            try:
+                to_email = get_fact(chat_id=chat_id, fact_key="user_email")
+            except Exception:
+                to_email = None
+
+            if not to_email:
+                to_email = get_user_email(chat_id, fallback_name=who)
 
             if not to_email:
                 await update.message.reply_text(f"No tengo correo configurado para '{who}'.")
@@ -2148,6 +2279,94 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     except Exception as e:
         logger.exception(f"[CASE_REGISTER_CMD] failed: {e}")
+
+    # --------------------------------------------------
+    # Case term command — deterministic
+    # --------------------------------------------------
+    try:
+        m_term = re.match(
+            r"(?is)^\s*registrar\s+t[eé]rmino\s+(?:del\s+)?(?:caso|expediente)\s+(\d{4,})\s*:\s*(.+?)\s*$",
+            text or "",
+        )
+        if m_term:
+            case_id = (m_term.group(1) or "").strip()
+            event_text = (m_term.group(2) or "").strip()
+
+            if case_id and event_text:
+                deadline_date = _extract_deadline_date(event_text)
+
+                if not deadline_date:
+                    await update.message.reply_text(
+                        "No pude detectar la fecha del término. Usa algo como: "
+                        "\"registrar término del caso 20260301: audiencia el 15 de abril\"."
+                    )
+                    return
+
+                from memory_store import insert_case_event
+
+                dup = False
+                try:
+                    conn = _get_conn()
+                    cur = conn.cursor()
+                    cur.execute(
+                        """
+                        SELECT id
+                        FROM case_events
+                        WHERE chat_id=?
+                          AND case_id=?
+                          AND event_text=?
+                          AND IFNULL(deadline_date,'') = IFNULL(?, '')
+                        ORDER BY id DESC
+                        LIMIT 1
+                        """,
+                        (
+                            int(chat_id),
+                            int(case_id),
+                            event_text,
+                            deadline_date,
+                        ),
+                    )
+                    row = cur.fetchone()
+                    conn.close()
+                    if row:
+                        dup = True
+                except Exception:
+                    dup = False
+
+                if dup:
+                    await update.message.reply_text(
+                        f"⚠️ Término duplicado detectado en CASE:{case_id}."
+                    )
+                    return
+
+                event_id = insert_case_event(
+                    chat_id=int(chat_id),
+                    case_id=int(case_id),
+                    event_text=event_text,
+                    deadline_date=deadline_date,
+                )
+
+                _LAST_ACTION[int(chat_id)] = {
+                    "type": "term_insert",
+                    "id": event_id,
+                    "case_id": str(case_id),
+                }
+
+                try:
+                    from core.case_summary import refresh_case_summary
+                    refresh_case_summary(int(chat_id), str(case_id))
+                except Exception:
+                    pass
+
+                await update.message.reply_text(
+                    f"⏳ Término registrado en CASE:{case_id}\n"
+                    f"Vence: {deadline_date}"
+                )
+                return
+
+    except Exception as e:
+        logger.exception(f"[CASE_TERM_CMD] failed: {e}")    
+
 
     # --------------------------------------------------
     # Task close command — deterministic
@@ -2863,11 +3082,9 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[NATURAL_TERM_DETECT] failed: {e}")
 
     # --------------------------------------------------
-    # Natural Note Capture v1 — AFTER term detection
+    # Natural Note Capture v1 — DISABLED FOR DEMO SAFETY
     # --------------------------------------------------
-    case_note_handled = await _maybe_capture_case_note(update, chat_id, text, source="text")
-    if case_note_handled:
-        return
+    case_note_handled = False
 
     # --- Sprint10: court-day timeline queries ---
     try:
@@ -3111,12 +3328,27 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     name = extract_preferred_name(text)
+
     if name:
         try:
             upsert_fact(chat_id=chat_id, fact_key="preferred_name", fact_value=name)
         except Exception as e:
             logger.exception(f"Failed to upsert preferred_name: {e}")
         reply = f"Perfecto. A partir de ahora te voy a llamar {name}. Lo dejo anotado en memoria."
+        sent = await _send_reply(update, context, reply)
+        try:
+            insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
+        except Exception:
+            pass
+        return
+    
+    email = extract_user_email(text)
+    if email:
+        try:
+            upsert_fact(chat_id=chat_id, fact_key="user_email", fact_value=email)
+        except Exception as e:
+            logger.exception(f"Failed to upsert user_email: {e}")
+        reply = f"Perfecto. Guardé tu correo: {email}."
         sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
@@ -3498,6 +3730,7 @@ Reglas de estructura obligatoria:
                 "- Use placeholders like [NOMBRE], [FECHA], [MONTO] if data is missing.\n"
                 "- Keep it clean, structured, and usable.\n"
                 "- After the draft, optionally add a short note asking for missing details.\n"
+                "Never call the user 'Boss'. Never use that word.\n"
             ),
         )
     else:
@@ -3514,6 +3747,10 @@ Reglas de estructura obligatoria:
             effective_context_block = summary_block
             effective_semantic_block = ""
 
+        name_instruction = ""
+        if preferred_name:
+            name_instruction = f"\nAlways address the user as '{preferred_name}'. Do not use any other name."    
+
         reply = call_val_openai(
             chat_id,
             text,
@@ -3521,7 +3758,11 @@ Reglas de estructura obligatoria:
             facts_block=facts_block,
             semantic_block=effective_semantic_block,
             forced_lang=preferred_language,
-            system_rules=combined_system_rules,
+            system_rules=(
+                (combined_system_rules or "")
+                + "\nNever call the user 'Boss'. Never use that word."
+                + name_instruction
+            ),
         )
 
     # --------------------------------------------------
@@ -3693,7 +3934,13 @@ Reglas de estructura obligatoria:
         )
 
         if any(t in text_norm for t in auto_email_triggers):
-            to_email = EMAIL_CONTACTS.get("miguel")
+            try:
+                to_email = get_fact(chat_id=chat_id, fact_key="user_email")
+            except Exception:
+                to_email = None
+
+            if not to_email:
+                to_email = get_user_email(chat_id)
 
             if to_email and reply:
                 reply_lower = reply.lower()
@@ -3716,7 +3963,13 @@ Reglas de estructura obligatoria:
                 reply = reply + "\n\n📧 También te lo envié por correo."
 
     except Exception as e:
-        logger.exception(f"[AUTO_EMAIL] failed: {e}")       
+        logger.exception(f"[AUTO_EMAIL] failed: {e}")
+
+    if preferred_name and preferred_name.lower() != "boss":
+        reply = re.sub(r"\bBoss\b", preferred_name, reply)
+        reply = re.sub(r"\bboss\b", preferred_name, reply)
+
+    logger.info("FORGE MERGE ATTEMPT")
 
     sent = await _send_reply(update, context, reply)
     try:
