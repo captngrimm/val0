@@ -1477,6 +1477,22 @@ def insert_case_note(
         rid = cur.lastrowid
         conn.close()
         return int(rid)
+    
+def insert_task(chat_id, case_id, task_text, source="system", priority="normal"):
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        INSERT INTO tasks (chat_id, case_id, task_text, source, priority)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (int(chat_id), case_id, task_text, source, priority),
+    )
+
+    task_id = cur.lastrowid
+    conn.commit()
+    conn.close()    
 
 
 def fetch_case_notes(chat_id: int, case_id: str, limit: int = 20) -> list[dict]:
