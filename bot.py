@@ -730,6 +730,8 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
     try:
         from forge_ingest_helper import send_audio_to_forge
         import json
+        import re
+        from difflib import SequenceMatcher
 
         loop = asyncio.get_running_loop()
 
@@ -750,7 +752,6 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
             f"saved_packet={result.get('saved_packet_path')}"
         )
 
-        # --- LOAD PACKET ---
         packet_path = result.get("saved_packet_path")
         if not packet_path or not os.path.exists(packet_path):
             return
@@ -762,7 +763,6 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
         tasks = extracted.get("tasks", [])
         confidence = packet.get("advisory", {}).get("confidence", "low")
 
-        # --- INTENT GATE (ignore queries) ---
         low = (transcribed_text or "").lower().strip()
 
         is_query = (
@@ -777,14 +777,27 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
             "qué hay" in low
         )
 
-        if not tasks or is_query:
+        is_task_candidate = (
+            "tengo que" in low or
+            "debo" in low or
+            "hay que" in low or
+            "recuérdame" in low or
+            "recordarme" in low or
+            "llamar" in low or
+            "enviar" in low or
+            "hacer" in low or
+            "comprar" in low or
+            "pagar" in low or
+            "agendar" in low or
+            "programar" in low
+        )
+
+        if not tasks or is_query or not is_task_candidate:
             return
 
-        # --- TASK TEXT PATCH (replace generic output) ---
         cleaned_tasks = []
         for t in tasks:
             t_low = t.lower().strip()
-
             if "follow up" in t_low or "action detected" in t_low:
                 if transcribed_text:
                     cleaned_tasks.append(transcribed_text.strip())
@@ -793,41 +806,50 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
 
         tasks = cleaned_tasks
 
-        # --- CONFIDENCE GATE ---
         if confidence != "high":
             return
 
-        # --- DUPLICATE GUARD ---
         try:
             from memory_store import _get_conn
+
+            def normalize(t: str) -> str:
+                t = t.lower()
+                t = re.sub(r"[^\w\s]", "", t)
+                t = re.sub(r"\s+", " ", t)
+                return t.strip()
+
+            def is_similar(a: str, b: str) -> bool:
+                return SequenceMatcher(None, a, b).ratio() > 0.85
+
+            new_task = normalize(tasks[0])
 
             conn = _get_conn()
             cur = conn.cursor()
 
             cur.execute(
                 """
-                SELECT id
+                SELECT task_text
                 FROM tasks
                 WHERE chat_id=?
-                  AND task_text=?
-                  AND created_at >= datetime('now','-60 seconds')
+                  AND created_at >= datetime('now','-120 seconds')
                 ORDER BY id DESC
-                LIMIT 1
+                LIMIT 5
                 """,
-                (int(chat_id), tasks[0]),
+                (int(chat_id),),
             )
 
-            row = cur.fetchone()
+            rows = cur.fetchall()
             conn.close()
 
-            if row:
-                logger.info("[FORGE_TASK_INSERT] skipped duplicate task")
-                return
+            for row in rows:
+                existing = row[0] if not hasattr(row, "keys") else row["task_text"]
+                if is_similar(normalize(existing), new_task):
+                    logger.info("[FORGE_TASK_INSERT] skipped duplicate (fuzzy match)")
+                    return
 
         except Exception as e:
             logger.exception(f"[FORGE_TASK_DEDUPE] failed: {e}")
 
-        # --- INSERT TASK ---
         try:
             from memory_store import insert_task
 
@@ -836,7 +858,7 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
             for t in tasks:
                 task_id = insert_task(
                     chat_id=int(chat_id),
-                    case_id="999001",  # TODO: replace later
+                    case_id="999001",
                     task_text=t,
                     source="forge_auto",
                     priority="high"
@@ -845,10 +867,7 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
 
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=(
-                    "⚠️ Registré tarea(s):\n"
-                    + "\n".join([f"- {t}" for _, t in created_tasks])
-                )
+                text="⚠️ Registré tarea(s):\n" + "\n".join([f"- {t}" for _, t in created_tasks])
             )
 
         except Exception as e:
@@ -1434,9 +1453,6 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 # Voice handler (Whisper via OpenAI)
 # --------------------------------------------------
-# --------------------------------------------------
-# Voice handler (Whisper via OpenAI)
-# --------------------------------------------------
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.voice:
         return
@@ -1453,7 +1469,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"duration={voice.duration}s file_id={file_id}"
     )
 
-    # Download voice to tmp
     tmp_dir = "/opt/val0/tmp"
     os.makedirs(tmp_dir, exist_ok=True)
     tmp_path = os.path.join(tmp_dir, f"voice_{chat_id}_{tg_msg_id}.ogg")
@@ -1462,10 +1477,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         file = await context.bot.get_file(file_id)
         await file.download_to_drive(tmp_path)
-
-        # Create Forge-safe copy BEFORE tmp_path is removed later
         shutil.copy2(tmp_path, forge_tmp_path)
-
     except Exception as e:
         logger.exception(f"Failed to download voice file from Telegram: {e}")
         await update.message.reply_text(
@@ -1473,7 +1485,6 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
-    # Transcribe (Whisper) + perf log
     transcribed_text = ""
     try:
         import time
@@ -1506,10 +1517,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
-    # Capture note silently + continue normal pipeline
     await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice", silent=True)
 
-    # Fire main reply immediately
     low = (transcribed_text or "").lower().strip()
 
     is_query = (
@@ -1524,23 +1533,46 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "qué hay" in low
     )
 
+    is_task_candidate = (
+        "tengo que" in low or
+        "debo" in low or
+        "hay que" in low or
+        "recuérdame" in low or
+        "recordarme" in low or
+        "llamar" in low or
+        "enviar" in low or
+        "hacer" in low or
+        "comprar" in low or
+        "pagar" in low or
+        "agendar" in low or
+        "programar" in low
+    )
+
+    # Queries stay in legacy/legal pipeline
     if is_query:
         await _process_text_pipeline(update, context, transcribed_text)
+        return
 
-    # Background Forge ingestion (non-blocking)
-    try:
-        asyncio.create_task(
-            _run_forge_ingestion_background(
-                update,
-                context,
-                transcribed_text=transcribed_text,
-                tmp_path=forge_tmp_path,
-                chat_id=chat_id,
-                user_id=user.id,
+    # Task-like voice gets fast ACK + background Forge
+    if is_task_candidate:
+        await update.message.reply_text("Procesando en segundo plano…")
+        try:
+            asyncio.create_task(
+                _run_forge_ingestion_background(
+                    update,
+                    context,
+                    transcribed_text=transcribed_text,
+                    tmp_path=forge_tmp_path,
+                    chat_id=chat_id,
+                    user_id=user.id,
+                )
             )
-        )
-    except Exception as e:
-        logger.exception(f"Forge background ingest scheduling failed: {e}")
+        except Exception as e:
+            logger.exception(f"Forge background ingest scheduling failed: {e}")
+        return
+
+    # Everything else is just normal conversation
+    await _process_text_pipeline(update, context, transcribed_text)
 
 
 
