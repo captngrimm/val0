@@ -763,6 +763,17 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
         tasks = extracted.get("tasks", [])
         confidence = packet.get("advisory", {}).get("confidence", "low")
 
+        from memory_store import insert_memory_item
+
+        logger.info(f"[MEMORY_TEST] inserting memory for chat_id={chat_id}: {transcribed_text}")
+
+        insert_memory_item(
+            chat_id=int(chat_id),
+            bucket="memory",
+            raw_input=transcribed_text,
+            summary="voice"
+        )
+
         low = (transcribed_text or "").lower().strip()
 
         is_query = (
@@ -867,7 +878,11 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
 
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="⚠️ Registré tarea(s):\n" + "\n".join([f"- {t}" for _, t in created_tasks])
+                text=(
+                    "🧠 Sobre tu audio anterior:\n"
+                    "⚠️ Registré tarea(s):\n"
+                    + "\n".join([f"- {t}" for _, t in created_tasks])
+                )
             )
 
         except Exception as e:
@@ -894,7 +909,7 @@ logging.getLogger("telegram").setLevel(logging.WARNING)
 async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         logger.exception("Unhandled exception in handler: %s", context.error)
-        msg = "Boss, algo se rompió procesando eso. Ya lo vi en los logs."
+        msg = "Algo se rompió procesando eso. Ya lo vi en los logs."
 
         effective_message = getattr(update, "effective_message", None)
         if effective_message:
@@ -937,7 +952,7 @@ openai.api_key = OPENAI_API_KEY
 VAL_SYSTEM_PROMPT = (
     "You are Val, a tactical, emotionally aware AI co-pilot. "
     "Tone: sharp, warm, protective, a bit sassy. "
-    "You talk to the user as 'Boss' unless the user asks otherwise. "
+    "Always address the user by their preferred name if available. If not, do not use any name."
     "You are concise, practical, and avoid fake hype. "
     "Language: answer in Spanish or English, matching the user. "
 )
@@ -958,7 +973,7 @@ def build_context_block(rows: List[Dict[str, Any]]) -> str:
         content = (r.get("content") or "").strip()
         if not content:
             continue
-        prefix = "Val:" if role == "assistant" else "Boss:"
+        prefix = "Val:" if role == "assistant" else "User:"
         lines.append(f"{prefix} {content}")
     return "\n".join(lines)
 
@@ -997,7 +1012,7 @@ def call_val_openai(
             messages.append(
                 {
                     "role": "system",
-                    "content": "Datos persistentes sobre el Boss (memoria de largo plazo):\n" + facts_block,
+                    "content": "Datos persistentes sobre del usuario (memoria de largo plazo):\n" + facts_block,
                 }
             )
 
@@ -1024,7 +1039,7 @@ def call_val_openai(
                     "role": "system",
                     "content": (
                         "Contexto reciente de esta conversación (no lo repitas, "
-                        "úsalo solo para recordar detalles del Boss):\n"
+                        "úsalo solo para recordar detalles del usuario):\n"
                         + context_block
                     ),
                 }
@@ -1053,7 +1068,7 @@ def call_val_openai(
         return out
     except Exception as e:
         logger.exception(f"OpenAI call failed: {e}")
-        return "Algo se rompió hablando con el modelo, Boss. Intenta otra vez en un momento."
+        return "Algo se rompió hablando con el modelo. Intenta otra vez en un momento."
 
 
 # --------------------------------------------------
@@ -1314,13 +1329,13 @@ def _places_query_from_text(text: str) -> str:
 # Telegram Commands
 # --------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Val-0 online. Ya puedo hablar contigo por aquí, Boss.")
+    await update.message.reply_text("Val-0 online. Ya puedo hablar contigo por aquí.")
 
 async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     facts = get_all_facts(chat_id)
     if not facts:
-        await update.message.reply_text("Todavía no tengo datos persistentes guardados para este chat, Boss.")
+        await update.message.reply_text("Todavía no tengo datos persistentes guardados para este chat.")
         return
     lines = [f"- {k}: {v}" for k, v in facts.items()]
     await update.message.reply_text("Memoria persistente para este chat:\n" + "\n".join(lines))
@@ -1354,24 +1369,24 @@ async def note_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = " ".join(context.args).strip() if context.args else ""
     if not text:
         await update.message.reply_text(
-            "Boss, dime qué nota quieres guardar. Ejemplo:\n"
+            "Dime qué nota quieres guardar. Ejemplo:\n"
             "/note pedir cita con el dentista el lunes"
         )
         return
     note_id = add_note(chat_id, text)
     if note_id <= 0:
         await update.message.reply_text(
-            "La nota estaba vacía o algo raro pasó, Boss. Intenta de nuevo con más detalle."
+            "La nota estaba vacía o algo raro pasó. Intenta de nuevo con más detalle."
         )
         return
-    await update.message.reply_text(f"Listo, Boss. Guardé la nota #{note_id}:\n{text}")
+    await update.message.reply_text(f"Listo. Guardé la nota #{note_id}:\n{text}")
 
 async def notes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     rows = get_notes(chat_id, limit=20)
     if not rows:
         await update.message.reply_text(
-            "Todavía no tienes notas guardadas, Boss. Usa /note algo que quieras recordar."
+            "Todavía no tienes notas guardadas. Usa /note algo que quieras recordar."
         )
         return
     lines = ["Notas guardadas (más recientes primero):"]
@@ -1389,13 +1404,13 @@ async def search_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = " ".join(context.args).strip() if context.args else ""
     if not query:
         await update.message.reply_text(
-            "Dime qué quieres buscar en tus notas, Boss. Ejemplo:\n"
+            "Dime qué quieres buscar en tus notas. Ejemplo:\n"
             "/search dentista"
         )
         return
     rows = search_notes(chat_id, query, limit=20)
     if not rows:
-        await update.message.reply_text(f"No encontré notas que contengan '{query}', Boss.")
+        await update.message.reply_text(f"No encontré notas que contengan '{query}'.")
         return
 
     seen_contents = set()
@@ -1420,7 +1435,7 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = " ".join(context.args).strip() if context.args else ""
     if not query:
         await update.message.reply_text(
-            "Dime qué buscar, Boss. Ejemplo:\n"
+            "Dime qué buscar. Ejemplo:\n"
             "/place dentista panama\n"
             "/place restaurantes cerca de albrook"
         )
@@ -1433,7 +1448,7 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     results = _normalize_places_results(results)
     if not results:
-        await update.message.reply_text("No encontré nada con esa búsqueda, Boss.")
+        await update.message.reply_text("No encontré nada con esa búsqueda.")
         return
 
     lines = []
@@ -1481,7 +1496,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         logger.exception(f"Failed to download voice file from Telegram: {e}")
         await update.message.reply_text(
-            "No pude descargar ese mensaje de voz, Boss. Intenta de nuevo."
+            "No pude descargar ese mensaje de voz. Intenta de nuevo."
         )
         return
 
@@ -1500,7 +1515,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         logger.exception(f"Whisper transcription failed: {e}")
         await update.message.reply_text(
-            "No pude transcribir ese audio con Whisper, Boss. Intenta con texto o mándalo de nuevo."
+            "No pude transcribir ese audio con Whisper. Intenta con texto o mándalo de nuevo."
         )
         return
 
@@ -1516,6 +1531,17 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "No entendí nada claro en ese audio, Boss. Intenta de nuevo o mándalo por texto."
         )
         return
+
+    from memory_store import insert_memory_item
+
+    logger.info(f"[MEMORY_TEST] inserting memory for chat_id={chat_id}: {transcribed_text}")
+
+    insert_memory_item(
+        chat_id=int(chat_id),
+        bucket="memory",
+        raw_input=transcribed_text,
+        summary="voice"
+    )
 
     await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice", silent=True)
 
@@ -1706,6 +1732,29 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+
+    # --------------------------------------------------
+    # TIME QUERY OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        text_norm_time = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm_time = "".join(ch for ch in text_norm_time if not unicodedata.combining(ch))
+
+        if any(x in text_norm_time for x in ["hora", "que hora", "qué hora"]):
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo("America/Panama")
+            now_local = datetime.now(tz)
+
+            reply = f"Son las {now_local.strftime('%I:%M %p')}."
+            await update.message.reply_text(reply)
+
+            logger.info("[TIME_OVERRIDE] handled deterministically")
+            return
+
+    except Exception as e:
+        logger.exception(f"[TIME_OVERRIDE] failed: {e}")
 
     # --------------------------------------------------
     # HARD DOC MODE OVERRIDE (EARLY EXIT)
@@ -2401,7 +2450,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 )
 
                 await update.message.reply_text(
-                    f"Listo, Boss. Registré CASE:{expediente} para cliente {client_name}."
+                    f"Listo. Registré el caso {expediente} para el cliente {client_name.title()}."
                 )
                 return
 
@@ -2657,7 +2706,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 except Exception as e:
                     logger.exception(f"[TASK_DETECT] failed: {e}")
 
-                await update.message.reply_text(f"Listo, Boss. Guardé la nota en CASE:{case_id}.")
+                await update.message.reply_text(f"Listo. Guardé la nota en el caso {case_id}.")
                 return
 
         m_force = re.match(r"(?is)^\s*forzar\s+nota\s+(?:del\s+)?(?:caso|expediente)\s+(\d{4,})\s*:\s*(.+?)\s*$", text or "")
@@ -2695,7 +2744,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 from core.case_summary import refresh_case_summary
                 refresh_case_summary(int(chat_id), str(case_id))
 
-                await update.message.reply_text(f"Listo, Boss. Forcé la nota en CASE:{case_id}.")
+                await update.message.reply_text(f"Listo. Forcé la nota en el caso {case_id}.")
                 return
 
     except Exception as e:
@@ -3456,13 +3505,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     name = extract_preferred_name(text)
-
     if name:
         try:
-            upsert_fact(chat_id=chat_id, fact_key="preferred_name", fact_value=name)
+            clean_name = name.strip().title()
+            upsert_fact(chat_id=chat_id, fact_key="preferred_name", fact_value=clean_name)
         except Exception as e:
             logger.exception(f"Failed to upsert preferred_name: {e}")
-        reply = f"Perfecto. A partir de ahora te voy a llamar {name}. Lo dejo anotado en memoria."
+            clean_name = name.strip().title()
+        reply = f"Perfecto. A partir de ahora te voy a llamar {clean_name}. Lo dejo anotado en memoria."
         sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
@@ -4609,7 +4659,7 @@ async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"No pude guardar el daily: {msg}")
             return
 
-        await update.message.reply_text(f"Listo, Boss. Guardé el daily auto de {date} ✅\n\n{summary}")
+        await update.message.reply_text(f"Listo. Guardé el daily auto de {date} ✅\n\n{summary}")
         return
 
     # MANUAL MODE
@@ -4619,7 +4669,7 @@ async def daily_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"No pude guardar el daily: {msg}")
         return
 
-    await update.message.reply_text(f"Listo, Boss. Guardé el daily de {date} ✅")
+    await update.message.reply_text(f"Listo. Guardé el daily de {date} ✅")
 
 async def dailies_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -5349,7 +5399,7 @@ async def rmd_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 payload=f"rid={rid}",
                 source="dm" if int(chat_id) >= 0 else "group",
             )
-            await update.message.reply_text(f"Listo, Boss. Cancelado #{rid}.")
+            await update.message.reply_text(f"Listo. Cancelado #{rid}.")
         else:
             await update.message.reply_text("No lo pude cancelar. Puede que no exista, no sea tuyo, o ya esté enviado.")
     except Exception as e:

@@ -1648,4 +1648,22 @@ def get_case_summary(chat_id: int, case_id: str) -> dict | None:
     if not row:
         return None
 
-    return dict(row)   
+    return dict(row)  
+
+def insert_memory_item(chat_id: int, bucket: str, raw_input: str, summary: str = ""):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            INSERT INTO memory_items (chat_id, bucket, raw_input, summary)
+            VALUES (?, ?, ?, ?)
+        """, (
+            int(chat_id),
+            bucket,
+            raw_input,
+            summary
+        ))
+
+        conn.commit()
+        conn.close() 
