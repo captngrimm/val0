@@ -81,12 +81,12 @@ async def try_idle_cases(update, chat_id, text) -> bool:
                 idle.append((client_name, expediente, days_idle))
 
         if not idle:
-            await update.message.reply_text("🟢 Todo activo, Boss.")
+            await update.message.reply_text("🟢 Todo activo.")
             return True
 
         idle.sort(key=lambda x: x[2], reverse=True)
 
-        msg = "⚠️ Boss — casos sin movimiento\n\n"
+        msg = "⚠️ Casos sin movimiento\n\n"
         for client_name, expediente, days_idle in idle[:10]:
             msg += f"• {client_name} — sin actividad en {days_idle} días\n"
 

@@ -151,7 +151,7 @@ async def try_cancel_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
     rid = int(m.group("rid") or "0")
     if rid <= 0:
-        await update.message.reply_text("ID inválido, Boss.")
+        await update.message.reply_text("ID inválido.")
         return True
 
     # Only cancel pending/sending, and only for this chat_id (enforced in DB layer)
@@ -173,7 +173,7 @@ async def try_cancel_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         )
 
     if ok:
-        await update.message.reply_text(f"Listo, Boss. Cancelé el recordatorio #{rid}.")
+        await update.message.reply_text(f"Listo. Cancelé el recordatorio #{rid}.")
     else:
         await update.message.reply_text(
             f"No pude cancelar #{rid}. Puede que no exista, no sea tuyo, o ya esté enviado/cancelado."
@@ -204,10 +204,10 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         what = (m.group("what") or "").strip()
         n = int(m.group("n") or "0")
         if n <= 0 or n > 1440:
-            await update.message.reply_text("Dame minutos entre 1 y 1440, Boss.")
+            await update.message.reply_text("Dame minutos entre 1 y 1440.")
             return True
         if not what:
-            await update.message.reply_text("¿Qué quieres que recuerde, Boss? Ej: Recuérdame pagar X en 10 minutos.")
+            await update.message.reply_text("¿Qué quieres que recuerde? Ej: Recuérdame pagar X en 10 minutos.")
             return True
 
         due_utc = datetime.now(timezone.utc) + timedelta(minutes=n)
@@ -232,7 +232,7 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
                 source="dm",
             )
 
-        await update.message.reply_text(f"Listo, Boss. Te lo recuerdo en {n} minuto(s).")
+        await update.message.reply_text(f"Listo. Te lo recuerdo en {n} minuto(s).")
         return True
 
     # 2) "en N horas"
@@ -241,10 +241,10 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         what = (m.group("what") or "").strip()
         n = int(m.group("n") or "0")
         if n <= 0 or n > 24:
-            await update.message.reply_text("Dame horas entre 1 y 24, Boss.")
+            await update.message.reply_text("Dame horas entre 1 y 24.")
             return True
         if not what:
-            await update.message.reply_text("¿Qué quieres que recuerde, Boss? Ej: Acuérdame X en 2 horas.")
+            await update.message.reply_text("¿Qué quieres que recuerde? Ej: Acuérdame X en 2 horas.")
             return True
 
         due_utc = datetime.now(timezone.utc) + timedelta(hours=n)
@@ -269,7 +269,7 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
                 source="dm",
             )
 
-        await update.message.reply_text(f"Listo, Boss. Te lo recuerdo en {n} hora(s).")
+        await update.message.reply_text(f"Listo. Te lo recuerdo en {n} hora(s).")
         return True
 
     # 3) "mañana ..."
@@ -279,7 +279,7 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         tok = (m.group("t") or "").strip()
         hm = _parse_time_token(tok)
         if not what:
-            await update.message.reply_text("¿Qué quieres que recuerde, Boss? Ej: Recuérdame X mañana a las 3pm.")
+            await update.message.reply_text("¿Qué quieres que recuerde? Ej: Recuérdame X mañana a las 3pm.")
             return True
         if not hm:
             await update.message.reply_text("Hora inválida. Usa HH:MM (24h) o 3pm / 3:15pm.")
@@ -309,7 +309,7 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
                 source="dm",
             )
 
-        await update.message.reply_text(f"Listo, Boss. Te lo recuerdo mañana a las {h:02d}:{minute:02d}.")
+        await update.message.reply_text(f"Listo. Te lo recuerdo mañana a las {h:02d}:{minute:02d}.")
         return True
 
     # 4) "hoy a las ..." / "a las ..."
@@ -319,7 +319,7 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         tok = (m.group("t") or "").strip()
         hm = _parse_time_token(tok)
         if not what:
-            await update.message.reply_text("¿Qué quieres que recuerde, Boss? Ej: Recuérdame X a las 18:00.")
+            await update.message.reply_text("¿Qué quieres que recuerde? Ej: Recuérdame X a las 18:00.")
             return True
         if not hm:
             await update.message.reply_text("Hora inválida. Usa HH:MM (24h) o 6pm / 6:15pm.")
@@ -331,7 +331,7 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
         # If the time already passed today, refuse (deterministic + avoids surprise)
         if dueL <= nowL:
-            await update.message.reply_text("Esa hora ya pasó hoy, Boss. Usa 'mañana' o 'en N minutos'.")
+            await update.message.reply_text("Esa hora ya pasó hoy. Usa 'mañana' o 'en N minutos'.")
             return True
 
         due_str = _to_utc_iso(dueL)
@@ -355,7 +355,7 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
                 source="dm",
             )
 
-        await update.message.reply_text(f"Listo, Boss. Te lo recuerdo hoy a las {h:02d}:{minute:02d}.")
+        await update.message.reply_text(f"Listo. Te lo recuerdo hoy a las {h:02d}:{minute:02d}.")
         return True
 
     return False

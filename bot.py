@@ -765,15 +765,6 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
 
         from memory_store import insert_memory_item
 
-        logger.info(f"[MEMORY_TEST] inserting memory for chat_id={chat_id}: {transcribed_text}")
-
-        insert_memory_item(
-            chat_id=int(chat_id),
-            bucket="memory",
-            raw_input=transcribed_text,
-            summary="voice"
-        )
-
         low = (transcribed_text or "").lower().strip()
 
         is_query = (
@@ -1465,9 +1456,6 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 # Voice handler (Whisper via OpenAI)
 # --------------------------------------------------
-# --------------------------------------------------
-# Voice handler (Whisper via OpenAI)
-# --------------------------------------------------
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.voice:
         return
@@ -1536,12 +1524,37 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     logger.info(f"[MEMORY_TEST] inserting memory for chat_id={chat_id}: {transcribed_text}")
 
+    from memory_store import insert_memory_item, classify_memory_item
+
+    bucket, summary = classify_memory_item(transcribed_text, source="voice")
+
+    logger.info(
+        f"[MEMORY_TEST] inserting memory for chat_id={chat_id}: "
+        f"bucket={bucket} summary={summary} text={transcribed_text}"
+    )
+
     insert_memory_item(
         chat_id=int(chat_id),
-        bucket="memory",
+        bucket=bucket,
         raw_input=transcribed_text,
-        summary="voice"
+        summary=summary
     )
+
+    if bucket == "task":
+        from memory_store import upsert_commitment
+
+        confidence = summary.replace("task_", "")
+        commitment = _extract_commitment_from_text(transcribed_text, confidence=confidence)
+
+        if commitment:
+            upsert_commitment(
+                chat_id=int(chat_id),
+                raw_input=commitment["raw_input"],
+                action=commitment["action"],
+                target=commitment["target"],
+                due_date=commitment["due_date"],
+                confidence=commitment["confidence"],
+            )
 
     await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice", silent=True)
 
@@ -1698,6 +1711,43 @@ async def ssearch_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Falló /ssearch: {type(e).__name__}: {e}")
 
 
+def _extract_memory_candidates(text: str) -> list[str]:
+    if not text:
+        return []
+
+    candidates = []
+    seen = set()
+
+    # Title-case words like Noah, Miguel, Kevin
+    for tok in re.findall(r"\b[A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ]+\b", text):
+        t = tok.strip()
+        if len(t) >= 3 and t.lower() not in seen:
+            seen.add(t.lower())
+            candidates.append(t)
+
+    low = text.lower()
+
+    # Fallback topic words worth tracking
+    topic_keywords = (
+        "tinder",
+        "bumble",
+        "gym",
+        "gimnasio",
+        "trabajo",
+        "proyecto",
+        "cliente",
+        "noah",
+        "miguel",
+        "kevin",
+    )
+
+    for kw in topic_keywords:
+        if kw in low and kw not in seen:
+            seen.add(kw)
+            candidates.append(kw)
+
+    return candidates[:5]
+
 # --------------------------------------------------
 # Core Message Pipeline
 # --------------------------------------------------
@@ -1732,6 +1782,34 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+    # --------------------------------------------------
+    # TASK INTENT GATE (prevents collision)
+    # --------------------------------------------------
+    try:
+        text_low = (text or "").lower()
+
+        task_markers = (
+            "tengo que",
+            "debo",
+            "hay que",
+            "debería",
+            "deberia",
+            "quizá",
+            "quizas",
+            "quizás",
+            "tal vez",
+            "podría",
+            "podria",
+        )
+
+        is_task_intent = any(m in text_low for m in task_markers)
+
+        if is_task_intent:
+            logger.info("[TASK_GATE] task detected → will skip time overrides")
+
+    except Exception as e:
+        logger.exception(f"[TASK_GATE] failed: {e}")
+
 
     # --------------------------------------------------
     # TIME QUERY OVERRIDE (DETERMINISTIC)
@@ -1740,10 +1818,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         text_norm_time = unicodedata.normalize("NFKD", (text or "").lower())
         text_norm_time = "".join(ch for ch in text_norm_time if not unicodedata.combining(ch))
 
-        if any(x in text_norm_time for x in ["hora", "que hora", "qué hora"]):
-            from datetime import datetime
-            from zoneinfo import ZoneInfo
-
+        if (not is_task_intent) and any(x in text_norm_time for x in ["hora", "que hora", "qué hora"]):
             tz = ZoneInfo("America/Panama")
             now_local = datetime.now(tz)
 
@@ -3912,23 +3987,85 @@ Reglas de estructura obligatoria:
             ),
         )
     else:
+        from memory_store import fetch_recent_memory
+
         combined_system_rules = advisory_system_rules
 
         if urgency_block:
             extra = f"\n\nDATOS DE TIEMPO REAL:\n{urgency_block}"
             combined_system_rules = (combined_system_rules or "") + extra
 
-        effective_context_block = context_block + summary_block
+        memory_rows = fetch_recent_memory(chat_id, limit=10)
+
+        memory_lines = []
+        for r in memory_rows:
+            bucket = r[1] if not hasattr(r, "keys") else r["bucket"]
+            raw = r[2] if not hasattr(r, "keys") else r["raw_input"]
+
+            if bucket == "sensitive":
+                continue
+
+            if raw and raw.strip():
+                memory_lines.append(f"- {raw.strip()}")
+
+        memory_block = ""
+        if memory_lines:
+            memory_block = "\n\nMEMORIA RECIENTE DEL USUARIO:\n" + "\n".join(memory_lines)
+
+        logger.info(f"[MEM_INJECT_ROWS] count={len(memory_rows)}")
+        logger.info(f"[MEM_INJECT_BLOCK_REPR] {memory_block!r}") 
+
+        effective_context_block = context_block + summary_block + memory_block
         effective_semantic_block = semantic_block
 
         if advisory_system_rules:
-            effective_context_block = summary_block
+            effective_context_block = summary_block + memory_block
             effective_semantic_block = ""
+
+        # ---------------------------------------
+        # LIGHT NUDGE (simple pattern)
+        # ---------------------------------------
+        try:
+            from memory_store import search_memory
+
+            nudge_text = ""
+
+            # Example: detect "Noah"
+            if "noah" in (text or "").lower():
+                rows = search_memory(chat_id, "noah", limit=3)
+
+                if rows:
+                    nudge_text = "\n\n(Nota: ya habías mencionado a Noah antes.)"
+
+            if nudge_text:
+                effective_context_block += nudge_text
+
+        except Exception as e:
+            logger.exception(f"[NUDGE] failed: {e}")    
 
         name_instruction = ""
         if preferred_name:
-            name_instruction = f"\nAlways address the user as '{preferred_name}'. Do not use any other name."    
+            name_instruction = f"\nAlways address the user as '{preferred_name}'. Do not use any other name."
 
+        # ------------------------------------------
+        # OPERATOR OVERRIDE (anti-assistant mode)
+        # ------------------------------------------
+        try:
+            if _has_active_commitment(text):
+
+                m = re.search(r"\b(?:a|con)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ]+)\b", text or "")
+                target = (m.group(1) if m else "").strip()
+
+                if target:
+                    msg = f"{target} sigue pendiente. Hazlo hoy y ciérralo."
+                else:
+                    msg = "Eso sigue pendiente. Ciérralo hoy."
+
+                await update.message.reply_text(msg)
+                return
+
+        except Exception as e:
+            logger.exception(f"[OPERATOR_OVERRIDE] failed: {e}")
         reply = call_val_openai(
             chat_id,
             text,
@@ -3938,10 +4075,54 @@ Reglas de estructura obligatoria:
             forced_lang=preferred_language,
             system_rules=(
                 (combined_system_rules or "")
+                + """
+
+            OPERATOR MODE DIRECTIVE:
+
+            - Do NOT default to generic help like offering scripts, guides, or “do you want help”.
+            - Prioritize continuity over politeness.
+            - If the user has mentioned a person or situation repeatedly, assume it matters.
+            - Respond based on pattern, not just the last message.
+            - Apply light pressure when something is pending.
+            - Avoid sounding like a generic assistant.
+
+            GOOD:
+            "Oye… Noah sigue pendiente. ¿Lo resolves hoy o lo movemos?"
+
+            BAD:
+            "¿Quieres que te ayude con un guión o sugerencias?"
+
+            - Keep responses short, grounded, and context-aware.
+            """
                 + "\nNever call the user 'Boss'. Never use that word."
                 + name_instruction
             ),
         )
+
+        try:
+            from memory_store import search_memory
+
+            candidates = _extract_memory_candidates(text)
+            matched_candidate = None
+
+            for candidate in candidates:
+                rows = search_memory(chat_id, candidate, limit=5)
+                usable_rows = []
+
+                for r in rows:
+                    raw = r[2] if not hasattr(r, "keys") else r["raw_input"]
+                    if raw and raw.strip() and raw.strip() != text.strip():
+                        usable_rows.append(raw.strip())
+
+                if usable_rows:
+                    matched_candidate = candidate
+                    break
+
+            if matched_candidate:
+                reply = f"🧠 Ojo: ya habías mencionado '{matched_candidate}' antes.\n\n" + reply
+
+        except Exception as e:
+            logger.exception(f"[NUDGE_APPEND] failed: {e}")
 
     # --------------------------------------------------
     # ENFORCE ADVISORY STRUCTURE (hard guarantee)
@@ -4540,6 +4721,24 @@ async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
 
     t = (text or "").strip().lower()
 
+    task_markers = (
+        "tengo que",
+        "debo",
+        "hay que",
+        "debería",
+        "deberia",
+        "quizá",
+        "quizas",
+        "quizás",
+        "tal vez",
+        "podría",
+        "podria",
+    )
+
+    if any(m in t for m in task_markers):
+        logger.info("[DUE_TOMORROW_GATE] skipped because task intent detected")
+        return False
+
     patterns = [
         r"^\s*qué\s+vence\s+mañana\s*$",
         r"^\s*que\s+vence\s+mañana\s*$",
@@ -4895,6 +5094,117 @@ def _audit(chat_id: int, action: str, entity_type: str = None, entity_id: str = 
         # Never crash core flow for audit logging
         pass
 
+def _extract_commitment_from_text(text: str, confidence: str = "medium") -> dict | None:
+    if not text:
+        return None
+
+    import re
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    raw = text.strip()
+    low = raw.lower()
+
+    action = ""
+    for verb in (
+        "llamar",
+        "escribir",
+        "enviar",
+        "revisar",
+        "pagar",
+        "comprar",
+        "agendar",
+        "programar",
+        "hablar",
+        "ir",
+        "hacer",
+        "responder",
+        "buscar",
+    ):
+        if verb in low:
+            action = verb
+            break
+
+    target = ""
+    m = re.search(r"\b(?:a|con)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ]+)\b", raw)
+    if m:
+        target = (m.group(1) or "").strip()
+
+    tz = ZoneInfo("America/Panama")
+    now_local = datetime.now(tz)
+
+    due_date = None
+    if "mañana" in low or "manana" in low:
+        due_date = (now_local + timedelta(days=1)).date().isoformat()
+    elif "hoy" in low:
+        due_date = now_local.date().isoformat()
+
+    if not action or not due_date:
+        return None
+
+    return {
+        "raw_input": raw,
+        "action": action,
+        "target": target,
+        "due_date": due_date,
+        "confidence": confidence,
+    }
+
+def _has_active_commitment(text: str) -> bool:
+    if not text:
+        return False
+
+    low = text.lower()
+
+    markers = (
+        "tengo que",
+        "debo",
+        "hay que",
+        "debería",
+        "deberia",
+        "quizá",
+        "quizas",
+        "quizás",
+        "podría",
+        "podria",
+    )
+
+    return any(m in low for m in markers)    
+
+def _looks_like_completion(text: str) -> bool:
+    if not text:
+        return False
+
+    low = text.lower().strip()
+
+    markers = (
+        "ya llamé",
+        "ya llame",
+        "ya lo hice",
+        "ya la hice",
+        "listo",
+        "resuelto",
+        "hecho",
+        "ya quedó",
+        "ya quedo",
+        "ya está",
+        "ya esta",
+        "terminé",
+        "termine",
+        "ya escribí",
+        "ya escribi",
+        "ya hablé",
+        "ya hable",
+        "ya envié",
+        "ya envie",
+        "ya pagué",
+        "ya pague",
+        "ya revisé",
+        "ya revise",
+    )
+
+    return any(m in low for m in markers)
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -4914,6 +5224,56 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         payload=text[:500],
         source="group" if int(chat_id) < 0 else "dm",
     )
+
+    # Completion loop: mark commitments as done
+    try:
+        if _looks_like_completion(text):
+            from memory_store import close_matching_commitment
+
+            closed = close_matching_commitment(int(chat_id), text)
+            if closed:
+                raw_input = closed["raw_input"] if hasattr(closed, "keys") else closed[1]
+                await update.message.reply_text(f"✅ Perfecto. Marco esto como resuelto:\n- {raw_input}")
+                return
+    except Exception as e:
+        logger.exception(f"[COMPLETION_LOOP] failed: {e}")
+
+    # Store text input in unified memory layer
+    try:
+        from memory_store import insert_memory_item, classify_memory_item
+
+        if text and not text.startswith("/"):
+            bucket, summary = classify_memory_item(text, source="text")
+
+            logger.info(
+                f"[MEMORY_TEST_TEXT] inserting memory for chat_id={chat_id}: "
+                f"bucket={bucket} summary={summary} text={text}"
+            )
+
+            insert_memory_item(
+                chat_id=int(chat_id),
+                bucket=bucket,
+                raw_input=text,
+                summary=summary
+            )
+
+            if bucket == "task":
+                from memory_store import upsert_commitment
+
+                confidence = summary.replace("task_", "")
+                commitment = _extract_commitment_from_text(text, confidence=confidence)
+
+                if commitment:
+                    upsert_commitment(
+                        chat_id=int(chat_id),
+                        raw_input=commitment["raw_input"],
+                        action=commitment["action"],
+                        target=commitment["target"],
+                        due_date=commitment["due_date"],
+                        confidence=commitment["confidence"],
+                    )
+    except Exception as e:
+        logger.exception(f"[MEMORY_TEXT_INSERT] failed: {e}")
 
     # ---------------------------------------
     # 1. HARD COMMANDS (ALWAYS FIRST)
@@ -5220,8 +5580,173 @@ async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     on = get_chat_voice_enabled(int(chat_id))
     await update.message.reply_text(f"🎧 Voice mode: {'ON' if on else 'OFF'}")
 
+async def handle_mem(update, context):
+    try:
+        from memory_store import fetch_recent_memory
 
+        chat_id = update.effective_chat.id
+        rows = fetch_recent_memory(chat_id, limit=5)
 
+        if not rows:
+            await update.message.reply_text("No tengo memoria reciente, boss.")
+            return
+
+        lines = []
+        for r in rows:
+            raw = r[2] if not hasattr(r, "keys") else r["raw_input"]
+            lines.append(f"- {raw}")
+
+        await update.message.reply_text(
+            "🧠 Memoria reciente:\n" + "\n".join(lines)
+        )
+
+    except Exception as e:
+        logger.exception(f"[MEM_FETCH] failed: {e}")
+        await update.message.reply_text("Error leyendo memoria.")
+
+async def handle_remember(update, context):
+    try:
+        from memory_store import search_memory
+
+        chat_id = update.effective_chat.id
+        args = context.args or []
+
+        if not args:
+            await update.message.reply_text("Uso: /remember <palabra>")
+            return
+
+        keyword = " ".join(args).strip()
+        rows = search_memory(chat_id, keyword, limit=5)
+
+        if not rows:
+            await update.message.reply_text(f"No encontré nada sobre: {keyword}")
+            return
+
+        lines = []
+        for r in rows:
+            raw = r[2] if not hasattr(r, "keys") else r["raw_input"]
+            lines.append(f"- {raw}")
+
+        await update.message.reply_text(
+            f"🧠 Recuerdos sobre '{keyword}':\n" + "\n".join(lines)
+        )
+
+    except Exception as e:
+        logger.exception(f"[REMEMBER_CMD] failed: {e}")
+        await update.message.reply_text("Error buscando memoria.")
+
+def _human_due_label(due_date: str) -> str:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    if not due_date:
+        return ""
+
+    try:
+        tz = ZoneInfo("America/Panama")
+        today = datetime.now(tz).date()
+        d = datetime.strptime(due_date, "%Y-%m-%d").date()
+
+        delta = (d - today).days
+
+        if delta == 0:
+            return "hoy"
+        elif delta == 1:
+            return "mañana"
+        elif delta == -1:
+            return "ayer"
+        elif delta < 0:
+            return f"hace {abs(delta)} días"
+        elif delta <= 7:
+            return f"en {delta} días"
+        else:
+            return d.strftime("%d %b")  # fallback
+
+    except Exception:
+        return due_date        
+
+def _human_due_label(due_date: str) -> str:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    if not due_date:
+        return ""
+
+    try:
+        tz = ZoneInfo("America/Panama")
+        today = datetime.now(tz).date()
+        d = datetime.strptime(due_date, "%Y-%m-%d").date()
+
+        delta = (d - today).days
+
+        if delta == 0:
+            return "hoy"
+        elif delta == 1:
+            return "mañana"
+        elif delta == -1:
+            return "ayer"
+        elif delta < 0:
+            return f"hace {abs(delta)} días"
+        elif delta <= 7:
+            return f"en {delta} días"
+        else:
+            return d.strftime("%d %b")
+
+    except Exception:
+        return due_date
+
+async def operator_followup_tick(context):
+    try:
+        from memory_store import fetch_due_commitments, mark_commitment_nudged
+
+        rows = fetch_due_commitments(limit=20)
+
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else r
+
+            commitment_id = row["id"] if isinstance(row, dict) else row[0]
+            chat_id = row["chat_id"] if isinstance(row, dict) else row[1]
+            raw_input = row["raw_input"] if isinstance(row, dict) else row[2]
+            action = row["action"] if isinstance(row, dict) else row[3]
+            target = row["target"] if isinstance(row, dict) else row[4]
+            due_date = row["due_date"] if isinstance(row, dict) else row[5]
+            confidence = row["confidence"] if isinstance(row, dict) else row[6]
+
+            who = target or "eso"
+            act = action or "hacerlo"
+            human_due = _human_due_label(due_date)
+
+            if action == "llamar" and target:
+                action_phrase = f"llamar a {who}"
+            elif action == "escribir" and target:
+                action_phrase = f"escribirle a {who}"
+            elif action == "hablar" and target:
+                action_phrase = f"hablar con {who}"
+            elif target:
+                action_phrase = f"{act} {who}"
+            else:
+                action_phrase = act
+
+            if confidence == "high":
+                msg = f"⏰ Oye… dijiste que ibas a {action_phrase} {human_due}. ¿Lo hiciste o lo movemos?"
+            elif confidence == "medium":
+                msg = f"⏰ Tenías pendiente {action_phrase} {human_due}. ¿Sigue en pie?"
+            else:
+                msg = f"⏰ Lo de {action_phrase} {human_due}… ¿lo retomamos o lo soltamos?"
+
+            await context.bot.send_message(chat_id=chat_id, text=msg)
+            mark_commitment_nudged(commitment_id)
+
+    except Exception as e:
+        logger.exception(f"[OPERATOR_FOLLOWUP_TICK] failed: {e}")
+
+async def handle_followup_test(update, context):
+    try:
+        await operator_followup_tick(context)
+        await update.message.reply_text("✅ Follow-up tick ejecutado.")
+    except Exception as e:
+        logger.exception(f"[FOLLOWUP_TEST] failed: {e}")
+        await update.message.reply_text(f"❌ Follow-up test failed: {e}")
 
 def main():
     init_db()
@@ -5240,10 +5765,10 @@ def main():
         pass
 
     app.job_queue.run_repeating(
-        _reminder_tick,
-        interval=interval,
-        first=10,
-        name=REMINDER_JOB_NAME,
+        operator_followup_tick,
+        interval=3600,
+        first=20,
+        name="OPERATOR_FOLLOWUP_JOB",
     )
 
     app.job_queue.run_daily(
@@ -5258,7 +5783,10 @@ def main():
         name="MORNING_DAILY_JOB",
     )
 
+
     app.add_error_handler(_error_handler)
+
+
 
     # Commands
     app.add_handler(CommandHandler("start", start))
@@ -5277,8 +5805,11 @@ def main():
     app.add_handler(CommandHandler("dsearch", dsearch_cmd))
     app.add_handler(CommandHandler("search", search_cmd))
     app.add_handler(CommandHandler("place", place_cmd))
+    app.add_handler(CommandHandler("followuptest", handle_followup_test))
     # HOTFIX: temporarily disabled until voice_cmd is defined correctly
     app.add_handler(CommandHandler("voice", voice_cmd))
+    app.add_handler(CommandHandler("mem", handle_mem))
+    app.add_handler(CommandHandler("remember", handle_remember))
 
     app.add_handler(CommandHandler("sremember", sremember_cmd))
     app.add_handler(CommandHandler("ssearch", ssearch_cmd))

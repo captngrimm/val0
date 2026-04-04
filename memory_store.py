@@ -1666,4 +1666,310 @@ def insert_memory_item(chat_id: int, bucket: str, raw_input: str, summary: str =
         ))
 
         conn.commit()
-        conn.close() 
+        conn.close()
+
+def fetch_recent_memory(chat_id: int, limit: int = 5):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, bucket, raw_input, summary, created_at
+            FROM memory_items
+            WHERE chat_id=?
+            ORDER BY id DESC
+            LIMIT ?
+        """, (
+            int(chat_id),
+            int(limit)
+        ))
+
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+
+def classify_memory_item(text: str, source: str = "text") -> tuple[str, str]:
+    if not text:
+        return ("memory", source)
+
+    low = text.lower().strip()
+
+    sensitive_keywords = (
+        "clave",
+        "password",
+        "contraseña",
+        "secret",
+        "token",
+        "api key",
+        "private key",
+        "access key",
+    )
+
+    if any(k in low for k in sensitive_keywords):
+        return ("sensitive", source)
+
+    high_task_markers = (
+        "tengo que",
+        "debo",
+        "hay que",
+        "recuérdame",
+        "recordarme",
+    )
+
+    action_verbs = (
+        "llamar",
+        "enviar",
+        "hacer",
+        "comprar",
+        "pagar",
+        "agendar",
+        "programar",
+        "escribir",
+        "responder",
+        "revisar",
+        "buscar",
+        "hablar",
+        "ir",
+    )
+
+    medium_task_markers = (
+        "debería",
+        "deberia",
+        "tengo pendiente",
+        "no se me puede olvidar",
+        "sería bueno",
+        "seria bueno",
+        "quiero acordarme",
+    )
+
+    low_task_markers = (
+        "quizá",
+        "quizas",
+        "quizás",
+        "tal vez",
+        "a lo mejor",
+        "puede que",
+        "podría",
+        "podria",
+        "me gustaría",
+        "me gustaria",
+    )
+
+    if any(m in low for m in high_task_markers) and any(v in low for v in action_verbs):
+        return ("task", "task_high")
+
+    if any(m in low for m in high_task_markers):
+        return ("task", "task_high")
+
+    if any(m in low for m in medium_task_markers) and any(v in low for v in action_verbs):
+        return ("task", "task_medium")
+
+    if any(m in low for m in medium_task_markers):
+        return ("task", "task_medium")
+
+    if any(m in low for m in low_task_markers) and any(v in low for v in action_verbs):
+        return ("task", "task_low")
+
+    return ("memory", source)
+
+def search_memory(chat_id: int, keyword: str, limit: int = 5, include_sensitive: bool = False):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        if include_sensitive:
+            cur.execute("""
+                SELECT id, bucket, raw_input, summary, created_at
+                FROM memory_items
+                WHERE chat_id=?
+                  AND raw_input LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+            """, (
+                int(chat_id),
+                f"%{keyword}%",
+                int(limit)
+            ))
+        else:
+            cur.execute("""
+                SELECT id, bucket, raw_input, summary, created_at
+                FROM memory_items
+                WHERE chat_id=?
+                  AND raw_input LIKE ?
+                  AND bucket != 'sensitive'
+                ORDER BY id DESC
+                LIMIT ?
+            """, (
+                int(chat_id),
+                f"%{keyword}%",
+                int(limit)
+            ))
+
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+
+def upsert_commitment(
+    chat_id: int,
+    raw_input: str,
+    action: str = "",
+    target: str = "",
+    due_date: str | None = None,
+    confidence: str = "medium",
+):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id
+            FROM commitments
+            WHERE chat_id=?
+              AND raw_input=?
+              AND IFNULL(due_date,'') = IFNULL(?, '')
+              AND status='open'
+            ORDER BY id DESC
+            LIMIT 1
+        """, (
+            int(chat_id),
+            raw_input,
+            due_date,
+        ))
+
+        row = cur.fetchone()
+        if row:
+            conn.close()
+            return int(row[0]) if not hasattr(row, "keys") else int(row["id"])
+
+        cur.execute("""
+            INSERT INTO commitments (chat_id, raw_input, action, target, due_date, confidence)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            int(chat_id),
+            raw_input,
+            action,
+            target,
+            due_date,
+            confidence,
+        ))
+
+        conn.commit()
+        rid = cur.lastrowid
+        conn.close()
+        return int(rid)
+
+
+def fetch_due_commitments(limit: int = 20):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, chat_id, raw_input, action, target, due_date, confidence, status, last_nudged_at, created_at
+            FROM commitments
+            WHERE status='open'
+              AND due_date IS NOT NULL
+              AND due_date <= date('now')
+              AND (
+                    last_nudged_at IS NULL
+                    OR date(last_nudged_at) < date('now')
+              )
+            ORDER BY due_date ASC, id ASC
+            LIMIT ?
+        """, (int(limit),))
+
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+
+
+def mark_commitment_nudged(commitment_id: int):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            UPDATE commitments
+            SET last_nudged_at=CURRENT_TIMESTAMP
+            WHERE id=?
+        """, (int(commitment_id),))
+
+        conn.commit()
+        conn.close()
+
+def close_matching_commitment(chat_id: int, text: str):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        low = (text or "").lower()
+
+        action = None
+        if "llam" in low:
+            action = "llamar"
+        elif "escrib" in low:
+            action = "escribir"
+        elif "habl" in low:
+            action = "hablar"
+        elif "envi" in low:
+            action = "enviar"
+        elif "revis" in low:
+            action = "revisar"
+        elif "pag" in low:
+            action = "pagar"
+
+        target = None
+        import re
+        m = re.search(r"\b(?:a|con)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ]+)\b", text or "")
+        if m:
+            target = (m.group(1) or "").strip()
+
+        if action and target:
+            cur.execute("""
+                SELECT id, raw_input, action, target, due_date, confidence, status
+                FROM commitments
+                WHERE chat_id=?
+                  AND status='open'
+                  AND action=?
+                  AND target=?
+                ORDER BY id DESC
+                LIMIT 1
+            """, (
+                int(chat_id),
+                action,
+                target,
+            ))
+        elif action:
+            cur.execute("""
+                SELECT id, raw_input, action, target, due_date, confidence, status
+                FROM commitments
+                WHERE chat_id=?
+                  AND status='open'
+                  AND action=?
+                ORDER BY id DESC
+                LIMIT 1
+            """, (
+                int(chat_id),
+                action,
+            ))
+        else:
+            conn.close()
+            return None
+
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            return None
+
+        commitment_id = row["id"] if hasattr(row, "keys") else row[0]
+
+        cur.execute("""
+            UPDATE commitments
+            SET status='done'
+            WHERE id=?
+        """, (int(commitment_id),))
+
+        conn.commit()
+        conn.close()
+
+        return row

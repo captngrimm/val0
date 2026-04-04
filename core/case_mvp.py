@@ -2979,60 +2979,114 @@ async def try_terms_due_today(update, chat_id, text) -> bool:
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     return True
 
-async def try_terms_due_tomorrow(update, chat_id, text) -> bool:
+async def try_due_tomorrow(update, chat_id, text) -> bool:
     """
-    Handles:
-    - qué vence mañana
-    - que vence mañana
+    Handles: 'qué tengo mañana', 'qué vence mañana', 'agenda mañana'
+    Returns True if it responded and should short-circuit the pipeline.
     """
-
     if not update or not getattr(update, "message", None):
         return False
 
-    t = _clean(text or "")
+    cleaned = _clean(text)
 
-    if "vence manana" not in t and "vence mañana" not in t:
+    task_markers = (
+        "tengo que",
+        "debo",
+        "hay que",
+        "debería",
+        "deberia",
+        "quizá",
+        "quizas",
+        "quizás",
+        "tal vez",
+        "podría",
+        "podria",
+    )
+
+    if any(m in cleaned for m in task_markers):
+        logger.info("[CASE MVP] try_due_tomorrow skipped because task intent detected")
         return False
+
+    if not re.search(r"\b(mañana|manana)\b", cleaned):
+        return False
+
+    tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+    tomorrow = (datetime.now(tz).date() + timedelta(days=1)).isoformat()
 
     try:
         conn = _get_conn()
         cur = conn.cursor()
 
         cur.execute(
-            """
-            SELECT c.client_name, e.deadline_date, e.event_text
-            FROM case_events e
-            JOIN cases c ON c.expediente = CAST(e.case_id AS TEXT)
-            WHERE c.chat_id=?
-              AND e.deadline_date = date('now','+1 day')
-            ORDER BY e.deadline_date ASC
-            """,
-            (int(chat_id),),
+            "SELECT c.expediente, ce.event_text, ce.deadline_date "
+            "FROM case_events ce "
+            "JOIN cases c ON c.id = ce.case_id "
+            "WHERE ce.chat_id=? AND ce.deadline_date=? "
+            "ORDER BY c.expediente ASC, ce.id ASC",
+            (int(chat_id), tomorrow),
         )
 
         rows = cur.fetchall() or []
         conn.close()
 
+        from core.due_merge import merge_due_items
+
+        y, m, d = map(int, tomorrow.split("-"))
+
+        db_items: List[Dict[str, Any]] = []
+        for r in rows:
+            exp = r["expediente"]
+            et = (r["event_text"] or "").strip() or "(evento)"
+
+            local_dt = datetime(y, m, d, 9, 0, 0, tzinfo=tz)
+            due_ts = int(local_dt.astimezone(timezone.utc).timestamp())
+
+            db_items.append({
+                "due_ts": due_ts,
+                "title": et,
+                "case_id": exp,
+                "source": "db",
+                "external_id": None,
+            })
+
+        start_local = datetime(y, m, d, 0, 0, 0, tzinfo=tz)
+        end_local = datetime(y, m, d, 23, 59, 59, tzinfo=tz)
+
+        merged = merge_due_items(
+            db_items=db_items,
+            range_start_utc=start_local.astimezone(timezone.utc),
+            range_end_utc=end_local.astimezone(timezone.utc),
+        )
+
+        items = merged["items"]
+        conflicts = merged["conflicts"]
+
+        _audit_merge(gate="due_tomorrow", chat_id=int(chat_id), label=f"{tomorrow}", items=items)
+
+        if not items:
+            await update.message.reply_text("Mañana no tengo vencimientos registrados.")
+            return True
+
+        weekday = datetime.now(tz).date() + timedelta(days=1)
+        WEEKDAY_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+        weekday_name = WEEKDAY_ES[weekday.weekday()]
+
+        msg = _render_due_grouped(
+            header=f"📅 {weekday_name.capitalize()}:",
+            items=items,
+            tz=tz,
+        )
+
+        if conflicts:
+            msg = msg + "\n" + _render_due_conflicts(conflicts)
+
+        await update.message.reply_text(msg)
+        return True
+
     except Exception as e:
-        logger.exception(f"[TERMS_TOMORROW] failed: {e}")
-        await update.message.reply_text("No pude consultar los vencimientos de mañana.")
-        return True
-
-    if not rows:
-        await update.message.reply_text("🟢 No hay vencimientos mañana.")
-        return True
-
-    lines = ["⏳ <b>Vencimientos mañana</b>", ""]
-
-    for r in rows:
-        client = r["client_name"] if hasattr(r, "keys") else r[0]
-        deadline = r["deadline_date"] if hasattr(r, "keys") else r[1]
-        event_text = r["event_text"] if hasattr(r, "keys") else r[2]
-
-        lines.append(f"• {deadline} | {client} | {event_text}")
-
-    await update.message.reply_text("\n".join(lines), parse_mode="HTML")
-    return True 
+        logger.exception(f"[CASE MVP] try_due_tomorrow failed: {e}")
+        await update.message.reply_text("Se cayó el chequeo de diligencias de mañana. Reviso logs.")
+        return True 
 
 async def try_delete_last_note(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
