@@ -638,18 +638,6 @@ def fetch_all_facts(chat_id: int):
 # ==========================================================
 
 
-# ---- FACTS ------------------------------------------------
-
-def upsert_fact(chat_id: int, key: str, value: str):
-    return None  # temporary stub
-
-def get_fact(chat_id: int, key: str):
-    return None
-
-def get_all_facts(chat_id: int):
-    return []
-
-
 # ---- NOTES ------------------------------------------------
 
 def add_note(chat_id: int, text: str):
