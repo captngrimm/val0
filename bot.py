@@ -5697,7 +5697,8 @@ def _human_due_label(due_date: str) -> str:
 
 async def operator_followup_tick(context):
     try:
-        from memory_store import fetch_due_commitments, mark_commitment_nudged
+        import random
+        from memory_store import fetch_due_commitments, mark_commitment_nudged, count_memory_hits
 
         rows = fetch_due_commitments(limit=20)
 
@@ -5727,12 +5728,69 @@ async def operator_followup_tick(context):
             else:
                 action_phrase = act
 
-            if confidence == "high":
-                msg = f"⏰ Oye… dijiste que ibas a {action_phrase} {human_due}. ¿Lo hiciste o lo movemos?"
-            elif confidence == "medium":
-                msg = f"⏰ Tenías pendiente {action_phrase} {human_due}. ¿Sigue en pie?"
+            hit_basis = target or action or ""
+            repeat_count = count_memory_hits(chat_id, hit_basis, limit=50) if hit_basis else 0
+
+            if repeat_count >= 4:
+                pressure = "high"
+            elif repeat_count >= 2:
+                pressure = "medium"
             else:
-                msg = f"⏰ Lo de {action_phrase} {human_due}… ¿lo retomamos o lo soltamos?"
+                pressure = "low"
+
+            if confidence == "high":
+                if pressure == "high":
+                    options = [
+                        f"⏰ Otra vez {who}. Esto ya se está arrastrando. ¿Lo cierras {human_due} o qué?",
+                        f"⏰ {who} sigue abierto y ya van varias vueltas con esto. ¿Lo resolviste o sigue colgado?",
+                        f"⏰ Esto con {who} ya es patrón. Si no lo cierras {human_due}, te va a seguir pesando.",
+                    ]
+                elif pressure == "medium":
+                    options = [
+                        f"⏰ {who} sigue pendiente. Dijiste que lo resolvías {human_due}. ¿Qué pasó?",
+                        f"⏰ Oye… lo de {action_phrase} {human_due} sigue vivo. ¿Lo hiciste o lo movemos?",
+                        f"⏰ No dejes que esto se arrastre. {action_phrase} era {human_due}. ¿Ya quedó?",
+                    ]
+                else:
+                    options = [
+                        f"⏰ Oye… dijiste que ibas a {action_phrase} {human_due}. ¿Lo hiciste o lo movemos?",
+                        f"⏰ Esto sigue abierto: {action_phrase} {human_due}. ¿Lo cerraste o sigue vivo?",
+                    ]
+            elif confidence == "medium":
+                if pressure == "high":
+                    options = [
+                        f"⏰ Esto con {who} ya ha salido varias veces. ¿Sigue en pie o lo redefinimos?",
+                        f"⏰ Ya van varias vueltas con {who}. ¿Lo vas a mover de verdad o lo bajamos?",
+                    ]
+                elif pressure == "medium":
+                    options = [
+                        f"⏰ Tenías pendiente {action_phrase} {human_due}. ¿Sigue en pie?",
+                        f"⏰ Lo de {action_phrase} {human_due} estaba sobre la mesa. ¿Todavía va?",
+                        f"⏰ Habías dejado {action_phrase} {human_due}. ¿Qué hacemos con eso?",
+                    ]
+                else:
+                    options = [
+                        f"⏰ Solo revisando: {action_phrase} {human_due}. ¿Lo mantienes o lo movemos?",
+                        f"⏰ Quedó pendiente {action_phrase} {human_due}. ¿Sigue en pie?",
+                    ]
+            else:
+                if pressure == "high":
+                    options = [
+                        f"⏰ Esto ya lleva rato rondando con {who}. ¿Lo retomamos o lo soltamos de una vez?",
+                        f"⏰ {who} vuelve a salir. ¿Esto va en serio o mejor lo dejamos caer?",
+                    ]
+                elif pressure == "medium":
+                    options = [
+                        f"⏰ Lo de {action_phrase} {human_due}… ¿lo retomamos o lo soltamos?",
+                        f"⏰ Eso de {action_phrase} {human_due} quedó rondando. ¿Sigue vivo?",
+                    ]
+                else:
+                    options = [
+                        f"⏰ Te lo dejo aquí por si acaso: {action_phrase} {human_due}. ¿Lo quieres retomar?",
+                        f"⏰ Quedó flotando lo de {action_phrase} {human_due}. ¿Lo dejamos caer o lo cerramos?",
+                    ]
+
+            msg = random.choice(options)
 
             await context.bot.send_message(chat_id=chat_id, text=msg)
             mark_commitment_nudged(commitment_id)
@@ -5747,6 +5805,92 @@ async def handle_followup_test(update, context):
     except Exception as e:
         logger.exception(f"[FOLLOWUP_TEST] failed: {e}")
         await update.message.reply_text(f"❌ Follow-up test failed: {e}")
+
+async def handle_context(update, context):
+    try:
+        from memory_store import (
+            fetch_open_commitments,
+            fetch_recent_memory_by_bucket,
+            count_memory_hits,
+        )
+
+        chat_id = update.effective_chat.id
+
+        open_commitments = fetch_open_commitments(chat_id, limit=8)
+        recent_memory = fetch_recent_memory_by_bucket(chat_id, bucket="memory", limit=8)
+        recent_tasks = fetch_recent_memory_by_bucket(chat_id, bucket="task", limit=8)
+
+        lines = []
+        lines.append("PX01 CONTEXT SNAPSHOT")
+        lines.append("")
+
+        # Open commitments
+        lines.append("[commitments]")
+        if open_commitments:
+            for r in open_commitments:
+                row = dict(r) if hasattr(r, "keys") else r
+                raw_input = row["raw_input"] if isinstance(row, dict) else row[1]
+                due_date = row["due_date"] if isinstance(row, dict) else row[4]
+                confidence = row["confidence"] if isinstance(row, dict) else row[5]
+                status = row["status"] if isinstance(row, dict) else row[6]
+                lines.append(f"- {raw_input} | due={due_date or '-'} | confidence={confidence} | status={status}")
+        else:
+            lines.append("- none")
+
+        lines.append("")
+
+        # Recent task-like memories
+        lines.append("[recent_tasks]")
+        if recent_tasks:
+            for r in recent_tasks[:5]:
+                row = dict(r) if hasattr(r, "keys") else r
+                raw_input = row["raw_input"] if isinstance(row, dict) else row[2]
+                summary = row["summary"] if isinstance(row, dict) else row[3]
+                lines.append(f"- {raw_input} | {summary}")
+        else:
+            lines.append("- none")
+
+        lines.append("")
+
+        # Recent memory
+        lines.append("[recent_memory]")
+        if recent_memory:
+            for r in recent_memory[:5]:
+                row = dict(r) if hasattr(r, "keys") else r
+                raw_input = row["raw_input"] if isinstance(row, dict) else row[2]
+                lines.append(f"- {raw_input}")
+        else:
+            lines.append("- none")
+
+        lines.append("")
+
+        # Simple weighted signals
+        lines.append("[signals]")
+        signal_keywords = ["Noah", "Miguel", "proyecto"]
+        found_any_signal = False
+
+        for kw in signal_keywords:
+            hits = count_memory_hits(chat_id, kw, limit=50)
+            if hits > 0:
+                found_any_signal = True
+                if hits >= 4:
+                    weight = "high"
+                elif hits >= 2:
+                    weight = "medium"
+                else:
+                    weight = "low"
+
+                lines.append(f"- {kw}: hits={hits}, weight={weight}")
+
+        if not found_any_signal:
+            lines.append("- none")
+
+        out = "\n".join(lines)
+        await update.message.reply_text(f"```text\n{out}\n```", parse_mode="Markdown")
+
+    except Exception as e:
+        logger.exception(f"[CONTEXT_CMD] failed: {e}")
+        await update.message.reply_text(f"❌ Context error: {e}")
 
 def main():
     init_db()
@@ -5810,6 +5954,8 @@ def main():
     app.add_handler(CommandHandler("voice", voice_cmd))
     app.add_handler(CommandHandler("mem", handle_mem))
     app.add_handler(CommandHandler("remember", handle_remember))
+    app.add_handler(CommandHandler("context", handle_context))
+    
 
     app.add_handler(CommandHandler("sremember", sremember_cmd))
     app.add_handler(CommandHandler("ssearch", ssearch_cmd))

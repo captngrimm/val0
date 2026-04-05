@@ -1973,3 +1973,77 @@ def close_matching_commitment(chat_id: int, text: str):
         conn.close()
 
         return row
+    
+def count_memory_hits(chat_id: int, keyword: str, limit: int = 50) -> int:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM (
+                SELECT id
+                FROM memory_items
+                WHERE chat_id=?
+                  AND bucket != 'sensitive'
+                  AND raw_input LIKE ?
+                ORDER BY id DESC
+                LIMIT ?
+            )
+        """, (
+            int(chat_id),
+            f"%{keyword}%",
+            int(limit),
+        ))
+
+        row = cur.fetchone()
+        conn.close()
+
+        if not row:
+            return 0
+
+        return int(row[0] if not hasattr(row, "keys") else list(row)[0])
+
+def fetch_open_commitments(chat_id: int, limit: int = 10):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, raw_input, action, target, due_date, confidence, status, last_nudged_at, created_at
+            FROM commitments
+            WHERE chat_id=?
+              AND status='open'
+            ORDER BY id DESC
+            LIMIT ?
+        """, (
+            int(chat_id),
+            int(limit),
+        ))
+
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+
+
+def fetch_recent_memory_by_bucket(chat_id: int, bucket: str = "memory", limit: int = 10):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, bucket, raw_input, summary, created_at
+            FROM memory_items
+            WHERE chat_id=?
+              AND bucket=?
+            ORDER BY id DESC
+            LIMIT ?
+        """, (
+            int(chat_id),
+            bucket,
+            int(limit),
+        ))
+
+        rows = cur.fetchall()
+        conn.close()
+        return rows        
