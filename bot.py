@@ -33,9 +33,6 @@ import time
 import shutil
 import asyncio
 
-# === CORE DB ACCESS (must ALWAYS exist) ===
-from memory_store import _get_conn
-
 # === MODE HANDLER (must ALWAYS exist if referenced later) ===
 from core.mode import try_set_mode
 
@@ -196,43 +193,6 @@ def seed_build_status(chat_id: int):
         except Exception:
             pass
 
-
-def try_capture_priority(chat_id: int, text: str) -> bool:
-    raw = (text or "").strip()
-    if not raw:
-        return False
-
-    normalized = re.sub(r"\s+", " ", raw).strip()
-    lowered = normalized.lower()
-
-    prefixes = [
-        "current priority:",
-        "priority:",
-        "our priority is ",
-        "current focus is ",
-    ]
-
-    value = None
-    for prefix in prefixes:
-        if lowered.startswith(prefix):
-            value = normalized[len(prefix):].strip()
-            break
-
-    if not value:
-        return False
-
-    try:
-        from memory_store import save_fact
-        save_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
-        return True
-    except Exception:
-        pass
-
-    try:
-        upsert_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
-        return True
-    except Exception:
-        return False
 
 # Places API
 from places.places_engine import places_search, place_details
@@ -6170,92 +6130,6 @@ async def handle_followup_test(update, context):
     except Exception as e:
         logger.exception(f"[FOLLOWUP_TEST] failed: {e}")
         await update.message.reply_text(f"❌ Follow-up test failed: {e}")
-
-async def handle_context(update, context):
-    try:
-        from memory_store import (
-            fetch_open_commitments,
-            fetch_recent_memory_by_bucket,
-            count_memory_hits,
-        )
-
-        chat_id = update.effective_chat.id
-
-        open_commitments = fetch_open_commitments(chat_id, limit=8)
-        recent_memory = fetch_recent_memory_by_bucket(chat_id, bucket="memory", limit=8)
-        recent_tasks = fetch_recent_memory_by_bucket(chat_id, bucket="task", limit=8)
-
-        lines = []
-        lines.append("PX01 CONTEXT SNAPSHOT")
-        lines.append("")
-
-        # Open commitments
-        lines.append("[commitments]")
-        if open_commitments:
-            for r in open_commitments:
-                row = dict(r) if hasattr(r, "keys") else r
-                raw_input = row["raw_input"] if isinstance(row, dict) else row[1]
-                due_date = row["due_date"] if isinstance(row, dict) else row[4]
-                confidence = row["confidence"] if isinstance(row, dict) else row[5]
-                status = row["status"] if isinstance(row, dict) else row[6]
-                lines.append(f"- {raw_input} | due={due_date or '-'} | confidence={confidence} | status={status}")
-        else:
-            lines.append("- none")
-
-        lines.append("")
-
-        # Recent task-like memories
-        lines.append("[recent_tasks]")
-        if recent_tasks:
-            for r in recent_tasks[:5]:
-                row = dict(r) if hasattr(r, "keys") else r
-                raw_input = row["raw_input"] if isinstance(row, dict) else row[2]
-                summary = row["summary"] if isinstance(row, dict) else row[3]
-                lines.append(f"- {raw_input} | {summary}")
-        else:
-            lines.append("- none")
-
-        lines.append("")
-
-        # Recent memory
-        lines.append("[recent_memory]")
-        if recent_memory:
-            for r in recent_memory[:5]:
-                row = dict(r) if hasattr(r, "keys") else r
-                raw_input = row["raw_input"] if isinstance(row, dict) else row[2]
-                lines.append(f"- {raw_input}")
-        else:
-            lines.append("- none")
-
-        lines.append("")
-
-        # Simple weighted signals
-        lines.append("[signals]")
-        signal_keywords = ["Noah", "Miguel", "proyecto"]
-        found_any_signal = False
-
-        for kw in signal_keywords:
-            hits = count_memory_hits(chat_id, kw, limit=50)
-            if hits > 0:
-                found_any_signal = True
-                if hits >= 4:
-                    weight = "high"
-                elif hits >= 2:
-                    weight = "medium"
-                else:
-                    weight = "low"
-
-                lines.append(f"- {kw}: hits={hits}, weight={weight}")
-
-        if not found_any_signal:
-            lines.append("- none")
-
-        out = "\n".join(lines)
-        await update.message.reply_text(f"```text\n{out}\n```", parse_mode="Markdown")
-
-    except Exception as e:
-        logger.exception(f"[CONTEXT_CMD] failed: {e}")
-        await update.message.reply_text(f"❌ Context error: {e}")
 
 async def handle_statepacket(update, context):
     try:
