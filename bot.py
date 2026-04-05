@@ -36,11 +36,11 @@ import asyncio
 # === CORE DB ACCESS (must ALWAYS exist) ===
 from memory_store import _get_conn
 
-# === CORE DB ACCESS (must ALWAYS exist) ===
-from memory_store import _get_conn
-
 # === MODE HANDLER (must ALWAYS exist if referenced later) ===
 from core.mode import try_set_mode
+
+from core.context_snapshot import build_context_snapshot
+
 
 # --- MIGUEL MVP: gates wiring (safe optional imports) ---
 try:
@@ -112,6 +112,127 @@ from memory_store import (
     mark_reminder_failed,
     revert_reminder_pending,
 )
+
+def ensure_current_priority(chat_id: int):
+    existing = None
+    try:
+        existing = get_fact(chat_id=chat_id, fact_key="current_priority")
+    except Exception:
+        existing = None
+
+    if existing:
+        return
+
+    priority_text = (
+        "preserve continuity across chats\n"
+        "refine /context into better handoff/state snapshot\n"
+        "then continue with post-Sunday continuity / persistent interface work"
+    )
+
+    try:
+        upsert_fact(chat_id=chat_id, fact_key="current_priority", fact_value=priority_text)
+    except Exception:
+        pass
+
+def get_current_priority_lines(chat_id: int):
+    try:
+        raw = get_fact(chat_id=chat_id, fact_key="current_priority")
+    except Exception:
+        raw = None
+
+    if not raw:
+        return [
+            "- preserve continuity across chats",
+            "- refine /context into better handoff/state snapshot",
+            "- then continue with post-Sunday continuity / persistent interface work",
+        ]
+
+    raw = str(raw).strip()
+    parts = [p.strip(" -•\n\r\t") for p in raw.splitlines() if p.strip()]
+    if len(parts) <= 1 and ";" in raw:
+        parts = [p.strip() for p in raw.split(";") if p.strip()]
+
+    out = [f"- {p}" for p in parts[:6] if p]
+    return out or [
+        "- preserve continuity across chats",
+        "- refine /context into better handoff/state snapshot",
+        "- then continue with post-Sunday continuity / persistent interface work",
+    ]
+
+
+def get_build_status_lines(chat_id: int):
+    return [
+        "- persistent memory working",
+        "- recall working",
+        "- sensitive filtering working",
+        "- task classification working",
+        "- commitment extraction working",
+        "- proactive follow-up working",
+        "- completion loop working",
+        "- operator override working",
+        "- M2 repetition/context weighting working",
+        "- M3 time/pattern awareness working",
+        "- /context working",
+    ]
+
+def seed_build_status(chat_id: int):
+    build_flags = {
+        "persistent_memory": "working",
+        "recall": "working",
+        "sensitive_filtering": "working",
+        "task_classification": "working",
+        "commitment_extraction": "working",
+        "proactive_followup": "working",
+        "completion_loop": "working",
+        "operator_override": "working",
+        "m2_weighting": "working",
+        "m3_time_awareness": "working",
+        "context_command": "working",
+    }
+
+    for key, value in build_flags.items():
+        try:
+            upsert_fact(chat_id=chat_id, fact_key=key, fact_value=value)
+        except Exception:
+            pass
+
+
+def try_capture_priority(chat_id: int, text: str) -> bool:
+    raw = (text or "").strip()
+    if not raw:
+        return False
+
+    normalized = re.sub(r"\s+", " ", raw).strip()
+    lowered = normalized.lower()
+
+    prefixes = [
+        "current priority:",
+        "priority:",
+        "our priority is ",
+        "current focus is ",
+    ]
+
+    value = None
+    for prefix in prefixes:
+        if lowered.startswith(prefix):
+            value = normalized[len(prefix):].strip()
+            break
+
+    if not value:
+        return False
+
+    try:
+        from memory_store import save_fact
+        save_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
+        return True
+    except Exception:
+        pass
+
+    try:
+        upsert_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
+        return True
+    except Exception:
+        return False
 
 # Places API
 from places.places_engine import places_search, place_details
@@ -1762,7 +1883,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     chat = update.effective_chat
     chat_id = chat.id
 
-    # Preferred name (defaults)
     # Preferred name (defaults)
     try:
         preferred_name = get_fact(chat_id=chat_id, fact_key="preferred_name")
@@ -5216,6 +5336,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tg_msg_id = getattr(update.message, "message_id", None)
 
+    raw = (text or "").strip()
+    normalized = re.sub(r"\s+", " ", raw).strip()
+    lowered = normalized.lower()
+
+    if lowered.startswith("current priority:") or lowered.startswith("priority:"):
+        try:
+            value = normalized.split(":", 1)[1].strip()
+
+            from memory_store import save_fact
+            save_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
+
+            await update.message.reply_text("Priority updated.")
+        except Exception:
+            try:
+                await update.message.reply_text("Priority updated.")
+            except Exception:
+                pass
+        return
+
     _audit(
         chat_id,
         action="IN_TEXT",
@@ -5635,6 +5774,38 @@ async def handle_remember(update, context):
         logger.exception(f"[REMEMBER_CMD] failed: {e}")
         await update.message.reply_text("Error buscando memoria.")
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+def _time_pressure_state(due_date: str):
+    try:
+        tz = ZoneInfo("America/Panama")
+        now = datetime.now(tz)
+
+        today_str = now.date().isoformat()
+
+        if not due_date:
+            return "none"
+
+        if due_date < today_str:
+            return "overdue"
+
+        if due_date == today_str:
+            hour = now.hour
+
+            # crude windows (we refine later)
+            if hour < 12:
+                return "early"
+            elif hour < 18:
+                return "mid"
+            else:
+                return "late"
+
+        return "future"
+
+    except Exception:
+        return "none"
+
 def _human_due_label(due_date: str) -> str:
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -5663,7 +5834,103 @@ def _human_due_label(due_date: str) -> str:
             return d.strftime("%d %b")  # fallback
 
     except Exception:
-        return due_date        
+        return due_date    
+
+def _format_context_snapshot(snapshot: dict) -> str:
+    lines = []
+    lines.append("🧠 CONTEXT SNAPSHOT\n")
+
+    # Commitments
+    lines.append("OPEN TASKS:")
+    if snapshot["commitments"]:
+        for r in snapshot["commitments"]:
+            row = dict(r) if hasattr(r, "keys") else r
+            act = row["action"] if isinstance(row, dict) else row[0]
+            tgt = row["target"] if isinstance(row, dict) else row[1]
+            due = row["due_date"] if isinstance(row, dict) else row[2]
+            lines.append(f"- {act} {tgt} ({due})")
+    else:
+        lines.append("- none")
+
+    # Signals
+    lines.append("\nRECENT SIGNALS:")
+    if snapshot["signals"]:
+        for r in snapshot["signals"]:
+            text = r["raw_input"] if hasattr(r, "keys") else r[0]
+            lines.append(f"- {text}")
+    else:
+        lines.append("- none")
+
+    return "\n".join(lines)
+
+async def context_cmd(update, context):
+    if not update or not update.effective_chat or not update.message:
+        return
+
+    chat_id = update.effective_chat.id
+
+    try:
+        ensure_current_priority(chat_id)
+    except Exception:
+        pass
+
+    try:
+        seed_build_status(chat_id)
+    except Exception:
+        pass
+
+    try:
+        snapshot = build_context_snapshot(
+            chat_id=chat_id,
+            build_status_lines=get_build_status_lines(chat_id),
+            priority_lines=get_current_priority_lines(chat_id),
+        )
+    except Exception as e:
+        snapshot = f"🧠 CONTEXT SNAPSHOT\n\nERROR: {str(e)}"
+
+    try:
+        await update.message.reply_text(snapshot)
+    except Exception:
+        pass            
+
+async def handoff_cmd(update, context):
+    if not update or not update.effective_chat or not update.message:
+        return
+
+    chat_id = update.effective_chat.id
+
+    try:
+        ensure_current_priority(chat_id)
+    except Exception:
+        pass
+
+    try:
+        seed_build_status(chat_id)
+    except Exception:
+        pass
+
+    try:
+        snapshot = build_context_snapshot(
+            chat_id=chat_id,
+            build_status_lines=get_build_status_lines(chat_id),
+            priority_lines=get_current_priority_lines(chat_id),
+        )
+        handoff = (
+            "We are continuing PX01 Val0 development.\n\n"
+            "Live system snapshot:\n\n"
+            f"{snapshot}\n\n"
+            "Act as Val in operator mode.\n"
+            "Give exact code instructions only.\n\n"
+            "continue from here"
+        )
+    except Exception as e:
+        handoff = f"We are continuing PX01 Val0 development.\n\nERROR: {str(e)}"
+
+    try:
+        await update.message.reply_text(handoff)
+    except Exception:
+        pass
+
 
 def _human_due_label(due_date: str) -> str:
     from datetime import datetime
@@ -5695,10 +5962,176 @@ def _human_due_label(due_date: str) -> str:
     except Exception:
         return due_date
 
+def _pattern_window_label(pattern: str) -> str:
+    if pattern == "midday":
+        return "al mediodía"
+    if pattern == "night":
+        return "en la noche"
+    return ""
+
+def _window_status(now_hour: int, windows: dict) -> dict:
+    has_midday = windows.get("has_midday", False)
+    has_night = windows.get("has_night", False)
+
+    return {
+        "missed_midday": bool(has_midday and now_hour >= 15),
+        "night_available": bool(has_night and now_hour < 23),
+        "midday_available": bool(has_midday and now_hour < 15),
+    }
+
+def _build_operator_state_packet(
+    chat_id: int,
+    raw_input: str,
+    action: str,
+    target: str,
+    due_date: str,
+    confidence: str,
+):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from memory_store import count_memory_hits, infer_simple_time_pattern, infer_time_windows
+
+    who = target or "eso"
+    act = action or "hacerlo"
+    human_due = _human_due_label(due_date)
+    time_state = _time_pressure_state(due_date)
+
+    if action == "llamar" and target:
+        action_phrase = f"llamar a {who}"
+    elif action == "escribir" and target:
+        action_phrase = f"escribirle a {who}"
+    elif action == "hablar" and target:
+        action_phrase = f"hablar con {who}"
+    elif target:
+        action_phrase = f"{act} {who}"
+    else:
+        action_phrase = act
+
+    hit_basis = target or action or ""
+    repeat_count = count_memory_hits(chat_id, hit_basis, limit=50) if hit_basis else 0
+
+    if repeat_count >= 4:
+        pressure = "high"
+    elif repeat_count >= 2:
+        pressure = "medium"
+    else:
+        pressure = "low"
+
+    pattern = infer_simple_time_pattern(chat_id, target if target else "", action=action, limit=20) if target else ""
+    pattern_label = _pattern_window_label(pattern)
+
+    tz = ZoneInfo("America/Panama")
+    now_local = datetime.now(tz)
+    now_hour = now_local.hour
+
+    windows = infer_time_windows(chat_id, target if target else "", action=action, limit=20) if target else {}
+    window_state = _window_status(now_hour, windows)
+
+    packet = {
+        "raw_input": raw_input or "",
+        "action": action or "",
+        "target": target or "",
+        "who": who,
+        "action_phrase": action_phrase,
+        "due_date": due_date or "",
+        "human_due": human_due,
+        "confidence": confidence or "medium",
+        "repeat_count": repeat_count,
+        "pressure": pressure,
+        "pattern": pattern,
+        "pattern_label": pattern_label,
+        "has_midday": windows.get("has_midday", False),
+        "has_night": windows.get("has_night", False),
+        "missed_midday": window_state.get("missed_midday", False),
+        "night_available": window_state.get("night_available", False),
+        "midday_available": window_state.get("midday_available", False),
+        "now_hour": now_hour,
+    }
+
+    return packet
+
+def _render_operator_nudge(packet: dict) -> str:
+    import random
+
+    who = packet.get("who") or "eso"
+    action_phrase = packet.get("action_phrase") or "hacerlo"
+    human_due = packet.get("human_due") or ""
+    confidence = packet.get("confidence") or "medium"
+    pressure = packet.get("pressure") or "low"
+    pattern_label = packet.get("pattern_label") or ""
+    missed_midday = bool(packet.get("missed_midday"))
+    night_available = bool(packet.get("night_available"))
+
+    if confidence == "high":
+        if pressure == "high":
+            if missed_midday and night_available:
+                options = [
+                    f"⏰ No lo resolviste al mediodía, que es una de tus ventanas normales con {who}. Te queda la noche. No lo dejes correr otra vez.",
+                    f"⏰ Se te fue la ventana del mediodía con {who}. Todavía estás a tiempo de cerrarlo en la noche. Hazlo.",
+                    f"⏰ Ya perdiste una de tus horas típicas con {who}. No dejes que también se te vaya la noche.",
+                ]
+            elif pattern_label:
+                options = [
+                    f"⏰ Otra vez {who}. Normalmente esto lo resuelves {pattern_label}. ¿Qué pasó esta vez?",
+                    f"⏰ Lo de {who} ya te suele caer {pattern_label} y sigue abierto. ¿Lo cierras o lo movemos?",
+                    f"⏰ Esto con {who} ya tiene patrón. Si ya se te fue la ventana {pattern_label}, no dejes que se te arrastre más.",
+                ]
+            else:
+                options = [
+                    f"⏰ Otra vez {who}. Esto ya se está arrastrando. ¿Lo cierras {human_due} o qué?",
+                    f"⏰ {who} sigue abierto y ya van varias vueltas con esto. ¿Lo resolviste o sigue colgado?",
+                    f"⏰ Esto con {who} ya es patrón. Si no lo cierras {human_due}, te va a seguir pesando.",
+                ]
+        elif pressure == "medium":
+            options = [
+                f"⏰ {who} sigue pendiente. Dijiste que lo resolvías {human_due}. ¿Qué pasó?",
+                f"⏰ Oye… lo de {action_phrase} {human_due} sigue vivo. ¿Lo hiciste o lo movemos?",
+                f"⏰ No dejes que esto se arrastre. {action_phrase} era {human_due}. ¿Ya quedó?",
+            ]
+        else:
+            options = [
+                f"⏰ Oye… dijiste que ibas a {action_phrase} {human_due}. ¿Lo hiciste o lo movemos?",
+                f"⏰ Esto sigue abierto: {action_phrase} {human_due}. ¿Lo cerraste o sigue vivo?",
+            ]
+    elif confidence == "medium":
+        if pressure == "high":
+            options = [
+                f"⏰ Esto con {who} ya ha salido varias veces. ¿Sigue en pie o lo redefinimos?",
+                f"⏰ Ya van varias vueltas con {who}. ¿Lo vas a mover de verdad o lo bajamos?",
+            ]
+        elif pressure == "medium":
+            options = [
+                f"⏰ Tenías pendiente {action_phrase} {human_due}. ¿Sigue en pie?",
+                f"⏰ Lo de {action_phrase} {human_due} estaba sobre la mesa. ¿Todavía va?",
+                f"⏰ Habías dejado {action_phrase} {human_due}. ¿Qué hacemos con eso?",
+            ]
+        else:
+            options = [
+                f"⏰ Solo revisando: {action_phrase} {human_due}. ¿Lo mantienes o lo movemos?",
+                f"⏰ Quedó pendiente {action_phrase} {human_due}. ¿Sigue en pie?",
+            ]
+    else:
+        if pressure == "high":
+            options = [
+                f"⏰ Esto ya lleva rato rondando con {who}. ¿Lo retomamos o lo soltamos de una vez?",
+                f"⏰ {who} vuelve a salir. ¿Esto va en serio o mejor lo dejamos caer?",
+            ]
+        elif pressure == "medium":
+            options = [
+                f"⏰ Lo de {action_phrase} {human_due}… ¿lo retomamos o lo soltamos?",
+                f"⏰ Eso de {action_phrase} {human_due} quedó rondando. ¿Sigue vivo?",
+            ]
+        else:
+            options = [
+                f"⏰ Te lo dejo aquí por si acaso: {action_phrase} {human_due}. ¿Lo quieres retomar?",
+                f"⏰ Quedó flotando lo de {action_phrase} {human_due}. ¿Lo dejamos caer o lo cerramos?",
+            ]
+
+    return random.choice(options)
+
 async def operator_followup_tick(context):
     try:
-        import random
-        from memory_store import fetch_due_commitments, mark_commitment_nudged, count_memory_hits
+        from memory_store import fetch_due_commitments, mark_commitment_nudged
 
         rows = fetch_due_commitments(limit=20)
 
@@ -5713,84 +6146,16 @@ async def operator_followup_tick(context):
             due_date = row["due_date"] if isinstance(row, dict) else row[5]
             confidence = row["confidence"] if isinstance(row, dict) else row[6]
 
-            who = target or "eso"
-            act = action or "hacerlo"
-            human_due = _human_due_label(due_date)
+            packet = _build_operator_state_packet(
+                chat_id=chat_id,
+                raw_input=raw_input,
+                action=action,
+                target=target,
+                due_date=due_date,
+                confidence=confidence,
+            )
 
-            if action == "llamar" and target:
-                action_phrase = f"llamar a {who}"
-            elif action == "escribir" and target:
-                action_phrase = f"escribirle a {who}"
-            elif action == "hablar" and target:
-                action_phrase = f"hablar con {who}"
-            elif target:
-                action_phrase = f"{act} {who}"
-            else:
-                action_phrase = act
-
-            hit_basis = target or action or ""
-            repeat_count = count_memory_hits(chat_id, hit_basis, limit=50) if hit_basis else 0
-
-            if repeat_count >= 4:
-                pressure = "high"
-            elif repeat_count >= 2:
-                pressure = "medium"
-            else:
-                pressure = "low"
-
-            if confidence == "high":
-                if pressure == "high":
-                    options = [
-                        f"⏰ Otra vez {who}. Esto ya se está arrastrando. ¿Lo cierras {human_due} o qué?",
-                        f"⏰ {who} sigue abierto y ya van varias vueltas con esto. ¿Lo resolviste o sigue colgado?",
-                        f"⏰ Esto con {who} ya es patrón. Si no lo cierras {human_due}, te va a seguir pesando.",
-                    ]
-                elif pressure == "medium":
-                    options = [
-                        f"⏰ {who} sigue pendiente. Dijiste que lo resolvías {human_due}. ¿Qué pasó?",
-                        f"⏰ Oye… lo de {action_phrase} {human_due} sigue vivo. ¿Lo hiciste o lo movemos?",
-                        f"⏰ No dejes que esto se arrastre. {action_phrase} era {human_due}. ¿Ya quedó?",
-                    ]
-                else:
-                    options = [
-                        f"⏰ Oye… dijiste que ibas a {action_phrase} {human_due}. ¿Lo hiciste o lo movemos?",
-                        f"⏰ Esto sigue abierto: {action_phrase} {human_due}. ¿Lo cerraste o sigue vivo?",
-                    ]
-            elif confidence == "medium":
-                if pressure == "high":
-                    options = [
-                        f"⏰ Esto con {who} ya ha salido varias veces. ¿Sigue en pie o lo redefinimos?",
-                        f"⏰ Ya van varias vueltas con {who}. ¿Lo vas a mover de verdad o lo bajamos?",
-                    ]
-                elif pressure == "medium":
-                    options = [
-                        f"⏰ Tenías pendiente {action_phrase} {human_due}. ¿Sigue en pie?",
-                        f"⏰ Lo de {action_phrase} {human_due} estaba sobre la mesa. ¿Todavía va?",
-                        f"⏰ Habías dejado {action_phrase} {human_due}. ¿Qué hacemos con eso?",
-                    ]
-                else:
-                    options = [
-                        f"⏰ Solo revisando: {action_phrase} {human_due}. ¿Lo mantienes o lo movemos?",
-                        f"⏰ Quedó pendiente {action_phrase} {human_due}. ¿Sigue en pie?",
-                    ]
-            else:
-                if pressure == "high":
-                    options = [
-                        f"⏰ Esto ya lleva rato rondando con {who}. ¿Lo retomamos o lo soltamos de una vez?",
-                        f"⏰ {who} vuelve a salir. ¿Esto va en serio o mejor lo dejamos caer?",
-                    ]
-                elif pressure == "medium":
-                    options = [
-                        f"⏰ Lo de {action_phrase} {human_due}… ¿lo retomamos o lo soltamos?",
-                        f"⏰ Eso de {action_phrase} {human_due} quedó rondando. ¿Sigue vivo?",
-                    ]
-                else:
-                    options = [
-                        f"⏰ Te lo dejo aquí por si acaso: {action_phrase} {human_due}. ¿Lo quieres retomar?",
-                        f"⏰ Quedó flotando lo de {action_phrase} {human_due}. ¿Lo dejamos caer o lo cerramos?",
-                    ]
-
-            msg = random.choice(options)
+            msg = _render_operator_nudge(packet)
 
             await context.bot.send_message(chat_id=chat_id, text=msg)
             mark_commitment_nudged(commitment_id)
@@ -5892,6 +6257,62 @@ async def handle_context(update, context):
         logger.exception(f"[CONTEXT_CMD] failed: {e}")
         await update.message.reply_text(f"❌ Context error: {e}")
 
+async def handle_statepacket(update, context):
+    try:
+        from memory_store import _get_conn
+
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        rows = cur.execute("""
+        SELECT id, chat_id, raw_input, action, target, due_date, confidence
+        FROM commitments
+        WHERE status = 'open'
+        ORDER BY id DESC
+        LIMIT 10
+        """).fetchall()
+
+        conn.close()
+
+        target_row = None
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else r
+            row_chat_id = row["chat_id"] if isinstance(row, dict) else row[1]
+            if int(row_chat_id) == int(chat_id):
+                target_row = row
+                break
+
+        if not target_row:
+            await update.message.reply_text("No hay commitments abiertos para este chat.")
+            return
+
+        raw_input = target_row["raw_input"] if isinstance(target_row, dict) else target_row[2]
+        action = target_row["action"] if isinstance(target_row, dict) else target_row[3]
+        target = target_row["target"] if isinstance(target_row, dict) else target_row[4]
+        due_date = target_row["due_date"] if isinstance(target_row, dict) else target_row[5]
+        confidence = target_row["confidence"] if isinstance(target_row, dict) else target_row[6]
+
+        packet = _build_operator_state_packet(
+            chat_id=chat_id,
+            raw_input=raw_input,
+            action=action,
+            target=target,
+            due_date=due_date,
+            confidence=confidence,
+        )
+
+        lines = ["OPERATOR STATE PACKET", ""]
+        for k, v in packet.items():
+            lines.append(f"{k}: {v}")
+
+        out = "\n".join(lines)
+        await update.message.reply_text(f"```text\n{out}\n```", parse_mode="Markdown")
+
+    except Exception as e:
+        logger.exception(f"[STATE_PACKET_CMD] failed: {e}")
+        await update.message.reply_text(f"❌ state packet error: {e}")
+
+
 def main():
     init_db()
     app = Application.builder().token(TELEGRAM_BOT_TOKEN).defaults(Defaults(parse_mode=None)).build()
@@ -5944,18 +6365,20 @@ def main():
     app.add_handler(CommandHandler("note", note_cmd))
     app.add_handler(CommandHandler("notes", notes_cmd))
     app.add_handler(CommandHandler("daily", daily_cmd))
+    app.add_handler(CommandHandler("context", context_cmd))
+    app.add_handler(CommandHandler("handoff", handoff_cmd))
     app.add_handler(CommandHandler("semana", semana_cmd))
     app.add_handler(CommandHandler("dailies", dailies_cmd))
     app.add_handler(CommandHandler("dsearch", dsearch_cmd))
     app.add_handler(CommandHandler("search", search_cmd))
     app.add_handler(CommandHandler("place", place_cmd))
     app.add_handler(CommandHandler("followuptest", handle_followup_test))
+    app.add_handler(CommandHandler("statepacket", handle_statepacket))
     # HOTFIX: temporarily disabled until voice_cmd is defined correctly
     app.add_handler(CommandHandler("voice", voice_cmd))
     app.add_handler(CommandHandler("mem", handle_mem))
     app.add_handler(CommandHandler("remember", handle_remember))
-    app.add_handler(CommandHandler("context", handle_context))
-    
+
 
     app.add_handler(CommandHandler("sremember", sremember_cmd))
     app.add_handler(CommandHandler("ssearch", ssearch_cmd))

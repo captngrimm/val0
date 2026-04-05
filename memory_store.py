@@ -605,6 +605,34 @@ def delete_fact(chat_id: int, fact_key: str) -> None:
         conn.commit()
         conn.close()
 
+def save_fact(chat_id: int, fact_key: str, fact_value: str, _impl=upsert_fact):
+    return _impl(chat_id=chat_id, fact_key=fact_key, fact_value=fact_value)
+
+
+def fetch_fact(chat_id: int, fact_key: str):
+    rows = get_facts(chat_id=chat_id, limit=500)
+    for row in rows:
+        try:
+            if row.get("fact_key") == fact_key:
+                return row.get("fact_value")
+        except Exception:
+            pass
+    return None
+
+
+def fetch_all_facts(chat_id: int):
+    rows = get_facts(chat_id=chat_id, limit=500)
+    out = {}
+    for row in rows:
+        try:
+            k = row.get("fact_key")
+            v = row.get("fact_value")
+            if k:
+                out[k] = v
+        except Exception:
+            pass
+    return out
+
 # ==========================================================
 # COMPATIBILITY LAYER — keep old bot.py alive
 # ==========================================================
@@ -740,14 +768,32 @@ def revert_reminder_pending(reminder_id: int):
 # ==========================================================
 
 def get_fact(chat_id: int, fact_key: str):
-    # If your real function is named differently, swap it here.
-    return fetch_fact(chat_id, fact_key) if "fetch_fact" in globals() else None
+    rows = get_facts(chat_id=chat_id, limit=500)
+    for row in rows:
+        try:
+            if row.get("fact_key") == fact_key:
+                return row.get("fact_value")
+        except Exception:
+            pass
+    return None
+
 
 def upsert_fact(chat_id: int, fact_key: str, fact_value: str):
-    return save_fact(chat_id, fact_key, fact_value) if "save_fact" in globals() else None
+    return save_fact(chat_id, fact_key, fact_value)
+
 
 def get_all_facts(chat_id: int):
-    return fetch_all_facts(chat_id) if "fetch_all_facts" in globals() else []
+    rows = get_facts(chat_id=chat_id, limit=500)
+    out = {}
+    for row in rows:
+        try:
+            k = row.get("fact_key")
+            v = row.get("fact_value")
+            if k:
+                out[k] = v
+        except Exception:
+            pass
+    return out
 
 # --- Compat alias (tests + older callers) ---
 def get_recent_messages(chat_id: int, limit: int = 30):
@@ -1965,7 +2011,8 @@ def close_matching_commitment(chat_id: int, text: str):
 
         cur.execute("""
             UPDATE commitments
-            SET status='done'
+            SET status='done',
+                completed_at=CURRENT_TIMESTAMP
             WHERE id=?
         """, (int(commitment_id),))
 
@@ -2046,4 +2093,174 @@ def fetch_recent_memory_by_bucket(chat_id: int, bucket: str = "memory", limit: i
 
         rows = cur.fetchall()
         conn.close()
-        return rows        
+        return rows  
+
+def fetch_completed_commitments_for_target(chat_id: int, target: str, action: str = "", limit: int = 20):
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        if action:
+            cur.execute("""
+                SELECT id, raw_input, action, target, due_date, confidence, status, completed_at, created_at
+                FROM commitments
+                WHERE chat_id=?
+                  AND status='done'
+                  AND target=?
+                  AND action=?
+                  AND completed_at IS NOT NULL
+                ORDER BY id DESC
+                LIMIT ?
+            """, (
+                int(chat_id),
+                target,
+                action,
+                int(limit),
+            ))
+        else:
+            cur.execute("""
+                SELECT id, raw_input, action, target, due_date, confidence, status, completed_at, created_at
+                FROM commitments
+                WHERE chat_id=?
+                  AND status='done'
+                  AND target=?
+                  AND completed_at IS NOT NULL
+                ORDER BY id DESC
+                LIMIT ?
+            """, (
+                int(chat_id),
+                target,
+                int(limit),
+            ))
+
+        rows = cur.fetchall()
+        conn.close()
+        return rows
+
+
+def infer_simple_time_pattern(chat_id: int, target: str, action: str = "", limit: int = 20) -> str:
+    from datetime import datetime
+
+    rows = fetch_completed_commitments_for_target(chat_id, target, action=action, limit=limit)
+    if not rows or len(rows) < 2:
+        return ""
+
+    buckets = {"midday": 0, "night": 0, "other": 0}
+
+    for r in rows:
+        row = dict(r) if hasattr(r, "keys") else r
+        completed_at = row["completed_at"] if isinstance(row, dict) else row[7]
+
+        if not completed_at:
+            continue
+
+        try:
+            dt = datetime.fromisoformat(str(completed_at).replace("Z", "+00:00"))
+            hour = dt.hour
+        except Exception:
+            try:
+                hour = int(str(completed_at)[11:13])
+            except Exception:
+                continue
+
+        if 11 <= hour <= 14:
+            buckets["midday"] += 1
+        elif 18 <= hour or hour <= 2:
+            buckets["night"] += 1
+        else:
+            buckets["other"] += 1
+
+    best = max(buckets, key=buckets.get)
+    if buckets[best] < 2:
+        return ""
+
+    return best      
+
+def infer_time_windows(chat_id: int, target: str, action: str = "", limit: int = 20) -> dict:
+    from datetime import datetime
+
+    rows = fetch_completed_commitments_for_target(chat_id, target, action=action, limit=limit)
+
+    result = {
+        "midday_count": 0,
+        "night_count": 0,
+        "other_count": 0,
+        "has_midday": False,
+        "has_night": False,
+    }
+
+    if not rows:
+        return result
+
+    for r in rows:
+        row = dict(r) if hasattr(r, "keys") else r
+        completed_at = row["completed_at"] if isinstance(row, dict) else row[7]
+
+        if not completed_at:
+            continue
+
+        try:
+            dt = datetime.fromisoformat(str(completed_at).replace("Z", "+00:00"))
+            hour = dt.hour
+        except Exception:
+            try:
+                hour = int(str(completed_at)[11:13])
+            except Exception:
+                continue
+
+        if 11 <= hour <= 14:
+            result["midday_count"] += 1
+        elif 18 <= hour or hour <= 2:
+            result["night_count"] += 1
+        else:
+            result["other_count"] += 1
+
+    result["has_midday"] = result["midday_count"] >= 2
+    result["has_night"] = result["night_count"] >= 2
+
+    return result    
+
+def build_context_snapshot(chat_id: int, limit: int = 5) -> dict:
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    # Open commitments
+    cur.execute("""
+        SELECT action, target, due_date
+        FROM commitments
+        WHERE chat_id=? AND status='open'
+        ORDER BY due_date ASC
+        LIMIT ?
+    """, (int(chat_id), limit))
+    commitments = cur.fetchall() or []
+
+    # Recent memory signals (dedup + filter)
+    cur.execute("""
+        SELECT raw_input
+        FROM memory_items
+        WHERE chat_id=?
+          AND raw_input NOT LIKE 'cd %'
+          AND raw_input NOT LIKE 'source %'
+          AND raw_input NOT LIKE 'python3 %'
+        ORDER BY id DESC
+        LIMIT ?
+    """, (int(chat_id), limit))
+
+    raw_signals = cur.fetchall() or []
+
+    seen = set()
+    signals = []
+
+    for r in raw_signals:
+        text = r["raw_input"] if hasattr(r, "keys") else r[0]
+
+        if text not in seen:
+            signals.append(r)
+            seen.add(text)
+
+    conn.close()
+
+    return {
+        "commitments": commitments,
+        "signals": signals,
+    }
