@@ -75,6 +75,165 @@ def _pick(cols: List[str], names: List[str]) -> Optional[str]:
             return n
     return None
 
+def _task_fingerprint(text: str) -> str:
+    t = (text or "").strip().lower()
+
+    # normalize accents
+    import unicodedata
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+
+    # strip punctuation
+    import re
+    t = re.sub(r"[^\w\s]", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+
+    # light stopword cleanup for better near-match grouping
+    stopwords = {
+        "el", "la", "los", "las", "un", "una", "al", "del",
+        "que", "de", "para", "por", "con", "y",
+    }
+    words = [w for w in t.split() if w not in stopwords]
+
+    return " ".join(words)
+
+
+def _levenshtein(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, start=1):
+        curr = [i]
+        for j, cb in enumerate(b, start=1):
+            ins = curr[j - 1] + 1
+            dele = prev[j] + 1
+            sub = prev[j - 1] + (0 if ca == cb else 1)
+            curr.append(min(ins, dele, sub))
+        prev = curr
+    return prev[-1]
+
+
+def _looks_like_near_duplicate(a: str, b: str) -> bool:
+    fa = _task_fingerprint(a)
+    fb = _task_fingerprint(b)
+
+    if not fa or not fb:
+        return False
+
+    if fa == fb:
+        return True
+
+    # token overlap
+    sa = set(fa.split())
+    sb = set(fb.split())
+    if sa and sb:
+        overlap = len(sa & sb) / max(1, min(len(sa), len(sb)))
+        if overlap >= 0.8:
+            return True
+
+    # fuzzy distance for small STT variations like test / tess
+    dist = _levenshtein(fa, fb)
+    max_len = max(len(fa), len(fb))
+    if max_len <= 0:
+        return False
+
+    similarity = 1 - (dist / max_len)
+    return similarity >= 0.88
+
+def _load_open_commitments(conn, chat_id: int, limit: int = 8) -> List[str]:
+    table = _detect_table(conn, ["commitments"])
+    if not table:
+        return []
+
+    cols = _detect_columns(conn, table)
+    chat_col = _pick(cols, ["chat_id", "user_id"])
+    raw_col = _pick(cols, ["raw_input", "task_text", "text", "content", "title"])
+    action_col = _pick(cols, ["action"])
+    target_col = _pick(cols, ["target"])
+    due_col = _pick(cols, ["due_date", "due_at", "deadline"])
+    status_col = _pick(cols, ["status"])
+    created_col = _pick(cols, ["created_at", "ts", "timestamp", "id"])
+
+    if not raw_col:
+        return []
+
+    where_parts = []
+    params: List[Any] = []
+
+    if chat_col:
+        where_parts.append(f"{chat_col}=?")
+        params.append(chat_id)
+
+    if status_col:
+        where_parts.append(f"COALESCE({status_col}, 'open')='open'")
+
+    where_sql = ""
+    if where_parts:
+        where_sql = "WHERE " + " AND ".join(where_parts)
+
+    if due_col:
+        order_sql = f"ORDER BY CASE WHEN {due_col} IS NULL OR {due_col}='' THEN 1 ELSE 0 END, {due_col} ASC"
+    elif created_col:
+        order_sql = f"ORDER BY {created_col} DESC"
+    else:
+        order_sql = ""
+
+    rows = _safe_fetchall(
+        conn,
+        f"""
+        SELECT * FROM {table}
+        {where_sql}
+        {order_sql}
+        LIMIT 50
+        """,
+        tuple(params),
+    )
+
+    out: List[str] = []
+    seen_exact = set()
+    chosen_clean_texts: List[str] = []
+
+    for row in rows:
+        raw_val = row[raw_col]
+        if not raw_val:
+            continue
+
+        clean = _trim(str(raw_val).replace("\n", " "), 140)
+        exact_norm = clean.lower().rstrip(".!?")
+
+        if not clean:
+            continue
+
+        if exact_norm in seen_exact:
+            continue
+
+        is_dup = False
+        for prev in chosen_clean_texts:
+            if _looks_like_near_duplicate(clean, prev):
+                is_dup = True
+                break
+
+        if is_dup:
+            continue
+
+        seen_exact.add(exact_norm)
+        chosen_clean_texts.append(clean)
+
+        due_val = row[due_col] if due_col else None
+        if due_val:
+            out.append(f"- {clean} ({str(due_val).strip()})")
+        else:
+            out.append(f"- {clean}")
+
+        if len(out) >= limit:
+            break
+
+    return out
 
 def _load_open_tasks(conn, chat_id: int, limit: int = 8) -> List[str]:
     table = _detect_table(conn, ["tasks", "task_items", "todo_items"])
@@ -126,7 +285,8 @@ def _load_open_tasks(conn, chat_id: int, limit: int = 8) -> List[str]:
     )
 
     out: List[str] = []
-    seen = set()
+    seen_exact = set()
+    chosen_clean_texts: List[str] = []
 
     junk_phrases = [
         "follow up action detected from audio",
@@ -148,15 +308,26 @@ def _load_open_tasks(conn, chat_id: int, limit: int = 8) -> List[str]:
             continue
 
         clean = _trim(raw.replace("\n", " "), 140)
-        norm = clean.lower().rstrip(".!?")
+        exact_norm = clean.lower().rstrip(".!?")
 
         if not clean:
             continue
 
-        if norm in seen:
+        if exact_norm in seen_exact:
             continue
 
-        seen.add(norm)
+        # near-duplicate suppression
+        is_dup = False
+        for prev in chosen_clean_texts:
+            if _looks_like_near_duplicate(clean, prev):
+                is_dup = True
+                break
+
+        if is_dup:
+            continue
+
+        seen_exact.add(exact_norm)
+        chosen_clean_texts.append(clean)
 
         due_val = row[due_col] if due_col else None
         if due_val:
@@ -410,7 +581,7 @@ def build_context_snapshot(
     conn.row_factory = getattr(conn, "row_factory", None) or __import__("sqlite3").Row
 
     try:
-        open_tasks = _load_open_tasks(conn, chat_id)
+        open_tasks = _load_open_commitments(conn, chat_id) or _load_open_tasks(conn, chat_id)
         recent_signals = _load_recent_signals(conn, chat_id)
         priority = priority_lines or _load_priority(conn, chat_id) or _fallback_priority()
         build_status = build_status_lines or ["- status facts unavailable"]
@@ -447,13 +618,3 @@ def build_context_snapshot(
         conn.close()
 
 
-def build_handoff_prompt(chat_id: int) -> str:
-    snapshot = build_context_snapshot(chat_id=chat_id)
-    return (
-        "We are continuing PX01 Val0 development.\n\n"
-        "Live system snapshot:\n\n"
-        f"{snapshot}\n\n"
-        "Act as Val in operator mode.\n"
-        "Give exact code instructions only.\n\n"
-        "continue from here"
-    )
