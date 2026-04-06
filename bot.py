@@ -37,6 +37,8 @@ import asyncio
 from core.mode import try_set_mode
 
 from core.context_snapshot import build_context_snapshot
+from core.reminder_actions import parse_reminder_action, apply_reminder_action
+
 
 
 # --- MIGUEL MVP: gates wiring (safe optional imports) ---
@@ -1623,19 +1625,30 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if bucket == "task":
         from memory_store import upsert_commitment
+        from datetime import datetime, timedelta
 
         confidence = summary.replace("task_", "")
+
         commitment = _extract_commitment_from_text(transcribed_text, confidence=confidence)
 
-        if commitment:
-            upsert_commitment(
-                chat_id=int(chat_id),
-                raw_input=commitment["raw_input"],
-                action=commitment["action"],
-                target=commitment["target"],
-                due_date=commitment["due_date"],
-                confidence=commitment["confidence"],
-            )
+        # --- FALLBACK: FORCE COMMITMENT IF EXTRACTION FAILS ---
+        if not commitment:
+            commitment = {
+                "raw_input": transcribed_text,
+                "action": transcribed_text,
+                "target": None,
+                "due_date": (datetime.utcnow() + timedelta(minutes=5)).isoformat(),
+                "confidence": "forced",
+            }
+
+        upsert_commitment(
+            chat_id=int(chat_id),
+            raw_input=commitment["raw_input"],
+            action=commitment["action"],
+            target=commitment["target"],
+            due_date=commitment["due_date"],
+            confidence=commitment["confidence"],
+        )
 
     await _maybe_capture_case_note(update, chat_id, transcribed_text, source="voice", silent=True)
 
@@ -5315,6 +5328,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
         return
 
+    # Reminder action intercept
+    try:
+        parsed = parse_reminder_action(text)
+        if parsed:
+            result = apply_reminder_action(chat_id, parsed)
+            if result:
+                await update.message.reply_text(result)
+                return
+    except Exception as e:
+        logger.exception(f"[REMINDER_ACTION] failed: {e}")
+
+
     _audit(
         chat_id,
         action="IN_TEXT",
@@ -5344,6 +5369,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text and not text.startswith("/"):
             bucket, summary = classify_memory_item(text, source="text")
 
+            # --- HARD TASK OVERRIDE (critical for reliability) ---
+            text_low = (text or "").lower()
+            force_task = any(x in text_low for x in [
+                "tengo que",
+                "i need to",
+                "i have to",
+                "debo",
+                "must",
+            ])
+
+            if force_task:
+                bucket = "task"
+                summary = "task_forced"
+
             logger.info(
                 f"[MEMORY_TEST_TEXT] inserting memory for chat_id={chat_id}: "
                 f"bucket={bucket} summary={summary} text={text}"
@@ -5358,19 +5397,29 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if bucket == "task":
                 from memory_store import upsert_commitment
+                from datetime import datetime, timedelta
 
                 confidence = summary.replace("task_", "")
                 commitment = _extract_commitment_from_text(text, confidence=confidence)
 
-                if commitment:
-                    upsert_commitment(
-                        chat_id=int(chat_id),
-                        raw_input=commitment["raw_input"],
-                        action=commitment["action"],
-                        target=commitment["target"],
-                        due_date=commitment["due_date"],
-                        confidence=commitment["confidence"],
-                    )
+                # --- FALLBACK: FORCE COMMITMENT IF EXTRACTION FAILS ---
+                if not commitment:
+                    commitment = {
+                        "raw_input": text,
+                        "action": text,
+                        "target": None,
+                        "due_date": (datetime.utcnow() + timedelta(minutes=5)).isoformat(),
+                        "confidence": "forced",
+                    }
+
+                upsert_commitment(
+                    chat_id=int(chat_id),
+                    raw_input=commitment["raw_input"],
+                    action=commitment["action"],
+                    target=commitment["target"],
+                    due_date=commitment["due_date"],
+                    confidence=commitment["confidence"],
+                )
     except Exception as e:
         logger.exception(f"[MEMORY_TEXT_INSERT] failed: {e}")
 
