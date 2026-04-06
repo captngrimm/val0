@@ -103,6 +103,7 @@ from memory_store import (
     upsert_daily_log,
     get_daily_logs,
     search_daily_logs,
+    log_action,
 
     fetch_due_reminders,
     claim_due_reminders,
@@ -5298,6 +5299,23 @@ def _looks_like_completion(text: str) -> bool:
 
     return any(m in low for m in markers)
 
+async def send_telegram_reply(update, text: str, chat_id: int, action_type: str = "telegram_outbound"):
+    try:
+        if not update or not update.message:
+            return None
+
+        sent = await update.message.reply_text(text)
+
+        try:
+            log_action(chat_id, action_type, text)
+        except Exception:
+            pass
+
+        return sent
+    except Exception as e:
+        logger.exception(f"[TG_OUTBOUND] failed: {e}")
+        return None
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -5320,10 +5338,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from memory_store import save_fact
             save_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
 
-            await update.message.reply_text("Priority updated.")
+            await send_telegram_reply(update, "Priority updated.", chat_id, "priority_reply")
+            log_action(chat_id, "priority_update", value)
         except Exception:
             try:
-                await update.message.reply_text("Priority updated.")
+                await send_telegram_reply(update, "Priority updated.", chat_id, "priority_reply")
             except Exception:
                 pass
         return
@@ -5334,7 +5353,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if parsed:
             result = apply_reminder_action(chat_id, parsed)
             if result:
-                await update.message.reply_text(result)
+                await send_telegram_reply(update, result, chat_id, "reminder_action_reply")
                 return
     except Exception as e:
         logger.exception(f"[REMINDER_ACTION] failed: {e}")
@@ -5357,7 +5376,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             closed = close_matching_commitment(int(chat_id), text)
             if closed:
                 raw_input = closed["raw_input"] if hasattr(closed, "keys") else closed[1]
-                await update.message.reply_text(f"✅ Perfecto. Marco esto como resuelto:\n- {raw_input}")
+                await send_telegram_reply(update, f"✅ Perfecto. Marco esto como resuelto:\n- {raw_input}", chat_id, "completion_reply")
+                log_action(chat_id, "task_closed", raw_input)
                 return
     except Exception as e:
         logger.exception(f"[COMPLETION_LOOP] failed: {e}")
@@ -5420,6 +5440,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     due_date=commitment["due_date"],
                     confidence=commitment["confidence"],
                 )
+                log_action(chat_id, "task_created", commitment["raw_input"])
     except Exception as e:
         logger.exception(f"[MEMORY_TEXT_INSERT] failed: {e}")
 
@@ -5898,7 +5919,7 @@ async def context_cmd(update, context):
         snapshot = f"🧠 CONTEXT SNAPSHOT\n\nERROR: {str(e)}"
 
     try:
-        await update.message.reply_text(snapshot)
+        await send_telegram_reply(update, snapshot, chat_id, "context_reply")
     except Exception:
         pass            
 
@@ -5936,7 +5957,7 @@ async def handoff_cmd(update, context):
         handoff = f"We are continuing PX01 Val0 development.\n\nERROR: {str(e)}"
 
     try:
-        await update.message.reply_text(handoff)
+        await send_telegram_reply(update, handoff, chat_id, "handoff_reply")
     except Exception:
         pass
 

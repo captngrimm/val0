@@ -551,6 +551,38 @@ def _ensure_user_facts_table(cur) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_facts_chat ON user_facts(chat_id);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_user_facts_key ON user_facts(chat_id, fact_key);")
 
+def _ensure_action_logs_table(cur):
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS action_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_id INTEGER,
+        action_type TEXT,
+        payload TEXT,
+        status TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_action_logs_chat ON action_logs(chat_id);")
+
+def log_action(chat_id: int, action_type: str, payload: str, status: str = "ok"):
+    try:
+        with _lock:
+            conn = _get_conn()
+            cur = conn.cursor()
+            _ensure_action_logs_table(cur)
+
+            cur.execute(
+                """
+                INSERT INTO action_logs (chat_id, action_type, payload, status)
+                VALUES (?, ?, ?, ?);
+                """,
+                (chat_id, action_type, payload, status),
+            )
+
+            conn.commit()
+            conn.close()
+    except Exception:
+        pass    
 
 def upsert_fact(chat_id: int, fact_key: str, fact_value: str,
                 source: str = "auto", confidence: float = 1.0) -> None:
