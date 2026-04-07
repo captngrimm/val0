@@ -4132,7 +4132,7 @@ Reglas de estructura obligatoria:
                 rows = search_memory(chat_id, "noah", limit=3)
 
                 if rows:
-                    nudge_text = "\n\n(Nota: ya habías mencionado a Noah antes.)"
+                    nudge_text = ""
 
             if nudge_text:
                 effective_context_block += nudge_text
@@ -4156,7 +4156,7 @@ Reglas de estructura obligatoria:
                 if target:
                     msg = f"{target} sigue pendiente. Hazlo hoy y ciérralo."
                 else:
-                    msg = "Eso sigue pendiente. Ciérralo hoy."
+                    msg = f"{raw_input} sigue pendiente. ¿done, tonight o snooze?"
 
                 await update.message.reply_text(msg)
                 return
@@ -4216,7 +4216,7 @@ Reglas de estructura obligatoria:
                     break
 
             if matched_candidate:
-                reply = f"🧠 Ojo: ya habías mencionado '{matched_candidate}' antes.\n\n" + reply
+                reply = f"{str(matched_candidate).strip().title()} ya estaba en tu radar.\n\n" + reply
 
         except Exception as e:
             logger.exception(f"[NUDGE_APPEND] failed: {e}")

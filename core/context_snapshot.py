@@ -603,23 +603,23 @@ def build_context_snapshot(
         lines.append(f"Generated: {_utc_now_iso()}")
         lines.append("")
 
-        lines.append("OPEN TASKS:")
-        lines.extend(open_tasks or ["- none"])
-        lines.append("")
-
-        lines.append("RECENT SIGNALS:")
-        lines.extend(recent_signals or ["- none"])
-        lines.append("")
-
-        lines.append("CURRENT BUILD STATUS:")
-        lines.extend(build_status)
-        lines.append("")
-
-        lines.append("CURRENT PRIORITY:")
+        lines.append("PRIORITY")
         lines.extend(priority or ["- none"])
         lines.append("")
 
-        lines.append("HANDOFF DIRECTIVE:")
+        lines.append("OPEN TASKS")
+        lines.extend(open_tasks or ["- none"])
+        lines.append("")
+
+        lines.append("RECENT SIGNALS")
+        lines.extend(recent_signals or ["- none"])
+        lines.append("")
+
+        lines.append("BUILD STATUS")
+        lines.extend(build_status)
+        lines.append("")
+
+        lines.append("HANDOFF")
         lines.append("- Continue from current PX01 Val0 state without re-planning completed systems.")
         lines.append("- Prioritize continuity preservation, /context refinement, and persistent interface work.")
         lines.append("- Treat unresolved open tasks and recent commitments as live.")
