@@ -35,9 +35,19 @@ _RE_TOMORROW_AT = re.compile(
     rf"(?is)^\s*{_VERB}\s+(?P<what>.+?)\s+ma[nñ]ana\s+(?:a\s+las?\s+)?{_TIME_TOKEN}\s*$"
 )
 
+# allow: "recuérdame mañana pagar la luz"
+_RE_TOMORROW_PLAIN = re.compile(
+    rf"(?is)^\s*{_VERB}\s+ma[nñ]ana\s+(?P<what>.+?)\s*$"
+)
+
 # Cancel by id: "cancela 28" / "olvida el recordatorio #28"
 _RE_CANCEL = re.compile(
     r"(?is)^\s*(?:olvida|cancela|borra)\s+(?:el\s+)?(?:recordatorio\s+)?#?(?P<rid>\d{1,9})\s*$"
+)
+
+# Cancel by text: "cancela el recordatorio de pagar la luz"
+_RE_CANCEL_TEXT = re.compile(
+    r"(?is)^\s*(?:olvida|cancela|borra)\s+(?:el\s+)?(?:recordatorio\s+)?(?:de\s+)?(?P<what>.+?)\s*$"
 )
 
 _CASE_RE = re.compile(r"\b(?:expediente|exp|caso|case)\s*[:#]?\s*(?P<cid>\d{4,})\b", re.IGNORECASE)
@@ -146,37 +156,102 @@ async def try_cancel_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         return False
 
     m = _RE_CANCEL.match(t)
-    if not m:
-        return False
+    if m:
+        rid = int(m.group("rid") or "0")
+        if rid <= 0:
+            await update.message.reply_text("ID inválido.")
+            return True
 
-    rid = int(m.group("rid") or "0")
-    if rid <= 0:
-        await update.message.reply_text("ID inválido.")
+        try:
+            from memory_store import cancel_reminder
+
+            ok = cancel_reminder(chat_id=int(chat_id), rid=rid)
+        except Exception:
+            ok = False
+
+        if audit_fn:
+            audit_fn(
+                chat_id=int(chat_id),
+                action="CMD_REMINDER_CANCEL",
+                entity_type="reminder",
+                entity_id=str(rid),
+                payload=f"rid={rid} ok={ok}"[:200],
+                source="dm",
+            )
+
+        if ok:
+            await update.message.reply_text(f"Listo. Cancelé el recordatorio #{rid}.")
+        else:
+            await update.message.reply_text(
+                f"No pude cancelar #{rid}. Puede que no exista, no sea tuyo, o ya esté enviado/cancelado."
+            )
         return True
 
-    # Only cancel pending/sending, and only for this chat_id (enforced in DB layer)
-    try:
-        from memory_store import cancel_reminder
+    m_text = _RE_CANCEL_TEXT.match(t)
+    if not m_text:
+        return False
 
-        ok = cancel_reminder(chat_id=int(chat_id), rid=rid)
+    what = (m_text.group("what") or "").strip()
+    if not what:
+        return False
+
+    try:
+        from memory_store import _get_conn
+
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, text
+            FROM reminders
+            WHERE chat_id = ?
+              AND status IN ('pending', 'sending')
+            ORDER BY id DESC
+            """,
+            (int(chat_id),),
+        )
+        rows = cur.fetchall()
+        conn.close()
+
+        target_norm = re.sub(r"\s+", " ", what.strip().lower())
+        match_id = None
+
+        for row in rows:
+            rid = row["id"] if hasattr(row, "keys") else row[0]
+            rtext = row["text"] if hasattr(row, "keys") else row[1]
+            rnorm = re.sub(r"\s+", " ", str(rtext or "").strip().lower())
+            if rnorm == target_norm:
+                match_id = int(rid)
+                break
+
+        if match_id is None:
+            await update.message.reply_text(
+                f"No encontré un recordatorio activo para: {what}"
+            )
+            return True
+
+        from memory_store import cancel_reminder
+        ok = cancel_reminder(chat_id=int(chat_id), rid=match_id)
+
     except Exception:
         ok = False
+        match_id = None
 
     if audit_fn:
         audit_fn(
             chat_id=int(chat_id),
             action="CMD_REMINDER_CANCEL",
             entity_type="reminder",
-            entity_id=str(rid),
-            payload=f"rid={rid} ok={ok}"[:200],
+            entity_id=str(match_id) if match_id else None,
+            payload=f"text={what} ok={ok}"[:200],
             source="dm",
         )
 
-    if ok:
-        await update.message.reply_text(f"Listo. Cancelé el recordatorio #{rid}.")
+    if ok and match_id:
+        await update.message.reply_text(f"Listo. Cancelé el recordatorio de {what}.")
     else:
         await update.message.reply_text(
-            f"No pude cancelar #{rid}. Puede que no exista, no sea tuyo, o ya esté enviado/cancelado."
+            f"No pude cancelar el recordatorio de {what}."
         )
     return True
 
@@ -310,6 +385,40 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
             )
 
         await update.message.reply_text(f"Listo. Te lo recuerdo mañana a las {h:02d}:{minute:02d}.")
+        return True
+    
+    # 3b) "mañana X" (default 09:00 local)
+    m = _RE_TOMORROW_PLAIN.match(t)
+    if m:
+        what = (m.group("what") or "").strip()
+        if not what:
+            await update.message.reply_text("¿Qué quieres que recuerde mañana?")
+            return True
+
+        nowL = _now_local()
+        dueL = (nowL + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+        due_str = _to_utc_iso(dueL)
+        parent_ref = _extract_case_parent_ref(what)
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
+
+        if audit_fn:
+            audit_fn(
+                chat_id=int(chat_id),
+                action="CMD_REMINDER_CREATE",
+                entity_type="reminder",
+                entity_id=str(rid),
+                payload=f"mode=tomorrow_plain | due_at_utc={due_str} | local={dueL.isoformat()} | text={what}"[:500],
+                source="dm",
+            )
+
+        await update.message.reply_text("Listo. Te lo recuerdo mañana a las 09:00.")
         return True
 
     # 4) "hoy a las ..." / "a las ..."

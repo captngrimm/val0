@@ -4280,7 +4280,7 @@ Reglas de estructura obligatoria:
             elif not is_trivial and len(tasks) == 1:
                 should_nudge = True
 
-            if should_nudge:
+            if should_nudge and reply:
                 nudge_lines = [f"⚠️ Tienes {len(tasks)} tarea(s) abierta(s):"]
                 for t in tasks[:2]:
                     nudge_lines.append(f"- {t}")
