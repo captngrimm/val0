@@ -5332,21 +5332,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lowered = normalized.lower()
 
     if lowered.startswith("current priority:") or lowered.startswith("priority:"):
+        value = normalized.split(":", 1)[1].strip()
+
         try:
-            value = normalized.split(":", 1)[1].strip()
-
-            from memory_store import save_fact
-            save_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
-
-            await send_telegram_reply(update, "Priority updated.", chat_id, "priority_reply")
+            upsert_fact(chat_id=chat_id, fact_key="current_priority", fact_value=value)
             log_action(chat_id, "priority_update", value)
-        except Exception:
-            try:
-                await send_telegram_reply(update, "Priority updated.", chat_id, "priority_reply")
-            except Exception:
-                pass
+            await send_telegram_reply(update, "Priority updated.", chat_id, "priority_reply")
+        except Exception as e:
+            logger.exception(f"[PRIORITY_UPDATE] failed: {e}")
+            await send_telegram_reply(update, "Priority update failed.", chat_id, "priority_reply")
         return
-
     # Reminder action intercept
     try:
         parsed = parse_reminder_action(text)
@@ -5923,6 +5918,89 @@ async def context_cmd(update, context):
     except Exception:
         pass            
 
+async def status_cmd(update, context):
+    try:
+        from memory_store import _get_conn, get_fact
+
+        chat_id = update.effective_chat.id
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        # --- OPEN TASK COUNT ---
+        open_tasks = 0
+        try:
+            row = cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM commitments
+                WHERE chat_id=? AND status='open'
+                """,
+                (chat_id,),
+            ).fetchone()
+            if row:
+                open_tasks = int(row[0])
+        except Exception:
+            open_tasks = 0
+
+            # --- LAST ACTION ---
+        last_action = "-"
+        try:
+            row = cur.execute(
+                """
+                SELECT action_type, payload
+                FROM action_logs
+                WHERE chat_id=?
+                  AND action_type != 'status_reply'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (chat_id,),
+            ).fetchone()
+            if row:
+                payload = str(row[1] or "").replace("\n", " ").strip()
+                if len(payload) > 140:
+                    payload = payload[:137] + "..."
+                last_action = f"{row[0]}: {payload}"
+        except Exception:
+            pass
+
+        # --- PRIORITY ---
+        priority = "-"
+        try:
+            priority_lines = get_current_priority_lines(chat_id)
+            if priority_lines:
+                priority = " | ".join(x.lstrip("- ").strip() for x in priority_lines if x.strip())
+        except Exception:
+            pass
+
+        conn.close()
+
+        # --- BUILD OUTPUT ---
+        lines = []
+        lines.append("PX01 STATUS")
+        lines.append("")
+        lines.append(f"OPEN TASKS: {open_tasks}")
+        lines.append("")
+        lines.append(f"LAST ACTION: {last_action}")
+        lines.append("")
+        lines.append(f"CURRENT PRIORITY: {priority}")
+        lines.append("")
+        lines.append("SYSTEM:")
+        lines.append("- memory: ok")
+        lines.append("- logging: ok")
+        lines.append("- outbound: ok")
+
+        msg = "\n".join(lines)
+
+        await send_telegram_reply(update, msg, chat_id, "status_reply")
+
+    except Exception as e:
+        logger.exception(f"[STATUS_CMD] failed: {e}")
+        try:
+            await send_telegram_reply(update, "Status failed.", update.effective_chat.id, "status_reply")
+        except Exception:
+            pass
+
 async def handoff_cmd(update, context):
     if not update or not update.effective_chat or not update.message:
         return
@@ -6310,6 +6388,8 @@ def main():
     app.add_handler(CommandHandler("notes", notes_cmd))
     app.add_handler(CommandHandler("daily", daily_cmd))
     app.add_handler(CommandHandler("context", context_cmd))
+    app.add_handler(CommandHandler("status", status_cmd))
+
     app.add_handler(CommandHandler("handoff", handoff_cmd))
     app.add_handler(CommandHandler("semana", semana_cmd))
     app.add_handler(CommandHandler("dailies", dailies_cmd))

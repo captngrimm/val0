@@ -589,21 +589,34 @@ def upsert_fact(chat_id: int, fact_key: str, fact_value: str,
     """
     bot.py expects this.
     Stores durable user facts (lightweight "infinite memory" seed).
+
+    Uses INSERT OR IGNORE + UPDATE for compatibility with older SQLite/SQLCipher builds.
     """
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
         _ensure_user_facts_table(cur)
 
-        cur.execute("""
-        INSERT INTO user_facts (chat_id, fact_key, fact_value, source, confidence, updated_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
-        ON CONFLICT(chat_id, fact_key) DO UPDATE SET
-            fact_value=excluded.fact_value,
-            source=excluded.source,
-            confidence=excluded.confidence,
-            updated_at=datetime('now');
-        """, (chat_id, fact_key, fact_value, source, confidence))
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO user_facts
+            (chat_id, fact_key, fact_value, source, confidence, updated_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            """,
+            (chat_id, fact_key, fact_value, source, confidence),
+        )
+
+        cur.execute(
+            """
+            UPDATE user_facts
+            SET fact_value=?,
+                source=?,
+                confidence=?,
+                updated_at=datetime('now')
+            WHERE chat_id=? AND fact_key=?
+            """,
+            (fact_value, source, confidence, chat_id, fact_key),
+        )
 
         conn.commit()
         conn.close()
