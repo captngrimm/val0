@@ -104,6 +104,9 @@ from memory_store import (
     get_daily_logs,
     search_daily_logs,
     log_action,
+    has_processed_event,
+    mark_processed_event,
+    mark_processed_event_once,
 
     fetch_due_reminders,
     claim_due_reminders,
@@ -5327,6 +5330,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     tg_msg_id = getattr(update.message, "message_id", None)
 
+    event_key = f"tg_text:{chat_id}:{tg_msg_id}:{text}"
+    try:
+        inserted = mark_processed_event_once(event_key, "tg_text")
+        if not inserted:
+            logger.info(f"[IDEMPOTENCY] skip duplicate text event: {event_key}")
+            return
+    except Exception as e:
+        logger.exception(f"[IDEMPOTENCY] text guard failed: {e}")
+
     raw = (text or "").strip()
     normalized = re.sub(r"\s+", " ", raw).strip()
     lowered = normalized.lower()
@@ -5346,6 +5358,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         parsed = parse_reminder_action(text)
         if parsed:
+            action_name = parsed.get("action", "unknown")
+            reminder_event_key = f"reminder_action:{chat_id}:{tg_msg_id}:{action_name}:{normalized}"
+
+            inserted = mark_processed_event_once(reminder_event_key, "reminder_action")
+            if not inserted:
+                logger.info(f"[IDEMPOTENCY] skip duplicate reminder action: {reminder_event_key}")
+                return
+
             result = apply_reminder_action(chat_id, parsed)
             if result:
                 await send_telegram_reply(update, result, chat_id, "reminder_action_reply")

@@ -584,6 +584,67 @@ def log_action(chat_id: int, action_type: str, payload: str, status: str = "ok")
     except Exception:
         pass    
 
+def _ensure_processed_events_table(cur):
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS processed_events (
+        event_key TEXT PRIMARY KEY,
+        event_type TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
+    );
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_processed_events_type ON processed_events(event_type);")
+
+
+def has_processed_event(event_key: str) -> bool:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        _ensure_processed_events_table(cur)
+        row = cur.execute(
+            "SELECT 1 FROM processed_events WHERE event_key=? LIMIT 1;",
+            (event_key,),
+        ).fetchone()
+        conn.close()
+        return row is not None
+
+
+def mark_processed_event(event_key: str, event_type: str) -> None:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        _ensure_processed_events_table(cur)
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO processed_events (event_key, event_type)
+            VALUES (?, ?);
+            """,
+            (event_key, event_type),
+        )
+        conn.commit()
+        conn.close()
+
+
+def mark_processed_event_once(event_key: str, event_type: str) -> bool:
+    """
+    Returns True if this call inserted the event for the first time.
+    Returns False if the event already existed.
+    """
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        _ensure_processed_events_table(cur)
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO processed_events (event_key, event_type)
+            VALUES (?, ?);
+            """,
+            (event_key, event_type),
+        )
+        inserted = cur.rowcount == 1
+        conn.commit()
+        conn.close()
+        return inserted    
+
 def upsert_fact(chat_id: int, fact_key: str, fact_value: str,
                 source: str = "auto", confidence: float = 1.0) -> None:
     """
