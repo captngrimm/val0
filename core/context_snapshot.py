@@ -224,6 +224,17 @@ def _load_open_commitments(conn, chat_id: int, limit: int = 8) -> List[str]:
         seen_exact.add(exact_norm)
         chosen_clean_texts.append(clean)
 
+        try:
+            from memory_store import upsert_fact
+            row_id = row["id"] if hasattr(row, "keys") else row[0]
+            upsert_fact(
+                chat_id=chat_id,
+                fact_key="last_surface_commitment_id",
+                fact_value=str(row_id),
+            )
+        except Exception:
+            pass
+
         due_val = row[due_col] if due_col else None
         if due_val:
             out.append(f"- {clean} ({str(due_val).strip()})")

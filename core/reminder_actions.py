@@ -56,16 +56,38 @@ def apply_reminder_action(chat_id: int, parsed: dict):
     if "due_date" in col_names:
         select_cols.append("due_date")
 
-    row = cur.execute(
-        f"""
-        SELECT {", ".join(select_cols)}
-        FROM commitments
-        WHERE chat_id=? AND status='open'
-        ORDER BY id DESC
-        LIMIT 1
-        """,
-        (chat_id,),
-    ).fetchone()
+    # Try last surfaced commitment first
+    row = None
+
+    try:
+        from memory_store import get_fact
+
+        last_id = get_fact(chat_id=chat_id, fact_key="last_surface_commitment_id")
+        if last_id:
+            row = cur.execute(
+                f"""
+                SELECT {", ".join(select_cols)}
+                FROM commitments
+                WHERE id=? AND chat_id=? AND status='open'
+                LIMIT 1
+                """,
+                (int(last_id), chat_id),
+            ).fetchone()
+    except Exception:
+        pass
+
+    # Fallback to latest open
+    if not row:
+        row = cur.execute(
+            f"""
+            SELECT {", ".join(select_cols)}
+            FROM commitments
+            WHERE chat_id=? AND status='open'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (chat_id,),
+        ).fetchone()
 
     if not row:
         conn.close()
