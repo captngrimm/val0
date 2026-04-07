@@ -35,6 +35,7 @@ import asyncio
 
 # === MODE HANDLER (must ALWAYS exist if referenced later) ===
 from core.mode import try_set_mode
+from core.language_utils import render_operator_reminder, resolve_user_language
 
 from core.context_snapshot import build_context_snapshot
 from core.reminder_actions import parse_reminder_action, apply_reminder_action
@@ -5337,18 +5338,6 @@ def _has_explicit_legal_intent(text: str) -> bool:
 # LANGUAGE RESOLUTION (single source of truth)
 # ==========================================================
 
-def resolve_user_language(chat_id: int) -> str:
-    try:
-        lang = get_fact(chat_id=chat_id, fact_key="preferred_language")
-        if lang in ("es", "en"):
-            return lang
-    except Exception:
-        pass
-
-    # DEFAULT → SPANISH (product decision)
-    return "es"
-
-
 def val_select_priority_commitment(commitments: list[dict]) -> dict | None:
     """
     Pick ONE commitment to surface based on priority rules.
@@ -5412,28 +5401,6 @@ def should_emit_inline_operator_nudge(chat_id: int, raw_text: str, cooldown_seco
     except Exception as e:
         logger.exception(f"[INLINE_NUDGE_COOLDOWN] failed: {e}")
         return True
-
-def render_operator_reminder(chat_id: int, raw_text: str, target: str = "") -> str:
-    lang = resolve_user_language(chat_id)
-
-    target_title = str(target or "").strip().title()
-    clean = (raw_text or "").strip()
-
-    if lang == "en":
-        if target_title:
-            return f"{target_title} is still pending. Done, tonight, or snooze?"
-        return f"{clean} is still pending. Done, tonight, or snooze?"
-
-    clean = str(clean or "").strip()
-
-    if clean:
-        clean = clean[:1].upper() + clean[1:]
-
-    clean = re.sub(r"\bnoah\b", "Noah", clean, flags=re.IGNORECASE)
-
-    if target_title:
-        return f"⏰ *{target_title}* sigue pendiente.\n¿Hecho, esta noche o posponer?"
-    return f"⏰ *{clean}* sigue pendiente.\n¿Hecho, esta noche o posponer?"
 
 def _looks_like_completion(text: str) -> bool:
     if not text:
