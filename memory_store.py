@@ -1,6 +1,7 @@
 import os
 import threading
 import logging
+import unicodedata
 from typing import List, Dict, Optional, Any
 
 import re
@@ -738,6 +739,35 @@ def fetch_all_facts(chat_id: int):
         except Exception:
             pass
     return out
+
+# ==========================================================
+# NUDGE / FOLLOW-UP HELPERS (operator layer)
+# ==========================================================
+
+def get_last_nudge_at(chat_id: int, commitment_id: int):
+    try:
+        return get_fact(chat_id, f"last_nudge_at:{commitment_id}")
+    except Exception:
+        return None
+
+def set_last_nudge_at(chat_id: int, commitment_id: int, iso_ts: str):
+    try:
+        upsert_fact(chat_id, f"last_nudge_at:{commitment_id}", iso_ts)
+    except Exception:
+        pass
+
+def get_last_surface_commitment_id(chat_id: int):
+    try:
+        v = get_fact(chat_id, "last_surface_commitment_id")
+        return int(v) if v else None
+    except Exception:
+        return None
+
+def set_last_surface_commitment_id(chat_id: int, commitment_id: int):
+    try:
+        upsert_fact(chat_id, "last_surface_commitment_id", str(commitment_id))
+    except Exception:
+        pass    
 
 # ==========================================================
 # COMPATIBILITY LAYER — keep old bot.py alive
@@ -1957,29 +1987,65 @@ def upsert_commitment(
     due_date: str | None = None,
     confidence: str = "medium",
 ):
+    def _norm(s: str) -> str:
+        s = (s or "").strip().lower()
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        s = re.sub(r"[^\w\s]", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
     with _lock:
         conn = _get_conn()
         cur = conn.cursor()
 
+        norm_input = _norm(raw_input)
+        norm_target = _norm(target)
+
         cur.execute("""
-            SELECT id
+            SELECT id, raw_input, action, target, due_date
             FROM commitments
             WHERE chat_id=?
-              AND raw_input=?
-              AND IFNULL(due_date,'') = IFNULL(?, '')
               AND status='open'
             ORDER BY id DESC
-            LIMIT 1
-        """, (
-            int(chat_id),
-            raw_input,
-            due_date,
-        ))
+            LIMIT 20
+        """, (int(chat_id),))
 
-        row = cur.fetchone()
-        if row:
-            conn.close()
-            return int(row[0]) if not hasattr(row, "keys") else int(row["id"])
+        rows = cur.fetchall()
+
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else {
+                "id": r[0],
+                "raw_input": r[1],
+                "action": r[2],
+                "target": r[3],
+                "due_date": r[4],
+            }
+
+            existing_norm = _norm(row["raw_input"])
+            existing_target = _norm(row["target"])
+
+            same_text = existing_norm == norm_input
+            same_action_target = (
+                action and row["action"] == action and
+                norm_target and existing_target == norm_target
+            )
+
+            if same_text or same_action_target:
+                cur.execute("""
+                    UPDATE commitments
+                    SET due_date = COALESCE(?, due_date),
+                        confidence = ?
+                    WHERE id = ?
+                """, (
+                    due_date,
+                    confidence,
+                    int(row["id"]),
+                ))
+
+                conn.commit()
+                conn.close()
+                return int(row["id"])
 
         cur.execute("""
             INSERT INTO commitments (chat_id, raw_input, action, target, due_date, confidence)
@@ -2009,12 +2075,8 @@ def fetch_due_commitments(limit: int = 20):
             FROM commitments
             WHERE status='open'
               AND due_date IS NOT NULL
-              AND due_date <= date('now')
-              AND (
-                    last_nudged_at IS NULL
-                    OR date(last_nudged_at) < date('now')
-              )
-            ORDER BY due_date ASC, id ASC
+              AND datetime(substr(due_date, 1, 19)) <= CURRENT_TIMESTAMP
+            ORDER BY datetime(substr(due_date, 1, 19)) ASC, id ASC
             LIMIT ?
         """, (int(limit),))
 

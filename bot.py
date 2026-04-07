@@ -233,6 +233,8 @@ _PENDING_CASE_DISAMBIG = {}
 _PENDING_REMINDER_CONFIRM = {}
 # --- last action tracker (demo-safe undo) ---
 _LAST_ACTION = {}
+_OPERATOR_FOLLOWUP_RUNNING = False
+_INLINE_NUDGE_LAST = {}
 # --------------------------------------------------
 # Logging
 # --------------------------------------------------
@@ -1068,10 +1070,40 @@ def call_val_openai(
     system_rules: Optional[str] = None,
 ) -> str:
     try:
+
+        # 🚨 COMMITMENT CONTEXT GUARD
+        try:
+            if _has_active_commitment(user_text):
+                # Do NOT allow LLM to generate task-related responses
+                # Return empty so upstream logic can decide what to do
+                return None
+        except Exception:
+            pass
         messages = [{"role": "system", "content": VAL_SYSTEM_PROMPT}]
 # Additional hard rules injected by pipeline (kept separate from VAL_SYSTEM_PROMPT)
         if system_rules:
             messages.append({"role": "system", "content": system_rules.strip()})
+        # 🚨 HARD BEHAVIOR GUARD (LLM role restriction)
+        messages.append({
+            "role": "system",
+            "content": """
+        CRITICAL BEHAVIOR OVERRIDE:
+
+        - NEVER generate reminders, nudges, or urgency prompts on your own.
+        - NEVER say things like "ya estaba en tu radar", "te insisto", "no lo dejes pasar".
+        - NEVER escalate urgency or repeat pending actions.
+
+        - If the user expresses a pending task (e.g. "tengo que", "debo"):
+        → DO NOT respond about it.
+        → The system will handle it separately.
+
+        - Your role is:
+        → analysis
+        → explanation
+        → answering questions
+        → NOT task enforcement.
+        """
+        })    
 
 
         # Hard language enforcement when preferred_language exists.
@@ -1245,20 +1277,28 @@ def extract_preferred_language(text: str) -> Optional[str]:
     norm = _norm_text(original)
 
     triggers = [
+        "habla en",
         "hablame en",
+        "háblame en",
+        "habla en espanol",
+        "habla en español",
+        "en espanol",
+        "en español",
         "prefiero que me hables en",
         "quiero que me hables en",
         "my preferred language is",
         "i prefer you speak in",
         "speak to me in",
         "talk to me in",
+        "reply in",
+        "respond in",
     ]
     if not any(norm.startswith(t) for t in triggers):
         return None
 
-    if "espanol" in norm or "spanish" in norm:
+    if "espanol" in norm or "español" in original.lower() or "spanish" in norm:
         return "es"
-    if "ingles" in norm or "english" in norm:
+    if "ingles" in norm or "inglés" in original.lower() or "english" in norm:
         return "en"
     return None
 
@@ -1997,7 +2037,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
                     reply = reply + "\n\n📧 También te lo envié por correo."
 
-            if preferred_name and preferred_name.lower() != "boss":
+            if preferred_name and preferred_name.lower() != "boss" and reply:
                 reply = re.sub(r"\bBoss\b", preferred_name, reply)
                 reply = re.sub(r"\bboss\b", preferred_name, reply)
 
@@ -3021,7 +3061,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         break
 
             if due_date:
-                if len(matches) == 1:
+                if _has_explicit_legal_intent(text) and len(matches) == 1:
                     case_id, client_name = matches[0]
 
                     explicit_auto_confirm_prefixes = (
@@ -3111,7 +3151,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     )
                     return
 
-                elif len(matches) > 1:
+                elif _has_explicit_legal_intent(text) and len(matches) > 1:
                     _PENDING_CASE_DISAMBIG[int(chat_id)] = {
                         "type": "reminder",
                         "candidates": matches,
@@ -3297,7 +3337,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     if client_name and client_name.lower() in low:
                         matches.append((str(expediente), client_name))
 
-                if len(matches) == 1:
+                if _has_explicit_legal_intent(text) and len(matches) == 1:
                     case_id, client_name = matches[0]
 
                     _PENDING_TERM_CONFIRM[int(chat_id)] = {
@@ -3318,7 +3358,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     )
                     return
 
-                elif len(matches) > 1:
+                elif _has_explicit_legal_intent(text) and len(matches) > 1:
                     _PENDING_CASE_DISAMBIG[int(chat_id)] = {
                         "type": "term",
                         "candidates": matches,
@@ -4117,28 +4157,9 @@ Reglas de estructura obligatoria:
 
         if advisory_system_rules:
             effective_context_block = summary_block + memory_block
-            effective_semantic_block = ""
+            effective_semantic_block = ""  
 
-        # ---------------------------------------
-        # LIGHT NUDGE (simple pattern)
-        # ---------------------------------------
-        try:
-            from memory_store import search_memory
-
-            nudge_text = ""
-
-            # Example: detect "Noah"
-            if "noah" in (text or "").lower():
-                rows = search_memory(chat_id, "noah", limit=3)
-
-                if rows:
-                    nudge_text = ""
-
-            if nudge_text:
-                effective_context_block += nudge_text
-
-        except Exception as e:
-            logger.exception(f"[NUDGE] failed: {e}")    
+        raw_input = text
 
         name_instruction = ""
         if preferred_name:
@@ -4150,15 +4171,26 @@ Reglas de estructura obligatoria:
         try:
             if _has_active_commitment(text):
 
-                m = re.search(r"\b(?:a|con)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ]+)\b", text or "")
+                m = re.search(
+                    r"\b(?:a|con)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ]+(?:\s+[a-zA-Záéíóúñ]+)?)",
+                    text or ""
+                )
                 target = (m.group(1) if m else "").strip()
+                target_title = str(target).strip().title() if target else ""
 
-                if target:
-                    msg = f"{target} sigue pendiente. Hazlo hoy y ciérralo."
-                else:
-                    msg = f"{raw_input} sigue pendiente. ¿done, tonight o snooze?"
+                if should_emit_inline_operator_nudge(
+                    chat_id=chat_id,
+                    raw_text=raw_input,
+                    cooldown_seconds=180
+                ):
+                    msg = render_operator_reminder(
+                        chat_id=chat_id,
+                        raw_text=raw_input,
+                        target=target_title,
+                    )
+                    await send_telegram_reply(update, msg, chat_id, "operator_inline_nudge")
 
-                await update.message.reply_text(msg)
+                # 🔒 HARD STOP — DO NOT LET ANY OTHER LAYERS RUN
                 return
 
         except Exception as e:
@@ -4216,7 +4248,15 @@ Reglas de estructura obligatoria:
                     break
 
             if matched_candidate:
-                reply = f"{str(matched_candidate).strip().title()} ya estaba en tu radar.\n\n" + reply
+                lang = resolve_user_language(chat_id)
+                candidate_title = str(matched_candidate).strip().title()
+
+                if lang == "en":
+                    if reply:
+                        reply = f"{candidate_title} was already on your radar.\n\n" + reply
+                else:
+                    if reply:
+                        reply = f"{candidate_title} ya estaba en tu radar.\n\n" + reply
 
         except Exception as e:
             logger.exception(f"[NUDGE_APPEND] failed: {e}")
@@ -4330,7 +4370,7 @@ Reglas de estructura obligatoria:
                 clean = txt.split(":", 1)[1].strip() if ":" in txt else txt
                 tasks.append(clean)
 
-        if tasks and not doc_generation_mode:
+        if tasks and not _has_active_commitment(text):
             low = (text or "").lower()
 
             operational_triggers = (
@@ -4421,13 +4461,16 @@ Reglas de estructura obligatoria:
     except Exception as e:
         logger.exception(f"[AUTO_EMAIL] failed: {e}")
 
-    if preferred_name and preferred_name.lower() != "boss":
+    if preferred_name and preferred_name.lower() != "boss" and reply:
         reply = re.sub(r"\bBoss\b", preferred_name, reply)
         reply = re.sub(r"\bboss\b", preferred_name, reply)
 
     logger.info("FORGE MERGE ATTEMPT")
 
-    sent = await _send_reply(update, context, reply)
+    if reply:
+        sent = await _send_reply(update, context, reply)
+    else:
+        return
     try:
         insert_message(
             chat_id=chat_id,
@@ -5268,6 +5311,130 @@ def _has_active_commitment(text: str) -> bool:
 
     return any(m in low for m in markers)    
 
+def _has_explicit_legal_intent(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    legal_markers = [
+        "caso",
+        "expediente",
+        "recordatorio legal",
+        "legal",
+        "registrar en caso",
+        "registrar caso",
+        "en el caso",
+        "para el caso",
+        "case:",
+        "case ",
+        "client_name",
+        "principal_id",
+    ]
+
+    return any(marker in t for marker in legal_markers)
+
+# ==========================================================
+# LANGUAGE RESOLUTION (single source of truth)
+# ==========================================================
+
+def resolve_user_language(chat_id: int) -> str:
+    try:
+        lang = get_fact(chat_id=chat_id, fact_key="preferred_language")
+        if lang in ("es", "en"):
+            return lang
+    except Exception:
+        pass
+
+    # DEFAULT → SPANISH (product decision)
+    return "es"
+
+
+def val_select_priority_commitment(commitments: list[dict]) -> dict | None:
+    """
+    Pick ONE commitment to surface based on priority rules.
+    """
+    if not commitments:
+        return None
+
+    def score(c):
+        due = c.get("due_date") or ""
+        text = (c.get("raw_input") or "").lower()
+
+        urgency = 0
+        if "ahora" in text or "now" in text:
+            urgency += 3
+        if due:
+            urgency += 2
+
+        length_penalty = len(text) * 0.001
+        return urgency - length_penalty
+
+    ranked = sorted(commitments, key=score, reverse=True)
+    return ranked[0]
+
+
+def should_emit_inline_operator_nudge(chat_id: int, raw_text: str, cooldown_seconds: int = 180) -> bool:
+    global _INLINE_NUDGE_LAST
+
+    try:
+        norm = (raw_text or "").strip().lower()
+        norm = unicodedata.normalize("NFKD", norm)
+        norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
+        norm = re.sub(r"[^\w\s]", " ", norm)
+        norm = re.sub(r"\s+", " ", norm).strip()
+
+        if not norm:
+            return True
+
+        key = f"{int(chat_id)}::{norm}"
+        now = datetime.utcnow()
+
+        # --- fast in-memory guard (prevents burst spam in same process) ---
+        last_dt = _INLINE_NUDGE_LAST.get(key)
+        if last_dt is not None:
+            try:
+                if (now - last_dt).total_seconds() < cooldown_seconds:
+                    return False
+            except Exception:
+                pass
+
+        _INLINE_NUDGE_LAST[key] = now
+
+        # --- optional persisted breadcrumb (best-effort only) ---
+        try:
+            fact_key = f"inline_nudge_at:{norm}"
+            upsert_fact(chat_id=chat_id, fact_key=fact_key, fact_value=now.isoformat())
+        except Exception:
+            pass
+
+        return True
+
+    except Exception as e:
+        logger.exception(f"[INLINE_NUDGE_COOLDOWN] failed: {e}")
+        return True
+
+def render_operator_reminder(chat_id: int, raw_text: str, target: str = "") -> str:
+    lang = resolve_user_language(chat_id)
+
+    target_title = str(target or "").strip().title()
+    clean = (raw_text or "").strip()
+
+    if lang == "en":
+        if target_title:
+            return f"{target_title} is still pending. Done, tonight, or snooze?"
+        return f"{clean} is still pending. Done, tonight, or snooze?"
+
+    clean = str(clean or "").strip()
+
+    if clean:
+        clean = clean[:1].upper() + clean[1:]
+
+    clean = re.sub(r"\bnoah\b", "Noah", clean, flags=re.IGNORECASE)
+
+    if target_title:
+        return f"⏰ *{target_title}* sigue pendiente.\n¿Hecho, esta noche o posponer?"
+    return f"⏰ *{clean}* sigue pendiente.\n¿Hecho, esta noche o posponer?"
+
 def _looks_like_completion(text: str) -> bool:
     if not text:
         return False
@@ -5327,6 +5494,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     text = update.message.text.strip()
+    raw_input = text
+    # 🚨 SPAM GUARD — collapse rapid repeated intent
+    try:
+        norm = re.sub(r"\s+", " ", text.lower()).strip()
+
+        now = datetime.utcnow()
+        key = f"recent_text:{chat_id}:{norm}"
+
+        last = _INLINE_NUDGE_LAST.get(key)
+        if last and (now - last).total_seconds() < 2:
+            return  # ignore rapid duplicate
+
+        _INLINE_NUDGE_LAST[key] = now
+
+    except Exception:
+        pass
     chat_id = update.effective_chat.id
     tg_msg_id = getattr(update.message, "message_id", None)
 
@@ -6343,10 +6526,80 @@ def _render_operator_nudge(packet: dict) -> str:
     return random.choice(options)
 
 async def operator_followup_tick(context):
-    try:
-        from memory_store import fetch_due_commitments, mark_commitment_nudged
+    global _OPERATOR_FOLLOWUP_RUNNING
 
-        rows = fetch_due_commitments(limit=20)
+    if _OPERATOR_FOLLOWUP_RUNNING:
+        logger.info("[OPERATOR_FOLLOWUP_TICK] skipped: already running")
+        return
+
+    _OPERATOR_FOLLOWUP_RUNNING = True
+    try:
+        from datetime import datetime, timedelta
+        from memory_store import (
+            fetch_due_commitments,
+            mark_commitment_nudged,
+            get_last_nudge_at,
+            set_last_nudge_at,
+            set_last_surface_commitment_id,
+            log_action,
+            get_fact,
+        )
+
+        NUDGE_COOLDOWN_MINUTES = 10
+
+        def _utcnow_iso():
+            return datetime.utcnow().isoformat()
+
+        def _parse_iso(ts):
+            try:
+                return datetime.fromisoformat(ts)
+            except Exception:
+                return None
+
+        def _norm_text(s: str) -> str:
+            s = (s or "").strip().lower()
+            s = unicodedata.normalize("NFKD", s)
+            s = "".join(ch for ch in s if not unicodedata.combining(ch))
+            s = re.sub(r"[^\w\s]", " ", s)
+            s = re.sub(r"\s+", " ", s).strip()
+            return s
+
+        rows = fetch_due_commitments(limit=50)
+        from datetime import datetime, timedelta
+
+        fresh_cutoff = datetime.utcnow() - timedelta(minutes=3)
+        filtered_rows = []
+
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else {
+                "id": r[0],
+                "chat_id": r[1],
+                "raw_input": r[2],
+                "action": r[3],
+                "target": r[4],
+                "due_date": r[5],
+                "confidence": r[6],
+                "status": r[7],
+                "last_nudged_at": r[8],
+                "created_at": r[9],
+            }
+
+            created_raw = row.get("created_at")
+            if created_raw:
+                try:
+                    created_dt = datetime.fromisoformat(str(created_raw).replace(" ", "T"))
+                    if created_dt > fresh_cutoff:
+                        continue
+                except Exception:
+                    pass
+
+            filtered_rows.append(r)
+
+        rows = filtered_rows
+
+        # one nudge max per chat per tick
+        chosen_by_chat = {}
+        seen_text_by_chat = {}
 
         for r in rows:
             row = dict(r) if hasattr(r, "keys") else r
@@ -6359,22 +6612,82 @@ async def operator_followup_tick(context):
             due_date = row["due_date"] if isinstance(row, dict) else row[5]
             confidence = row["confidence"] if isinstance(row, dict) else row[6]
 
-            packet = _build_operator_state_packet(
-                chat_id=chat_id,
-                raw_input=raw_input,
-                action=action,
-                target=target,
-                due_date=due_date,
-                confidence=confidence,
-            )
+            raw_clean = (raw_input or "").strip()
+            raw_low = raw_clean.lower()
 
-            msg = _render_operator_nudge(packet)
+            # --- skip explicit legal/case-scoped commitments ---
+            if _has_explicit_legal_intent(raw_clean):
+                continue
 
-            await context.bot.send_message(chat_id=chat_id, text=msg)
+            # --- dedupe same/similar text per chat ---
+            norm = _norm_text(raw_clean)
+            if chat_id not in seen_text_by_chat:
+                seen_text_by_chat[chat_id] = set()
+
+            if norm in seen_text_by_chat[chat_id]:
+                continue
+
+            # --- cooldown guard ---
+            allow_nudge = True
+            last_nudge = get_last_nudge_at(int(chat_id), int(commitment_id))
+
+            if last_nudge:
+                last_dt = _parse_iso(last_nudge)
+                if last_dt and (datetime.utcnow() - last_dt) < timedelta(minutes=NUDGE_COOLDOWN_MINUTES):
+                    allow_nudge = False
+
+            if not allow_nudge:
+                continue
+
+            # --- pick only first/best due item per chat ---
+            if int(chat_id) in chosen_by_chat:
+                continue
+
+            chosen_by_chat[int(chat_id)] = {
+                "commitment_id": int(commitment_id),
+                "chat_id": int(chat_id),
+                "raw_input": raw_clean,
+            }
+            seen_text_by_chat[chat_id].add(norm)
+
+        # --- group by chat ---
+        grouped = {}
+        for _, item in chosen_by_chat.items():
+            grouped.setdefault(item["chat_id"], []).append(item)
+
+        # --- send ONE per chat ---
+        for chat_id, items in grouped.items():
+
+            selected = val_select_priority_commitment(items)
+            if not selected:
+                continue
+
+            commitment_id = selected["commitment_id"]
+            clean = str(selected["raw_input"] or "").strip()
+
+            if clean:
+                clean = clean[:1].upper() + clean[1:]
+
+            clean = re.sub(r"\bnoah\b", "Noah", clean, flags=re.IGNORECASE)
+
+            lang = resolve_user_language(int(chat_id))
+
+            if lang == "en":
+                msg = f"⏰ *{clean}* is still pending.\nDone, tonight, or snooze?"
+            else:
+                msg = f"⏰ *{clean}* sigue pendiente.\n¿Hecho, esta noche o posponer?"
+
+            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+
+            set_last_surface_commitment_id(int(chat_id), int(commitment_id))
+            set_last_nudge_at(int(chat_id), int(commitment_id), _utcnow_iso())
             mark_commitment_nudged(commitment_id)
+            log_action(int(chat_id), "operator_nudge", clean)
 
     except Exception as e:
         logger.exception(f"[OPERATOR_FOLLOWUP_TICK] failed: {e}")
+    finally:
+        _OPERATOR_FOLLOWUP_RUNNING = False
 
 async def handle_followup_test(update, context):
     try:
@@ -6456,12 +6769,12 @@ def main():
         # Older versions may not support get_jobs_by_name; ignore and just schedule
         pass
 
-    app.job_queue.run_repeating(
-        operator_followup_tick,
-        interval=3600,
-        first=20,
-        name="OPERATOR_FOLLOWUP_JOB",
-    )
+#    app.job_queue.run_repeating(
+#        operator_followup_tick,
+#        interval=3600,
+#        first=20,
+#        name="OPERATOR_FOLLOWUP_JOB",
+#    )
 
     app.job_queue.run_daily(
         evening_brief_tick,
