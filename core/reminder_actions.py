@@ -13,24 +13,106 @@ def parse_reminder_action(text: str):
     if t in ("done", "hecho", "listo"):
         return {"action": "done"}
 
+    if t.startswith("done "):
+        return {"action": "done", "target_text": text[5:].strip()}
+
     if t in ("now", "ahora", "ya", "ya voy", "voy ahora", "lo hago ahora", "i'll do it now"):
         return {"action": "now"}
+
+    if t.startswith("now "):
+        return {"action": "now", "target_text": text[4:].strip()}
 
     if t in ("later", "luego"):
         return {"action": "snooze", "minutes": 30}
 
-    m = re.search(r"(?:snooze|in)\s*(\d+)", t)
+    if t.startswith("later "):
+        return {"action": "snooze", "minutes": 30, "target_text": text[6:].strip()}
+
+    m = re.match(r"^(?:snooze|in)\s*(\d+)(?:\s+(.+))?$", t)
     if m:
-        return {"action": "snooze", "minutes": int(m.group(1))}
+        out = {"action": "snooze", "minutes": int(m.group(1))}
+        if m.group(2):
+            out["target_text"] = text[m.start(2):].strip()
+        return out
 
     if t in ("tonight", "esta noche", "hoy en la noche"):
         return {"action": "move", "target": "tonight"}
 
+    if t.startswith("tonight "):
+        return {"action": "move", "target": "tonight", "target_text": text[8:].strip()}
+
+    if t.startswith("esta noche "):
+        return {"action": "move", "target": "tonight", "target_text": text[11:].strip()}
+
     if t in ("tomorrow", "mañana"):
         return {"action": "move", "target": "tomorrow"}
 
+    if t.startswith("tomorrow "):
+        return {"action": "move", "target": "tomorrow", "target_text": text[9:].strip()}
+
+    if t.startswith("mañana "):
+        return {"action": "move", "target": "tomorrow", "target_text": text[7:].strip()}
+
     return None
 
+def _normalize_target_text(s: str) -> str:
+    s = (s or "").strip().lower()
+
+    import unicodedata
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+
+    s = re.sub(r"[^\w\s]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _find_open_commitment_by_target(cur, chat_id: int, select_cols, target_text: str):
+    needle = _normalize_target_text(target_text)
+    if not needle:
+        return None
+
+    rows = cur.execute(
+        f"""
+        SELECT {", ".join(select_cols)}
+        FROM commitments
+        WHERE chat_id=? AND status='open'
+        ORDER BY id DESC
+        LIMIT 50
+        """,
+        (chat_id,),
+    ).fetchall()
+
+    best_row = None
+    best_score = 0
+
+    for row in rows:
+        try:
+            raw = str(row[1] or "")
+        except Exception:
+            continue
+
+        hay = _normalize_target_text(raw)
+        if not hay:
+            continue
+
+        score = 0
+        if needle == hay:
+            score = 100
+        elif needle in hay:
+            score = 90
+        else:
+            needle_tokens = set(needle.split())
+            hay_tokens = set(hay.split())
+            overlap = len(needle_tokens & hay_tokens)
+            if overlap > 0:
+                score = overlap * 10
+
+        if score > best_score:
+            best_score = score
+            best_row = row
+
+    return best_row if best_score >= 10 else None
 
 def apply_reminder_action(chat_id: int, parsed: dict):
     if not parsed:
@@ -59,24 +141,34 @@ def apply_reminder_action(chat_id: int, parsed: dict):
     # Try last surfaced commitment first
     row = None
 
+    # 1) Explicit named target wins first
     try:
-        from memory_store import get_fact
-
-        last_id = get_fact(chat_id=chat_id, fact_key="last_surface_commitment_id")
-        if last_id:
-            row = cur.execute(
-                f"""
-                SELECT {", ".join(select_cols)}
-                FROM commitments
-                WHERE id=? AND chat_id=? AND status='open'
-                LIMIT 1
-                """,
-                (int(last_id), chat_id),
-            ).fetchone()
+        target_text = parsed.get("target_text")
+        if target_text:
+            row = _find_open_commitment_by_target(cur, chat_id, select_cols, target_text)
     except Exception:
         pass
 
-    # Fallback to latest open
+    # 2) Then try last surfaced commitment
+    if not row:
+        try:
+            from memory_store import get_fact
+
+            last_id = get_fact(chat_id=chat_id, fact_key="last_surface_commitment_id")
+            if last_id:
+                row = cur.execute(
+                    f"""
+                    SELECT {", ".join(select_cols)}
+                    FROM commitments
+                    WHERE id=? AND chat_id=? AND status='open'
+                    LIMIT 1
+                    """,
+                    (int(last_id), chat_id),
+                ).fetchone()
+        except Exception:
+            pass
+
+    # 3) Fallback to latest open
     if not row:
         row = cur.execute(
             f"""
