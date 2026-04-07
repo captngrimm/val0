@@ -36,6 +36,12 @@ import asyncio
 # === MODE HANDLER (must ALWAYS exist if referenced later) ===
 from core.mode import try_set_mode
 from core.language_utils import render_operator_reminder, resolve_user_language
+from core.commitment_utils import (
+    _has_active_commitment,
+    val_select_priority_commitment,
+    should_emit_inline_operator_nudge,
+)
+from core.operator_followup import operator_followup_tick
 
 from core.context_snapshot import build_context_snapshot
 from core.reminder_actions import parse_reminder_action, apply_reminder_action
@@ -234,7 +240,6 @@ _PENDING_CASE_DISAMBIG = {}
 _PENDING_REMINDER_CONFIRM = {}
 # --- last action tracker (demo-safe undo) ---
 _LAST_ACTION = {}
-_OPERATOR_FOLLOWUP_RUNNING = False
 _INLINE_NUDGE_LAST = {}
 # --------------------------------------------------
 # Logging
@@ -5290,27 +5295,7 @@ def _extract_commitment_from_text(text: str, confidence: str = "medium") -> dict
         "due_date": due_date,
         "confidence": confidence,
     }
-
-def _has_active_commitment(text: str) -> bool:
-    if not text:
-        return False
-
-    low = text.lower()
-
-    markers = (
-        "tengo que",
-        "debo",
-        "hay que",
-        "debería",
-        "deberia",
-        "quizá",
-        "quizas",
-        "quizás",
-        "podría",
-        "podria",
-    )
-
-    return any(m in low for m in markers)    
+    
 
 def _has_explicit_legal_intent(text: str) -> bool:
     t = (text or "").strip().lower()
@@ -5337,70 +5322,6 @@ def _has_explicit_legal_intent(text: str) -> bool:
 # ==========================================================
 # LANGUAGE RESOLUTION (single source of truth)
 # ==========================================================
-
-def val_select_priority_commitment(commitments: list[dict]) -> dict | None:
-    """
-    Pick ONE commitment to surface based on priority rules.
-    """
-    if not commitments:
-        return None
-
-    def score(c):
-        due = c.get("due_date") or ""
-        text = (c.get("raw_input") or "").lower()
-
-        urgency = 0
-        if "ahora" in text or "now" in text:
-            urgency += 3
-        if due:
-            urgency += 2
-
-        length_penalty = len(text) * 0.001
-        return urgency - length_penalty
-
-    ranked = sorted(commitments, key=score, reverse=True)
-    return ranked[0]
-
-
-def should_emit_inline_operator_nudge(chat_id: int, raw_text: str, cooldown_seconds: int = 180) -> bool:
-    global _INLINE_NUDGE_LAST
-
-    try:
-        norm = (raw_text or "").strip().lower()
-        norm = unicodedata.normalize("NFKD", norm)
-        norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
-        norm = re.sub(r"[^\w\s]", " ", norm)
-        norm = re.sub(r"\s+", " ", norm).strip()
-
-        if not norm:
-            return True
-
-        key = f"{int(chat_id)}::{norm}"
-        now = datetime.utcnow()
-
-        # --- fast in-memory guard (prevents burst spam in same process) ---
-        last_dt = _INLINE_NUDGE_LAST.get(key)
-        if last_dt is not None:
-            try:
-                if (now - last_dt).total_seconds() < cooldown_seconds:
-                    return False
-            except Exception:
-                pass
-
-        _INLINE_NUDGE_LAST[key] = now
-
-        # --- optional persisted breadcrumb (best-effort only) ---
-        try:
-            fact_key = f"inline_nudge_at:{norm}"
-            upsert_fact(chat_id=chat_id, fact_key=fact_key, fact_value=now.isoformat())
-        except Exception:
-            pass
-
-        return True
-
-    except Exception as e:
-        logger.exception(f"[INLINE_NUDGE_COOLDOWN] failed: {e}")
-        return True
 
 def _looks_like_completion(text: str) -> bool:
     if not text:
@@ -6491,170 +6412,6 @@ def _render_operator_nudge(packet: dict) -> str:
             ]
 
     return random.choice(options)
-
-async def operator_followup_tick(context):
-    global _OPERATOR_FOLLOWUP_RUNNING
-
-    if _OPERATOR_FOLLOWUP_RUNNING:
-        logger.info("[OPERATOR_FOLLOWUP_TICK] skipped: already running")
-        return
-
-    _OPERATOR_FOLLOWUP_RUNNING = True
-    try:
-        from datetime import datetime, timedelta
-        from memory_store import (
-            fetch_due_commitments,
-            mark_commitment_nudged,
-            get_last_nudge_at,
-            set_last_nudge_at,
-            set_last_surface_commitment_id,
-            log_action,
-            get_fact,
-        )
-
-        NUDGE_COOLDOWN_MINUTES = 10
-
-        def _utcnow_iso():
-            return datetime.utcnow().isoformat()
-
-        def _parse_iso(ts):
-            try:
-                return datetime.fromisoformat(ts)
-            except Exception:
-                return None
-
-        def _norm_text(s: str) -> str:
-            s = (s or "").strip().lower()
-            s = unicodedata.normalize("NFKD", s)
-            s = "".join(ch for ch in s if not unicodedata.combining(ch))
-            s = re.sub(r"[^\w\s]", " ", s)
-            s = re.sub(r"\s+", " ", s).strip()
-            return s
-
-        rows = fetch_due_commitments(limit=50)
-        from datetime import datetime, timedelta
-
-        fresh_cutoff = datetime.utcnow() - timedelta(minutes=3)
-        filtered_rows = []
-
-        for r in rows:
-            row = dict(r) if hasattr(r, "keys") else {
-                "id": r[0],
-                "chat_id": r[1],
-                "raw_input": r[2],
-                "action": r[3],
-                "target": r[4],
-                "due_date": r[5],
-                "confidence": r[6],
-                "status": r[7],
-                "last_nudged_at": r[8],
-                "created_at": r[9],
-            }
-
-            created_raw = row.get("created_at")
-            if created_raw:
-                try:
-                    created_dt = datetime.fromisoformat(str(created_raw).replace(" ", "T"))
-                    if created_dt > fresh_cutoff:
-                        continue
-                except Exception:
-                    pass
-
-            filtered_rows.append(r)
-
-        rows = filtered_rows
-
-        # one nudge max per chat per tick
-        chosen_by_chat = {}
-        seen_text_by_chat = {}
-
-        for r in rows:
-            row = dict(r) if hasattr(r, "keys") else r
-
-            commitment_id = row["id"] if isinstance(row, dict) else row[0]
-            chat_id = row["chat_id"] if isinstance(row, dict) else row[1]
-            raw_input = row["raw_input"] if isinstance(row, dict) else row[2]
-            action = row["action"] if isinstance(row, dict) else row[3]
-            target = row["target"] if isinstance(row, dict) else row[4]
-            due_date = row["due_date"] if isinstance(row, dict) else row[5]
-            confidence = row["confidence"] if isinstance(row, dict) else row[6]
-
-            raw_clean = (raw_input or "").strip()
-            raw_low = raw_clean.lower()
-
-            # --- skip explicit legal/case-scoped commitments ---
-            if _has_explicit_legal_intent(raw_clean):
-                continue
-
-            # --- dedupe same/similar text per chat ---
-            norm = _norm_text(raw_clean)
-            if chat_id not in seen_text_by_chat:
-                seen_text_by_chat[chat_id] = set()
-
-            if norm in seen_text_by_chat[chat_id]:
-                continue
-
-            # --- cooldown guard ---
-            allow_nudge = True
-            last_nudge = get_last_nudge_at(int(chat_id), int(commitment_id))
-
-            if last_nudge:
-                last_dt = _parse_iso(last_nudge)
-                if last_dt and (datetime.utcnow() - last_dt) < timedelta(minutes=NUDGE_COOLDOWN_MINUTES):
-                    allow_nudge = False
-
-            if not allow_nudge:
-                continue
-
-            # --- pick only first/best due item per chat ---
-            if int(chat_id) in chosen_by_chat:
-                continue
-
-            chosen_by_chat[int(chat_id)] = {
-                "commitment_id": int(commitment_id),
-                "chat_id": int(chat_id),
-                "raw_input": raw_clean,
-            }
-            seen_text_by_chat[chat_id].add(norm)
-
-        # --- group by chat ---
-        grouped = {}
-        for _, item in chosen_by_chat.items():
-            grouped.setdefault(item["chat_id"], []).append(item)
-
-        # --- send ONE per chat ---
-        for chat_id, items in grouped.items():
-
-            selected = val_select_priority_commitment(items)
-            if not selected:
-                continue
-
-            commitment_id = selected["commitment_id"]
-            clean = str(selected["raw_input"] or "").strip()
-
-            if clean:
-                clean = clean[:1].upper() + clean[1:]
-
-            clean = re.sub(r"\bnoah\b", "Noah", clean, flags=re.IGNORECASE)
-
-            lang = resolve_user_language(int(chat_id))
-
-            if lang == "en":
-                msg = f"⏰ *{clean}* is still pending.\nDone, tonight, or snooze?"
-            else:
-                msg = f"⏰ *{clean}* sigue pendiente.\n¿Hecho, esta noche o posponer?"
-
-            await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
-
-            set_last_surface_commitment_id(int(chat_id), int(commitment_id))
-            set_last_nudge_at(int(chat_id), int(commitment_id), _utcnow_iso())
-            mark_commitment_nudged(commitment_id)
-            log_action(int(chat_id), "operator_nudge", clean)
-
-    except Exception as e:
-        logger.exception(f"[OPERATOR_FOLLOWUP_TICK] failed: {e}")
-    finally:
-        _OPERATOR_FOLLOWUP_RUNNING = False
 
 async def handle_followup_test(update, context):
     try:
