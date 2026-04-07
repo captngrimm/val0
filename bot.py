@@ -5940,7 +5940,7 @@ async def context_cmd(update, context):
 
 async def status_cmd(update, context):
     try:
-        from memory_store import _get_conn, get_fact
+        from memory_store import _get_conn
 
         chat_id = update.effective_chat.id
         conn = _get_conn()
@@ -5962,7 +5962,32 @@ async def status_cmd(update, context):
         except Exception:
             open_tasks = 0
 
-            # --- LAST ACTION ---
+        # --- OPEN TASK NAMES (top 3) ---
+        open_task_lines = []
+        try:
+            rows = cur.execute(
+                """
+                SELECT raw_input, due_date
+                FROM commitments
+                WHERE chat_id=? AND status='open'
+                ORDER BY id DESC
+                LIMIT 3
+                """,
+                (chat_id,),
+            ).fetchall()
+            for r in rows:
+                raw = str(r[0] or "").strip()
+                due = str(r[1] or "").strip() if len(r) > 1 and r[1] else ""
+                if not raw:
+                    continue
+                if due:
+                    open_task_lines.append(f"- {raw} ({due})")
+                else:
+                    open_task_lines.append(f"- {raw}")
+        except Exception:
+            open_task_lines = []
+
+        # --- LAST ACTION ---
         last_action = "-"
         try:
             row = cur.execute(
@@ -5984,6 +6009,60 @@ async def status_cmd(update, context):
         except Exception:
             pass
 
+        # --- LAST SURFACED COMMITMENT ---
+        last_surfaced = "-"
+        try:
+            row = cur.execute(
+                """
+                SELECT fact_value
+                FROM user_facts
+                WHERE chat_id=? AND fact_key='last_surface_commitment_id'
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (chat_id,),
+            ).fetchone()
+            if row and row[0]:
+                cid = int(row[0])
+                row2 = cur.execute(
+                    """
+                    SELECT raw_input
+                    FROM commitments
+                    WHERE id=? AND chat_id=?
+                    LIMIT 1
+                    """,
+                    (cid, chat_id),
+                ).fetchone()
+                if row2 and row2[0]:
+                    last_surfaced = str(row2[0]).strip()
+        except Exception:
+            pass
+
+        # --- LAST VERIFICATION RESULT ---
+        last_verification = "-"
+        try:
+            row = cur.execute(
+                """
+                SELECT action_type, payload, status
+                FROM action_logs
+                WHERE chat_id=?
+                  AND (
+                    action_type LIKE 'reminder_%'
+                    OR action_type LIKE '%verify%'
+                  )
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (chat_id,),
+            ).fetchone()
+            if row:
+                payload = str(row[1] or "").replace("\n", " ").strip()
+                if len(payload) > 120:
+                    payload = payload[:117] + "..."
+                last_verification = f"{row[0]} [{row[2]}]: {payload}"
+        except Exception:
+            pass
+
         # --- PRIORITY ---
         priority = "-"
         try:
@@ -6000,8 +6079,14 @@ async def status_cmd(update, context):
         lines.append("PX01 STATUS")
         lines.append("")
         lines.append(f"OPEN TASKS: {open_tasks}")
+        if open_task_lines:
+            lines.extend(open_task_lines)
         lines.append("")
         lines.append(f"LAST ACTION: {last_action}")
+        lines.append("")
+        lines.append(f"LAST SURFACED: {last_surfaced}")
+        lines.append("")
+        lines.append(f"LAST VERIFICATION: {last_verification}")
         lines.append("")
         lines.append(f"CURRENT PRIORITY: {priority}")
         lines.append("")
