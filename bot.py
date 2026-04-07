@@ -2154,7 +2154,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 subject = "Valeria – Documento generado"
             send_email_resend(to_email=to_email, subject=subject, body=last_reply)
 
-            await update.message.reply_text(f"📧 Listo. Envié el último contenido a {who}.")
+            await update.message.reply_text("📧 Listo, enviado. Revisa tu inbox .")
             return
 
     except Exception as e:
@@ -3378,7 +3378,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_terms_due_this_week,
             try_terms_due_this_week_for_case,
             try_terms_due_today,
-            try_terms_due_tomorrow,
             try_cases_due_this_week,
         )
         from core.control import try_debug_mode, try_help
@@ -3412,6 +3411,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_debug_mode,
             try_help,
             try_undo_last_action,
+
+            # due / agenda natural FIRST
+            try_due_today_natural,
+            try_agenda_tomorrow_natural,
+            try_due_tomorrow_natural,
+            try_week_natural,
+
             try_priority_dashboard,
 
             # reports / control
@@ -3447,10 +3453,25 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_terms_due_this_week_for_case,
             try_cases_due_this_week,
             try_terms_due_today,
-            try_terms_due_tomorrow,
             try_terms_due_this_week,
             try_due_range,
         ]
+
+        # --------------------------------------------------
+        # HARD AGENDA OVERRIDE (guaranteed deterministic)
+        # --------------------------------------------------
+        try:
+            t = (text or "").strip().lower()
+            t = unicodedata.normalize("NFKD", t)
+            t = "".join(ch for ch in t if not unicodedata.combining(ch))
+
+            if re.match(r"^que\s+vence\s+manana$", t):
+                from core.case_mvp import try_due_tomorrow
+                if await try_due_tomorrow(update, chat_id, text):
+                    return
+
+        except Exception as e:
+            logger.exception(f"[HARD_AGENDA_OVERRIDE] failed: {e}")
 
         for handler in HANDLERS:
             if is_advisory_case_prompt and handler in (
@@ -4737,20 +4758,20 @@ async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
         return False
 
     import re
+    import unicodedata
 
     t = (text or "").strip().lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
 
     task_markers = (
         "tengo que",
         "debo",
         "hay que",
-        "debería",
         "deberia",
-        "quizá",
+        "quiza",
         "quizas",
-        "quizás",
         "tal vez",
-        "podría",
         "podria",
     )
 
@@ -4759,10 +4780,8 @@ async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
         return False
 
     patterns = [
-        r"^\s*qué\s+vence\s+mañana\s*$",
-        r"^\s*que\s+vence\s+mañana\s*$",
-        r"^\s*qué\s+t[eé]rminos\s+vencen\s+mañana\s*$",
-        r"^\s*que\s+terminos\s+vencen\s+mañana\s*$",
+        r"^\s*que\s+vence\s+manana\s*$",
+        r"^\s*que\s+terminos\s+vencen\s+manana\s*$",
     ]
 
     if not any(re.match(p, t) for p in patterns):
@@ -4776,11 +4795,14 @@ async def try_due_today_natural(update, chat_id, text) -> bool:
     Natural-language gate for today's agenda.
     """
     import re
+    import unicodedata
 
     if not update or not getattr(update, "message", None):
         return False
 
     t = (text or "").strip().lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
 
     patterns = [
         r"^que tengo hoy$",
@@ -4800,6 +4822,7 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
     Natural-language gate for tomorrow agenda.
     """
     import re
+    import unicodedata
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
 
@@ -4807,13 +4830,12 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
         return False
 
     t = (text or "").strip().lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
 
     patterns = [
-        r"^que tengo mañana$",
-        r"^qué tengo mañana$",
         r"^que tengo manana$",
-        r"^qué audiencias tengo mañana$",
-        r"^que audiencias tengo mañana$",
+        r"^que audiencias tengo manana$",
     ]
 
     for p in patterns:
@@ -4824,7 +4846,6 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
             out = _generate_morning_brief_det(int(chat_id), tomorrow)
 
             if not out:
-                tz = ZoneInfo("America/Panama")
                 tomorrow_dt = datetime.now(tz) + timedelta(days=1)
 
                 weekday = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][tomorrow_dt.weekday()]
@@ -4836,6 +4857,32 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
 
             await update.message.reply_text(out)
             return True
+
+    return False
+
+async def try_week_natural(update, chat_id, text) -> bool:
+    """
+    Natural-language gate for week agenda.
+    """
+    import re
+    import unicodedata
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+
+    patterns = [
+        r"^que tengo esta semana$",
+        r"^que vence esta semana$",
+        r"^que tengo en la semana$",
+    ]
+
+    for p in patterns:
+        if re.match(p, t):
+            return await try_due_range(update, chat_id, "que vence esta semana")
 
     return False
 
