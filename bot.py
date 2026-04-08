@@ -1898,6 +1898,110 @@ def _extract_memory_candidates(text: str) -> list[str]:
 
     return candidates[:5]
 
+async def try_gcal_write_sandbox(update, chat_id, text) -> bool:
+    """
+    Explicit sandbox calendar writer.
+    Format:
+      agenda mañana 3pm Llamada con Miguel
+      agenda manana 15:30 Reunión test
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    import re
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from core.gcal_write import create_event
+
+    raw = (text or "").strip()
+    low = raw.lower().strip()
+
+    m = re.match(r"(?is)^agenda\s+(mañana|manana)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)(?:\s+)(.+?)\s*$", raw)
+    if not m:
+        return False
+
+    day_token = (m.group(1) or "").strip().lower()
+    time_token = (m.group(2) or "").strip().lower().replace(" ", "")
+    title = (m.group(3) or "").strip()
+    if title:
+        title = title[0].upper() + title[1:]
+
+    # preserve natural casing but clean first letter
+    if title:
+        title = title[0].upper() + title[1:]
+
+    if not title:
+        await update.message.reply_text("Falta el título del evento.")
+        return True
+
+    # parse time token
+    hour = None
+    minute = 0
+
+    if re.fullmatch(r"\d{1,2}:\d{2}", time_token):
+        hh, mm = time_token.split(":")
+        hour = int(hh)
+        minute = int(mm)
+    else:
+        tm = re.fullmatch(r"(\d{1,2})(?::(\d{2}))?(am|pm)?", time_token)
+        if not tm:
+            await update.message.reply_text("Hora inválida. Usa 3pm, 3:30pm o 15:30.")
+            return True
+
+        hour = int(tm.group(1))
+        minute = int(tm.group(2) or "0")
+        ap = tm.group(3)
+
+        if ap:
+            if not (1 <= hour <= 12):
+                await update.message.reply_text("Hora inválida. Usa 1–12 con am/pm.")
+                return True
+            if ap == "am":
+                hour = 0 if hour == 12 else hour
+            elif ap == "pm":
+                hour = 12 if hour == 12 else hour + 12
+
+    if hour is None or not (0 <= hour <= 23 and 0 <= minute <= 59):
+        await update.message.reply_text("Hora inválida. Usa 3pm, 3:30pm o 15:30.")
+        return True
+
+    tz = ZoneInfo("America/Panama")
+    now = datetime.now(tz)
+
+    if day_token in ("mañana", "manana"):
+        start_dt = (now + timedelta(days=1)).replace(hour=hour, minute=minute, second=0, microsecond=0)
+    else:
+        return False
+
+    result = create_event(
+        title=title,
+        start_dt=start_dt,
+        duration_minutes=60,
+        description="Created from Val0 sandbox command",
+    )
+
+    if result.get("status") == "dry_run":
+        await update.message.reply_text(
+            f"🧪 DRY RUN\n\n"
+            f"Título: {title}\n"
+            f"Inicio: {start_dt.isoformat()}\n"
+            f"Duración: 60 min\n"
+            f"No escribí nada en Google Calendar."
+        )
+        return True
+
+    if result.get("status") == "created":
+        await update.message.reply_text(
+            f"📅 Evento creado\n\n"
+            f"Título: {title}\n"
+            f"Inicio: {start_dt.isoformat()}"
+        )
+        return True
+
+    await update.message.reply_text("No pude crear el evento.")
+    return True
+
+
 # --------------------------------------------------
 # Core Message Pipeline
 # --------------------------------------------------
@@ -3354,6 +3458,19 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # --------------------------------------------------
     case_note_handled = False
 
+
+
+    # --------------------------------------------------
+    # Google Calendar write sandbox
+    # --------------------------------------------------
+    try:
+        if await try_gcal_write_sandbox(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[GCAL_WRITE_SANDBOX] failed: {e}")
+        await update.message.reply_text("No pude crear el evento en Google Calendar. Reviso credenciales.")
+        return True
+
     # --- Sprint10: court-day timeline queries ---
     try:
         from core.case_mvp import (
@@ -3386,6 +3503,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_daily_work_summary,
             try_priority_dashboard,
         )
+        from core.conflict_detector import try_conflicts_tomorrow
 
         advisory_case_prefixes = (
             "resumen del caso",
@@ -3417,7 +3535,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_agenda_tomorrow_natural,
             try_due_tomorrow_natural,
             try_week_natural,
-
+            # conflict checks
+            try_conflicts_tomorrow,
             try_priority_dashboard,
 
             # reports / control
