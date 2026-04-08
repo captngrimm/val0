@@ -3503,7 +3503,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_daily_work_summary,
             try_priority_dashboard,
         )
-        from core.conflict_detector import try_conflicts_tomorrow
+        from core.conflict_detector import (
+            try_conflicts_tomorrow,
+            try_reschedule_tomorrow,
+        )
 
         advisory_case_prefixes = (
             "resumen del caso",
@@ -3536,6 +3539,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_due_tomorrow_natural,
             try_week_natural,
             # conflict checks
+            try_reschedule_tomorrow,
             try_conflicts_tomorrow,
             try_priority_dashboard,
 

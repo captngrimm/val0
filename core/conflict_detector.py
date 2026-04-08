@@ -202,6 +202,101 @@ def build_conflict_report_for_tomorrow(chat_id: int) -> str:
 
     return "\n".join(lines)
 
+def build_reschedule_suggestions_for_tomorrow(chat_id: int) -> str:
+    tz = _tz()
+    tomorrow = (datetime.now(tz) + timedelta(days=1)).date()
+
+    gcal_events = _load_gcal_events_for_day(tomorrow)
+    db_items = _load_db_due_items_for_day(int(chat_id), tomorrow)
+
+    suggestions: List[str] = []
+    keep: List[str] = []
+
+    # 1) overlapping events: suggest moving the later one
+    for i in range(len(gcal_events)):
+        for j in range(i + 1, len(gcal_events)):
+            a = gcal_events[i]
+            b = gcal_events[j]
+
+            if _overlaps(a["start_utc"], a["end_utc"], b["start_utc"], b["end_utc"]):
+                suggestions.append(
+                    f"• Mover o renegociar '{b['title']}' "
+                    f"({_fmt_local(b['start_utc'])}-{_fmt_local(b['end_utc'])}) "
+                    f"porque choca con '{a['title']}'."
+                )
+
+    # 2) DB due items inside meetings: suggest protecting the due item
+    for d in db_items:
+        collided = False
+        for ev in gcal_events:
+            if _overlaps(d["start_utc"], d["end_utc"], ev["start_utc"], ev["end_utc"]):
+                suggestions.append(
+                    f"• Protege CASE:{d.get('case_id','?')} alrededor de {_fmt_local(d['start_utc'])}. "
+                    f"Ahora mismo cae durante '{ev['title']}'."
+                )
+                collided = True
+        if not collided:
+            keep.append(
+                f"• CASE:{d.get('case_id','?')} a las {_fmt_local(d['start_utc'])} no presenta choque claro."
+            )
+
+    # 3) crowded day heuristic
+    if len(gcal_events) >= 4:
+        suggestions.append(
+            f"• Tienes {len(gcal_events)} eventos mañana. Considera mover el menos importante para abrir margen."
+        )
+
+    # 4) if nothing bad, say so
+    weekday = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][tomorrow.weekday()]
+    month = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][tomorrow.month]
+    pretty = f"{weekday} {tomorrow.day} {month}"
+
+    lines: List[str] = [f"🧭 Qué movería — mañana ({pretty})", ""]
+
+    if not suggestions:
+        lines.append("🟢 No movería nada por ahora. Mañana se ve estable.")
+        if keep:
+            lines.append("")
+            lines.append("✅ Estable")
+            lines.extend(keep[:5])
+        return "\n".join(lines)
+
+    lines.append("🟡 Recomendaciones")
+    lines.extend(suggestions[:8])
+
+    if keep:
+        lines.append("")
+        lines.append("✅ Lo que sí aguanta")
+        lines.extend(keep[:5])
+
+    return "\n".join(lines)
+
+
+async def try_reschedule_tomorrow(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+
+    triggers = (
+        "que moverias manana",
+        "qué moverías mañana",
+        "como arreglo manana",
+        "cómo arreglo mañana",
+        "que mover mañana",
+        "qué mover mañana",
+    )
+
+    if not any(x in t for x in triggers):
+        return False
+
+    try:
+        out = build_reschedule_suggestions_for_tomorrow(int(chat_id))
+        await update.message.reply_text(out)
+        return True
+    except Exception:
+        await update.message.reply_text("No pude generar recomendaciones para mañana.")
+        return True
 
 async def try_conflicts_tomorrow(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
