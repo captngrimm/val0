@@ -1,0 +1,85 @@
+🗺️ UPDATED ROADMAP (DROP-IN)
+
+Copy this. Use it.
+
+📍 CURRENT STATE (Phase 0.5)
+✅ Agenda system
+✅ Case tracking
+✅ Calendar write (working)
+✅ Conflict detection
+⚠️ Memory = partial (raw, not structured)
+❌ No shared execution
+❌ No voice layer
+❌ No graph navigation
+🚀 PHASE 1 — STABILITY + MEMORY (3–5 days)
+Goal:
+👉 “Val doesn’t break and doesn’t forget”
+Tasks:
+ fix remaining routing inconsistencies
+ unify agenda outputs (no duplicate styles)
+ create nodes + edges tables (SQLite)
+nodes(id, title, tags, created_at)
+edges(id, from_node, to_node, type)
+ add command:
+where were we
+
+👉 Output:
+
+Val can recover context without scrolling
+
+🚀 PHASE 2 — EXECUTION (5–7 days)
+Goal:
+👉 “Val DOES things”
+Tasks:
+ send_to_person handler
+ basic document resolver
+ shared view lite:
+“send this to Sofía”
+
+👉 Output:
+
+“Listo. Ambos tienen lo mismo.”
+
+🚀 PHASE 3 — PRESENCE (5–10 days)
+Goal:
+👉 “Val is with you”
+Tasks:
+ PTT voice
+ basic TTS
+ speaker mode detection
+
+👉 Output:
+
+you say “Val…” → she answers
+
+🚀 PHASE 4 — STYLE + INTERVENTION (5–7 days)
+Goal:
+👉 “Val pushes behavior”
+Tasks:
+ intervention engine v1
+ tone modes
+ 20–30 core lines (like your trash one)
+ meme engine (basic)
+
+👉 Output:
+
+“holy shit, it called me out perfectly”
+
+🚀 PHASE 5 — GRAPH + UI (ONGOING)
+Goal:
+👉 “You never lose ideas again”
+Tasks:
+ Obsidian integration (manual first)
+ export nodes to markdown
+ optional graph UI later
+🚀 PHASE 6 — OPPORTUNITY ENGINE (LATER)
+Goal:
+👉 monetization without killing trust
+⏱️ TIMELINE (REAL)
+👉 MVP (wow factor):
+
+2–3 weeks
+
+👉 Strong alpha:
+
+4–5 weeks

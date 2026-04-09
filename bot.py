@@ -50,7 +50,7 @@ from core.operator_reminders import (
 )
 
 from core.context_snapshot import build_context_snapshot
-
+from subprocess import check_output
 
 
 
@@ -89,6 +89,8 @@ import smtplib
 import requests
 from email.mime.text import MIMEText
 from email.utils import formataddr
+
+_ACTIVE_NODE = {}
 
 from telegram import Update
 from telegram.constants import ChatAction
@@ -237,6 +239,8 @@ def _places_session_get(chat_id: int):
     except Exception:
         return None
 
+
+
 # --------------------------------------------------
 # Companion Operator v0 — session timing
 # --------------------------------------------------
@@ -268,6 +272,8 @@ def _extract_case_id(text: str) -> str:
         return ""
     m = _CASE_RE.search(text)
     return (m.group(1) or "").strip() if m else ""
+
+
 
 # --- Sprint08 deterministic deadline extractor ---
 def _extract_deadline_date(text: str) -> str:
@@ -1897,6 +1903,130 @@ def _extract_memory_candidates(text: str) -> list[str]:
             candidates.append(kw)
 
     return candidates[:5]
+
+async def try_where_were_we(update, chat_id, text) -> bool:
+    """
+    Bridge Val0 -> Forge graph memory.
+    Handles:
+    - donde estabamos
+    - dónde estábamos
+    - where were we
+    """
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+
+    triggers = (
+        "donde estabamos",
+        "where were we",
+    )
+
+    if t not in triggers:
+        return False
+
+    try:
+        out = check_output(
+            [
+                "ssh",
+                "-o", "BatchMode=yes",
+                "forge@forge",
+                "python3 ~/valeria_graph/where.py",
+            ],
+            text=True,
+            timeout=12,
+        ).strip()
+
+        if not out:
+            await update.message.reply_text("No encontré contexto recuperable.")
+            return True
+
+        await update.message.reply_text(out)
+        return True
+
+    except Exception:
+        await update.message.reply_text("No pude recuperar el contexto desde Forge.")
+        return True
+
+async def try_resume_node(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip()
+
+    if not t.lower().startswith("retoma "):
+        return False
+
+    node = t[7:].strip()
+
+    if not node:
+        await update.message.reply_text("¿Qué quieres retomar?")
+        return True
+
+    try:
+        # tell Forge this node was touched
+        from subprocess import check_output
+
+        check_output(
+            [
+                "ssh",
+                "-o", "BatchMode=yes",
+                "forge@forge",
+                f'python3 ~/valeria_graph/touch_node.py "{node}"',
+            ],
+            text=True,
+            timeout=10,
+        )
+
+        pretty = " ".join(word.capitalize() for word in node.replace("_", " ").split())
+
+        _ACTIVE_NODE[int(chat_id)] = pretty
+
+        await update.message.reply_text(
+            f"📌 Retomando: {pretty}\n\n"
+            f"Dime qué quieres hacer con esto y lo ejecutamos."
+        )
+
+        return True
+
+    except Exception:
+        await update.message.reply_text("No pude retomar ese nodo.")
+        return True
+
+async def try_node_followup(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    node = _ACTIVE_NODE.get(int(chat_id))
+    if not node:
+        return False
+
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    low_signal = (
+        "quiero que esto",
+        "esto deberia",
+        "esto debería",
+        "haz que esto",
+        "aqui",
+        "aquí",
+        "en esto",
+        "para esto",
+    )
+
+    if not any(x in t for x in low_signal):
+        return False
+
+    await update.message.reply_text(
+        f"🧠 Contexto activo: {node}\n\n"
+        f"Entendido. Tomo esto como trabajo dentro de {node}.\n"
+        f"Ahora dime la regla, comportamiento o resultado exacto que quieres definir."
+    )
+    return True
 
 async def try_gcal_write_sandbox(update, chat_id, text) -> bool:
     """
@@ -3528,10 +3658,35 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             (text or "").lower().strip().startswith(p) for p in advisory_case_prefixes
         )
 
+        # --------------------------------------------------
+        # HARD CONTEXT GRAPH OVERRIDES (PLACE HERE)
+        # --------------------------------------------------
+        try:
+
+            t = (text or "").strip().lower()
+            t = unicodedata.normalize("NFKD", t)
+            t = "".join(ch for ch in t if not unicodedata.combining(ch))
+
+            if t == "donde estabamos" or t == "where were we":
+                if await try_where_were_we(update, chat_id, text):
+                    return
+
+            if t.startswith("retoma "):
+                if await try_resume_node(update, chat_id, text):
+                    return
+
+        except Exception as e:
+            logger.exception(f"[HARD_CONTEXT_OVERRIDE] failed: {e}")
+
+
+
         HANDLERS = [
             try_debug_mode,
             try_help,
             try_undo_last_action,
+            try_where_were_we,
+            try_resume_node,
+            try_node_followup,
 
             # due / agenda natural FIRST
             try_due_today_natural,
@@ -4881,7 +5036,6 @@ async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
         return False
 
     import re
-    import unicodedata
 
     t = (text or "").strip().lower()
     t = unicodedata.normalize("NFKD", t)
@@ -4918,7 +5072,6 @@ async def try_due_today_natural(update, chat_id, text) -> bool:
     Natural-language gate for today's agenda.
     """
     import re
-    import unicodedata
 
     if not update or not getattr(update, "message", None):
         return False
@@ -4945,7 +5098,6 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
     Natural-language gate for tomorrow agenda.
     """
     import re
-    import unicodedata
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
 
@@ -4988,7 +5140,6 @@ async def try_week_natural(update, chat_id, text) -> bool:
     Natural-language gate for week agenda.
     """
     import re
-    import unicodedata
 
     if not update or not getattr(update, "message", None):
         return False

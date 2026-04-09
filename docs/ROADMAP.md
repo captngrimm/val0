@@ -346,6 +346,74 @@ System answers consistently across sessions
 without losing context.
 
 =====================================================================
+PHASE 1.6 — CONTEXT GRAPH (MIND MAP LAYER)
+=====================================================================
+
+Goal:
+Enable structured idea navigation and context recovery
+
+Purpose:
+
+Prevent loss of ideas due to linear chat structure
+and allow fast retrieval of conceptual context.
+
+Architecture:
+
+Val0 / ValPrime (SQLite):
+
+- nodes table
+- edges table
+
+Schema:
+
+nodes:
+- id
+- title
+- tags
+- created_at
+- last_accessed
+
+edges:
+- id
+- from_node
+- to_node
+- type
+
+Capabilities:
+
+- store key ideas as nodes
+- link related concepts
+- enable retrieval via:
+  - similarity
+  - recency
+  - connection strength
+
+User Commands:
+
+- "where were we"
+- "resume topic X"
+
+Output:
+
+System proposes top 2–4 likely contexts
+
+Constraints:
+
+- deterministic storage
+- no automatic hallucinated linking
+- links must be explicit or validated
+
+UI Layer (External):
+
+- Obsidian used as visualization layer
+- markdown-based node representation
+- graph view used for human navigation
+
+Definition of Done:
+
+User can recover context without scrolling chat
+
+=====================================================================
 STATE AUTHORITY (VALPRIME)
 =====================================================================
 
@@ -497,6 +565,34 @@ Definition of Done:
 - audio → transcript + summary + classification returned automatically
 
 =====================================================================
+PHASE 2.1 — SHARED EXECUTION LAYER
+=====================================================================
+
+Goal:
+Enable Val0 to act across users and contexts
+
+Capabilities:
+
+- send documents to contacts
+- share context across participants
+- synchronize information state
+
+Examples:
+
+- "send this to Sofía"
+- "share this with Miguel"
+
+Constraints:
+
+- explicit user confirmation required
+- no implicit data sharing
+- maintain auditability
+
+Definition of Done:
+
+Val0 performs real-world multi-user actions
+
+=====================================================================
 PHASE 3 — MEMORY + EMBEDDINGS
 =====================================================================
 
@@ -572,6 +668,46 @@ Timing:
 
 Begin design after Phase 4 stability  
 Implement only after system reliability is proven  
+
+=====================================================================
+PHASE 6.1 — PERSONALITY CONTROL (KNOB SYSTEM)
+=====================================================================
+
+Goal:
+Enable controlled personality variation without affecting system integrity
+
+Concept:
+
+Personality is a rendering layer applied AFTER deterministic output
+
+Parameters:
+
+- tone (neutral, direct, sarcastic, aggressive)
+- verbosity (low, medium, high)
+- humor (none, light, heavy)
+- profanity (none, moderate, high)
+
+Modes:
+
+- Operator
+- Deadpool
+- Advisor
+- Soft
+
+Rules:
+
+- personality must NOT:
+  - alter facts
+  - alter execution
+  - override constraints
+
+- personality must:
+  - adapt to user preference
+  - remain consistent per session unless changed
+
+Definition of Done:
+
+User can switch personality modes without affecting system reliability
 
 =====================================================================
 DRIFT MANAGEMENT
