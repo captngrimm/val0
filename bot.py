@@ -91,6 +91,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 
 _ACTIVE_NODE = {}
+_LAST_NODE_IDEA = {}
 
 from telegram import Update
 from telegram.constants import ChatAction
@@ -2021,10 +2022,67 @@ async def try_node_followup(update, chat_id, text) -> bool:
     if not any(x in t for x in low_signal):
         return False
 
+    _LAST_NODE_IDEA[int(chat_id)] = (text or "").strip()   
+
     await update.message.reply_text(
         f"🧠 Contexto activo: {node}\n\n"
         f"Entendido. Tomo esto como trabajo dentro de {node}.\n"
         f"Ahora dime la regla, comportamiento o resultado exacto que quieres definir."
+    )
+    return True
+
+async def try_convert_node_idea(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+
+    triggers = (
+        "convierte esto",
+        "convert this",
+        "hazlo nodo",
+        "hazlo bloque",
+    )
+
+    if t not in triggers:
+        return False
+
+    node = _ACTIVE_NODE.get(int(chat_id))
+    idea = _LAST_NODE_IDEA.get(int(chat_id))
+
+    if not node:
+        await update.message.reply_text("No tengo un nodo activo. Usa: retoma <Nodo>")
+        return True
+
+    if not idea:
+        await update.message.reply_text("No tengo una idea reciente para convertir.")
+        return True
+
+    title = idea.strip()
+    if len(title) > 72:
+        title = title[:72].rstrip() + "..."
+
+    block = (
+        f"## Draft Update — {title}\n\n"
+        f"### Contexto\n"
+        f"Este bloque pertenece a [[{node}]].\n\n"
+        f"### Idea\n"
+        f"{idea}\n\n"
+        f"### For Dummies\n"
+        f"Explica en lenguaje simple qué significa esta idea dentro de {node}.\n\n"
+        f"### Proposed Behavior\n"
+        f"- definir trigger\n"
+        f"- definir acción\n"
+        f"- definir resultado esperado\n\n"
+        f"### Links\n"
+        f"- [[{node}]]\n\n"
+        f"### Status\n"
+        f"draft\n"
+    )
+
+    await update.message.reply_text(
+        f"🧩 Borrador listo para Obsidian\n\n```markdown\n{block}```",
+        parse_mode="Markdown",
     )
     return True
 
@@ -3687,6 +3745,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_where_were_we,
             try_resume_node,
             try_node_followup,
+            try_convert_node_idea,
 
             # due / agenda natural FIRST
             try_due_today_natural,
