@@ -91,6 +91,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 
 _ACTIVE_NODE = {}
+_PENDING_CONVERT = {}
 _LAST_NODE_IDEA = {}
 
 from telegram import Update
@@ -2019,6 +2020,20 @@ async def try_node_followup(update, chat_id, text) -> bool:
         "para esto",
     )
 
+    idea_signals = (
+        "quiero que",
+        "haz que",
+        "deberia",
+        "debería",
+        "necesito que",
+        "podria",
+        "podría",
+    )
+
+    # if it's a strong idea → let auto-propose handle it
+    if any(x in t for x in idea_signals):
+        return False
+
     if not any(x in t for x in low_signal):
         return False
 
@@ -2030,6 +2045,209 @@ async def try_node_followup(update, chat_id, text) -> bool:
         f"Ahora dime la regla, comportamiento o resultado exacto que quieres definir."
     )
     return True
+
+async def try_auto_propose_node(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    node = _ACTIVE_NODE.get(int(chat_id))
+    if not node:
+        return False
+
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    # skip if explicit commands
+    if t in ("convierte esto", "convert this", "hazlo nodo", "hazlo bloque"):
+        return False
+
+    # skip if already handled patterns
+    if any(x in t for x in (
+        "retoma ",
+        "donde estabamos",
+        "where were we",
+    )):
+        return False
+
+    # detect "idea-like" messages
+    idea_signals = (
+        "quiero que",
+        "haz que",
+        "deberia",
+        "debería",
+        "necesito que",
+        "podria",
+        "podría",
+    )
+
+    if not any(x in t for x in idea_signals):
+        return False
+
+    idea = (text or "").strip()
+
+    title = _normalize_draft_title(idea)
+    triggers = _infer_trigger_conditions(idea)
+    behavior = _infer_proposed_behavior(idea)
+
+    trigger_preview = ", ".join(triggers[:2])
+    behavior_preview = ", ".join(b.split()[0] for b in behavior[:2])
+
+    await update.message.reply_text(
+        f"🧠 {node} — propuesta rápida\n\n"
+        f"• {title}\n"
+        f"• Trigger: {trigger_preview}\n"
+        f"• Acción: {behavior_preview}...\n\n"
+        f"Si quieres convertir esta idea en un nodo de Forge, dime: sí"
+    )
+
+    # store idea anyway for later conversion
+    _LAST_NODE_IDEA[int(chat_id)] = idea
+    _PENDING_CONVERT[int(chat_id)] = True
+
+    return True
+
+
+def _normalize_draft_title(raw: str) -> str:
+    t = (raw or "").strip()
+
+    replacements = [
+        ("quiero que esto ", ""),
+        ("quiero que ", ""),
+        ("haz que esto ", ""),
+        ("haz que ", ""),
+        ("esto ", ""),
+    ]
+
+    low = t.lower()
+    for old, new in replacements:
+        if low.startswith(old):
+            t = t[len(old):].strip()
+            break
+
+    title_map = [
+        ("detecte cuando procrastino", "Procrastination Detection"),
+        ("detecte procrastinacion", "Procrastination Detection"),
+        ("detecte procrastinación", "Procrastination Detection"),
+        ("me detecte cuando procrastino", "Procrastination Detection"),
+        ("me recuerde", "Reminder Behavior"),
+        ("me empuje", "Escalation Behavior"),
+        ("me haga follow up", "Follow-Up Behavior"),
+    ]
+
+    low = t.lower()
+    for pattern, title in title_map:
+        if pattern in low:
+            return title
+
+    t = t.replace("_", " ").strip()
+    if not t:
+        return "Draft Update"
+
+    return " ".join(word.capitalize() for word in t.split())
+
+
+def _infer_trigger_conditions(raw: str) -> list[str]:
+    low = (raw or "").lower()
+
+    if "procrastin" in low:
+        return [
+            "inactividad prolongada",
+            "cambio repetido de tareas",
+            "evasión de tarea prioritaria",
+        ]
+
+    if "record" in low or "recuerde" in low:
+        return [
+            "tarea pendiente sin avance",
+            "vencimiento cercano",
+            "ausencia de confirmación",
+        ]
+
+    if "follow up" in low or "seguimiento" in low:
+        return [
+            "compromiso no cumplido",
+            "sin respuesta después de intervalo esperado",
+            "estado incierto",
+        ]
+
+    return [
+        "definir trigger principal",
+        "definir señal secundaria",
+        "definir umbral de activación",
+    ]
+
+
+def _infer_proposed_behavior(raw: str) -> list[str]:
+    low = (raw or "").lower()
+
+    if "procrastin" in low:
+        return [
+            "detectar señales combinadas de procrastinación",
+            "activar nudge inicial",
+            "escalar tono si no hay acción",
+        ]
+
+    if "record" in low or "recuerde" in low:
+        return [
+            "emitir recordatorio inicial",
+            "esperar ventana de respuesta",
+            "escalar si sigue pendiente",
+        ]
+
+    if "follow up" in low or "seguimiento" in low:
+        return [
+            "revisar estado del compromiso",
+            "enviar seguimiento corto",
+            "marcar como pendiente si no hay respuesta",
+        ]
+
+    return [
+        "definir acción principal",
+        "definir escalación",
+        "definir resultado esperado",
+    ]
+
+
+def _infer_for_dummies(node: str, raw: str) -> str:
+    low = (raw or "").lower()
+
+    if "procrastin" in low:
+        return (
+            f"Permite que {node} detecte señales de procrastinación antes de que "
+            f"el usuario pierda demasiado tiempo o se desvíe por completo."
+        )
+
+    if "record" in low or "recuerde" in low:
+        return (
+            f"Permite que {node} recuerde cosas importantes sin depender de que "
+            f"el usuario las pida en el momento exacto."
+        )
+
+    return (
+        f"Explica en lenguaje simple qué significa esta idea dentro de {node} "
+        f"y qué mejora concreta aporta al sistema."
+    )
+
+async def try_confirm_convert(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    if not _PENDING_CONVERT.get(int(chat_id)):
+        return False
+
+    t = (text or "").strip().lower()
+
+    yes_signals = ("si", "sí", "yes", "dale", "hazlo")
+
+    if t not in yes_signals:
+        return False
+
+    # clear flag
+    _PENDING_CONVERT[int(chat_id)] = False
+
+    # reuse convert logic
+    return await try_convert_node_idea(update, chat_id, "convierte esto")
 
 async def try_convert_node_idea(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
@@ -2058,22 +2276,26 @@ async def try_convert_node_idea(update, chat_id, text) -> bool:
         await update.message.reply_text("No tengo una idea reciente para convertir.")
         return True
 
-    title = idea.strip()
-    if len(title) > 72:
-        title = title[:72].rstrip() + "..."
+    title = _normalize_draft_title(idea)
+    trigger_conditions = _infer_trigger_conditions(idea)
+    proposed_behavior = _infer_proposed_behavior(idea)
+    for_dummies = _infer_for_dummies(node, idea)
+
+    trigger_lines = "\n".join(f"- {x}" for x in trigger_conditions)
+    behavior_lines = "\n".join(f"- {x}" for x in proposed_behavior)
 
     block = (
         f"## Draft Update — {title}\n\n"
         f"### Contexto\n"
         f"Este bloque pertenece a [[{node}]].\n\n"
-        f"### Idea\n"
+        f"### Idea Original\n"
         f"{idea}\n\n"
         f"### For Dummies\n"
-        f"Explica en lenguaje simple qué significa esta idea dentro de {node}.\n\n"
+        f"{for_dummies}\n\n"
+        f"### Trigger Conditions\n"
+        f"{trigger_lines}\n\n"
         f"### Proposed Behavior\n"
-        f"- definir trigger\n"
-        f"- definir acción\n"
-        f"- definir resultado esperado\n\n"
+        f"{behavior_lines}\n\n"
         f"### Links\n"
         f"- [[{node}]]\n\n"
         f"### Status\n"
@@ -3745,6 +3967,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_where_were_we,
             try_resume_node,
             try_node_followup,
+            try_auto_propose_node,
+            try_confirm_convert,
             try_convert_node_idea,
 
             # due / agenda natural FIRST
