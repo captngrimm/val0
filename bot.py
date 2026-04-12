@@ -2084,17 +2084,39 @@ async def try_recovery_protocol(update, chat_id, text) -> bool:
             timeout=8
         ).strip()
 
+        # ------------------------------
+        # ACTIVE NODE PRIORITY
+        # ------------------------------
         active = _ACTIVE_NODE.get(int(chat_id))
 
         if active:
             node = active
-            next_action = f"Continúa en {node} y define el siguiente bloque concreto."
         elif node:
             _ACTIVE_NODE[int(chat_id)] = node
-            next_action = f"Retoma {node} y define el siguiente bloque concreto."
-        else:
-            next_action = "Retoma el foco principal y define el siguiente paso concreto."
 
+        # ------------------------------
+        # AUTO NEXT TASK (from tasks.md)
+        # ------------------------------
+        next_line = ""
+
+        for line in tasks.splitlines():
+            if line.strip().startswith("- [ ]"):
+                next_line = line.replace("- [ ]", "").strip()
+                break
+
+        # ------------------------------
+        # FALLBACK LOGIC
+        # ------------------------------
+        if next_line:
+            next_action = next_line
+        elif node:
+            next_action = f"Continúa en {node} y define el siguiente bloque concreto."
+        else:
+            next_action = "Define el siguiente paso concreto."
+
+        # ------------------------------
+        # FINAL MESSAGE
+        # ------------------------------
         msg = f"""🧠 SYSTEM RECOVERY
 
 Current Focus:
@@ -2106,7 +2128,7 @@ Recent Actions:
 Pending:
 {tasks}
 
-Likely Active Node:
+Active Context:
 {node or "No claro"}
 
 ⚡ Next Action:
