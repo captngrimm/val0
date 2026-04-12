@@ -2046,6 +2046,75 @@ async def try_node_followup(update, chat_id, text) -> bool:
     )
     return True
 
+async def try_recovery_protocol(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    t = (text or "").strip().lower()
+
+    if "recovery protocol" not in t:
+        return False
+
+    try:
+        from subprocess import check_output
+
+        base = "/home/forge/valeria_ops"
+
+        current = check_output(
+            ["ssh", "-o", "BatchMode=yes", "forge@forge", f"cat {base}/current_state.md"],
+            text=True,
+            timeout=8
+        ).strip()
+
+        tasks = check_output(
+            ["ssh", "-o", "BatchMode=yes", "forge@forge", f"cat {base}/tasks.md"],
+            text=True,
+            timeout=8
+        ).strip()
+
+        done = check_output(
+            ["ssh", "-o", "BatchMode=yes", "forge@forge", f"tail -n 12 {base}/done_log.md"],
+            text=True,
+            timeout=8
+        ).strip()
+
+        node = check_output(
+            ["ssh", "-o", "BatchMode=yes", "forge@forge", "python3 ~/valeria_graph/current_node.py"],
+            text=True,
+            timeout=8
+        ).strip()
+
+        if node:
+            _ACTIVE_NODE[int(chat_id)] = node
+            next_action = f"Retoma {node} y define el siguiente bloque concreto."
+        else:
+            next_action = "Retoma el foco principal y define el siguiente paso concreto."
+
+        msg = f"""🧠 SYSTEM RECOVERY
+
+Current Focus:
+{current}
+
+Recent Actions:
+{done}
+
+Pending:
+{tasks}
+
+Likely Active Node:
+{node or "No claro"}
+
+⚡ Next Action:
+{next_action}
+"""
+
+        await update.message.reply_text(msg)
+        return True
+
+    except Exception:
+        await update.message.reply_text("Recovery protocol failed.")
+        return True
+
 async def try_auto_propose_node(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
         return False
@@ -3951,6 +4020,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 if await try_where_were_we(update, chat_id, text):
                     return
 
+            if t == "run recovery protocol":
+                if await try_recovery_protocol(update, chat_id, text):
+                    return        
+
             if t.startswith("retoma "):
                 if await try_resume_node(update, chat_id, text):
                     return
@@ -3965,6 +4038,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             try_help,
             try_undo_last_action,
             try_where_were_we,
+            try_recovery_protocol,
             try_resume_node,
             try_node_followup,
             try_auto_propose_node,
