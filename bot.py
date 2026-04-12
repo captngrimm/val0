@@ -2566,6 +2566,13 @@ def _is_pm_drift_candidate(text: str) -> bool:
     )
     return any(m in low for m in markers)
 
+def _build_pm_redirect_reply(pm_state: dict) -> str:
+    return (
+        f"No ahora. Eso es drift.\n\n"
+        f"Foco actual: {pm_state.get('current_focus', '')}\n"
+        f"Decisión: {pm_state.get('decision', '')}\n"
+        f"Siguiente acción: {pm_state.get('next_action', '')}"
+    ).strip()
 
 def _build_pm_system_block(pm_state: dict) -> str:
     return (
@@ -2606,6 +2613,217 @@ async def showfocus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Roadmap: {focus.get('roadmap_note', '')}"
     ).strip()
     await update.message.reply_text(msg)
+
+def _infer_focus_candidate(text: str) -> dict | None:
+    low = (text or "").lower().strip()
+
+    pm_memory_markers = (
+        "pm loop", "pm", "bertha", "memory", "memoria", "session memory",
+        "session continuity", "continuity", "context", "contexto",
+        "pipeline", "bot.py", "val0", "focus", "foco",
+    )
+
+    calendar_markers = (
+        "calendar", "calendario", "agenda", "evento", "event", "reminder",
+        "recordatorio", "gcal", "google calendar",
+    )
+
+    miguel_demo_markers = (
+        "miguel", "demo", "demo readiness",
+    )
+
+    if any(m in low for m in pm_memory_markers):
+        return {
+            "focus_title": "Val0 PM + session continuity",
+            "focus_summary": "Implement automatic focus control and conversational continuity in Val0",
+            "roadmap_note": "Defer watch/UI/device work until after MVP",
+        }
+
+    if any(m in low for m in calendar_markers):
+        return {
+            "focus_title": "Val0 calendar + reminder hardening",
+            "focus_summary": "Harden calendar, reminder, and agenda reliability for MVP",
+            "roadmap_note": "Keep conversational continuity and PM stable while tightening utility flows",
+        }
+
+    if any(m in low for m in miguel_demo_markers):
+        return {
+            "focus_title": "Miguel demo readiness",
+            "focus_summary": "Prepare a stable, guided, promise-safe Val0 demo flow for Miguel",
+            "roadmap_note": "Prioritize continuity, reminders, and useful execution over side features",
+        }
+
+    return None
+
+
+def _is_focus_switch_signal(text: str) -> bool:
+    low = (text or "").lower().strip()
+    markers = (
+        "switch to",
+        "let's work on",
+        "lets work on",
+        "now let's do",
+        "now lets do",
+        "vamos con",
+        "cambiemos a",
+        "ahora trabajemos en",
+        "trabajemos en",
+    )
+    return any(m in low for m in markers)
+
+
+def _is_focus_continue_signal(text: str) -> bool:
+    low = (text or "").lower().strip()
+    markers = (
+        "continue",
+        "keep going",
+        "what were we doing",
+        "where were we",
+        "the other thing",
+        "seguimos",
+        "continua",
+        "continúa",
+        "que estabamos haciendo",
+        "qué estábamos haciendo",
+        "en que ibamos",
+        "en qué íbamos",
+    )
+    return any(m in low for m in markers)
+
+
+def _maybe_autoset_focus(chat_id: int, text: str) -> dict:
+    current = get_pm_focus(int(chat_id))
+    candidate = _infer_focus_candidate(text)
+
+    # If the user is clearly asking to continue/recover, keep current focus sticky.
+    if _is_focus_continue_signal(text):
+        return current
+
+    # No strong candidate detected: keep current focus as-is.
+    if not candidate:
+        return current
+
+    current_title = (current.get("focus_title") or "").strip()
+    candidate_title = (candidate.get("focus_title") or "").strip()
+
+    # If current focus is generic/unset, auto-bootstrap.
+    if not current_title or current_title == "General execution":
+        set_pm_focus(
+            int(chat_id),
+            candidate["focus_title"],
+            candidate["focus_summary"],
+            candidate["roadmap_note"],
+        )
+        return get_pm_focus(int(chat_id))
+
+    # If candidate matches current, refresh timestamp implicitly by rewriting same focus.
+    if current_title == candidate_title:
+        set_pm_focus(
+            int(chat_id),
+            candidate["focus_title"],
+            candidate["focus_summary"],
+            candidate["roadmap_note"],
+        )
+        return get_pm_focus(int(chat_id))
+
+    # Auto-promote from broad demo focus into active implementation lane
+    # when the new message strongly matches PM/memory work.
+    if current_title == "Miguel demo readiness" and candidate_title == "Val0 PM + session continuity":
+        set_pm_focus(
+            int(chat_id),
+            candidate["focus_title"],
+            candidate["focus_summary"],
+            candidate["roadmap_note"],
+        )
+        return get_pm_focus(int(chat_id))
+
+    # Only switch other focus lanes automatically when the user gives a strong switch signal.
+    if _is_focus_switch_signal(text):
+        set_pm_focus(
+            int(chat_id),
+            candidate["focus_title"],
+            candidate["focus_summary"],
+            candidate["roadmap_note"],
+        )
+        return get_pm_focus(int(chat_id))
+
+    # Otherwise keep current focus sticky.
+    return current
+
+def _is_continuation_query(text: str) -> bool:
+    low = (text or "").lower().strip()
+    markers = (
+        "continue",
+        "okay continue",
+        "ok continue",
+        "keep going",
+        "what was the last concrete thing",
+        "what were we doing",
+        "where were we",
+        "summarize that",
+        "turn that into 3 steps",
+        "turn it into 3 steps",
+        "what are step 2 and step 3",
+        "seguimos",
+        "continua",
+        "continúa",
+        "resume eso",
+        "resumelo",
+        "resúmelo",
+        "conviertelo en 3 pasos",
+        "conviértelo en 3 pasos",
+        "que estabamos haciendo",
+        "qué estábamos haciendo",
+        "cual era la ultima cosa concreta",
+        "cuál era la última cosa concreta",
+        "en que ibamos",
+        "en qué íbamos",
+    )
+    return any(m in low for m in markers)
+
+
+def _get_last_user_work_message(chat_id: int) -> str:
+    try:
+        rows = fetch_recent_messages(int(chat_id), limit=12)
+    except Exception:
+        return ""
+
+    # walk backwards, skip the current meta query and trivial chatter
+    skip_markers = (
+        "continue",
+        "okay continue",
+        "ok continue",
+        "what was the last concrete thing",
+        "what were we doing",
+        "where were we",
+        "summarize that",
+        "turn that into 3 steps",
+        "turn it into 3 steps",
+        "what are step 2 and step 3",
+        "seguimos",
+        "continua",
+        "continúa",
+        "resume eso",
+        "resumelo",
+        "resúmelo",
+        "conviertelo en 3 pasos",
+        "conviértelo en 3 pasos",
+    )
+
+    for row in reversed(rows):
+        role = (row.get("role") or "").strip().lower()
+        content = (row.get("content") or "").strip()
+        low = content.lower()
+
+        if role != "user":
+            continue
+        if not content:
+            continue
+        if any(m in low for m in skip_markers):
+            continue
+        return content
+
+    return ""
 
 # --------------------------------------------------
 # Core Message Pipeline
@@ -2656,10 +2874,19 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[SESSION_MEMORY_INBOUND] failed: {e}")
 
     # --------------------------------------------------
-    # PM LOOP: always compute, usually invisible
+    # AUTO-FOCUS + PM LOOP
     # --------------------------------------------------
     try:
+        auto_focus = _maybe_autoset_focus(int(chat_id), text)
+    except Exception as e:
+        logger.exception(f"[AUTO_FOCUS] failed: {e}")
+        auto_focus = get_pm_focus(int(chat_id))
+
+    try:
         pm_state = evaluate_pm_input(int(chat_id), text)
+        pm_state["current_focus"] = auto_focus.get("focus_title", pm_state.get("current_focus", "General execution"))
+        pm_state["focus_summary"] = auto_focus.get("focus_summary", pm_state.get("focus_summary", ""))
+        pm_state["roadmap_note"] = auto_focus.get("roadmap_note", pm_state.get("roadmap_note", ""))
     except Exception as e:
         logger.exception(f"[PM_EVAL] failed: {e}")
         pm_state = {
@@ -2671,13 +2898,9 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "next_action": "Continue current focus.",
         }
 
-    # Surface only when needed
+    # Hard redirect when drift is obvious
     if pm_state["decision"] in ("DEFER", "DISCARD") and _is_pm_drift_candidate(text):
-        surfaced = (
-            f"Current focus: {pm_state['current_focus']}\n"
-            f"Decision: {pm_state['decision']}\n"
-            f"Next action: {pm_state['next_action']}"
-        )
+        surfaced = _build_pm_redirect_reply(pm_state)
         try:
             log_pm_decision(
                 int(chat_id),
@@ -2690,7 +2913,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             logger.exception(f"[PM_LOG_SURFACED] failed: {e}")
 
-        await update.message.reply_text(surfaced)
+        await _send_reply(update, context, surfaced)
         return
 
     try:
@@ -2738,7 +2961,77 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
     except Exception as e:
-        logger.exception(f"[PM_FOCUS_OVERRIDE] failed: {e}")    
+        logger.exception(f"[PM_FOCUS_OVERRIDE] failed: {e}")  
+
+    # --------------------------------------------------
+    # PM CONTINUATION OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        if _is_continuation_query(text):
+            focus = get_pm_focus(int(chat_id))
+            last_work = _get_last_user_work_message(int(chat_id))
+
+            text_norm_cont = unicodedata.normalize("NFKD", (text or "").lower())
+            text_norm_cont = "".join(ch for ch in text_norm_cont if not unicodedata.combining(ch))
+
+            if "turn that into 3 steps" in text_norm_cont or "turn it into 3 steps" in text_norm_cont or "conviertelo en 3 pasos" in text_norm_cont or "conviertelo en 3 pasos" in text_norm_cont:
+                if last_work:
+                    reply = (
+                        f"Claro. Para avanzar en {focus.get('focus_title', 'el foco actual')}:\n\n"
+                        f"1. Definir con precisión el objetivo de este bloque: {last_work}\n"
+                        f"2. Identificar el punto exacto de integración o bloqueo dentro del flujo actual.\n"
+                        f"3. Ejecutar el siguiente cambio concreto y verificarlo en Telegram."
+                    )
+                else:
+                    reply = (
+                        f"Claro. Para avanzar en {focus.get('focus_title', 'el foco actual')}:\n\n"
+                        f"1. Reconfirmar el objetivo inmediato.\n"
+                        f"2. Identificar el siguiente bloqueo o integración pendiente.\n"
+                        f"3. Ejecutar y verificar el siguiente cambio concreto."
+                    )
+                await _send_reply(update, context, reply)
+                return
+
+            if "what was the last concrete thing" in text_norm_cont or "cual era la ultima cosa concreta" in text_norm_cont or "cuál era la última cosa concreta" in text_norm_cont:
+                if last_work:
+                    reply = (
+                        f"La última cosa concreta era esta:\n"
+                        f"- {last_work}\n\n"
+                        f"Eso cae bajo:\n"
+                        f"Foco actual: {focus.get('focus_title', '')}"
+                    )
+                else:
+                    reply = (
+                        f"No tengo una acción concreta reciente suficientemente clara en el hilo.\n\n"
+                        f"Foco actual: {focus.get('focus_title', '')}\n"
+                        f"Resumen: {focus.get('focus_summary', '')}"
+                    )
+                await _send_reply(update, context, reply)
+                return
+
+            # Generic continue / what were we doing / summarize that
+            if last_work:
+                reply = (
+                    f"Seguimos con esto:\n"
+                    f"- {last_work}\n\n"
+                    f"Foco actual: {focus.get('focus_title', '')}\n"
+                    f"Resumen: {focus.get('focus_summary', '')}\n"
+                    f"Siguiente dirección: {focus.get('roadmap_note', '')}"
+                )
+            else:
+                reply = (
+                    f"Seguimos en:\n"
+                    f"Foco actual: {focus.get('focus_title', '')}\n"
+                    f"Resumen: {focus.get('focus_summary', '')}\n"
+                    f"Roadmap: {focus.get('roadmap_note', '')}"
+                )
+
+            await _send_reply(update, context, reply)
+            return
+
+    except Exception as e:
+        logger.exception(f"[PM_CONTINUATION_OVERRIDE] failed: {e}")
+
     # --------------------------------------------------
     # TASK INTENT GATE (prevents collision)
     # --------------------------------------------------
@@ -5131,7 +5424,30 @@ Reglas de estructura obligatoria:
                 clean = txt.split(":", 1)[1].strip() if ":" in txt else txt
                 tasks.append(clean)
 
-        if tasks and not _has_active_commitment(text):
+        pm_footer_block_triggers = (
+            "what are we working on",
+            "what is the current focus",
+            "what was the last concrete thing",
+            "turn that into 3 steps",
+            "turn it into 3 steps",
+            "continue",
+            "okay continue",
+            "ok continue",
+            "keep going",
+            "cual es el foco actual",
+            "cuál es el foco actual",
+            "que estabamos haciendo",
+            "qué estábamos haciendo",
+            "conviertelo en 3 pasos",
+            "conviértelo en 3 pasos",
+            "en que estamos trabajando",
+            "en qué estamos trabajando",
+        )
+
+        low = (text or "").lower()
+        pm_footer_blocked = any(t in low for t in pm_footer_block_triggers)
+
+        if tasks and not _has_active_commitment(text) and not pm_footer_blocked:
             low = (text or "").lower()
 
             operational_triggers = (

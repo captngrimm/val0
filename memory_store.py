@@ -382,6 +382,33 @@ def log_pm_decision(
         conn.close()
 
 
+def get_last_non_drift_user_input(chat_id: int, limit: int = 20) -> str:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT user_input
+            FROM pm_decisions
+            WHERE chat_id = ?
+              AND decision = 'DO_NOW'
+              AND TRIM(COALESCE(user_input, '')) <> ''
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (int(chat_id), int(limit)),
+        )
+        rows = cur.fetchall()
+        conn.close()
+
+    for row in rows:
+        val = row["user_input"] if hasattr(row, "keys") else row[0]
+        if val and str(val).strip():
+            return str(val).strip()
+
+    return ""
+    
+
 def evaluate_pm_input(chat_id: int, user_input: str) -> Dict[str, str]:
     text = (user_input or "").strip()
     low = text.lower()
