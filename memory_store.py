@@ -204,22 +204,32 @@ def init_db() -> None:
         """)
 
         # --------------------------------------------------
-        # Phase 2: case summary cache (derived, non-authoritative)
+        # PM loop tables (isolated from canonical case/reminder data)
         # --------------------------------------------------
         cur.execute("""
-        CREATE TABLE IF NOT EXISTS case_summaries (
-            chat_id INTEGER NOT NULL,
-            case_id TEXT NOT NULL,
-            summary_text TEXT NOT NULL DEFAULT '',
-            last_event_at TEXT,
-            last_note_at TEXT,
-            next_deadline TEXT,
-            open_reminders_count INTEGER NOT NULL DEFAULT 0,
-            last_summary_refresh TEXT,
-            summary_version INTEGER NOT NULL DEFAULT 1,
-            PRIMARY KEY (chat_id, case_id)
+        CREATE TABLE IF NOT EXISTS pm_current_focus (
+            chat_id INTEGER PRIMARY KEY,
+            focus_title TEXT NOT NULL,
+            focus_summary TEXT DEFAULT '',
+            roadmap_note TEXT DEFAULT '',
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS pm_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chat_id INTEGER NOT NULL,
+            user_input TEXT NOT NULL,
+            decision TEXT NOT NULL,
+            reason TEXT DEFAULT '',
+            next_action TEXT DEFAULT '',
+            surfaced_to_user INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_pm_decisions_chat_id ON pm_decisions(chat_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_pm_decisions_created_at ON pm_decisions(created_at);")
 
         conn.commit()
         conn.close()
@@ -264,6 +274,160 @@ def fetch_recent_messages(chat_id: int, limit: int = 30) -> List[Dict[str, Any]]
         conn.close()
     return [dict(r) for r in reversed(rows)]
 
+def trim_messages_for_chat(chat_id: int, keep_last: int = 12) -> None:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            DELETE FROM messages
+            WHERE chat_id = ?
+              AND id NOT IN (
+                SELECT id
+                FROM messages
+                WHERE chat_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+              )
+            """,
+            (int(chat_id), int(chat_id), int(keep_last)),
+        )
+        conn.commit()
+        conn.close()
+
+
+def set_pm_focus(chat_id: int, focus_title: str, focus_summary: str = "", roadmap_note: str = "") -> None:
+    focus_title = (focus_title or "").strip() or "General execution"
+    focus_summary = (focus_summary or "").strip()
+    roadmap_note = (roadmap_note or "").strip()
+
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            "INSERT OR IGNORE INTO pm_current_focus(chat_id, focus_title, focus_summary, roadmap_note, updated_at) VALUES(?,?,?,?,datetime('now'))",
+            (int(chat_id), focus_title, focus_summary, roadmap_note),
+        )
+
+        cur.execute(
+            """
+            UPDATE pm_current_focus
+            SET focus_title = ?,
+                focus_summary = ?,
+                roadmap_note = ?,
+                updated_at = datetime('now')
+            WHERE chat_id = ?
+            """,
+            (focus_title, focus_summary, roadmap_note, int(chat_id)),
+        )
+
+        conn.commit()
+        conn.close()
+
+
+def get_pm_focus(chat_id: int) -> Dict[str, Any]:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT chat_id, focus_title, focus_summary, roadmap_note, updated_at
+            FROM pm_current_focus
+            WHERE chat_id = ?
+            """,
+            (int(chat_id),),
+        )
+        row = cur.fetchone()
+        conn.close()
+
+    if row:
+        return dict(row)
+
+    return {
+        "chat_id": int(chat_id),
+        "focus_title": "General execution",
+        "focus_summary": "",
+        "roadmap_note": "",
+        "updated_at": None,
+    }
+
+
+def log_pm_decision(
+    chat_id: int,
+    user_input: str,
+    decision: str,
+    reason: str,
+    next_action: str,
+    surfaced_to_user: bool = False,
+) -> None:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO pm_decisions(chat_id, user_input, decision, reason, next_action, surfaced_to_user)
+            VALUES(?,?,?,?,?,?)
+            """,
+            (
+                int(chat_id),
+                (user_input or "").strip(),
+                (decision or "").strip(),
+                (reason or "").strip(),
+                (next_action or "").strip(),
+                1 if surfaced_to_user else 0,
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+
+def evaluate_pm_input(chat_id: int, user_input: str) -> Dict[str, str]:
+    text = (user_input or "").strip()
+    low = text.lower()
+    focus = get_pm_focus(int(chat_id))
+
+    do_now_markers = (
+        "memory", "memoria", "context", "contexto", "telegram", "prompt",
+        "bot.py", "pipeline", "continuity", "continuidad", "session",
+        "sesion", "sesión", "miguel", "demo", "focus", "recordatorio",
+        "reminder", "calendar", "calendario",
+    )
+    defer_markers = (
+        "watch", "wear", "alexa", "ui", "interfaz", "theme", "tema",
+        "app", "aplicacion", "aplicación", "multidevice", "device",
+        "voice playback", "speaker", "audio flow", "book", "newspaper",
+    )
+    discard_markers = (
+        "rewrite everything", "start over", "rebuild from scratch",
+        "change the whole stack", "cambiar todo", "empezar de cero",
+    )
+
+    decision = "DO_NOW"
+    reason = "No drift detected."
+    next_action = f"Continue current focus: {focus['focus_title']}"
+
+    if any(x in low for x in discard_markers):
+        decision = "DISCARD"
+        reason = "Destabilizing scope or reset-risk input."
+        next_action = f"Ignore this and continue: {focus['focus_title']}"
+    elif any(x in low for x in defer_markers):
+        decision = "DEFER"
+        reason = "Useful, but outside the current MVP critical path."
+        next_action = f"Log it for later and continue: {focus['focus_title']}"
+    elif any(x in low for x in do_now_markers):
+        decision = "DO_NOW"
+        reason = "Directly supports the active MVP path."
+        next_action = f"Advance current focus: {focus['focus_title']}"
+
+    return {
+        "current_focus": focus["focus_title"],
+        "focus_summary": focus.get("focus_summary", "") or "",
+        "roadmap_note": focus.get("roadmap_note", "") or "",
+        "decision": decision,
+        "reason": reason,
+        "next_action": next_action,
+    }
 
 # bot.py expects this name
 

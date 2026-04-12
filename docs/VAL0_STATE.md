@@ -156,3 +156,64 @@ Personality polish
 - Infinite / omniscient memory claims
 - Autonomous monitoring
 - Implicit behavioral profiling
+
+---
+
+## 2026-04-12 — PM LOOP + SESSION CONTINUITY MVP (AUDITED)
+
+### Runtime source of truth
+- Live service: `val0-bot.service`
+- Entrypoint: `/opt/val0/.venv/bin/python /opt/val0/bot.py`
+- Working directory: `/opt/val0`
+- Live DB: `/opt/val0/val0_memory.enc.db`
+- DB mode: SQLCipher / encrypted
+- DB key file: `/etc/val0/db_key`
+
+### Important runtime note
+These are **not** source of truth:
+- `/opt/val0/system/val0.service`
+- `/opt/val0/system/service_start.sh`
+
+Both were audited and confirmed to be empty stubs.
+
+### Undocumented-but-working features confirmed
+- Telegram voice input pipeline is live
+- Whisper transcription is live
+- Voice reply mode is live via `/voice on|off|status`
+- TTS reply path is live in `_send_reply()`
+- Background Forge ingest path for voice is live
+- Prompt assembly is centralized in `_process_text_pipeline()`
+- Final model gateway is `call_val_openai(...)`
+- Existing message logging already existed in `memory_store.py`
+- Existing recent-memory injection already existed
+- Existing semantic memory hooks already existed
+- `_ACTIVE_NODE` / `retoma` flow is live
+- Legal / case / reminder routing is already live and coupled
+- Reminder runner / polling loop is live
+
+### PM loop MVP added
+- PM is computed on every user input
+- PM decisions:
+  - `DO_NOW`
+  - `DEFER`
+  - `DISCARD`
+- PM focus persists in DB
+- PM drift can be surfaced to user when needed
+- PM guidance is injected into model behavior
+
+### Session continuity MVP added
+- Inbound user turns are stored in `messages`
+- Outbound assistant replies are stored in `messages`
+- Recent per-chat messages are trimmed to last 12
+- Existing prompt context now has reliable short-turn continuity support
+
+### Deterministic override added
+Questions like:
+- “What are we working on?”
+- “What is the current focus?”
+now resolve from PM focus directly instead of leaking into legal/case urgency layers.
+
+### Isolation rule preserved
+- PM tables do **not** mutate canonical case/reminder records
+- PM logic is advisory/control only
+- canonical data remains separate

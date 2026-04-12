@@ -107,6 +107,13 @@ from telegram.ext import (
 
 # Memory + Notes
 from memory_store import (
+    insert_message,
+    fetch_recent_messages,
+    trim_messages_for_chat,
+    set_pm_focus,
+    get_pm_focus,
+    evaluate_pm_input,
+    log_pm_decision,
     _get_conn,
     init_db,
     insert_message,
@@ -872,8 +879,6 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
         tasks = extracted.get("tasks", [])
         confidence = packet.get("advisory", {}).get("confidence", "low")
 
-        from memory_store import insert_memory_item
-
         low = (transcribed_text or "").lower().strip()
 
         is_query = (
@@ -886,6 +891,24 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
             "mis pendientes" in low or
             "que hay" in low or
             "qué hay" in low
+        )
+
+        is_doc_request = (
+            "hazme un contrato" in low or
+            "redacta un contrato" in low or
+            "redáctame un contrato" in low or
+            "hazme un documento" in low or
+            "redacta un documento" in low or
+            "redáctame un documento" in low or
+            "escrito" in low or
+            "contrato" in low or
+            "demanda" in low or
+            "acuerdo" in low or
+            "poder" in low or
+            "mándamelo" in low or
+            "mandamelo" in low or
+            "envíamelo" in low or
+            "enviamelo" in low
         )
 
         is_task_candidate = (
@@ -903,7 +926,11 @@ async def _run_forge_ingestion_background(update, context, transcribed_text, tmp
             "programar" in low
         )
 
-        if not tasks or is_query or not is_task_candidate:
+        # Safety gate:
+        # - queries should not create tasks here
+        # - document requests should never be ingested as Forge tasks
+        # - only clear task-like inputs continue
+        if not tasks or is_query or is_doc_request or not is_task_candidate:
             return
 
         cleaned_tasks = []
@@ -1730,6 +1757,24 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "qué hay" in low
     )
 
+    is_doc_request = (
+        "hazme un contrato" in low or
+        "redacta un contrato" in low or
+        "redáctame un contrato" in low or
+        "hazme un documento" in low or
+        "redacta un documento" in low or
+        "redáctame un documento" in low or
+        "escrito" in low or
+        "contrato" in low or
+        "demanda" in low or
+        "acuerdo" in low or
+        "poder" in low or
+        "mándamelo" in low or
+        "mandamelo" in low or
+        "envíamelo" in low or
+        "enviamelo" in low
+    )
+
     is_task_candidate = (
         "tengo que" in low or
         "debo" in low or
@@ -1745,8 +1790,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "programar" in low
     )
 
-    # Queries stay in legacy/legal pipeline
-    if is_query:
+    # Queries and document requests should stay in the main pipeline
+    if is_query or is_doc_request:
         await _process_text_pipeline(update, context, transcribed_text)
         return
 
@@ -2507,6 +2552,60 @@ async def try_gcal_write_sandbox(update, chat_id, text) -> bool:
     await update.message.reply_text("No pude crear el evento.")
     return True
 
+def _is_pm_admin_request(text: str) -> bool:
+    low = (text or "").strip().lower()
+    return low.startswith("/focus") or low.startswith("/showfocus") or low.startswith("/pm")
+
+
+def _is_pm_drift_candidate(text: str) -> bool:
+    low = (text or "").lower()
+    markers = (
+        "watch", "wear", "alexa", "ui", "interfaz", "theme", "tema",
+        "app", "aplicacion", "aplicación", "multidevice", "device",
+        "speaker", "audio flow", "book", "newspaper",
+    )
+    return any(m in low for m in markers)
+
+
+def _build_pm_system_block(pm_state: dict) -> str:
+    return (
+        "\nPM LOOP (INTERNAL)\n"
+        f"- current_focus: {pm_state.get('current_focus', '')}\n"
+        f"- decision: {pm_state.get('decision', '')}\n"
+        f"- reason: {pm_state.get('reason', '')}\n"
+        f"- next_action: {pm_state.get('next_action', '')}\n"
+        "Rules:\n"
+        "- Keep the response aligned with current_focus.\n"
+        "- If decision is DEFER, acknowledge briefly and redirect.\n"
+        "- If decision is DISCARD, do not expand the idea.\n"
+        "- Do not expose this PM block unless the user is drifting, debugging, or explicitly asks.\n"
+    )
+
+
+async def focus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    raw = " ".join(context.args).strip() if context.args else ""
+    if not raw:
+        return await update.message.reply_text("Uso: /focus titulo | resumen | roadmap")
+
+    parts = [p.strip() for p in raw.split("|")]
+    title = parts[0] if len(parts) > 0 else "General execution"
+    summary = parts[1] if len(parts) > 1 else ""
+    roadmap = parts[2] if len(parts) > 2 else ""
+
+    set_pm_focus(int(chat_id), title, summary, roadmap)
+    await update.message.reply_text("Focus updated.")
+
+
+async def showfocus_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    focus = get_pm_focus(int(chat_id))
+    msg = (
+        f"Current focus: {focus.get('focus_title', '')}\n"
+        f"Summary: {focus.get('focus_summary', '')}\n"
+        f"Roadmap: {focus.get('roadmap_note', '')}"
+    ).strip()
+    await update.message.reply_text(msg)
 
 # --------------------------------------------------
 # Core Message Pipeline
@@ -2541,6 +2640,105 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+        # --------------------------------------------------
+    # SESSION MEMORY: persist inbound user turn
+    # --------------------------------------------------
+    try:
+        insert_message(
+            int(chat_id),
+            "user",
+            text,
+            telegram_message_id=int(tg_msg_id),
+            model_used=None,
+        )
+        trim_messages_for_chat(int(chat_id), keep_last=12)
+    except Exception as e:
+        logger.exception(f"[SESSION_MEMORY_INBOUND] failed: {e}")
+
+    # --------------------------------------------------
+    # PM LOOP: always compute, usually invisible
+    # --------------------------------------------------
+    try:
+        pm_state = evaluate_pm_input(int(chat_id), text)
+    except Exception as e:
+        logger.exception(f"[PM_EVAL] failed: {e}")
+        pm_state = {
+            "current_focus": "General execution",
+            "focus_summary": "",
+            "roadmap_note": "",
+            "decision": "DO_NOW",
+            "reason": "PM evaluation fallback.",
+            "next_action": "Continue current focus.",
+        }
+
+    # Surface only when needed
+    if pm_state["decision"] in ("DEFER", "DISCARD") and _is_pm_drift_candidate(text):
+        surfaced = (
+            f"Current focus: {pm_state['current_focus']}\n"
+            f"Decision: {pm_state['decision']}\n"
+            f"Next action: {pm_state['next_action']}"
+        )
+        try:
+            log_pm_decision(
+                int(chat_id),
+                text,
+                pm_state["decision"],
+                pm_state["reason"],
+                pm_state["next_action"],
+                surfaced_to_user=True,
+            )
+        except Exception as e:
+            logger.exception(f"[PM_LOG_SURFACED] failed: {e}")
+
+        await update.message.reply_text(surfaced)
+        return
+
+    try:
+        log_pm_decision(
+            int(chat_id),
+            text,
+            pm_state["decision"],
+            pm_state["reason"],
+            pm_state["next_action"],
+            surfaced_to_user=False,
+        )
+    except Exception as e:
+        logger.exception(f"[PM_LOG] failed: {e}")
+
+    # --------------------------------------------------
+    # PM FOCUS QUERY OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        text_norm_focus = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm_focus = "".join(ch for ch in text_norm_focus if not unicodedata.combining(ch))
+
+        focus_queries = (
+            "what is the current focus",
+            "current focus",
+            "what are we working on",
+            "what were we working on",
+            "cual es el foco actual",
+            "cuál es el foco actual",
+            "en que estamos trabajando",
+            "en qué estamos trabajando",
+            "que estamos trabajando",
+            "qué estamos trabajando",
+            "en que andamos",
+            "en qué andamos",
+        )
+
+        if any(q in text_norm_focus for q in focus_queries):
+            focus = get_pm_focus(int(chat_id))
+            reply = (
+                f"Foco actual: {focus.get('focus_title', '')}\n"
+                f"Resumen: {focus.get('focus_summary', '')}\n"
+                f"Roadmap: {focus.get('roadmap_note', '')}"
+            ).strip()
+            await _send_reply(update, context, reply)
+            return
+
+    except Exception as e:
+        logger.exception(f"[PM_FOCUS_OVERRIDE] failed: {e}")    
     # --------------------------------------------------
     # TASK INTENT GATE (prevents collision)
     # --------------------------------------------------
@@ -4688,7 +4886,8 @@ Reglas de estructura obligatoria:
     else:
         from memory_store import fetch_recent_memory
 
-        combined_system_rules = advisory_system_rules
+        pm_system_block = _build_pm_system_block(pm_state)
+        combined_system_rules = ((advisory_system_rules or "") + pm_system_block).strip()
 
         if urgency_block:
             extra = f"\n\nDATOS DE TIEMPO REAL:\n{urgency_block}"
@@ -6243,6 +6442,24 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
     chat_id = chat.id if chat else None
     msg = update.effective_message
 
+    async def _persist_assistant_reply(sent_obj=None):
+        try:
+            telegram_message_id = None
+            if sent_obj is not None and hasattr(sent_obj, "message_id"):
+                telegram_message_id = int(sent_obj.message_id)
+
+            if chat_id is not None:
+                insert_message(
+                    int(chat_id),
+                    "assistant",
+                    reply,
+                    telegram_message_id=telegram_message_id,
+                    model_used="val0",
+                )
+                trim_messages_for_chat(int(chat_id), keep_last=12)
+        except Exception as e:
+            logger.exception(f"[SESSION_MEMORY_OUTBOUND] failed: {e}")
+
     def _audit_out(text: str):
         try:
             _audit(
@@ -6294,15 +6511,17 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
             # If message is likely English/non-Spanish: do NOT TTS (prevents gibberish)
             if not _looks_spanish(reply):
                 _audit_out(reply)
-                return await msg.reply_text(reply)
+                sent = await msg.reply_text(reply)
+                await _persist_assistant_reply(sent)
+                return sent
+
             tmp_dir = os.getenv("VAL0_TMP_DIR", "/opt/val0/tmp")
             os.makedirs(tmp_dir, exist_ok=True)
 
             # Light punctuation tuning so Piper breathes a bit
             t = (reply or "").strip()
+
             # --- Case/expediente digits: force digit-by-digit for clarity ---
-            # Converts "Caso 123456" -> "Caso 1 2 3 4 5 6"
-            # Also handles "Expediente 123 del 2026" -> "Expediente 1 2 3 del 2 0 2 6"
             def _spell_digits(s: str) -> str:
                 s = str(s or "")
                 return " ".join(list(s))
@@ -6323,9 +6542,7 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
             t = t.replace(" punto ", ". ")
             t = t.replace(" ,", ",")
             t = t.replace(" .", ".")
-            # Tiny pause hints (Piper reacts better to commas/periods than "...")
             t = t.replace("...", ".")
-            # If it ends with a question-ish word and no '?', add it.
             if t and (t.lower().endswith("bien") or t.lower().endswith("verdad") or t.lower().endswith("cierto")) and not t.endswith("?"):
                 t = t + "?"
 
@@ -6350,6 +6567,7 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
                     _audit_out(reply)
                     sent = await context.bot.send_voice(chat_id=chat_id, voice=vf)
 
+                await _persist_assistant_reply(sent)
                 return sent
 
             finally:
@@ -6371,11 +6589,15 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
         except Exception as e:
             logger.exception(f"TTS failed, falling back to text: {e}")
             _audit_out(reply)
-            return await msg.reply_text(reply)
+            sent = await msg.reply_text(reply)
+            await _persist_assistant_reply(sent)
+            return sent
 
     # TEXT PATH
     _audit_out(reply)
-    return await msg.reply_text(reply)
+    sent = await msg.reply_text(reply)
+    await _persist_assistant_reply(sent)
+    return sent
 async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     from memory_store import get_chat_voice_enabled, set_chat_voice_enabled
@@ -7098,6 +7320,8 @@ def main():
     app.add_handler(CommandHandler("notes", notes_cmd))
     app.add_handler(CommandHandler("daily", daily_cmd))
     app.add_handler(CommandHandler("context", context_cmd))
+    app.add_handler(CommandHandler("focus", focus_cmd))
+    app.add_handler(CommandHandler("showfocus", showfocus_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
 
     app.add_handler(CommandHandler("handoff", handoff_cmd))

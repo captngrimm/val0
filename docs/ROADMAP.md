@@ -414,6 +414,74 @@ Definition of Done:
 User can recover context without scrolling chat
 
 =====================================================================
+PHASE 1.7 — PM LOOP (CRITICAL)
+=====================================================================
+
+Goal:
+Convert ValPrime from passive state system → active project manager
+
+Responsibilities:
+
+ValPrime must:
+
+always know:
+current focus
+next action
+priority order
+enforce:
+focus discipline
+task sequencing
+roadmap alignment
+Capabilities:
+
+When user inputs ANYTHING:
+
+ValPrime must classify:
+
+1) Is this aligned with current focus?
+2) Is this a distraction?
+3) Is this a future-phase idea?
+4) Is this critical now?
+Output Behavior:
+
+ValPrime must respond with:
+
+- Current focus
+- Evaluation of input
+- Decision:
+    - DO NOW
+    - DEFER
+    - DISCARD
+- Next action (explicit)
+Example:
+
+User:
+
+“let’s work on personality system”
+
+ValPrime:
+
+Current focus: Session memory
+
+Evaluation:
+Personality system = valid but Phase 6
+
+Decision:
+DEFER
+
+Next action:
+Implement session memory storage (step 1)
+Constraints:
+must follow roadmap strictly
+must not reorder phases without explicit user override
+must enforce discipline over creativity
+Definition of Done:
+
+User cannot drift without being corrected
+
+System always provides next action without being asked
+
+=====================================================================
 STATE AUTHORITY (VALPRIME)
 =====================================================================
 
@@ -755,3 +823,61 @@ All structural changes must:
 2. preserve determinism
 3. remain testable
 4. respect layer separation
+
+---
+
+## 2026-04-12 — PM Loop + Session Continuity MVP Update
+
+### Status
+Implemented and working at MVP level.
+
+### Delivered
+- PM focus persistence
+- PM decision logging
+- Heuristic PM classifier:
+  - `DO_NOW`
+  - `DEFER`
+  - `DISCARD`
+- PM drift surfacing
+- Session message persistence for inbound/outbound turns
+- Recent-message trimming
+- Deterministic focus-query override
+
+### Files touched
+- `/opt/val0/memory_store.py`
+- `/opt/val0/bot.py`
+
+### Runtime assumptions confirmed
+- live service: `val0-bot.service`
+- live DB: `/opt/val0/val0_memory.enc.db`
+- runtime source of truth comes from systemd, not `/opt/val0/system/*.service`
+
+### Design rules preserved
+- SQLite / SQLCipher only
+- no embeddings added
+- no mutation of canonical case tables for PM
+- no mutation of reminder canonical flow for PM
+- no overengineering beyond MVP
+
+### Compatibility note
+Current SQLCipher build did not accept:
+- `ON CONFLICT (...) DO UPDATE`
+
+Working replacement used:
+- `INSERT OR IGNORE`
+- then `UPDATE`
+
+### Deferred by design
+- embeddings-based recall improvements
+- full ValPrime orchestration engine
+- app/UI work
+- watch-native UX
+- multi-device sync
+- advanced privacy layer
+- richer PM planner logic
+
+### Next recommended step
+- continuity polish pass
+- follow-up carryover testing
+- active-context continuity testing
+- torch-pass recovery doc
