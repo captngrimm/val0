@@ -2084,7 +2084,12 @@ async def try_recovery_protocol(update, chat_id, text) -> bool:
             timeout=8
         ).strip()
 
-        if node:
+        active = _ACTIVE_NODE.get(int(chat_id))
+
+        if active:
+            node = active
+            next_action = f"Continúa en {node} y define el siguiente bloque concreto."
+        elif node:
             _ACTIVE_NODE[int(chat_id)] = node
             next_action = f"Retoma {node} y define el siguiente bloque concreto."
         else:
