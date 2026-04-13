@@ -407,7 +407,7 @@ def get_last_non_drift_user_input(chat_id: int, limit: int = 20) -> str:
             return str(val).strip()
 
     return ""
-    
+
 
 def evaluate_pm_input(chat_id: int, user_input: str) -> Dict[str, str]:
     text = (user_input or "").strip()
