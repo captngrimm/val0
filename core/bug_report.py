@@ -224,12 +224,14 @@ async def reports_cmd(update, context):
         await msg.reply_text("No veo reportes todavía.")
         return
 
-    lines = [f"Últimos {len(rows)} reporte(s):"]
+    lines = [f"Últimos {len(rows)} reporte(s):", ""]
 
-    for r in reversed(rows):
-        kind = (r.get("kind") or "bug").strip().lower()
+    for idx, r in enumerate(reversed(rows), start=1):
+        kind = (r.get("kind") or "bug").strip().upper()
         attempted = (r.get("attempted_action") or "").strip()
         actual = (r.get("actual_result") or "").strip()
+        expected = (r.get("expected_result") or "").strip()
+        channel = (r.get("channel") or "").strip()
 
         report_chat_id = r.get("chat_id")
         preferred_name = ""
@@ -245,13 +247,21 @@ async def reports_cmd(update, context):
 
         author = preferred_name or display_name or username or (str(user_id) if user_id is not None else "desconocido")
 
-        if len(attempted) > 60:
-            attempted = attempted[:60] + "…"
-        if len(actual) > 60:
-            actual = actual[:60] + "…"
+        def _clip(s: str, limit: int = 90) -> str:
+            s = (s or "").strip()
+            return s if len(s) <= limit else s[:limit] + "…"
 
-        lines.append(f"- {kind} — {author}: {attempted}")
+        lines.append(f"[{kind}] {author}")
+        if attempted:
+            lines.append(f"- Contexto: {_clip(attempted)}")
         if actual:
-            lines.append(f"  ↳ {actual}")
+            lines.append(f"- Resultado: {_clip(actual)}")
+        if expected:
+            lines.append(f"- Esperado: {_clip(expected)}")
+        if channel:
+            lines.append(f"- Canal: {_clip(channel, 40)}")
+
+        if idx < len(rows):
+            lines.append("")
 
     await msg.reply_text("\n".join(lines))   
