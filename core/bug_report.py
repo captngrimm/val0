@@ -58,6 +58,7 @@ def _start_report(update, kind: str):
         "chat_id": chat_id,
         "user_id": getattr(user, "id", None),
         "username": getattr(user, "username", None),
+        "display_name": getattr(user, "full_name", None),
     }
 
     opening = {
@@ -160,6 +161,7 @@ async def handle_pending_bug_report(update, chat_id: int, text: str) -> bool:
             "chat_id": p.get("chat_id"),
             "user_id": p.get("user_id"),
             "username": p.get("username"),
+            "display_name": p.get("display_name"),
             "attempted_action": p.get("attempted_action", ""),
             "actual_result": p.get("actual_result", ""),
             "expected_result": p.get("expected_result", ""),
@@ -177,3 +179,79 @@ async def handle_pending_bug_report(update, chat_id: int, text: str) -> bool:
 
     _PENDING_BUG_REPORT.pop(int(chat_id), None)
     return False
+
+def read_recent_reports(limit: int = 5) -> list[dict]:
+    if limit < 1:
+        limit = 1
+    if limit > 20:
+        limit = 20
+
+    if not os.path.exists(BUG_REPORT_PATH):
+        return []
+
+    rows = []
+    with open(BUG_REPORT_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            line = (line or "").strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+
+    return rows[-limit:]
+
+
+async def reports_cmd(update, context):
+    msg = update.effective_message
+    if msg is None:
+        return
+
+    from memory_store import get_fact
+
+    n = 5
+    try:
+        parts = (msg.text or "").strip().split()
+        if len(parts) >= 2:
+            n = int(parts[1])
+    except Exception:
+        n = 5
+
+    rows = read_recent_reports(limit=n)
+
+    if not rows:
+        await msg.reply_text("No veo reportes todavía.")
+        return
+
+    lines = [f"Últimos {len(rows)} reporte(s):"]
+
+    for r in reversed(rows):
+        kind = (r.get("kind") or "bug").strip().lower()
+        attempted = (r.get("attempted_action") or "").strip()
+        actual = (r.get("actual_result") or "").strip()
+
+        report_chat_id = r.get("chat_id")
+        preferred_name = ""
+        try:
+            if report_chat_id is not None:
+                preferred_name = (get_fact(int(report_chat_id), "preferred_name") or "").strip()
+        except Exception:
+            preferred_name = ""
+
+        display_name = (r.get("display_name") or "").strip()
+        username = (r.get("username") or "").strip()
+        user_id = r.get("user_id")
+
+        author = preferred_name or display_name or username or (str(user_id) if user_id is not None else "desconocido")
+
+        if len(attempted) > 60:
+            attempted = attempted[:60] + "…"
+        if len(actual) > 60:
+            actual = actual[:60] + "…"
+
+        lines.append(f"- {kind} — {author}: {attempted}")
+        if actual:
+            lines.append(f"  ↳ {actual}")
+
+    await msg.reply_text("\n".join(lines))   
