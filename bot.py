@@ -406,8 +406,7 @@ def get_user_email(chat_id: int, fallback_name: str = "miguel"):
     if chat_id in EMAIL_BY_CHAT_ID:
         return EMAIL_BY_CHAT_ID[chat_id]
 
-    return EMAIL_CONTACTS.get(fallback_name)
-
+    return None
 def send_email_resend(to_email: str, subject: str, body: str) -> None:
     url = "https://api.resend.com/emails"
 
@@ -2574,6 +2573,21 @@ def _is_pm_admin_request(text: str) -> bool:
     low = (text or "").strip().lower()
     return low.startswith("/focus") or low.startswith("/showfocus") or low.startswith("/pm")
 
+def _looks_like_doc_request(text: str) -> bool:
+    low = unicodedata.normalize("NFKD", (text or "").lower())
+    low = "".join(ch for ch in low if not unicodedata.combining(ch))
+
+    doc_triggers = (
+        "contrato",
+        "hazme un contrato",
+        "generame un contrato",
+        "modelo de",
+        "borrador de",
+        "acuerdo",
+        "convenio",
+        "documento",
+    )
+    return any(t in low for t in doc_triggers)
 
 def _is_pm_drift_candidate(text: str) -> bool:
     low = (text or "").lower()
@@ -2812,15 +2826,15 @@ def _is_continuation_query(text: str) -> bool:
 
 def _get_last_user_work_message(chat_id: int) -> str:
     try:
-        rows = fetch_recent_messages(int(chat_id), limit=12)
+        rows = fetch_recent_messages(int(chat_id), limit=20)
     except Exception:
         return ""
 
-    # walk backwards, skip the current meta query and trivial chatter
     skip_markers = (
         "continue",
         "okay continue",
         "ok continue",
+        "keep going",
         "what was the last concrete thing",
         "what were we doing",
         "where were we",
@@ -2829,6 +2843,7 @@ def _get_last_user_work_message(chat_id: int) -> str:
         "turn it into 3 steps",
         "what are step 2 and step 3",
         "seguimos",
+        "sigue",
         "continua",
         "continúa",
         "resume eso",
@@ -2836,19 +2851,51 @@ def _get_last_user_work_message(chat_id: int) -> str:
         "resúmelo",
         "conviertelo en 3 pasos",
         "conviértelo en 3 pasos",
+        "que estabamos haciendo",
+        "qué estábamos haciendo",
+        "que tengo manana",
+        "que audiencias tengo manana",
+        "que vence manana",
+        "recuérdame",
+        "recuerdame",
+        "agenda manana",
+        "agenda mañana",
+        "foco actual",
+        "current focus",
+        )
+
+    stale_lane_markers = (
+        "val0 pm + session continuity",
+        "implement automatic focus control and conversational continuity in val0",
+        "defer watch/ui/device work until after mvp",
+        "revisar contrato",
+        "llamar a miguel",
+        "audiencia del 15 de abril",
     )
+
+    seen = set()
 
     for row in reversed(rows):
         role = (row.get("role") or "").strip().lower()
         content = (row.get("content") or "").strip()
-        low = content.lower()
 
         if role != "user":
             continue
         if not content:
             continue
+        if content in seen:
+            continue
+        seen.add(content)
+
+        low = unicodedata.normalize("NFKD", content.lower())
+        low = "".join(ch for ch in low if not unicodedata.combining(ch))
+        low = re.sub(r"[¿?¡!.,:;]+", "", low).strip()
+
         if any(m in low for m in skip_markers):
             continue
+        if any(m in low for m in stale_lane_markers):
+            continue
+
         return content
 
     return ""
@@ -2935,7 +2982,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "next_action": "Continue current focus.",
         }
     # Hard redirect when drift is obvious
-    if pm_state["decision"] in ("DEFER", "DISCARD") and _is_pm_drift_candidate(text):
+    if pm_state["decision"] in ("DEFER", "DISCARD") and _is_pm_drift_candidate(text) and not _looks_like_doc_request(text):
+
         surfaced = _build_pm_redirect_reply(pm_state)
         try:
             log_pm_decision(
@@ -2999,13 +3047,32 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[PM_FOCUS_OVERRIDE] failed: {e}")  
 
-       # --------------------------------------------------
+    # --------------------------------------------------
     # PM CONTINUATION OVERRIDE (DETERMINISTIC)
     # --------------------------------------------------
     try:
         if _is_continuation_query(text):
             focus = get_pm_focus(int(chat_id))
             last_work = _get_last_user_work_message(int(chat_id))
+            lang = resolve_user_language(int(chat_id))
+
+            def L(es_text: str, en_text: str) -> str:
+                return es_text if lang == "es" else en_text
+
+            stale_lane_markers = (
+                "val0 pm + session continuity",
+                "implement automatic focus control and conversational continuity in val0",
+                "defer watch/ui/device work until after mvp",
+                "revisar contrato",
+                "llamar a miguel",
+                "audiencia del 15 de abril",
+            )
+
+            if last_work:
+                low_last_work = unicodedata.normalize("NFKD", last_work.lower())
+                low_last_work = "".join(ch for ch in low_last_work if not unicodedata.combining(ch))
+                if any(m in low_last_work for m in stale_lane_markers):
+                    last_work = ""
 
             text_norm_cont = unicodedata.normalize("NFKD", (text or "").lower())
             text_norm_cont = "".join(ch for ch in text_norm_cont if not unicodedata.combining(ch))
@@ -3032,57 +3099,87 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
                 if approved:
                     reply = (
-                        f"Volvemos a la prioridad real:\n"
-                        f"- {approved}\n\n"
-                        f"Foco actual: {focus.get('focus_title', '')}\n"
-                        f"Resumen: {focus.get('focus_summary', '')}\n"
-                        f"Siguiente dirección: {focus.get('roadmap_note', '')}"
+                        L("Volvemos a la prioridad real:\n", "Back to the real priority:\n")
+                        + f"- {approved}\n\n"
+                        + L("Foco actual: ", "Current focus: ") + f"{focus.get('focus_title', '')}\n"
+                        + L("Resumen: ", "Summary: ") + f"{focus.get('focus_summary', '')}\n"
+                        + L("Siguiente dirección: ", "Next direction: ") + f"{focus.get('roadmap_note', '')}"
                     )
                 else:
                     reply = (
-                        f"Volvemos a la prioridad real.\n\n"
-                        f"Foco actual: {focus.get('focus_title', '')}\n"
-                        f"Resumen: {focus.get('focus_summary', '')}\n"
-                        f"Roadmap: {focus.get('roadmap_note', '')}"
+                        L("Volvemos a la prioridad real.\n\n", "Back to the real priority.\n\n")
+                        + L("Foco actual: ", "Current focus: ") + f"{focus.get('focus_title', '')}\n"
+                        + L("Resumen: ", "Summary: ") + f"{focus.get('focus_summary', '')}\n"
+                        + "Roadmap: " + f"{focus.get('roadmap_note', '')}"
                     )
 
                 await _send_reply(update, context, reply)
                 return
 
-            text_norm_cont = unicodedata.normalize("NFKD", (text or "").lower())
-            text_norm_cont = "".join(ch for ch in text_norm_cont if not unicodedata.combining(ch))
-
-            if "turn that into 3 steps" in text_norm_cont or "turn it into 3 steps" in text_norm_cont or "conviertelo en 3 pasos" in text_norm_cont or "conviertelo en 3 pasos" in text_norm_cont:
+            if (
+                "turn that into 3 steps" in text_norm_cont
+                or "turn it into 3 steps" in text_norm_cont
+                or "conviertelo en 3 pasos" in text_norm_cont
+                or "conviértelo en 3 pasos" in text_norm_cont
+            ):
                 if last_work:
                     reply = (
-                        f"Claro. Para avanzar en {focus.get('focus_title', 'el foco actual')}:\n\n"
-                        f"1. Definir con precisión el objetivo de este bloque: {last_work}\n"
-                        f"2. Identificar el punto exacto de integración o bloqueo dentro del flujo actual.\n"
-                        f"3. Ejecutar el siguiente cambio concreto y verificarlo en Telegram."
+                        L(
+                            f"Claro. Para avanzar en {focus.get('focus_title', 'el foco actual')}:\n\n",
+                            f"Sure. To move forward in {focus.get('focus_title', 'the current focus')}:\n\n",
+                        )
+                        + L(
+                            f"1. Definir con precisión el objetivo de este bloque: {last_work}\n",
+                            f"1. Define precisely the goal of this block: {last_work}\n",
+                        )
+                        + L(
+                            "2. Identificar el punto exacto de integración o bloqueo dentro del flujo actual.\n",
+                            "2. Identify the exact integration point or blockage in the current flow.\n",
+                        )
+                        + L(
+                            "3. Ejecutar el siguiente cambio concreto y verificarlo en Telegram.",
+                            "3. Execute the next concrete change and verify it in Telegram.",
+                        )
                     )
                 else:
                     reply = (
-                        f"Claro. Para avanzar en {focus.get('focus_title', 'el foco actual')}:\n\n"
-                        f"1. Reconfirmar el objetivo inmediato.\n"
-                        f"2. Identificar el siguiente bloqueo o integración pendiente.\n"
-                        f"3. Ejecutar y verificar el siguiente cambio concreto."
+                        L(
+                            f"Claro. Para avanzar en {focus.get('focus_title', 'el foco actual')}:\n\n",
+                            f"Sure. To move forward in {focus.get('focus_title', 'the current focus')}:\n\n",
+                        )
+                        + L("1. Reconfirmar el objetivo inmediato.\n", "1. Reconfirm the immediate goal.\n")
+                        + L(
+                            "2. Identificar el siguiente bloqueo o integración pendiente.\n",
+                            "2. Identify the next blockage or pending integration.\n",
+                        )
+                        + L(
+                            "3. Ejecutar y verificar el siguiente cambio concreto.",
+                            "3. Execute and verify the next concrete change.",
+                        )
                     )
                 await _send_reply(update, context, reply)
                 return
 
-            if "what was the last concrete thing" in text_norm_cont or "cual era la ultima cosa concreta" in text_norm_cont or "cuál era la última cosa concreta" in text_norm_cont:
+            if (
+                "what was the last concrete thing" in text_norm_cont
+                or "cual era la ultima cosa concreta" in text_norm_cont
+                or "cuál era la última cosa concreta" in text_norm_cont
+            ):
                 if last_work:
                     reply = (
-                        f"La última cosa concreta era esta:\n"
-                        f"- {last_work}\n\n"
-                        f"Eso cae bajo:\n"
-                        f"Foco actual: {focus.get('focus_title', '')}"
+                        L("La última cosa concreta era esta:\n", "The last concrete thing was this:\n")
+                        + f"- {last_work}\n\n"
+                        + L("Eso cae bajo:\n", "That falls under:\n")
+                        + L("Foco actual: ", "Current focus: ") + f"{focus.get('focus_title', '')}"
                     )
                 else:
                     reply = (
-                        f"No tengo una acción concreta reciente suficientemente clara en el hilo.\n\n"
-                        f"Foco actual: {focus.get('focus_title', '')}\n"
-                        f"Resumen: {focus.get('focus_summary', '')}"
+                        L(
+                            "No tengo una acción concreta reciente suficientemente clara en el hilo.\n\n",
+                            "I do not have a recent concrete enough action in the thread.\n\n",
+                        )
+                        + L("Foco actual: ", "Current focus: ") + f"{focus.get('focus_title', '')}\n"
+                        + L("Resumen: ", "Summary: ") + f"{focus.get('focus_summary', '')}"
                     )
                 await _send_reply(update, context, reply)
                 return
@@ -3090,18 +3187,18 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             # Generic continue / what were we doing / summarize that
             if last_work:
                 reply = (
-                    f"Seguimos con esto:\n"
-                    f"- {last_work}\n\n"
-                    f"Foco actual: {focus.get('focus_title', '')}\n"
-                    f"Resumen: {focus.get('focus_summary', '')}\n"
-                    f"Siguiente dirección: {focus.get('roadmap_note', '')}"
+                    L("Seguimos con esto:\n", "We are continuing with this:\n")
+                    + f"- {last_work}\n\n"
+                    + L("Foco actual: ", "Current focus: ") + f"{focus.get('focus_title', '')}\n"
+                    + L("Resumen: ", "Summary: ") + f"{focus.get('focus_summary', '')}\n"
+                    + L("Siguiente dirección: ", "Next direction: ") + f"{focus.get('roadmap_note', '')}"
                 )
             else:
                 reply = (
-                    f"Seguimos en:\n"
-                    f"Foco actual: {focus.get('focus_title', '')}\n"
-                    f"Resumen: {focus.get('focus_summary', '')}\n"
-                    f"Roadmap: {focus.get('roadmap_note', '')}"
+                    L("Volvemos al foco actual.\n\n", "Back to the current focus.\n\n")
+                    + L("Foco actual: ", "Current focus: ") + f"{focus.get('focus_title', '')}\n"
+                    + L("Resumen: ", "Summary: ") + f"{focus.get('focus_summary', '')}\n"
+                    + "Roadmap: " + f"{focus.get('roadmap_note', '')}"
                 )
 
             await _send_reply(update, context, reply)
@@ -3174,6 +3271,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "borrador de",
             "acuerdo",
             "convenio",
+            "documento",
         )
 
         email_triggers = (
@@ -3182,6 +3280,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "mandamelo",
             "mandamelo por correo",
             "enviamelo por correo",
+            "mandes por correo",
+            "mandarlo por correo",
+            "mandalo por correo",
+            "enviar por correo",
+            "enviarlo por correo",
+            "por correo",
+            "por email",
+            "mandamelo al correo",
+            "enviamelo al correo",
             "send it",
             "email it",
         )
@@ -3189,8 +3296,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         is_doc = any(t in text_norm for t in doc_triggers)
         wants_email = any(t in text_norm for t in email_triggers)
 
+        logger.info(
+            "[DOC_MODE_DEBUG] chat_id=%s is_doc=%s wants_email=%s text_norm=%r",
+            chat_id,
+            is_doc,
+            wants_email,
+            text_norm,
+        )
+
         if is_doc:
-            # generate WITHOUT any case/advisory context
             reply = call_val_openai(
                 chat_id,
                 text,
@@ -3206,31 +3320,78 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     "- Use placeholders like [NOMBRE], [FECHA], [MONTO] if data is missing.\n"
                     "- Keep it clean, structured, and usable.\n"
                     "- After the draft, optionally add a short note asking for missing details.\n"
-                    + name_instruction
+                    "- DO NOT say that you cannot send email.\n"
+                    "- DO NOT mention email capability limits inside the draft.\n"
+                    "- Email confirmation is handled outside the model response.\n"
                 ),
             )
 
-            if wants_email:
+            if reply:
+                cleanup_patterns = (
+                    r"\n*No puedo enviar(?:lo)? por correo[^.\n]*\.?",
+                    r"\n*No envío correos[^.\n]*\.?",
+                    r"\n*Si quieres, dime el correo al que deseas que lo envíe[^.\n]*\.?",
+                    r"\n*Si quieres, dime el correo[^.\n]*\.?",
+                    r"\n*Puedo ayudarte a dejarlo listo para que lo guardes tú misma[^.\n]*\.?",
+                    r"\n*Todo está aquí para que lo copies y uses[^.\n]*\.?",
+                )
+
+                for pat in cleanup_patterns:
+                    reply = re.sub(pat, "", reply, flags=re.IGNORECASE)
+
+                reply = re.sub(r"\n{3,}", "\n\n", reply).strip()
+
+            if wants_email and reply:
                 try:
                     to_email = get_fact(chat_id=chat_id, fact_key="user_email")
                 except Exception:
                     to_email = None
 
-                if not to_email:
-                    to_email = get_user_email(chat_id)
+                to_email = (to_email or "").strip()
 
-                if to_email and reply:
-                    send_email_resend(
-                        to_email=to_email,
-                        subject="Valeria – Borrador de contrato",
-                        body=reply,
+                logger.info(
+                    "[DOC_MODE_DEBUG] chat_id=%s resolved_to_email=%r",
+                    chat_id,
+                    to_email,
+                )
+
+                if to_email:
+                    try:
+                        logger.info(
+                            "[DOC_MODE_DEBUG] chat_id=%s sending_contract_email_to=%r",
+                            chat_id,
+                            to_email,
+                        )
+                        send_email_resend(
+                            to_email=to_email,
+                            subject="Valeria – Borrador de contrato",
+                            body=reply,
+                        )
+                        reply = reply + f"\n\n📧 Te lo envié a {to_email}."
+                        try:
+                            upsert_fact(chat_id=chat_id, fact_key="last_email_sent_to", fact_value=to_email)
+                        except Exception as e:
+                            logger.exception(f"[DOC_MODE_EMAIL_FACT] failed: {e}")
+                    except Exception as e:
+                        logger.exception(
+                            "[DOC_MODE_DEBUG] chat_id=%s email_send_failed to=%r err=%s",
+                            chat_id,
+                            to_email,
+                            e,
+                        )
+                        reply = reply + (
+                            f"\n\n⚠️ No pude enviarlo por correo ahora mismo a {to_email}. "
+                            "Aquí lo tienes en el chat."
+                        )
+                else:
+                    logger.info(
+                        "[DOC_MODE_DEBUG] chat_id=%s no_confirmed_email_in_chat",
+                        chat_id,
                     )
-
-                    reply = reply + "\n\n📧 También te lo envié por correo."
-
-            if preferred_name and preferred_name.lower() != "boss" and reply:
-                reply = re.sub(r"\bBoss\b", preferred_name, reply)
-                reply = re.sub(r"\bboss\b", preferred_name, reply)
+                    reply = reply + (
+                        "\n\n⚠️ No tengo un correo confirmado en este chat, así que por seguridad "
+                        "no lo envié por email. Aquí lo tienes en el chat."
+                    )
 
             sent = await _send_reply(update, context, reply)
 
@@ -3251,6 +3412,42 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[DOC_MODE_EARLY] failed: {e}")
 
     # --------------------------------------------------
+    # EMAIL STATUS OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        text_norm_email = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm_email = "".join(ch for ch in text_norm_email if not unicodedata.combining(ch))
+        text_norm_email = re.sub(r"[¿?¡!.,:;]+", "", text_norm_email).strip()
+
+        ask_sent_markers = (
+            "a que correo lo enviaste",
+            "a que correo exactamente",
+            "me lo enviaste por correo",
+            "lo enviaste por correo",
+            "me lo mandaste por correo",
+            "lo mandaste por correo",
+        )
+
+        if any(m in text_norm_email for m in ask_sent_markers):
+            try:
+                last_email_sent_to = get_fact(chat_id=chat_id, fact_key="last_email_sent_to")
+            except Exception:
+                last_email_sent_to = None
+
+            last_email_sent_to = (last_email_sent_to or "").strip()
+
+            if last_email_sent_to:
+                await update.message.reply_text(f"Te lo envié a {last_email_sent_to}.")
+            else:
+                await update.message.reply_text(
+                    "No tengo registro de un envío de correo confirmado en este chat."
+                )
+            return
+
+    except Exception as e:
+        logger.exception(f"[EMAIL_STATUS_OVERRIDE] failed: {e}")    
+
+    # --------------------------------------------------
     # Email send command (MVP)
     # --------------------------------------------------
     try:
@@ -3266,6 +3463,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "mandamelo",
             "mandamelo por correo",
             "enviamelo por correo",
+            "mandalo por correo",
+            "enviarlo por correo",
+            "mandamelo al correo",
+            "enviamelo al correo",
             "send it",
             "email it",
         )
@@ -3289,11 +3490,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             except Exception:
                 to_email = None
 
-            if not to_email:
-                to_email = get_user_email(chat_id, fallback_name=who)
+            to_email = (to_email or "").strip()
 
             if not to_email:
-                await update.message.reply_text(f"No tengo correo configurado para '{who}'.")
+                await update.message.reply_text(
+                    "No tengo un correo confirmado en este chat. Por seguridad no envié nada."
+                )
                 return
 
             conn = _get_conn()
@@ -3333,7 +3535,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 subject = "Valeria – Documento generado"
             send_email_resend(to_email=to_email, subject=subject, body=last_reply)
 
-            await update.message.reply_text("📧 Listo, enviado. Revisa tu inbox .")
+            try:
+                send_email_resend(to_email=to_email, subject=subject, body=last_reply)
+                await update.message.reply_text(f"📧 Listo. Lo envié a {to_email}.")
+            except Exception as e:
+                logger.exception(f"[EMAIL_SEND_CMD_SEND] failed: {e}")
+                await update.message.reply_text(
+                    f"⚠️ No pude enviarlo por correo a {to_email}. El contenido sigue disponible en el chat."
+                )
             return
 
     except Exception as e:
@@ -4695,6 +4904,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             t = (text or "").strip().lower()
             t = unicodedata.normalize("NFKD", t)
             t = "".join(ch for ch in t if not unicodedata.combining(ch))
+            t = re.sub(r"[¿?¡!.,:;]+", "", t).strip()
+
+            if re.match(r"^que\s+tengo\s+manana$", t) or re.match(r"^que\s+audiencias\s+tengo\s+manana$", t):
+                if await try_agenda_tomorrow_natural(update, chat_id, text):
+                    return
 
             if re.match(r"^que\s+vence\s+manana$", t):
                 from core.case_mvp import try_due_tomorrow
@@ -5301,7 +5515,7 @@ Reglas de estructura obligatoria:
         # OPERATOR OVERRIDE (anti-assistant mode)
         # ------------------------------------------
         try:
-            if _has_active_commitment(text):
+            if _has_active_commitment(text) and not _is_continuation_query(text):
 
                 m = re.search(
                     r"\b(?:a|con)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñA-ZÁÉÍÓÚÑ]+(?:\s+[a-zA-Záéíóúñ]+)?)",
@@ -5566,14 +5780,32 @@ Reglas de estructura obligatoria:
             is_operational = any(t in low for t in operational_triggers)
             is_trivial = low.strip() in trivial_triggers
 
-            should_nudge = False
+            meta_reply_markers = (
+                "que estabamos haciendo",
+                "qué estábamos haciendo",
+                "sigue",
+                "seguimos",
+                "convierte eso en 3 pasos",
+                "conviertelo en 3 pasos",
+                "conviértelo en 3 pasos",
+                "what are we working on",
+                "what were we doing",
+                "continue with launch",
+                "continue with the real priority",
+                "no, continue with launch",
+                "no, continue with the real priority",
+            )
 
-            if len(tasks) >= 2:
-                should_nudge = True
-            elif is_operational:
-                should_nudge = True
-            elif not is_trivial and len(tasks) == 1:
-                should_nudge = True
+            should_nudge = False
+            suppress_nudge = any(m in low for m in meta_reply_markers)
+
+            if not suppress_nudge:
+                if len(tasks) >= 2:
+                    should_nudge = True
+                elif is_operational:
+                    should_nudge = True
+                elif not is_trivial and len(tasks) == 1:
+                    should_nudge = True
 
             if should_nudge and reply:
                 nudge_lines = [f"⚠️ Tienes {len(tasks)} tarea(s) abierta(s):"]
@@ -5590,48 +5822,10 @@ Reglas de estructura obligatoria:
     # AUTO EMAIL (inline intent)
     # --------------------------------------------------
     try:
-        text_norm = unicodedata.normalize("NFKD", (text or "").lower())
-        text_norm = "".join(ch for ch in text_norm if not unicodedata.combining(ch))
-
-        auto_email_triggers = (
-            "envialo",
-            "enviamelo",
-            "mandamelo",
-            "mandamelo por correo",
-            "enviamelo por correo",
-            "send it",
-            "email it",
-        )
-
-        if any(t in text_norm for t in auto_email_triggers):
-            try:
-                to_email = get_fact(chat_id=chat_id, fact_key="user_email")
-            except Exception:
-                to_email = None
-
-            if not to_email:
-                to_email = get_user_email(chat_id)
-
-            if to_email and reply:
-                reply_lower = reply.lower()
-
-                if "guion" in reply_lower or "llamada" in reply_lower:
-                    subject = "Valeria – Guion de llamada"
-                elif "contrato" in reply_lower and "guion" not in reply_lower:
-                    subject = "Valeria – Borrador de contrato"
-                elif "resumen" in reply_lower:
-                    subject = "Valeria – Resumen del caso"
-                else:
-                    subject = "Valeria – Documento generado"
-
-                send_email_resend(
-                    to_email=to_email,
-                    subject=subject,
-                    body=reply,
-                )
-
-                reply = reply + "\n\n📧 También te lo envié por correo."
-
+        # AUTO EMAIL inline disabled for alpha safety.
+        # Email sending is handled only in explicit document/email flows
+        # and only when the current chat has a confirmed user_email.
+        pass
     except Exception as e:
         logger.exception(f"[AUTO_EMAIL] failed: {e}")
 
@@ -6103,6 +6297,7 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
     t = (text or "").strip().lower()
     t = unicodedata.normalize("NFKD", t)
     t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    t = re.sub(r"[¿?¡!.,:;]+", "", t).strip()
 
     patterns = [
         r"^que tengo manana$",
