@@ -1690,7 +1690,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if not transcribed_text:
         await update.message.reply_text(
-            "No entendí nada claro en ese audio, Boss. Intenta de nuevo o mándalo por texto."
+            "No entendí nada claro en ese audio. Intenta de nuevo o mándalo por texto."
         )
         return
 
@@ -2764,9 +2764,19 @@ def _is_continuation_query(text: str) -> bool:
         "turn that into 3 steps",
         "turn it into 3 steps",
         "what are step 2 and step 3",
+        "no, continue with launch",
+        "continue with launch",
+        "continue with the real priority",
+        "no, continue with the real priority",
+        "not that, continue",
         "seguimos",
         "continua",
         "continúa",
+        "sigue con launch",
+        "sigue con lo real",
+        "sigue con la prioridad real",
+        "no, sigue con launch",
+        "no, sigue con lo real",
         "resume eso",
         "resumelo",
         "resúmelo",
@@ -2963,13 +2973,55 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[PM_FOCUS_OVERRIDE] failed: {e}")  
 
-    # --------------------------------------------------
+       # --------------------------------------------------
     # PM CONTINUATION OVERRIDE (DETERMINISTIC)
     # --------------------------------------------------
     try:
         if _is_continuation_query(text):
             focus = get_pm_focus(int(chat_id))
             last_work = _get_last_user_work_message(int(chat_id))
+
+            text_norm_cont = unicodedata.normalize("NFKD", (text or "").lower())
+            text_norm_cont = "".join(ch for ch in text_norm_cont if not unicodedata.combining(ch))
+
+            real_priority_markers = (
+                "continue with launch",
+                "continue with the real priority",
+                "no, continue with launch",
+                "no, continue with the real priority",
+                "not that, continue",
+                "sigue con launch",
+                "sigue con lo real",
+                "sigue con la prioridad real",
+                "no, sigue con launch",
+                "no, sigue con lo real",
+            )
+
+            if any(m in text_norm_cont for m in real_priority_markers):
+                approved = ""
+                try:
+                    approved = get_last_non_drift_user_input(int(chat_id), limit=20)
+                except Exception:
+                    approved = ""
+
+                if approved:
+                    reply = (
+                        f"Volvemos a la prioridad real:\n"
+                        f"- {approved}\n\n"
+                        f"Foco actual: {focus.get('focus_title', '')}\n"
+                        f"Resumen: {focus.get('focus_summary', '')}\n"
+                        f"Siguiente dirección: {focus.get('roadmap_note', '')}"
+                    )
+                else:
+                    reply = (
+                        f"Volvemos a la prioridad real.\n\n"
+                        f"Foco actual: {focus.get('focus_title', '')}\n"
+                        f"Resumen: {focus.get('focus_summary', '')}\n"
+                        f"Roadmap: {focus.get('roadmap_note', '')}"
+                    )
+
+                await _send_reply(update, context, reply)
+                return
 
             text_norm_cont = unicodedata.normalize("NFKD", (text or "").lower())
             text_norm_cont = "".join(ch for ch in text_norm_cont if not unicodedata.combining(ch))
@@ -6685,19 +6737,6 @@ def _piper_cfg_es() -> str:
 def _tts_enabled() -> bool:
     return os.getenv("VAL0_TTS_ENABLED", "1") == "1"
 
-def _prepare_tts_text(text: str) -> str:
-    # Remove inverted Spanish punctuation (Piper struggles with them)
-    text = text.replace("¿", "").replace("¡", "")
-
-    # Force slight separation before questions
-    text = text.replace("? ", "?\n")
-
-    # Encourage softer pause before question ending
-    if text.endswith("?"):
-        text = text[:-1] + "...?"
-
-    return text.strip()
-
 def _tts_text_sanitize(t: str) -> str:
     t = (t or "").strip()
     # keep it short-ish for driving; tweak via env
@@ -6708,24 +6747,29 @@ def _tts_text_sanitize(t: str) -> str:
 
 def _prepare_tts_text(t: str) -> str:
     """
-    Add light punctuation shaping for more natural tone.
-    Also forces digit-by-digit pronunciation.
+    Final TTS shaping for Spanish replies.
+    Keeps one single authoritative prep path.
     """
+    import re
+
     t = _tts_text_sanitize(t)
 
+    # Piper struggles with inverted punctuation
+    t = t.replace("¿", "").replace("¡", "")
+
     # Force digit-by-digit pronunciation
-    import re
     t = re.sub(r"\d+", lambda m: " ".join(m.group(0)), t)
 
-    # Ensure proper pauses
+    # Add light pause shaping
     t = t.replace(". ", ".  ")
     t = t.replace(", ", ",  ")
+    t = t.replace("? ", "?  ")
 
-    # Add question tone hint
+    # Softer ending question hint
     if t.endswith("?"):
         t = t[:-1] + " ?"
 
-    return t
+    return t.strip()
 
 def tts_synthesize_es_to_wav(text: str, out_wav: str) -> None:
     """
@@ -6743,7 +6787,6 @@ def tts_synthesize_es_to_wav(text: str, out_wav: str) -> None:
         pbin,
         "--model", model,
         "--config", cfg,
-        "--length_scale", os.getenv("VAL0_PIPER_LENGTH_ES", "1.20"),
         "--output_file", out_wav,
         "--quiet",
     ]
@@ -6934,31 +6977,35 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
     await _persist_assistant_reply(sent)
     return sent
 async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    from memory_store import get_chat_voice_enabled, set_chat_voice_enabled
     """
     /voice on|off|status
     """
-    chat_id = update.effective_chat.id if update.effective_chat else None
-    if chat_id is None:
+    from memory_store import get_chat_voice_enabled, set_chat_voice_enabled
+
+    msg = update.effective_message
+    chat = update.effective_chat
+    chat_id = chat.id if chat else None
+
+    if chat_id is None or msg is None:
         return
 
-    parts = (update.message.text or "").strip().split()
+    parts = (msg.text or "").strip().split()
     mode = parts[1].lower() if len(parts) >= 2 else "status"
 
     if mode in ("on", "1", "yes", "enable", "enabled"):
         set_chat_voice_enabled(int(chat_id), True)
-        await update.message.reply_text("🎧 Voice mode: ON. Te respondo con audio cuando pueda.")
+        await msg.reply_text("🎧 Modo voz: activado. Te responderé con audio cuando tenga sentido.")
         return
 
     if mode in ("off", "0", "no", "disable", "disabled"):
         set_chat_voice_enabled(int(chat_id), False)
-        await update.message.reply_text("🛑 Voice mode: OFF. Vuelvo a texto normal.")
+        await msg.reply_text("🛑 Modo voz: desactivado. Vuelvo a texto normal.")
         return
 
-    # status/default
     on = get_chat_voice_enabled(int(chat_id))
-    await update.message.reply_text(f"🎧 Voice mode: {'ON' if on else 'OFF'}")
+    await msg.reply_text(
+        f"🎧 Modo voz: {'activado' if on else 'desactivado'}"
+    )
 
 async def handle_mem(update, context):
     try:
@@ -7743,18 +7790,37 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rows = list_reminders_for_chat(int(chat_id), statuses=["pending", "sending"], limit=n)
 
         if not rows:
-            await update.message.reply_text("REMINDERS\n- none (pending/sending)")
+            await update.message.reply_text("No tienes recordatorios pendientes.")
             return
 
-        lines = ["REMINDERS (pending/sending)"]
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo("America/Panama")
+
+        lines = [f"Tienes {len(rows)} recordatorio(s) pendiente(s):"]
         for r in rows:
             rid = r.get("id")
-            due = r.get("due_at_utc")
-            st = r.get("status")
+            due = (r.get("due_at_utc") or "").strip()
+            st = (r.get("status") or "").strip()
             txt = (r.get("text") or "").replace("\n", " ").strip()
-            if len(txt) > 60:
-                txt = txt[:60] + "…"
-            lines.append(f"- #{rid} | {due} | {st} | {txt}")
+
+            if len(txt) > 70:
+                txt = txt[:70] + "…"
+
+            due_local = due
+            try:
+                due_dt = datetime.fromisoformat(due.replace("Z", "+00:00"))
+                due_local = due_dt.astimezone(tz).strftime("%Y-%m-%d %I:%M %p")
+            except Exception:
+                pass
+
+            lines.append(f"#{rid} · {due_local} · {st}")
+            lines.append(f"  {txt}")
+
+        lines.append("")
+        lines.append("Para cancelar uno: /rmd <id>")
+
         await update.message.reply_text("\n".join(lines))
     except Exception as e:
         await update.message.reply_text(f"REMINDERS\n- error: {e}")
@@ -7771,13 +7837,13 @@ async def rmd_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     parts = (update.message.text or "").strip().split()
     if len(parts) < 2:
-        await update.message.reply_text("Uso: /rmd <id>  (ej: /rmd 27)")
+        await update.message.reply_text("Uso: /rmd <id>\nEjemplo: /rmd 27")
         return
 
     try:
         rid = int(parts[1])
     except Exception:
-        await update.message.reply_text("Ese id no parece número. Ej: /rmd 27")
+        await update.message.reply_text("Ese id no parece válido.\nEjemplo: /rmd 27")
         return
 
     try:
@@ -7792,12 +7858,12 @@ async def rmd_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 payload=f"rid={rid}",
                 source="dm" if int(chat_id) >= 0 else "group",
             )
-            await update.message.reply_text(f"Listo. Cancelado #{rid}.")
+            await update.message.reply_text(f"Listo. Cancelé el recordatorio #{rid}.")
         else:
-            await update.message.reply_text("No lo pude cancelar. Puede que no exista, no sea tuyo, o ya esté enviado.")
+            await update.message.reply_text("No pude cancelarlo. Puede que no exista, no sea tuyo, o ya se haya enviado.")
     except Exception as e:
         logger.exception(f"rmd_cmd failed: {e}")
-        await update.message.reply_text("Se cayó el cancel. Intenta otra vez.")
+        await update.message.reply_text("Se cayó la cancelación. Intenta otra vez.")
 
 
 async def health_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
