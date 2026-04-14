@@ -48,6 +48,12 @@ from core.operator_reminders import (
     handle_reminder_gate,
     _PENDING_REMINDER_CONFIRM,
 )
+from core.bug_report import (
+    bug_cmd,
+    handle_pending_bug_report,
+    get_pending_bug_report_text,
+    _PENDING_BUG_REPORT,
+)
 
 from core.context_snapshot import build_context_snapshot
 from subprocess import check_output
@@ -360,6 +366,10 @@ def _get_pending_state_text(chat_id: int) -> str | None:
         parts.append(
             f"• Recordatorio pendiente de confirmar: CASE:{p.get('case_id')} | fecha {p.get('due_date')}"
         )
+
+    bug_pending = get_pending_bug_report_text(int(chat_id))
+    if bug_pending:
+        parts.append(bug_pending)
 
     if not parts:
         return None
@@ -2889,6 +2899,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[SESSION_MEMORY_INBOUND] failed: {e}")
 
     # --------------------------------------------------
+    # Pending bug report (hard gate before PM/drift)
+    # --------------------------------------------------
+    try:
+        if await handle_pending_bug_report(update, int(chat_id), text):
+            return
+    except Exception as e:
+        logger.exception(f"[PENDING_BUG_REPORT_EARLY] failed: {e}")
+        
+    # --------------------------------------------------
     # AUTO-FOCUS + PM LOOP
     # --------------------------------------------------
     try:
@@ -2912,7 +2931,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "reason": "PM evaluation fallback.",
             "next_action": "Continue current focus.",
         }
-
     # Hard redirect when drift is obvious
     if pm_state["decision"] in ("DEFER", "DISCARD") and _is_pm_drift_candidate(text):
         surfaced = _build_pm_redirect_reply(pm_state)
@@ -7763,6 +7781,7 @@ def main():
     app.add_handler(CommandHandler("statepacket", handle_statepacket))
     # HOTFIX: temporarily disabled until voice_cmd is defined correctly
     app.add_handler(CommandHandler("voice", voice_cmd))
+    app.add_handler(CommandHandler("bug", bug_cmd))
     app.add_handler(CommandHandler("mem", handle_mem))
     app.add_handler(CommandHandler("remember", handle_remember))
 
