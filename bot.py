@@ -3483,20 +3483,26 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
             if reply:
                 cleanup_patterns = (
-                        r"\n*No puedo enviar(?:lo)? por correo[^.\n]*\.?",
-                        r"\n*No envío correos[^.\n]*\.?",
-                        r"\n*Si quieres, dime el correo al que deseas que lo envíe[^.\n]*\.?",
-                        r"\n*Si quieres, dime el correo[^.\n]*\.?",
-                        r"\n*Si quieres, indícame[^.\n]*correo[^.\n]*\.?",
-                        r"\n*Si prefieres que te lo envíe por correo[^.\n]*\.?",
-                        r"\n*Si quieres, dime a que correo lo envio[^.\n]*\.?",
-                        r"\n*Si quieres, dime a qué correo lo envío[^.\n]*\.?",
-                        r"\n*Si deseas, indicame a que correo enviarlo[^.\n]*\.?",
-                        r"\n*Si deseas, indícame a qué correo enviarlo[^.\n]*\.?",
-                        r"\n*Puedo ayudarte a dejarlo listo para que lo guardes tú misma[^.\n]*\.?",
-                        r"\n*Todo está aquí para que lo copies y uses[^.\n]*\.?",
-                        r"\n*Tambien puedo ajustar el contrato a tus necesidades especificas[^.\n]*\.?",
-                        r"\n*También puedo ajustar el contrato a tus necesidades específicas[^.\n]*\.?",
+                    r"\n*No puedo enviar(?:lo)? por correo[^.\n]*\.?",
+                    r"\n*No puedo enviar correos[^.\n]*\.?",
+                    r"\n*No envío correos[^.\n]*\.?",
+                    r"\n*Si quieres, dime el correo al que deseas que lo envíe[^.\n]*\.?",
+                    r"\n*Si quieres, dime el correo[^.\n]*\.?",
+                    r"\n*Si quieres, indícame[^.\n]*correo[^.\n]*\.?",
+                    r"\n*Si prefieres que te lo envíe por correo[^.\n]*\.?",
+                    r"\n*Si quieres, dime a que correo lo envio[^.\n]*\.?",
+                    r"\n*Si quieres, dime a qué correo lo envío[^.\n]*\.?",
+                    r"\n*Si deseas, indicame a que correo enviarlo[^.\n]*\.?",
+                    r"\n*Si deseas, indícame a qué correo enviarlo[^.\n]*\.?",
+                    r"\n*Tambien puedo ajustar el contrato a tus necesidades especificas[^.\n]*\.?",
+                    r"\n*También puedo ajustar el contrato a tus necesidades específicas[^.\n]*\.?",
+                    r"\n*Si quieres, dime los datos que faltan[^.\n]*\.?",
+                    r"\n*Si quieres, indicame los datos que faltan[^.\n]*\.?",
+                    r"\n*Si quieres, indícame los datos que faltan[^.\n]*\.?",
+                    r"\n*Puedo ayudarte a dejarlo listo para que lo guardes tú misma[^.\n]*\.?",
+                    r"\n*Todo está aquí para que lo copies y uses[^.\n]*\.?",
+                    r"\n*Puedes copiar y pegar este texto para enviarlo tu mismo[^.\n]*\.?",
+                    r"\n*Puedes copiar y pegar este texto para enviarlo tú mismo[^.\n]*\.?",
                 )
 
                 for pat in cleanup_patterns:
@@ -3530,6 +3536,21 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                             subject="Valeria – Borrador de contrato",
                             body=reply,
                         )
+
+                        post_send_cleanup_patterns = (
+                            r"\n*No puedo enviar(?:lo)? por correo[^.\n]*\.?",
+                            r"\n*No puedo enviar correos[^.\n]*\.?",
+                            r"\n*No envío correos[^.\n]*\.?",
+                            r"\n*Si quieres[^.\n]*correo[^.\n]*\.?",
+                            r"\n*Si deseas[^.\n]*correo[^.\n]*\.?",
+                            r"\n*Puedes copiar y pegar[^.\n]*\.?",
+                            r"\n*Todo está aquí para que lo copies y uses[^.\n]*\.?",
+                        )
+
+                        for pat in post_send_cleanup_patterns:
+                            reply = re.sub(pat, "", reply, flags=re.IGNORECASE)
+
+                        reply = re.sub(r"\n{3,}", "\n\n", reply).strip()
                         reply = reply + f"\n\n📧 Te lo envié a {to_email}."
                         try:
                             upsert_fact(chat_id=chat_id, fact_key="last_email_sent_to", fact_value=to_email)
