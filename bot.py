@@ -3055,10 +3055,40 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception:
         preferred_language = None
 
+    # --------------------------------------------------
+    # GREETING OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        text_norm_greet = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm_greet = "".join(ch for ch in text_norm_greet if not unicodedata.combining(ch))
+        text_norm_greet = re.sub(r"[¿?¡!.,:;]+", "", text_norm_greet).strip()
+
+        greeting_markers = (
+            "hola",
+            "hello",
+            "hi",
+            "buenos dias",
+            "buen dia",
+            "buenas",
+            "buenas tardes",
+            "buenas noches",
+        )
+
+        if text_norm_greet in greeting_markers:
+            if preferred_language == "en":
+                reply = "Hey. What do you need?"
+            else:
+                reply = "Hola. ¿Qué necesitas?"
+            await update.message.reply_text(reply)
+            return
+
+    except Exception as e:
+        logger.exception(f"[GREETING_OVERRIDE] failed: {e}")
+
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
-        # --------------------------------------------------
+    # --------------------------------------------------
     # SESSION MEMORY: persist inbound user turn
     # --------------------------------------------------
     try:
@@ -3453,12 +3483,20 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
             if reply:
                 cleanup_patterns = (
-                    r"\n*No puedo enviar(?:lo)? por correo[^.\n]*\.?",
-                    r"\n*No envío correos[^.\n]*\.?",
-                    r"\n*Si quieres, dime el correo al que deseas que lo envíe[^.\n]*\.?",
-                    r"\n*Si quieres, dime el correo[^.\n]*\.?",
-                    r"\n*Puedo ayudarte a dejarlo listo para que lo guardes tú misma[^.\n]*\.?",
-                    r"\n*Todo está aquí para que lo copies y uses[^.\n]*\.?",
+                        r"\n*No puedo enviar(?:lo)? por correo[^.\n]*\.?",
+                        r"\n*No envío correos[^.\n]*\.?",
+                        r"\n*Si quieres, dime el correo al que deseas que lo envíe[^.\n]*\.?",
+                        r"\n*Si quieres, dime el correo[^.\n]*\.?",
+                        r"\n*Si quieres, indícame[^.\n]*correo[^.\n]*\.?",
+                        r"\n*Si prefieres que te lo envíe por correo[^.\n]*\.?",
+                        r"\n*Si quieres, dime a que correo lo envio[^.\n]*\.?",
+                        r"\n*Si quieres, dime a qué correo lo envío[^.\n]*\.?",
+                        r"\n*Si deseas, indicame a que correo enviarlo[^.\n]*\.?",
+                        r"\n*Si deseas, indícame a qué correo enviarlo[^.\n]*\.?",
+                        r"\n*Puedo ayudarte a dejarlo listo para que lo guardes tú misma[^.\n]*\.?",
+                        r"\n*Todo está aquí para que lo copies y uses[^.\n]*\.?",
+                        r"\n*Tambien puedo ajustar el contrato a tus necesidades especificas[^.\n]*\.?",
+                        r"\n*También puedo ajustar el contrato a tus necesidades específicas[^.\n]*\.?",
                 )
 
                 for pat in cleanup_patterns:
