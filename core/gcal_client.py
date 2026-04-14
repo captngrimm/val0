@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 CLIENT_SECRET_PATH = Path("/etc/val0/gcal/client_secret.json")
 REFRESH_TOKEN_PATH  = Path("/etc/val0/gcal/refresh_token")

@@ -2474,8 +2474,6 @@ async def try_gcal_write_sandbox(update, chat_id, text) -> bool:
     day_token = (m.group(1) or "").strip().lower()
     time_token = (m.group(2) or "").strip().lower().replace(" ", "")
     title = (m.group(3) or "").strip()
-    if title:
-        title = title[0].upper() + title[1:]
 
     # preserve natural casing but clean first letter
     if title:
@@ -2542,11 +2540,18 @@ async def try_gcal_write_sandbox(update, chat_id, text) -> bool:
         return True
 
     if result.get("status") == "created":
-        await update.message.reply_text(
+        link = (result.get("link") or "").strip()
+
+        msg = (
             f"📅 Evento creado\n\n"
             f"Título: {title}\n"
-            f"Inicio: {start_dt.isoformat()}"
+            f"Inicio: {start_dt.strftime('%Y-%m-%d %I:%M %p')}"
         )
+
+        if link:
+            msg += f"\nLink: {link}"
+
+        await update.message.reply_text(msg, disable_web_page_preview=True)
         return True
 
     await update.message.reply_text("No pude crear el evento.")
@@ -6090,15 +6095,57 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
 
             out = _generate_morning_brief_det(int(chat_id), tomorrow)
 
+            tomorrow_dt = datetime.now(tz) + timedelta(days=1)
+            weekday = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][tomorrow_dt.weekday()]
+            month = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][tomorrow_dt.month]
+            pretty = f"{weekday} {tomorrow_dt.day} {month}"
+
+            # Pull Google Calendar events for tomorrow and append them.
+            gcal_lines = []
+            try:
+                from core.gcal_client import get_events_between
+                from datetime import timezone
+
+                start_local = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day, 0, 0, 0, tzinfo=tz)
+                end_local = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day, 23, 59, 59, tzinfo=tz)
+
+                events = get_events_between(
+                    start_local.astimezone(timezone.utc),
+                    end_local.astimezone(timezone.utc),
+                    limit=50,
+                )
+
+                for ev in events or []:
+                    title = (ev.get("summary") or "(sin título)").strip()
+                    start_raw = (ev.get("start") or "").strip()
+
+                    time_label = "sin hora"
+                    try:
+                        ev_dt = datetime.fromisoformat(start_raw.replace("Z", "+00:00"))
+                        if ev_dt.tzinfo is None:
+                            ev_dt = ev_dt.replace(tzinfo=timezone.utc)
+                        time_label = ev_dt.astimezone(tz).strftime("%I:%M %p")
+                    except Exception:
+                        if len(start_raw) == 10:
+                            time_label = "Todo el día"
+
+                    gcal_lines.append(f"• {time_label} — {title}")
+
+            except Exception:
+                gcal_lines = []
+
             if not out:
-                tomorrow_dt = datetime.now(tz) + timedelta(days=1)
+                out = f"📅 Mañana ({pretty})\n\nNo veo nada agendado para mañana."
 
-                weekday = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][tomorrow_dt.weekday()]
-                month = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][tomorrow_dt.month]
+            # If the deterministic brief returned the old empty-state text, normalize it.
+            if "— No tengo nada agendado —" in out:
+                out = f"📅 Mañana ({pretty})\n\nNo veo nada agendado para mañana."
 
-                pretty = f"{weekday} {tomorrow_dt.day} {month}"
-
-                out = f"📅 Mañana ({pretty})\n\n— No tengo nada agendado —"
+            if gcal_lines:
+                if out.strip():
+                    out = out.rstrip() + "\n\nGoogle Calendar:\n" + "\n".join(gcal_lines)
+                else:
+                    out = f"📅 Mañana ({pretty})\n\nGoogle Calendar:\n" + "\n".join(gcal_lines)
 
             await update.message.reply_text(out)
             return True
