@@ -3553,10 +3553,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         ask_sent_markers = (
             "a que correo lo enviaste",
             "a que correo exactamente",
-            "me lo enviaste por correo",
-            "lo enviaste por correo",
-            "me lo mandaste por correo",
-            "lo mandaste por correo",
         )
 
         if any(m in text_norm_email for m in ask_sent_markers):
