@@ -50,6 +50,8 @@ from core.operator_reminders import (
 )
 from core.bug_report import (
     bug_cmd,
+    feedback_cmd,
+    idea_cmd,
     handle_pending_bug_report,
     get_pending_bug_report_text,
     _PENDING_BUG_REPORT,
@@ -7782,7 +7784,11 @@ def main():
     # HOTFIX: temporarily disabled until voice_cmd is defined correctly
     app.add_handler(CommandHandler("voice", voice_cmd))
     app.add_handler(CommandHandler("bug", bug_cmd))
+    app.add_handler(CommandHandler("feedback", feedback_cmd))
+    app.add_handler(CommandHandler("idea", idea_cmd))
     app.add_handler(CommandHandler("mem", handle_mem))
+
+    
     app.add_handler(CommandHandler("remember", handle_remember))
 
 
