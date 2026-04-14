@@ -8565,8 +8565,9 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             due_local = due
             try:
-                due_dt = datetime.fromisoformat(due.replace("Z", "+00:00"))
-                due_local = due_dt.astimezone(tz).strftime("%Y-%m-%d %I:%M %p")
+                from datetime import timezone
+                due_dt_utc = datetime.strptime(due, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                due_local = due_dt_utc.astimezone(tz).strftime("%Y-%m-%d %I:%M %p")
             except Exception:
                 pass
 
