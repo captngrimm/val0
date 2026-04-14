@@ -2979,6 +2979,29 @@ def _extract_redirect_target(text: str) -> str:
 
     return ""
 
+def _extract_redirect_sent_message_target(text: str) -> str:
+    raw = (text or "").strip()
+    norm = unicodedata.normalize("NFKD", raw.lower())
+    norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
+    norm = re.sub(r"[¿?¡!.,:;]+", "", norm).strip()
+
+    patterns = [
+        r"no mejor mandale ese email a ([a-z0-9_.-]+)$",
+        r"no mejor enviaselo a ([a-z0-9_.-]+)$",
+        r"no mejor mandaselo a ([a-z0-9_.-]+)$",
+        r"mandale ese email a ([a-z0-9_.-]+)$",
+        r"enviaselo a ([a-z0-9_.-]+)$",
+        r"send that to ([a-z0-9_.-]+) instead$",
+        r"send the last message to ([a-z0-9_.-]+) instead$",
+    ]
+
+    for pat in patterns:
+        m = re.match(pat, norm, flags=re.IGNORECASE)
+        if m:
+            return (m.group(1) or "").strip().lower()
+
+    return ""
+
 def _extract_copy_target(text: str) -> str:
     raw = (text or "").strip()
     norm = unicodedata.normalize("NFKD", raw.lower())
@@ -3649,8 +3672,59 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[LAST_ATTACHMENT_STATUS_OVERRIDE] failed: {e}")
 
     # --------------------------------------------------
+    # REDIRECT SENT MESSAGE OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        who = _extract_redirect_sent_message_target(text)
+
+        if who:
+            to_email = EMAIL_CONTACTS.get(who)
+            if not to_email:
+                await update.message.reply_text(f"No tengo correo configurado para {who}.")
+                return
+
+            try:
+                subject = (get_fact(chat_id=chat_id, fact_key="last_email_subject") or "").strip()
+            except Exception:
+                subject = ""
+
+            if not subject:
+                subject = "Valeria – Documento generado"
+
+            body = get_last_assistant_message(chat_id).strip()
+            if not body:
+                await update.message.reply_text("No encontré contenido reciente para reenviar.")
+                return
+
+            try:
+                send_email_resend(
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                )
+
+                try:
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_to", fact_value=to_email)
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_at", fact_value=datetime.now(timezone.utc).isoformat())
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_had_attachment", fact_value="no")
+                    upsert_fact(chat_id=chat_id, fact_key="last_attachment_name", fact_value="")
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_channel", fact_value="email")
+                except Exception as e:
+                    logger.exception(f"[REDIRECT_SENT_MESSAGE_FACTS] failed: {e}")
+
+                await update.message.reply_text(f"📧 Listo. Se lo mandé a {who.title()} en {to_email}.")
+            except Exception as e:
+                logger.exception(f"[REDIRECT_SENT_MESSAGE_OVERRIDE] failed: {e}")
+                await update.message.reply_text(f"⚠️ No pude mandárselo a {who.title()} en {to_email}.")
+            return
+
+    except Exception as e:
+        logger.exception(f"[REDIRECT_SENT_MESSAGE_OVERRIDE] failed: {e}")
+
+    # --------------------------------------------------
     # SEND COPY OVERRIDE (DETERMINISTIC)
     # --------------------------------------------------
+    
     try:
         who = _extract_copy_target(text)
 

@@ -1,4 +1,5 @@
 import re
+import os
 from datetime import datetime, timedelta, timezone
 
 from memory_store import insert_reminder
@@ -24,7 +25,7 @@ _RE_HOUR = re.compile(
 )
 
 # time token supports: 15:30, 3pm, 3 pm, 3:15pm, 03:05
-_TIME_TOKEN = r"(?P<t>(?:\d{1,2}:\d{2})|(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)))"
+_TIME_TOKEN = r"(?P<t>(?:\d{1,2}:\d{2})|(?:\d{1,2}(?::\d{2})?\s*(?:am|pm))|(?:\d{1,2}))"
 
 _RE_TODAY_AT = re.compile(
     rf"(?is)^\s*{_VERB}\s+(?P<what>(?:(?!\bma[nñ]ana\b).)+?)\s+(?:hoy\s+)?a\s+las?\s+{_TIME_TOKEN}\s*$"
@@ -33,6 +34,10 @@ _RE_TODAY_AT = re.compile(
 # allow both: "mañana a las 3pm" and "mañana 15:30"
 _RE_TOMORROW_AT = re.compile(
     rf"(?is)^\s*{_VERB}\s+(?P<what>.+?)\s+ma[nñ]ana\s+(?:a\s+las?\s+)?{_TIME_TOKEN}\s*$"
+)
+
+_RE_TOMORROW_FIRST_AT = re.compile(
+    rf"(?is)^\s*{_VERB}\s+ma[nñ]ana\s+(?:a\s+las?\s+)?{_TIME_TOKEN}\s+(?P<what>.+?)\s*$"
 )
 
 # allow: "recuérdame mañana pagar la luz"
@@ -115,6 +120,13 @@ def _parse_time_token(token: str):
         m = int(mm)
         if 0 <= h <= 23 and 0 <= m <= 59:
             return h, m
+        return None
+
+    # bare hour like "10" -> assume exact hour in 24h local time
+    if re.fullmatch(r"\d{1,2}", s):
+        h = int(s)
+        if 0 <= h <= 23:
+            return h, 0
         return None
 
     # am/pm
@@ -360,10 +372,11 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
             await update.message.reply_text("Hora inválida. Usa HH:MM (24h) o 3pm / 3:15pm.")
             return True
 
+        tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+        nowL = datetime.now(tz)
         h, minute = hm
-        nowL = _now_local()
         dueL = (nowL + timedelta(days=1)).replace(hour=h, minute=minute, second=0, microsecond=0)
-        due_str = _to_utc_iso(dueL)
+        due_str = dueL.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         parent_ref = _extract_case_parent_ref(what)
         rid = insert_reminder(
             chat_id=int(chat_id),
@@ -386,18 +399,61 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
         await update.message.reply_text(f"Listo. Te lo recuerdo mañana a las {h:02d}:{minute:02d}.")
         return True
+
+    # 3a-alt) "mañana a las 10 X"
+    m = _RE_TOMORROW_FIRST_AT.match(t)
+    if m:
+        tok = (m.group("t") or "").strip()
+        what = (m.group("what") or "").strip()
+        hm = _parse_time_token(tok)
+        if not what:
+            await update.message.reply_text("¿Qué quieres que recuerde? Ej: Recuérdame mañana a las 3pm pagar la luz.")
+            return True
+        if not hm:
+            await update.message.reply_text("Hora inválida. Usa HH:MM (24h) o 3pm / 3:15pm.")
+            return True
+
+        tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+        nowL = datetime.now(tz)
+        h, minute = hm
+        dueL = (nowL + timedelta(days=1)).replace(hour=h, minute=minute, second=0, microsecond=0)
+        due_str = dueL.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        parent_ref = _extract_case_parent_ref(what)
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
+
+        if audit_fn:
+            audit_fn(
+                chat_id=int(chat_id),
+                action="CMD_REMINDER_CREATE",
+                entity_type="reminder",
+                entity_id=str(rid),
+                payload=f"mode=tomorrow_first_at | due_at_utc={due_str} | local={dueL.isoformat()} | text={what}"[:500],
+                source="dm",
+            )
+
+        await update.message.reply_text(f"Listo. Te lo recuerdo mañana a las {h:02d}:{minute:02d}.")
+        return True
     
     # 3b) "mañana X" (default 09:00 local)
     m = _RE_TOMORROW_PLAIN.match(t)
+
     if m:
         what = (m.group("what") or "").strip()
         if not what:
             await update.message.reply_text("¿Qué quieres que recuerde mañana?")
             return True
 
-        nowL = _now_local()
+        tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+        nowL = datetime.now(tz)
         dueL = (nowL + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
-        due_str = _to_utc_iso(dueL)
+        due_str = dueL.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         parent_ref = _extract_case_parent_ref(what)
         rid = insert_reminder(
             chat_id=int(chat_id),
