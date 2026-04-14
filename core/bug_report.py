@@ -7,6 +7,42 @@ _PENDING_BUG_REPORT = {}
 BUG_REPORT_PATH = "/opt/val0/logs/bug_reports.jsonl"
 
 
+async def _block_if_pending_report(update, kind: str) -> bool:
+    """
+    Prevent slash-command interruption while a guided bug/feedback/idea flow is active.
+
+    kind:
+      - "same" for re-entering the same command (/bug while bug active, etc.)
+      - "other" for trying a different command like /reports during an active flow
+    """
+    if not update or not getattr(update, "effective_chat", None):
+        return False
+
+    msg = getattr(update, "effective_message", None)
+    if msg is None:
+        return False
+
+    chat_id = int(update.effective_chat.id)
+    pending = _PENDING_BUG_REPORT.get(chat_id)
+    if not pending:
+        return False
+
+    pending_kind = str(pending.get("kind") or "bug").strip().lower()
+
+    if kind == "same":
+        await msg.reply_text(
+            f"Tienes un {pending_kind} en curso.\n\n"
+            "Respóndeme la siguiente pregunta para terminarlo, o escribe /cancelreport para cancelarlo."
+        )
+        return True
+
+    await msg.reply_text(
+        f"Tienes un {pending_kind} en curso.\n\n"
+        "Termínalo primero o escribe /cancelreport para cancelarlo antes de usar otro comando."
+    )
+    return True
+
+
 def _ensure_bug_log_dir() -> None:
     os.makedirs(os.path.dirname(BUG_REPORT_PATH), exist_ok=True)
 
@@ -70,7 +106,28 @@ def _start_report(update, kind: str):
     return msg, opening.get(kind, "Vamos a registrar esto.")
 
 
+async def cancelreport_cmd(update, context):
+    if not update or not getattr(update, "effective_chat", None):
+        return
+
+    msg = getattr(update, "effective_message", None)
+    if msg is None:
+        return
+
+    chat_id = int(update.effective_chat.id)
+    pending = _PENDING_BUG_REPORT.pop(chat_id, None)
+
+    if pending:
+        kind = str(pending.get("kind") or "reporte").strip().lower()
+        await msg.reply_text(f"Entendido. Cancelé el {kind} en curso.")
+    else:
+        await msg.reply_text("No tienes ningún reporte en curso.")
+
+
 async def bug_cmd(update, context):
+    if await _block_if_pending_report(update, "same"):
+        return
+
     msg, opening = _start_report(update, "bug")
     if msg is None:
         return
@@ -82,6 +139,9 @@ async def bug_cmd(update, context):
 
 
 async def feedback_cmd(update, context):
+    if await _block_if_pending_report(update, "other"):
+        return
+
     msg, opening = _start_report(update, "feedback")
     if msg is None:
         return
@@ -93,6 +153,9 @@ async def feedback_cmd(update, context):
 
 
 async def idea_cmd(update, context):
+    if await _block_if_pending_report(update, "other"):
+        return
+
     msg, opening = _start_report(update, "idea")
     if msg is None:
         return
@@ -180,6 +243,7 @@ async def handle_pending_bug_report(update, chat_id: int, text: str) -> bool:
     _PENDING_BUG_REPORT.pop(int(chat_id), None)
     return False
 
+
 def read_recent_reports(limit: int = 5) -> list[dict]:
     if limit < 1:
         limit = 1
@@ -204,6 +268,9 @@ def read_recent_reports(limit: int = 5) -> list[dict]:
 
 
 async def reports_cmd(update, context):
+    if await _block_if_pending_report(update, "other"):
+        return
+
     msg = update.effective_message
     if msg is None:
         return
@@ -264,4 +331,4 @@ async def reports_cmd(update, context):
         if idx < len(rows):
             lines.append("")
 
-    await msg.reply_text("\n".join(lines))   
+    await msg.reply_text("\n".join(lines))

@@ -53,6 +53,7 @@ from core.bug_report import (
     feedback_cmd,
     idea_cmd,
     reports_cmd,
+    cancelreport_cmd,
     handle_pending_bug_report,
     get_pending_bug_report_text,
     _PENDING_BUG_REPORT,
@@ -86,7 +87,7 @@ import os
 import logging
 import unicodedata
 import datetime
-from datetime import timedelta
+from datetime import timedelta, timezone
 from forge_ingest_helper import send_audio_to_forge
 import pytz
 from typing import List, Dict, Any, Optional
@@ -390,6 +391,9 @@ VAL_EMAIL_FROM = "Val <val@holaval.com>"
 
 EMAIL_CONTACTS = {
     "miguel": "franklin.miranda.c@gmail.com",
+    "frank": "franklin.miranda.c@gmail.com",
+    "boss": "franklin.miranda.c@gmail.com",
+    "karen": "karenmm20@gmail.com",
 }
 
 # --------------------------------------------------
@@ -406,7 +410,32 @@ def get_user_email(chat_id: int, fallback_name: str = "miguel"):
     if chat_id in EMAIL_BY_CHAT_ID:
         return EMAIL_BY_CHAT_ID[chat_id]
 
-    return None
+    return EMAIL_CONTACTS.get(fallback_name)
+
+
+def get_last_assistant_message(chat_id: int) -> str:
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT content
+            FROM messages
+            WHERE chat_id=?
+              AND role='assistant'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (int(chat_id),),
+        )
+        row = cur.fetchone()
+        if not row:
+            return ""
+        return (row["content"] if hasattr(row, "keys") else row[0]) or ""
+    finally:
+        conn.close()
+
+
 def send_email_resend(to_email: str, subject: str, body: str) -> None:
     url = "https://api.resend.com/emails"
 
@@ -2900,6 +2929,79 @@ def _get_last_user_work_message(chat_id: int) -> str:
 
     return ""
 
+def _extract_send_email_payload(text: str) -> tuple[str, str]:
+    """
+    Returns (target_name, body_text) for patterns like:
+    - mandale un email a frank que diga: hola
+    - enviale un correo a frank diciendo hola
+    - send an email to frank that says hello
+    """
+    raw = (text or "").strip()
+    norm = unicodedata.normalize("NFKD", raw.lower())
+    norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
+
+    patterns = [
+        r"mandale un email a ([a-z0-9_.-]+)\s+que diga[:\s]+(.+)$",
+        r"mandale un correo a ([a-z0-9_.-]+)\s+que diga[:\s]+(.+)$",
+        r"enviale un email a ([a-z0-9_.-]+)\s+que diga[:\s]+(.+)$",
+        r"enviale un correo a ([a-z0-9_.-]+)\s+que diga[:\s]+(.+)$",
+        r"send an email to ([a-z0-9_.-]+)\s+that says[:\s]+(.+)$",
+    ]
+
+    for pat in patterns:
+        m = re.match(pat, norm, flags=re.IGNORECASE)
+        if m:
+            who = (m.group(1) or "").strip().lower()
+            body = (m.group(2) or "").strip()
+            return who, body
+
+    return "", ""
+
+def _extract_redirect_target(text: str) -> str:
+    raw = (text or "").strip()
+    norm = unicodedata.normalize("NFKD", raw.lower())
+    norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
+    norm = re.sub(r"[¿?¡!.,:;]+", "", norm).strip()
+
+    patterns = [
+        r"no mejor enviaselo a ([a-z0-9_.-]+)$",
+        r"no mejor mandaselo a ([a-z0-9_.-]+)$",
+        r"enviaselo mejor a ([a-z0-9_.-]+)$",
+        r"mandaselo mejor a ([a-z0-9_.-]+)$",
+        r"send it to ([a-z0-9_.-]+) instead$",
+        r"send the last email to ([a-z0-9_.-]+) instead$",
+    ]
+
+    for pat in patterns:
+        m = re.match(pat, norm, flags=re.IGNORECASE)
+        if m:
+            return (m.group(1) or "").strip().lower()
+
+    return ""
+
+def _extract_copy_target(text: str) -> str:
+    raw = (text or "").strip()
+    norm = unicodedata.normalize("NFKD", raw.lower())
+    norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
+    norm = re.sub(r"[¿?¡!.,:;]+", "", norm).strip()
+
+    patterns = [
+        r"mandale una copia a ([a-z0-9_.-]+)$",
+        r"mandale copia a ([a-z0-9_.-]+)$",
+        r"enviale una copia a ([a-z0-9_.-]+)$",
+        r"enviale copia a ([a-z0-9_.-]+)$",
+        r"send a copy to ([a-z0-9_.-]+)$",
+        r"send it to ([a-z0-9_.-]+) too$",
+        r"cc ([a-z0-9_.-]+)$",
+    ]
+
+    for pat in patterns:
+        m = re.match(pat, norm, flags=re.IGNORECASE)
+        if m:
+            return (m.group(1) or "").strip().lower()
+
+    return ""
+
 # --------------------------------------------------
 # Core Message Pipeline
 # --------------------------------------------------
@@ -3370,8 +3472,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         reply = reply + f"\n\n📧 Te lo envié a {to_email}."
                         try:
                             upsert_fact(chat_id=chat_id, fact_key="last_email_sent_to", fact_value=to_email)
+                            upsert_fact(chat_id=chat_id, fact_key="last_email_subject", fact_value="Valeria – Borrador de contrato")
+                            upsert_fact(chat_id=chat_id, fact_key="last_document_type", fact_value="contract")
+                            upsert_fact(chat_id=chat_id, fact_key="last_email_sent_at", fact_value=datetime.now(timezone.utc).isoformat())
+                            upsert_fact(chat_id=chat_id, fact_key="last_email_had_attachment", fact_value="no")
+                            upsert_fact(chat_id=chat_id, fact_key="last_attachment_name", fact_value="")
+                            upsert_fact(chat_id=chat_id, fact_key="last_email_channel", fact_value="email")
                         except Exception as e:
-                            logger.exception(f"[DOC_MODE_EMAIL_FACT] failed: {e}")
+                            logger.exception(f"[DOC_MODE_EMAIL_FACTS] failed: {e}")
                     except Exception as e:
                         logger.exception(
                             "[DOC_MODE_DEBUG] chat_id=%s email_send_failed to=%r err=%s",
@@ -3446,6 +3554,309 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     except Exception as e:
         logger.exception(f"[EMAIL_STATUS_OVERRIDE] failed: {e}")    
+
+    # --------------------------------------------------
+    # LAST EMAIL SUMMARY OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        text_norm_email_summary = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm_email_summary = "".join(ch for ch in text_norm_email_summary if not unicodedata.combining(ch))
+        text_norm_email_summary = re.sub(r"[¿?¡!.,:;]+", "", text_norm_email_summary).strip()
+
+        ask_last_email_markers = (
+            "que fue lo ultimo que enviaste por correo",
+            "que fue lo ultimo que mandaste por correo",
+            "cual fue el ultimo correo que enviaste",
+            "what was the last thing you emailed",
+            "what was the last email you sent",
+        )
+
+        if any(m in text_norm_email_summary for m in ask_last_email_markers):
+            try:
+                last_to = (get_fact(chat_id=chat_id, fact_key="last_email_sent_to") or "").strip()
+            except Exception:
+                last_to = ""
+
+            try:
+                last_subject = (get_fact(chat_id=chat_id, fact_key="last_email_subject") or "").strip()
+            except Exception:
+                last_subject = ""
+
+            try:
+                last_doc_type = (get_fact(chat_id=chat_id, fact_key="last_document_type") or "").strip()
+            except Exception:
+                last_doc_type = ""
+
+            if last_to or last_subject or last_doc_type:
+                parts = []
+                if last_doc_type:
+                    parts.append(f"tipo: {last_doc_type}")
+                if last_subject:
+                    parts.append(f"asunto: {last_subject}")
+                if last_to:
+                    parts.append(f"destinatario: {last_to}")
+
+                await update.message.reply_text("Lo último que envié por correo fue:\n- " + "\n- ".join(parts))
+            else:
+                await update.message.reply_text("No tengo registro de un último correo enviado en este chat.")
+            return
+
+    except Exception as e:
+        logger.exception(f"[LAST_EMAIL_SUMMARY_OVERRIDE] failed: {e}")
+
+    # --------------------------------------------------
+    # LAST ATTACHMENT STATUS OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        text_norm_attach = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm_attach = "".join(ch for ch in text_norm_attach if not unicodedata.combining(ch))
+        text_norm_attach = re.sub(r"[¿?¡!.,:;]+", "", text_norm_attach).strip()
+
+        ask_attachment_markers = (
+            "tenia adjunto",
+            "tenia attachment",
+            "llevaba adjunto",
+            "what was attached",
+            "did it have an attachment",
+            "did the last email have an attachment",
+            "que fue lo ultimo que mandaste adjunto",
+            "que adjunto llevaba",
+        )
+
+        if any(m in text_norm_attach for m in ask_attachment_markers):
+            try:
+                had_attachment = (get_fact(chat_id=chat_id, fact_key="last_email_had_attachment") or "").strip().lower()
+            except Exception:
+                had_attachment = ""
+
+            try:
+                attachment_name = (get_fact(chat_id=chat_id, fact_key="last_attachment_name") or "").strip()
+            except Exception:
+                attachment_name = ""
+
+            if had_attachment == "yes":
+                if attachment_name:
+                    await update.message.reply_text(f"Sí. El último email llevaba este adjunto: {attachment_name}.")
+                else:
+                    await update.message.reply_text("Sí. El último email llevaba un adjunto, pero no tengo el nombre guardado.")
+            elif had_attachment == "no":
+                await update.message.reply_text("No. El último email no llevaba adjunto.")
+            else:
+                await update.message.reply_text("No tengo registro del estado de adjuntos para el último email en este chat.")
+            return
+
+    except Exception as e:
+        logger.exception(f"[LAST_ATTACHMENT_STATUS_OVERRIDE] failed: {e}")
+
+    # --------------------------------------------------
+    # SEND COPY OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        who = _extract_copy_target(text)
+
+        if who:
+            to_email = EMAIL_CONTACTS.get(who)
+            if not to_email:
+                await update.message.reply_text(f"No tengo correo configurado para {who}.")
+                return
+
+            body = get_last_assistant_message(chat_id)
+            body = (body or "").strip()
+            if not body:
+                await update.message.reply_text("No encontré un documento reciente para reenviar.")
+                return
+
+            try:
+                last_subject = (get_fact(chat_id=chat_id, fact_key="last_email_subject") or "").strip()
+            except Exception:
+                last_subject = ""
+
+            if not last_subject:
+                last_subject = "Valeria – Documento generado"
+
+            try:
+                send_email_resend(
+                    to_email=to_email,
+                    subject=last_subject,
+                    body=body,
+                )
+
+                try:
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_to", fact_value=to_email)
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_at", fact_value=datetime.now(timezone.utc).isoformat())
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_had_attachment", fact_value="no")
+                    upsert_fact(chat_id=chat_id, fact_key="last_attachment_name", fact_value="")
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_channel", fact_value="email")
+                except Exception as e:
+                    logger.exception(f"[SEND_COPY_FACTS] failed: {e}")
+
+                await update.message.reply_text(f"📧 Listo. Le mandé una copia a {who.title()} en {to_email}.")
+            except Exception as e:
+                logger.exception(f"[SEND_COPY_OVERRIDE] failed: {e}")
+                await update.message.reply_text(
+                    f"⚠️ No pude enviarle la copia a {who.title()} en {to_email}."
+                )
+            return
+
+    except Exception as e:
+        logger.exception(f"[SEND_COPY_OVERRIDE] failed: {e}")
+
+    # --------------------------------------------------
+    # REDIRECT LAST EMAIL OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        who = _extract_redirect_target(text)
+
+        if who:
+            to_email = EMAIL_CONTACTS.get(who)
+            if not to_email:
+                await update.message.reply_text(f"No tengo correo configurado para {who}.")
+                return
+
+            body = get_last_assistant_message(chat_id)
+            body = (body or "").strip()
+            if not body:
+                await update.message.reply_text("No encontré contenido reciente para redirigir.")
+                return
+
+            try:
+                last_subject = (get_fact(chat_id=chat_id, fact_key="last_email_subject") or "").strip()
+            except Exception:
+                last_subject = ""
+
+            if not last_subject:
+                last_subject = "Valeria – Documento generado"
+
+            try:
+                send_email_resend(
+                    to_email=to_email,
+                    subject=last_subject,
+                    body=body,
+                )
+
+                try:
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_to", fact_value=to_email)
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_at", fact_value=datetime.now(timezone.utc).isoformat())
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_had_attachment", fact_value="no")
+                    upsert_fact(chat_id=chat_id, fact_key="last_attachment_name", fact_value="")
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_channel", fact_value="email")
+                except Exception as e:
+                    logger.exception(f"[REDIRECT_LAST_EMAIL_FACTS] failed: {e}")
+
+                await update.message.reply_text(f"📧 Listo. Redirigí el último correo a {who.title()} en {to_email}.")
+            except Exception as e:
+                logger.exception(f"[REDIRECT_LAST_EMAIL_OVERRIDE] failed: {e}")
+                await update.message.reply_text(f"⚠️ No pude redirigir el último correo a {who.title()} en {to_email}.")
+            return
+
+    except Exception as e:
+        logger.exception(f"[REDIRECT_LAST_EMAIL_OVERRIDE] failed: {e}")
+
+    # --------------------------------------------------
+    # RESEND LAST EMAIL OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        text_norm_resend = unicodedata.normalize("NFKD", (text or "").lower())
+        text_norm_resend = "".join(ch for ch in text_norm_resend if not unicodedata.combining(ch))
+        text_norm_resend = re.sub(r"[¿?¡!.,:;]+", "", text_norm_resend).strip()
+
+        resend_markers = (
+            "reenvialo",
+            "reenvialo por correo",
+            "mandalo otra vez",
+            "mandalo de nuevo",
+            "envialo otra vez",
+            "envialo de nuevo",
+            "resend it",
+            "send it again",
+            "resend the last email",
+        )
+
+        if any(m in text_norm_resend for m in resend_markers):
+            try:
+                to_email = (get_fact(chat_id=chat_id, fact_key="last_email_sent_to") or "").strip()
+            except Exception:
+                to_email = ""
+
+            try:
+                subject = (get_fact(chat_id=chat_id, fact_key="last_email_subject") or "").strip()
+            except Exception:
+                subject = ""
+
+            body = get_last_assistant_message(chat_id).strip()
+
+            if not to_email:
+                await update.message.reply_text("No tengo registro del último destinatario en este chat.")
+                return
+
+            if not subject:
+                subject = "Valeria – Documento generado"
+
+            if not body:
+                await update.message.reply_text("No encontré contenido reciente para reenviar.")
+                return
+
+            try:
+                send_email_resend(
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                )
+
+                try:
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_at", fact_value=datetime.now(timezone.utc).isoformat())
+                except Exception as e:
+                    logger.exception(f"[RESEND_LAST_EMAIL_FACTS] failed: {e}")
+
+                await update.message.reply_text(f"📧 Listo. Reenvié el último correo a {to_email}.")
+            except Exception as e:
+                logger.exception(f"[RESEND_LAST_EMAIL_OVERRIDE] failed: {e}")
+                await update.message.reply_text(f"⚠️ No pude reenviar el último correo a {to_email}.")
+            return
+
+    except Exception as e:
+        logger.exception(f"[RESEND_LAST_EMAIL_OVERRIDE] failed: {e}")
+
+    # --------------------------------------------------
+    # SEND FREEFORM EMAIL OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        who, body_text = _extract_send_email_payload(text)
+
+        if who and body_text:
+            to_email = EMAIL_CONTACTS.get(who)
+            if not to_email:
+                await update.message.reply_text(f"No tengo correo configurado para {who}.")
+                return
+
+            subject = f"Valeria – Mensaje para {who.title()}"
+
+            try:
+                send_email_resend(
+                    to_email=to_email,
+                    subject=subject,
+                    body=body_text,
+                )
+
+                try:
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_to", fact_value=to_email)
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_subject", fact_value=subject)
+                    upsert_fact(chat_id=chat_id, fact_key="last_document_type", fact_value="freeform_email")
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_sent_at", fact_value=datetime.now(timezone.utc).isoformat())
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_had_attachment", fact_value="no")
+                    upsert_fact(chat_id=chat_id, fact_key="last_attachment_name", fact_value="")
+                    upsert_fact(chat_id=chat_id, fact_key="last_email_channel", fact_value="email")
+                except Exception as e:
+                    logger.exception(f"[FREEFORM_EMAIL_FACTS] failed: {e}")
+
+                await update.message.reply_text(f"📧 Listo. Le mandé el email a {who.title()} en {to_email}.")
+            except Exception as e:
+                logger.exception(f"[FREEFORM_EMAIL_OVERRIDE] failed: {e}")
+                await update.message.reply_text(f"⚠️ No pude enviarle el email a {who.title()} en {to_email}.")
+            return
+
+    except Exception as e:
+        logger.exception(f"[FREEFORM_EMAIL_OVERRIDE] failed: {e}")
 
     # --------------------------------------------------
     # Email send command (MVP)
@@ -7968,6 +8379,7 @@ def main():
     app.add_handler(CommandHandler("focus", focus_cmd))
     app.add_handler(CommandHandler("showfocus", showfocus_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CommandHandler("cancelreport", cancelreport_cmd))
 
     app.add_handler(CommandHandler("handoff", handoff_cmd))
     app.add_handler(CommandHandler("semana", semana_cmd))
