@@ -160,4 +160,3 @@ La persona debe salir con una de estas sensaciones:
 - "No parece solo otro chatbot."
 
 Si logramos eso, el demo funcionó.
-EOF

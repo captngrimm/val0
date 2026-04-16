@@ -102,12 +102,24 @@ async def reminders_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines = ["REMINDERS (pending/sending)"]
         for r in rows:
             rid = r.get("id")
-            due = r.get("due_at_utc")
+            due = (r.get("due_at_utc") or "").strip()
             st = r.get("status")
             txt = (r.get("text") or "").replace("\n", " ").strip()
+
             if len(txt) > 60:
                 txt = txt[:60] + "…"
-            lines.append(f"- #{rid} | {due} | {st} | {txt}")
+
+            due_label = due
+            try:
+                from datetime import datetime, timezone
+                from zoneinfo import ZoneInfo
+                tz = ZoneInfo(os.getenv("VAL0_TZ", "America/Panama"))
+                due_dt_utc = datetime.strptime(due, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                due_label = due_dt_utc.astimezone(tz).strftime("%Y-%m-%d %I:%M %p")
+            except Exception:
+                pass
+
+            lines.append(f"- #{rid} | {due_label} | {st} | {txt}")
         await update.message.reply_text("\n".join(lines))
     except Exception as e:
         await update.message.reply_text(f"REMINDERS\n- error: {e}")
