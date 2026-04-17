@@ -6856,6 +6856,33 @@ async def try_agenda_tomorrow_natural(update, chat_id, text) -> bool:
             month = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][tomorrow_dt.month]
             pretty = f"{weekday} {tomorrow_dt.day} {month}"
 
+            # Normalize reused daily-brief header when this path is explicitly "mañana"
+            try:
+                out = (out or "").strip()
+
+                # Drop an old "Hoy (...)" header if present.
+                out = re.sub(
+                    r"^\s*📋\s*Hoy\s*\([^)]+\):\s*",
+                    "",
+                    out,
+                    flags=re.IGNORECASE,
+                ).lstrip()
+
+                # Drop an existing "Mañana (...)" header if present.
+                out = re.sub(
+                    r"^\s*📅\s*Mañana\s*\([^)]+\)\s*",
+                    "",
+                    out,
+                    flags=re.IGNORECASE,
+                ).lstrip()
+
+                if out:
+                    out = f"📅 Mañana ({pretty})\n\n{out}"
+                else:
+                    out = f"📅 Mañana ({pretty})\n\nNo veo nada agendado para mañana."
+            except Exception:
+                pass
+
             # Pull Google Calendar events for tomorrow and append them.
             gcal_lines = []
             try:

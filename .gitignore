@@ -87,3 +87,7 @@ You
 
 forge_ingest_log.jsonl
 create_tasks_table.py
+
+# runtime junk
+audit/
+forge_ingest_log.jsonl
