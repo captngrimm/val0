@@ -3065,20 +3065,16 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         greeting_markers = (
             "hola",
+            "hola val",
+            "buenas",
+            "buenas val",
             "hello",
             "hi",
-            "buenos dias",
-            "buen dia",
-            "buenas",
-            "buenas tardes",
-            "buenas noches",
+            "hey",
         )
 
         if text_norm_greet in greeting_markers:
-            if preferred_language == "en":
-                reply = "Hey. What do you need?"
-            else:
-                reply = "Hola. ¿Qué necesitas?"
+            reply = "Hola. ¿Qué necesitas?"
             await update.message.reply_text(reply)
             return
 
