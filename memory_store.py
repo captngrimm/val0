@@ -967,14 +967,68 @@ def set_last_surface_commitment_id(chat_id: int, commitment_id: int):
 
 # ---- NOTES ------------------------------------------------
 
-def add_note(chat_id: int, text: str):
-    return None
+def add_note(chat_id: int, text: str) -> int:
+    text = (text or "").strip()
+    if not text:
+        return 0
 
-def get_notes(chat_id: int):
-    return []
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO notes(chat_id, content) VALUES(?, ?)",
+            (int(chat_id), text),
+        )
+        note_id = int(cur.lastrowid or 0)
+        conn.commit()
+        conn.close()
 
-def search_notes(chat_id: int, query: str):
-    return []
+    return note_id
+
+
+def get_notes(chat_id: int, limit: int = 20) -> list[dict]:
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT id, chat_id, content, created_at
+            FROM notes
+            WHERE chat_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (int(chat_id), int(limit)),
+        ).fetchall()
+        conn.close()
+
+    return [dict(r) for r in rows]
+
+
+def search_notes(chat_id: int, query: str, limit: int = 20) -> list[dict]:
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    like = f"%{query}%"
+
+    with _lock:
+        conn = _get_conn()
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT id, chat_id, content, created_at
+            FROM notes
+            WHERE chat_id = ?
+              AND content LIKE ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT ?
+            """,
+            (int(chat_id), like, int(limit)),
+        ).fetchall()
+        conn.close()
+
+    return [dict(r) for r in rows]
 
 
 # ---- DAILY LOGS -------------------------------------------
