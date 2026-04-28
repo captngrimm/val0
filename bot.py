@@ -3171,6 +3171,41 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
     # --------------------------------------------------
+    # NATURAL NOTE OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        note_patterns = (
+            r"^guarda esta nota[:\s]+(.+)$",
+            r"^guardar nota[:\s]+(.+)$",
+            r"^guarda nota[:\s]+(.+)$",
+            r"^anota[:\s]+(.+)$",
+            r"^nota[:\s]+(.+)$",
+            r"^remember this[:\s]+(.+)$",
+            r"^save this note[:\s]+(.+)$",
+        )
+
+        for pat in note_patterns:
+            m = re.match(pat, text_norm_greet, flags=re.IGNORECASE)
+            if m:
+                note_text = (m.group(1) or "").strip()
+                if not note_text:
+                    await update.message.reply_text("Dime qué nota quieres guardar.")
+                    return
+
+                note_id = add_note(chat_id, note_text)
+                if note_id <= 0:
+                    await update.message.reply_text("No pude guardar esa nota. Intenta de nuevo.")
+                    return
+
+                await update.message.reply_text(f"Listo. Guardé la nota #{note_id}:\n{note_text}")
+                return
+
+    except Exception as e:
+        logger.exception(f"[NATURAL_NOTE_OVERRIDE] failed: {e}")
+        await update.message.reply_text("Intenté guardar la nota, pero algo falló.")
+        return
+
+    # --------------------------------------------------
     # SESSION MEMORY: persist inbound user turn
     # --------------------------------------------------
     try:
