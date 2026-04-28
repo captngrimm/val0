@@ -1535,7 +1535,12 @@ def _places_query_from_text(text: str) -> str:
 # Telegram Commands
 # --------------------------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Val-0 online. Ya puedo hablar contigo por aquí.")
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    try:
+        preferred_name = get_fact(chat_id=chat_id, fact_key="preferred_name") or ""
+    except Exception:
+        preferred_name = ""
+    await update.message.reply_text(build_alpha_onboarding_reply(preferred_name))
 
 async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -3025,6 +3030,54 @@ def _extract_copy_target(text: str) -> str:
 
     return ""
 
+
+def build_alpha_onboarding_reply(preferred_name: str = "") -> str:
+    name_line = f"{preferred_name}, " if preferred_name else ""
+    return (
+        f"👀 {name_line}hola. Estoy en modo alpha y no voy a fingir magia: soy Valeria, "
+        "software diseñado para ayudarte como segunda memoria y copiloto práctico.\n\n"
+        "Puedo ayudarte con:\n"
+        "1. 📝 Guardar notas\n"
+        "2. ⏰ Crear recordatorios\n"
+        "3. ✅ Organizar tareas\n"
+        "4. 📁 Dar seguimiento a casos o temas importantes\n"
+        "5. 🎙️ Entender mensajes de voz\n"
+        "6. 🧭 Recuperar el hilo cuando te pierdas\n\n"
+        "Para probarme, dime algo como:\n"
+        "• Guarda esta nota: comprar leche\n"
+        "• Recuérdame llamar mañana a las 9\n"
+        "• ¿Qué tengo pendiente?\n"
+        "• Estoy perdida, guíame.\n\n"
+        "Antes de empezar: ¿cómo quieres que te llame?"
+    )
+
+
+def build_alpha_capability_reply(preferred_name: str = "") -> str:
+    name_line = f"{preferred_name}, " if preferred_name else ""
+    return (
+        f"{name_line}puedo ayudarte como una capa práctica de memoria, tareas y seguimiento.\n\n"
+        "Lo útil ahora mismo:\n"
+        "• 📝 Notas: Guarda esta nota: comprar leche\n"
+        "• ⏰ Recordatorios: Recuérdame llamar mañana a las 9\n"
+        "• ✅ Tareas: Tengo que revisar X\n"
+        "• 📁 Casos/temas: Guarda esto en el caso de...\n"
+        "• 🎙️ Voz: puedes mandarme notas de voz\n"
+        "• 🧭 Recuperación: Estoy perdida, ¿qué hago?\n\n"
+        "Siguiente paso: prueba una nota o un recordatorio simple."
+    )
+
+
+def build_alpha_lost_reply(preferred_name: str = "") -> str:
+    name_line = f"{preferred_name}, " if preferred_name else ""
+    return (
+        f"{name_line}tranquila. Empezamos simple.\n\n"
+        "Puedes probar una de estas tres cosas:\n"
+        "1. Guarda esta nota: comprar leche\n"
+        "2. Recuérdame llamar mañana a las 9\n"
+        "3. ¿Qué tengo pendiente?\n\n"
+        "Siguiente paso: mándame una nota o recordatorio de prueba."
+    )
+
 # --------------------------------------------------
 # Core Message Pipeline
 # --------------------------------------------------
@@ -3073,8 +3126,41 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "hey",
         )
 
+        capability_markers = (
+            "que puedes hacer",
+            "que haces",
+            "para que sirves",
+            "ayuda",
+            "help",
+            "what can you do",
+            "what do you do",
+        )
+
+        lost_markers = (
+            "estoy perdida",
+            "estoy perdido",
+            "me perdi",
+            "me perdi",
+            "no se que hacer",
+            "no se que hacer",
+            "que hago",
+            "que hago",
+            "estoy perdida que hago",
+            "estoy perdido que hago",
+        )
+
         if text_norm_greet in greeting_markers:
-            reply = "Hola. ¿Qué necesitas?"
+            reply = build_alpha_onboarding_reply(preferred_name)
+            await update.message.reply_text(reply)
+            return
+
+        if text_norm_greet in capability_markers:
+            reply = build_alpha_capability_reply(preferred_name)
+            await update.message.reply_text(reply)
+            return
+
+        if text_norm_greet in lost_markers:
+            reply = build_alpha_lost_reply(preferred_name)
             await update.message.reply_text(reply)
             return
 
