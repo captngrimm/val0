@@ -3379,12 +3379,17 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "hey",
         )
 
+        help_markers = (
+            "ayuda",
+            "help",
+            "comandos",
+            "ejemplos",
+        )
+
         capability_markers = (
             "que puedes hacer",
             "que haces",
             "para que sirves",
-            "ayuda",
-            "help",
             "what can you do",
             "what do you do",
         )
@@ -3404,6 +3409,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         if text_norm_greet in greeting_markers:
             reply = build_alpha_onboarding_reply(preferred_name)
+            await update.message.reply_text(reply)
+            return
+
+        if text_norm_greet in help_markers:
+            from core.control import build_user_help_message
+            reply = build_user_help_message()
             await update.message.reply_text(reply)
             return
 
