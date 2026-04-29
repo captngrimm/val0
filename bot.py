@@ -3066,9 +3066,12 @@ def _extract_copy_target(text: str) -> str:
 
 
 def build_alpha_onboarding_reply(preferred_name: str = "") -> str:
-    name_line = f"{preferred_name}, " if preferred_name else ""
+    preferred_name = (preferred_name or "").strip()
+    greeting = f"👀 Hola, {preferred_name}. " if preferred_name else "👀 Hola. "
+    name_prompt = "" if preferred_name else "\n\nAntes de empezar: ¿cómo quieres que te llame?"
+
     return (
-        f"👀 {name_line}Hola. Estoy en modo alpha y no voy a fingir magia: soy Valeria, "
+        f"{greeting}Estoy en modo alpha y no voy a fingir magia: soy Valeria, "
         "software diseñado para ayudarte como segunda memoria y copiloto práctico.\n\n"
         "Puedo ayudarte con:\n"
         "1. 📝 Guardar notas\n"
@@ -3081,15 +3084,15 @@ def build_alpha_onboarding_reply(preferred_name: str = "") -> str:
         "• Guarda esta nota: comprar leche\n"
         "• Recuérdame llamar mañana a las 9\n"
         "• ¿Qué tengo pendiente?\n"
-        "• Estoy perdida, guíame.\n\n"
-        "Antes de empezar: ¿cómo quieres que te llame?"
+        "• Estoy perdida, guíame."
+        f"{name_prompt}"
     )
 
 
 def build_alpha_capability_reply(preferred_name: str = "") -> str:
     name_line = f"{preferred_name}, " if preferred_name else ""
     return (
-        f"{name_line}Puedo ayudarte como una capa práctica de memoria, tareas y seguimiento.\n\n"
+        f"{name_line}puedo ayudarte como una capa práctica de memoria, tareas y seguimiento.\n\n"
         "Lo útil ahora mismo:\n"
         "• 📝 Notas: Guarda esta nota: comprar leche\n"
         "• ⏰ Recordatorios: Recuérdame llamar mañana a las 9\n"
@@ -3104,7 +3107,7 @@ def build_alpha_capability_reply(preferred_name: str = "") -> str:
 def build_alpha_lost_reply(preferred_name: str = "") -> str:
     name_line = f"{preferred_name}, " if preferred_name else ""
     return (
-        f"{name_line}Tranquila. Empezamos simple.\n\n"
+        f"{name_line}tranquila. Empezamos simple.\n\n"
         "Puedes probar una de estas tres cosas:\n"
         "1. Guarda esta nota: comprar leche\n"
         "2. Recuérdame llamar mañana a las 9\n"
