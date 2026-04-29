@@ -3113,6 +3113,101 @@ def build_alpha_lost_reply(preferred_name: str = "") -> str:
     )
 
 
+
+def build_unified_pending_dashboard(chat_id: int) -> str:
+    """
+    User-facing pending dashboard.
+    Combines open tasks + pending reminders so "¿Qué tengo pendiente?"
+    does not fall into narrow legal/today-only priority logic.
+    """
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import _get_conn, fetch_open_commitments
+
+    tz = ZoneInfo("America/Panama")
+    now_local = datetime.now(tz)
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    tasks = []
+    reminders = []
+
+    try:
+        rows = fetch_open_commitments(int(chat_id), limit=10) or []
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else r
+            raw = str(row.get("raw_input") or "").strip()
+            due = str(row.get("due_date") or "").strip()
+
+            if raw:
+                if due:
+                    tasks.append(f"- {raw} ({due[:10]})")
+                else:
+                    tasks.append(f"- {raw}")
+    except Exception as e:
+        tasks.append(f"- No pude leer tareas: {e}")
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT id, text, due_at_utc, status
+            FROM reminders
+            WHERE chat_id = ?
+              AND status = 'pending'
+              AND due_at_utc >= ?
+            ORDER BY due_at_utc ASC, id ASC
+            LIMIT 10
+            """,
+            (int(chat_id), now_utc),
+        ).fetchall()
+        conn.close()
+
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else {
+                "id": r[0],
+                "text": r[1],
+                "due_at_utc": r[2],
+                "status": r[3],
+            }
+
+            due_raw = str(row.get("due_at_utc") or "")
+            label = due_raw[:16]
+            try:
+                due_dt = datetime.strptime(due_raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(tz)
+                if due_dt.date() == now_local.date():
+                    label = "hoy " + due_dt.strftime("%H:%M")
+                else:
+                    label = due_dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pass
+
+            txt = str(row.get("text") or "").strip() or f"recordatorio #{row.get('id')}"
+            reminders.append(f"- {label} · {txt}")
+
+    except Exception as e:
+        reminders.append(f"- No pude leer recordatorios: {e}")
+
+    lines = ["📌 Pendiente", ""]
+
+    lines.append("✅ Tareas abiertas")
+    if tasks:
+        lines.extend(tasks)
+    else:
+        lines.append("- No tienes tareas abiertas.")
+
+    lines.append("")
+    lines.append("⏰ Recordatorios pendientes")
+    if reminders:
+        lines.extend(reminders)
+    else:
+        lines.append("- No tienes recordatorios pendientes.")
+
+    lines.append("")
+    lines.append("Siguiente paso: puedo ayudarte a ordenar esto por prioridad o cerrar algo que ya hiciste.")
+
+    return "\n".join(lines)
+
 def build_unified_tomorrow_dashboard(chat_id: int) -> str:
     """
     User-facing tomorrow dashboard.
@@ -3325,6 +3420,33 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+    # --------------------------------------------------
+    # UNIFIED PENDING DASHBOARD OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        pending_dashboard_markers = (
+            "que tengo pendiente",
+            "qué tengo pendiente",
+            "que tengo pendientes",
+            "qué tengo pendientes",
+            "mis pendientes",
+            "pendientes",
+            "que debo hacer",
+            "qué debo hacer",
+            "que debo hacer hoy",
+            "qué debo hacer hoy",
+        )
+
+        if text_norm_greet in pending_dashboard_markers:
+            reply = build_unified_pending_dashboard(int(chat_id))
+            await update.message.reply_text(reply)
+            return
+
+    except Exception as e:
+        logger.exception(f"[PENDING_DASHBOARD_OVERRIDE] failed: {e}")
+        await update.message.reply_text("No pude armar tus pendientes ahora mismo. Reviso logs.")
+        return
+
     # --------------------------------------------------
     # UNIFIED TOMORROW DASHBOARD OVERRIDE (DETERMINISTIC)
     # --------------------------------------------------
