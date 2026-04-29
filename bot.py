@@ -9183,6 +9183,8 @@ def main():
 
     # Commands
     app.add_handler(CommandHandler("start", start))
+    from core.control import help_cmd
+    app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("ops", ops_cmd))
     app.add_handler(CommandHandler("health", health_cmd))
     app.add_handler(CommandHandler("reminders", reminders_cmd))
