@@ -1393,19 +1393,53 @@ def extract_preferred_language(text: str) -> Optional[str]:
 def extract_preferred_name(text: str) -> Optional[str]:
     original = (text or "").strip()
     norm = _norm_text(original)
+
+    # Phrase forms where the name appears after a fixed trigger.
     triggers = [
         "quiero que me llames ",
         "quiero que me llame ",
         "llamame ",
+        "llámame ",
         "puedes llamarme ",
+        "me llamo ",
+        "mi nombre es ",
+        "soy ",
         "call me ",
         "you can call me ",
+        "my name is ",
+        "i am ",
+        "i'm ",
     ]
+
     for t in triggers:
-        if norm.startswith(t):
-            tail = original[len(t):].strip() if len(original) >= len(t) else original
+        if norm.startswith(_norm_text(t)):
+            # Use the normalized trigger length only for simple ASCII-ish slicing safety.
+            # For Spanish accents, fall back to regex below if slicing is weird.
+            tail = original[len(t):].strip() if len(original) >= len(t) else ""
             if len(tail) > 1:
-                return tail
+                return tail.strip(" .,:;!¡?¿")
+
+    import re
+
+    patterns = [
+        r"(?i)^me llamo\s+(.+)$",
+        r"(?i)^mi nombre es\s+(.+)$",
+        r"(?i)^soy\s+(.+)$",
+        r"(?i)^ll[aá]mame\s+(.+)$",
+        r"(?i)^puedes llamarme\s+(.+)$",
+        r"(?i)^call me\s+(.+)$",
+        r"(?i)^my name is\s+(.+)$",
+        r"(?i)^i am\s+(.+)$",
+        r"(?i)^i'm\s+(.+)$",
+    ]
+
+    for pat in patterns:
+        m = re.match(pat, original)
+        if m:
+            name = (m.group(1) or "").strip(" .,:;!¡?¿")
+            if len(name) > 1:
+                return name
+
     return None
 
 def extract_user_email(text: str) -> Optional[str]:
