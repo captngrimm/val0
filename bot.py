@@ -8312,6 +8312,12 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
                 await _persist_assistant_reply(sent)
                 return sent
 
+            # Quick ACK before TTS so the user does not think Val0 froze
+            try:
+                await msg.reply_text("🎙️ Te escuché. Estoy preparando la respuesta en voz...")
+            except Exception:
+                pass
+
             tmp_dir = os.getenv("VAL0_TMP_DIR", "/opt/val0/tmp")
             os.makedirs(tmp_dir, exist_ok=True)
 
