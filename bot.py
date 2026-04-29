@@ -3498,7 +3498,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         for pat in note_patterns:
             m = re.match(pat, text_norm_greet, flags=re.IGNORECASE)
             if m:
-                note_text = (m.group(1) or "").strip()
+                # Match using normalized text, but extract from original text to preserve accents.
+                raw_m = re.match(pat, text or "", flags=re.IGNORECASE)
+                if raw_m:
+                    note_text = (raw_m.group(1) or "").strip()
+                else:
+                    note_text = (m.group(1) or "").strip()
+
                 if not note_text:
                     await update.message.reply_text("Dime qué nota quieres guardar.")
                     return
