@@ -7639,6 +7639,7 @@ def _looks_like_completion(text: str) -> bool:
     markers = (
         "ya llamé",
         "ya llame",
+        "ya hice",
         "ya lo hice",
         "ya la hice",
         "listo",
