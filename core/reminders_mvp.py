@@ -150,6 +150,60 @@ def _parse_time_token(token: str):
     return h, minute
 
 
+
+def _norm_reminder_text(text: str) -> str:
+    s = (text or "").strip().lower()
+    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r"[.!?¡¿,;:]+$", "", s).strip()
+    return s
+
+
+async def _warn_duplicate_reminder_if_needed(update, chat_id: int, due_at_utc: str, what: str) -> bool:
+    """
+    Returns True if a duplicate/similar reminder was found and user was warned.
+    For now, warning blocks creation. Later we can add yes/no confirmation.
+    """
+    try:
+        from memory_store import _get_conn
+
+        target = _norm_reminder_text(what)
+        if not target:
+            return False
+
+        conn = _get_conn()
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT id, text, due_at_utc
+            FROM reminders
+            WHERE chat_id = ?
+              AND status IN ('pending', 'sending')
+              AND due_at_utc = ?
+            ORDER BY id DESC
+            LIMIT 10
+            """,
+            (int(chat_id), due_at_utc),
+        ).fetchall()
+        conn.close()
+
+        for r in rows:
+            rid = r["id"] if hasattr(r, "keys") else r[0]
+            rtext = r["text"] if hasattr(r, "keys") else r[1]
+            rnorm = _norm_reminder_text(rtext)
+
+            if rnorm == target or target in rnorm or rnorm in target:
+                await update.message.reply_text(
+                    "Ya tienes un recordatorio parecido para esa misma hora:\n"
+                    f"#{rid} · {rtext}\n\n"
+                    "No creé otro para evitar duplicados. Si quieres cambiarlo, cancela el anterior con /rmd <id> y crea uno nuevo."
+                )
+                return True
+
+    except Exception:
+        return False
+
+    return False
+
 async def try_cancel_reminder(update, chat_id: int, text: str, audit_fn=None) -> bool:
     """
     Deterministic reminder cancel (DM only). Returns True if handled.
@@ -300,6 +354,8 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         due_utc = datetime.now(timezone.utc) + timedelta(minutes=n)
         due_str = _to_utc_iso(due_utc)
         parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
         rid = insert_reminder(
             chat_id=int(chat_id),
             due_at_utc=due_str,
@@ -337,6 +393,8 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         due_utc = datetime.now(timezone.utc) + timedelta(hours=n)
         due_str = _to_utc_iso(due_utc)
         parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
         rid = insert_reminder(
             chat_id=int(chat_id),
             due_at_utc=due_str,
@@ -378,6 +436,8 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         dueL = (nowL + timedelta(days=1)).replace(hour=h, minute=minute, second=0, microsecond=0)
         due_str = dueL.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
         rid = insert_reminder(
             chat_id=int(chat_id),
             due_at_utc=due_str,
@@ -419,6 +479,8 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         dueL = (nowL + timedelta(days=1)).replace(hour=h, minute=minute, second=0, microsecond=0)
         due_str = dueL.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
         rid = insert_reminder(
             chat_id=int(chat_id),
             due_at_utc=due_str,
@@ -455,6 +517,8 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
         dueL = (nowL + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
         due_str = dueL.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
         rid = insert_reminder(
             chat_id=int(chat_id),
             due_at_utc=due_str,
@@ -501,6 +565,8 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
         due_str = _to_utc_iso(dueL)
         parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
         rid = insert_reminder(
             chat_id=int(chat_id),
             due_at_utc=due_str,
