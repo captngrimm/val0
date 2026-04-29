@@ -7560,6 +7560,50 @@ def _extract_commitment_from_text(text: str, confidence: str = "medium") -> dict
     }
     
 
+
+def _is_question_or_status_query(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    if "?" in t or "¿" in t:
+        return True
+
+    markers = (
+        "que tengo",
+        "qué tengo",
+        "que debo hacer",
+        "qué debo hacer",
+        "que hago",
+        "qué hago",
+        "que hay",
+        "qué hay",
+        "mis pendientes",
+        "mis tareas",
+        "pendiente",
+        "pendientes",
+    )
+    return any(m in t for m in markers)
+
+
+def _is_reminder_creation_request(text: str) -> bool:
+    t = (text or "").strip().lower()
+    return (
+        t.startswith("recuerdame")
+        or t.startswith("recuérdame")
+        or t.startswith("recordarme")
+        or t.startswith("remind me")
+        or "recordatorio" in t
+    )
+
+
+def _is_commitment_capture_allowed(text: str) -> bool:
+    if _is_question_or_status_query(text):
+        return False
+    if _is_reminder_creation_request(text):
+        return False
+    return True
+
 def _has_explicit_legal_intent(text: str) -> bool:
     t = (text or "").strip().lower()
     if not t:
@@ -7733,7 +7777,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             is_query_not_task = _is_user_query_not_task(text)
 
             force_task = (
-                not is_query_not_task
+                _is_commitment_capture_allowed(text)
                 and any(x in text_low for x in [
                     "tengo que",
                     "i need to",
@@ -7785,6 +7829,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     confidence=commitment["confidence"],
                 )
                 log_action(chat_id, "task_created", commitment["raw_input"])
+
+                try:
+                    await update.message.reply_text(
+                        f"Listo. Guardé la tarea:\\n{commitment['raw_input']}"
+                    )
+                    return
+                except Exception:
+                    pass
     except Exception as e:
         logger.exception(f"[MEMORY_TEXT_INSERT] failed: {e}")
 
