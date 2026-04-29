@@ -7578,13 +7578,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             # --- HARD TASK OVERRIDE (critical for reliability) ---
             text_low = (text or "").lower()
-            force_task = any(x in text_low for x in [
-                "tengo que",
-                "i need to",
-                "i have to",
-                "debo",
-                "must",
-            ])
+            is_query_not_task = _is_user_query_not_task(text)
+
+            force_task = (
+                not is_query_not_task
+                and any(x in text_low for x in [
+                    "tengo que",
+                    "i need to",
+                    "i have to",
+                    "debo",
+                    "must",
+                ])
+            )
 
             if force_task:
                 bucket = "task"
@@ -8128,6 +8133,61 @@ async def context_cmd(update, context):
     except Exception:
         pass            
 
+
+def _is_user_query_not_task(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    query_markers = (
+        "que tengo",
+        "qué tengo",
+        "que debo hacer",
+        "qué debo hacer",
+        "que hago",
+        "qué hago",
+        "que hay",
+        "qué hay",
+        "cuales son",
+        "cuáles son",
+        "mis pendientes",
+        "mis tareas",
+    )
+
+    return t.endswith("?") or any(m in t for m in query_markers)
+
+
+async def tasks_cmd(update, context):
+    if not update or not update.effective_chat or not update.message:
+        return
+
+    chat_id = update.effective_chat.id
+
+    try:
+        from memory_store import fetch_open_commitments
+
+        rows = fetch_open_commitments(int(chat_id), limit=10)
+
+        if not rows:
+            await update.message.reply_text("No tienes tareas abiertas para este chat.")
+            return
+
+        lines = ["Tareas abiertas:"]
+        for idx, r in enumerate(rows, start=1):
+            row = dict(r) if hasattr(r, "keys") else r
+            raw = str(row["raw_input"] if isinstance(row, dict) else row[1]).strip()
+            due = str(row["due_date"] if isinstance(row, dict) else row[4] or "").strip()
+            if due:
+                lines.append(f"{idx}. {raw} ({due})")
+            else:
+                lines.append(f"{idx}. {raw}")
+
+        await update.message.reply_text("\n".join(lines))
+
+    except Exception as e:
+        logger.exception(f"[TASKS_CMD] failed: {e}")
+        await update.message.reply_text("No pude leer tus tareas ahora mismo.")
+
 async def status_cmd(update, context):
     try:
         from memory_store import _get_conn
@@ -8266,21 +8326,21 @@ async def status_cmd(update, context):
 
         # --- BUILD OUTPUT ---
         lines = []
-        lines.append("PX01 STATUS")
+        lines.append("Val0 status para este chat")
         lines.append("")
-        lines.append(f"OPEN TASKS: {open_tasks}")
+        lines.append(f"Tareas abiertas: {open_tasks}")
         if open_task_lines:
             lines.extend(open_task_lines)
         lines.append("")
-        lines.append(f"LAST ACTION: {last_action}")
+        lines.append(f"Última acción: {last_action}")
         lines.append("")
-        lines.append(f"LAST SURFACED: {last_surfaced}")
+        lines.append(f"Última tarea mostrada: {last_surfaced}")
         lines.append("")
-        lines.append(f"LAST VERIFICATION: {last_verification}")
+        lines.append(f"Última verificación: {last_verification}")
         lines.append("")
-        lines.append(f"CURRENT PRIORITY: {priority}")
+        lines.append(f"Prioridad actual: {priority}")
         lines.append("")
-        lines.append("SYSTEM:")
+        lines.append("Sistema:")
         lines.append("- memory: ok")
         lines.append("- logging: ok")
         lines.append("- outbound: ok")
@@ -8645,6 +8705,7 @@ def main():
     app.add_handler(CommandHandler("rmd", rmd_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
+    app.add_handler(CommandHandler("tasks", tasks_cmd))
     app.add_handler(CommandHandler("note", note_cmd))
     app.add_handler(CommandHandler("notes", notes_cmd))
     app.add_handler(CommandHandler("daily", daily_cmd))
