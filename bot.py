@@ -5830,7 +5830,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             upsert_fact(chat_id=chat_id, fact_key="favorite_color", fact_value=fav)
         except Exception as e:
             logger.exception(f"Failed to upsert favorite_color: {e}")
-        reply = f"Queda registrado, {preferred_name}: tu color favorito ahora es {fav}. Lo tengo guardado."
+        name_prefix = f"{preferred_name}, " if preferred_name else ""
+        reply = f"Queda registrado, {name_prefix}tu color favorito ahora es {fav}. Lo tengo guardado."
         sent = await _send_reply(update, context, reply)
         try:
             insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
