@@ -5794,6 +5794,23 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"Failed to insert user message into DB: {e}")
 
     # --------------------------------------------------
+    # User-facing memory dashboard
+    # --------------------------------------------------
+    try:
+        if _is_what_do_you_remember_query(text):
+            reply = build_user_memory_dashboard(int(chat_id))
+            sent = await _send_reply(update, context, reply)
+            try:
+                insert_message(chat_id, "assistant", reply, sent.message_id, "gpt-4.1-mini")
+            except Exception:
+                pass
+            return
+    except Exception as e:
+        logger.exception(f"[USER_MEMORY_DASHBOARD] failed: {e}")
+        await update.message.reply_text("No pude leer tu memoria ahora mismo.")
+        return
+
+    # --------------------------------------------------
     # Memory: favorite color Q/A
     # --------------------------------------------------
     if is_color_memory_question(text):
@@ -7682,6 +7699,89 @@ async def send_telegram_reply(update, text: str, chat_id: int, action_type: str 
     except Exception as e:
         logger.exception(f"[TG_OUTBOUND] failed: {e}")
         return None
+
+
+def _is_what_do_you_remember_query(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+
+    t_norm = unicodedata.normalize("NFKD", t)
+    t_norm = "".join(ch for ch in t_norm if not unicodedata.combining(ch))
+
+    markers = (
+        "que recuerdas de mi",
+        "que sabes de mi",
+        "que tienes guardado de mi",
+        "que sabes sobre mi",
+        "what do you remember about me",
+        "what do you know about me",
+    )
+
+    return any(m in t_norm for m in markers)
+
+
+def build_user_memory_dashboard(chat_id: int) -> str:
+    from memory_store import get_all_facts, fetch_open_commitments
+
+    try:
+        facts = get_all_facts(chat_id=chat_id) or {}
+    except Exception:
+        facts = {}
+
+    try:
+        open_tasks = fetch_open_commitments(int(chat_id), limit=10) or []
+    except Exception:
+        open_tasks = []
+
+    lines = ["🧠 Esto recuerdo de ti:", ""]
+
+    preferred_name = (facts.get("preferred_name") or "").strip()
+    favorite_color = (facts.get("favorite_color") or "").strip()
+    main_goal = (facts.get("main_goal") or "").strip()
+    preferred_language = (facts.get("preferred_language") or "").strip()
+
+    remembered_anything = False
+
+    if preferred_name:
+        lines.append(f"- Te llamas {preferred_name}.")
+        remembered_anything = True
+
+    if favorite_color:
+        lines.append(f"- Tu color favorito es {favorite_color}.")
+        remembered_anything = True
+
+    if main_goal:
+        lines.append(f"- Tu objetivo principal es: {main_goal}.")
+        remembered_anything = True
+
+    if preferred_language:
+        lang_label = "español" if preferred_language == "es" else preferred_language
+        lines.append(f"- Prefieres hablar en {lang_label}.")
+        remembered_anything = True
+
+    if not remembered_anything:
+        lines.append("- Todavía no tengo datos personales claros guardados para ti.")
+
+    lines.append("")
+    lines.append("📌 Tareas abiertas:")
+
+    if open_tasks:
+        for row in open_tasks:
+            r = dict(row) if hasattr(row, "keys") else row
+            raw = str(r.get("raw_input") or "").strip()
+            due = str(r.get("due_date") or "").strip()
+            if due:
+                lines.append(f"- {raw} ({due})")
+            else:
+                lines.append(f"- {raw}")
+    else:
+        lines.append("- No tienes tareas abiertas ahora mismo.")
+
+    lines.append("")
+    lines.append("Siguiente paso: puedo guardar una preferencia, nota, tarea o recordatorio.")
+
+    return "\n".join(lines)
 
 # --------------------------------------------------
 # Text handler
