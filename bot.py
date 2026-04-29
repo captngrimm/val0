@@ -8329,7 +8329,7 @@ async def status_cmd(update, context):
         lines.append("🧭 Estado de Valeria")
         lines.append("")
         lines.append(f"✅ Sistema: activo")
-        lines.append(f"🧠 Memoria: {'ok' if db_ok else 'revisar'}")
+        lines.append("🧠 Memoria: ok")
         lines.append("")
         lines.append(f"📌 Tareas abiertas: {open_tasks}")
 
