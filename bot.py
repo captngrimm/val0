@@ -3078,6 +3078,127 @@ def build_alpha_lost_reply(preferred_name: str = "") -> str:
         "Siguiente paso: mándame una nota o recordatorio de prueba."
     )
 
+
+def build_unified_tomorrow_dashboard(chat_id: int) -> str:
+    """
+    User-facing tomorrow dashboard.
+    Combines reminders + open commitments so normal users don't see contradictory answers.
+    """
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import _get_conn
+
+    tz = ZoneInfo("America/Panama")
+    tomorrow_dt = datetime.now(tz) + timedelta(days=1)
+    tomorrow_date = tomorrow_dt.date().isoformat()
+
+    weekday = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][tomorrow_dt.weekday()]
+    month = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][tomorrow_dt.month]
+    pretty = f"{weekday} {tomorrow_dt.day} {month}"
+
+    start_local = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day, 0, 0, 0, tzinfo=tz)
+    end_local = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day, 23, 59, 59, tzinfo=tz)
+    start_utc = start_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    end_utc = end_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    reminders = []
+    tasks = []
+
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    try:
+        rows = cur.execute(
+            """
+            SELECT id, text, due_at_utc, status
+            FROM reminders
+            WHERE chat_id = ?
+              AND status = 'pending'
+              AND due_at_utc >= ?
+              AND due_at_utc <= ?
+            ORDER BY due_at_utc ASC, id ASC
+            """,
+            (int(chat_id), start_utc, end_utc),
+        ).fetchall()
+
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else {
+                "id": r[0],
+                "text": r[1],
+                "due_at_utc": r[2],
+                "status": r[3],
+            }
+            due_raw = str(row.get("due_at_utc") or "")
+            label = ""
+            try:
+                due_dt = datetime.strptime(due_raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(tz)
+                label = due_dt.strftime("%H:%M")
+            except Exception:
+                label = due_raw[:16]
+
+            txt = str(row.get("text") or "").strip() or f"recordatorio #{row.get('id')}"
+            reminders.append(f"- {label} · {txt}")
+
+    except Exception as e:
+        reminders.append(f"- No pude leer recordatorios: {e}")
+
+    try:
+        rows = cur.execute(
+            """
+            SELECT id, raw_input, action, target, due_date, status
+            FROM commitments
+            WHERE chat_id = ?
+              AND status = 'open'
+              AND substr(COALESCE(due_date, ''), 1, 10) = ?
+            ORDER BY id ASC
+            """,
+            (int(chat_id), tomorrow_date),
+        ).fetchall()
+
+        for r in rows:
+            row = dict(r) if hasattr(r, "keys") else {
+                "id": r[0],
+                "raw_input": r[1],
+                "action": r[2],
+                "target": r[3],
+                "due_date": r[4],
+                "status": r[5],
+            }
+
+            raw = str(row.get("raw_input") or "").strip()
+            if raw:
+                tasks.append(f"- {raw}")
+            else:
+                action = str(row.get("action") or "").strip()
+                target = str(row.get("target") or "").strip()
+                label = " ".join(x for x in [action, target] if x).strip() or f"tarea #{row.get('id')}"
+                tasks.append(f"- {label}")
+
+    except Exception as e:
+        tasks.append(f"- No pude leer tareas: {e}")
+
+    conn.close()
+
+    lines = [f"📅 Mañana ({pretty})", ""]
+
+    lines.append("⏰ Recordatorios")
+    if reminders:
+        lines.extend(reminders)
+    else:
+        lines.append("- No tienes recordatorios para mañana.")
+
+    lines.append("")
+    lines.append("📌 Tareas")
+    if tasks:
+        lines.extend(tasks)
+    else:
+        lines.append("- No tienes tareas abiertas para mañana.")
+
+    lines.append("")
+    lines.append("Siguiente paso: si quieres, puedo ayudarte a ordenar esto por prioridad.")
+
+    return "\n".join(lines)
+
 # --------------------------------------------------
 # Core Message Pipeline
 # --------------------------------------------------
@@ -3170,6 +3291,37 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+    # --------------------------------------------------
+    # UNIFIED TOMORROW DASHBOARD OVERRIDE (DETERMINISTIC)
+    # --------------------------------------------------
+    try:
+        tomorrow_dashboard_markers = (
+            "que tengo manana",
+            "que tengo mañana",
+            "qué tengo manana",
+            "qué tengo mañana",
+            "que debo hacer manana",
+            "que debo hacer mañana",
+            "qué debo hacer manana",
+            "qué debo hacer mañana",
+            "mis pendientes de manana",
+            "mis pendientes de mañana",
+            "que hay manana",
+            "que hay mañana",
+            "qué hay manana",
+            "qué hay mañana",
+        )
+
+        if text_norm_greet in tomorrow_dashboard_markers:
+            reply = build_unified_tomorrow_dashboard(int(chat_id))
+            await update.message.reply_text(reply)
+            return
+
+    except Exception as e:
+        logger.exception(f"[TOMORROW_DASHBOARD_OVERRIDE] failed: {e}")
+        await update.message.reply_text("No pude armar el resumen de mañana. Reviso logs.")
+        return
+
     # --------------------------------------------------
     # NATURAL NOTE OVERRIDE (DETERMINISTIC)
     # --------------------------------------------------
