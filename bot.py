@@ -8326,24 +8326,27 @@ async def status_cmd(update, context):
 
         # --- BUILD OUTPUT ---
         lines = []
-        lines.append("Val0 status para este chat")
+        lines.append("🧭 Estado de Valeria")
         lines.append("")
-        lines.append(f"Tareas abiertas: {open_tasks}")
+        lines.append(f"✅ Sistema: activo")
+        lines.append(f"🧠 Memoria: {'ok' if db_ok else 'revisar'}")
+        lines.append("")
+        lines.append(f"📌 Tareas abiertas: {open_tasks}")
+
         if open_task_lines:
             lines.extend(open_task_lines)
+        else:
+            lines.append("- No tienes tareas abiertas.")
+
         lines.append("")
-        lines.append(f"Última acción: {last_action}")
+        lines.append("Puedes probar:")
+        lines.append("• Guarda esta nota: comprar leche")
+        lines.append("• Recuérdame llamar mañana a las 9")
+        lines.append("• ¿Qué tengo mañana?")
+        lines.append("• Estoy perdida, ¿qué hago?")
+
         lines.append("")
-        lines.append(f"Última tarea mostrada: {last_surfaced}")
-        lines.append("")
-        lines.append(f"Última verificación: {last_verification}")
-        lines.append("")
-        lines.append(f"Prioridad actual: {priority}")
-        lines.append("")
-        lines.append("Sistema:")
-        lines.append("- memory: ok")
-        lines.append("- logging: ok")
-        lines.append("- outbound: ok")
+        lines.append("Siguiente paso: dime una nota, tarea o recordatorio.")
 
         msg = "\n".join(lines)
 
