@@ -7803,6 +7803,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 summary=summary
             )
 
+            if bucket == "task" and not _is_commitment_capture_allowed(text):
+                logger.info(f"[COMMITMENT_GUARD] blocked task capture for text={text!r}")
+                bucket = "memory"
+                summary = "blocked_task_like_query_or_reminder"
+
             if bucket == "task":
                 from memory_store import upsert_commitment
                 from datetime import datetime, timedelta
@@ -7832,7 +7837,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
                 try:
                     await update.message.reply_text(
-                        f"Listo. Guardé la tarea:\\n{commitment['raw_input']}"
+                        f"Listo. Guardé la tarea:\n{commitment['raw_input']}"
                     )
                     return
                 except Exception:
