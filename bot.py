@@ -1774,6 +1774,44 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
+    # --------------------------------------------------
+    # VOICE TOMORROW DASHBOARD OVERRIDE
+    # Keep voice "Qué tengo mañana" aligned with text behavior.
+    # --------------------------------------------------
+    try:
+        voice_norm = unicodedata.normalize("NFKD", (transcribed_text or "").lower())
+        voice_norm = "".join(ch for ch in voice_norm if not unicodedata.combining(ch))
+        voice_norm = re.sub(r"[¿?¡!.,:;]+", "", voice_norm).strip()
+
+        voice_tomorrow_markers = (
+            "que tengo manana",
+            "que tengo mañana",
+            "qué tengo manana",
+            "qué tengo mañana",
+            "tengo manana",
+            "tengo mañana",
+            "manana",
+            "mañana",
+            "que debo hacer manana",
+            "que debo hacer mañana",
+            "qué debo hacer manana",
+            "qué debo hacer mañana",
+            "mis pendientes de manana",
+            "mis pendientes de mañana",
+            "que hay manana",
+            "que hay mañana",
+            "qué hay manana",
+            "qué hay mañana",
+        )
+
+        if voice_norm in voice_tomorrow_markers:
+            reply = build_unified_tomorrow_dashboard(int(chat_id))
+            await update.message.reply_text(reply)
+            return
+
+    except Exception as e:
+        logger.exception(f"[VOICE_TOMORROW_DASHBOARD_OVERRIDE] failed: {e}")
+
     from memory_store import insert_memory_item
 
     logger.info(f"[MEMORY_TEST] inserting memory for chat_id={chat_id}: {transcribed_text}")
