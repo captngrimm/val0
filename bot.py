@@ -3520,7 +3520,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             m = re.match(pat, text_norm_greet, flags=re.IGNORECASE)
             if m:
                 # Match using normalized text, but extract from original text to preserve casing/accenting.
-                raw_text = (text or "").strip()
+                # Use original Telegram text directly; `text` may have been normalized/lowercased upstream.
+                raw_text = ""
+                try:
+                    raw_text = (update.message.text or "").strip()
+                except Exception:
+                    raw_text = (text or "").strip()
+
                 note_text = ""
 
                 for prefix in note_prefixes:
