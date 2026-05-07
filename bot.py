@@ -3496,6 +3496,29 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(reply)
             return
 
+        calendar_capability_markers = (
+            "puedes manejar mi calendario completo",
+            "puedes manejar mi calendario",
+            "manejas calendario",
+            "manejas mi calendario",
+            "puedes gestionar mi calendario",
+            "puedes usar mi calendario",
+            "puedes crear eventos",
+            "puedes revisar mi agenda",
+            "puedes manejar agenda",
+            "puedes manejar mi agenda",
+        )
+
+        if text_norm_greet in calendar_capability_markers:
+            reply = (
+                "Sí, puedo ayudarte con calendario cuando está conectado: revisar agenda, "
+                "crear eventos básicos, organizar tu día y trabajar con recordatorios.\n\n"
+                "Lo que todavía no prometo en founder-beta es manejo perfecto o control completo "
+                "de todos los casos. Para agenda y eventos básicos, sí."
+            )
+            await update.message.reply_text(reply)
+            return
+
     except Exception as e:
         logger.exception(f"[GREETING_OVERRIDE] failed: {e}")
 
@@ -6943,12 +6966,23 @@ Reglas de estructura obligatoria:
             should_nudge = False
             suppress_nudge = any(m in low for m in meta_reply_markers)
 
-            if not suppress_nudge:
-                if len(tasks) >= 2:
-                    should_nudge = True
-                elif is_operational:
-                    should_nudge = True
-                elif not is_trivial and len(tasks) == 1:
+            explicit_task_nudge_markers = (
+                "pendiente",
+                "pendientes",
+                "tarea",
+                "tareas",
+                "que debo hacer",
+                "qué debo hacer",
+                "que tengo pendiente",
+                "qué tengo pendiente",
+                "status",
+                "estado",
+            )
+
+            wants_task_nudge = any(m in low for m in explicit_task_nudge_markers)
+
+            if not suppress_nudge and wants_task_nudge:
+                if len(tasks) >= 1:
                     should_nudge = True
 
             if should_nudge and reply:
