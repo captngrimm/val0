@@ -3408,7 +3408,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         if text_norm_greet in greeting_markers:
-            reply = build_alpha_onboarding_reply(preferred_name)
+            reply = "Hola 👀 Estoy aquí. Dime qué quieres recordar, organizar o resolver."
             await update.message.reply_text(reply)
             return
 
