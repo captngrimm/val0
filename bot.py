@@ -1872,7 +1872,21 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "mis tareas" in low or
         "mis pendientes" in low or
         "que hay" in low or
-        "qué hay" in low
+        "qué hay" in low or
+        "puedes" in low or
+        "puedo" in low or
+        low.startswith("puedes ") or
+        low.startswith("puedo ") or
+        low.startswith("me puedes ") or
+        low.startswith("me podrías ") or
+        low.startswith("me podrias ") or
+        (
+            "recordarme cosas" in low
+            and not any(x in low for x in [
+                "mañana", "manana", "hoy", "a las", "a la",
+                "revisar", "llamar", "comprar", "pagar", "enviar", "hacer"
+            ])
+        )
     )
 
     is_doc_request = (
@@ -8426,8 +8440,9 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
     except Exception:
         voice_on = False
 
-    # Voice path
-    if voice_on and _tts_enabled():
+    # Voice reply path temporarily disabled for founder-beta safety.
+    # Voice input stays enabled, but replies should remain readable text until TTS is stable.
+    if False and voice_on and _tts_enabled():
         import os, time, subprocess, re
 
         def _looks_spanish(s: str) -> bool:
