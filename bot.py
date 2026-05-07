@@ -3475,8 +3475,24 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(reply)
             return
 
-        if text_norm_greet in lost_markers:
-            reply = build_alpha_lost_reply(preferred_name)
+        reminder_capability_markers = (
+            "puedes recordarme cosas",
+            "puedes recordarme algo",
+            "me puedes recordar cosas",
+            "me puedes recordar algo",
+            "puedes hacer recordatorios",
+            "haces recordatorios",
+            "recordarme cosas",
+            "recordarme algo",
+            "puedes crear recordatorios",
+            "puedes poner recordatorios",
+        )
+
+        if text_norm_greet in reminder_capability_markers:
+            reply = (
+                "Sí. Puedo ayudarte con recordatorios si me dices qué y cuándo.\n\n"
+                "Ejemplo: Recuérdame mañana a las 9 revisar una compra."
+            )
             await update.message.reply_text(reply)
             return
 
