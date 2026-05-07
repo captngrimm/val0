@@ -3444,6 +3444,51 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[PENDING_REPORT_HARD_GATE] failed: {e}")
     # --------------------------------------------------
+    # NATURAL IDEA CAPTURE → GUIDED IDEA FLOW
+    # --------------------------------------------------
+    try:
+        natural_idea_prefixes = (
+            "tengo una idea",
+            "tengo una idea:",
+            "idea:",
+            "se me ocurrio",
+            "se me ocurrió",
+            "se me ocurrio:",
+            "se me ocurrió:",
+        )
+
+        if any(text_norm_greet.startswith(pfx) for pfx in natural_idea_prefixes):
+            raw_text = (update.message.text or text or "").strip()
+            idea_text = raw_text
+
+            if ":" in raw_text:
+                idea_text = raw_text.split(":", 1)[1].strip()
+
+            if not idea_text:
+                idea_text = raw_text.strip()
+
+            user = update.effective_user
+            _PENDING_BUG_REPORT[int(chat_id)] = {
+                "kind": "idea",
+                "step": "actual",
+                "started_at": datetime.utcnow().isoformat(),
+                "chat_id": int(chat_id),
+                "user_id": getattr(user, "id", None),
+                "username": getattr(user, "username", None),
+                "display_name": getattr(user, "full_name", None),
+                "attempted_action": idea_text,
+            }
+
+            await update.message.reply_text(
+                "Buena. La registro como idea.\n\n"
+                "2/4 — ¿Qué problema resolvería o qué mejoraría?"
+            )
+            return
+
+    except Exception as e:
+        logger.exception(f"[NATURAL_IDEA_CAPTURE] failed: {e}")
+
+    # --------------------------------------------------
     # UNIFIED PENDING DASHBOARD OVERRIDE (DETERMINISTIC)
     # --------------------------------------------------
     try:
