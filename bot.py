@@ -3434,6 +3434,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+
+    # --------------------------------------------------
+    # Pending bug/feedback/idea report (hard gate before notes/tasks/PM)
+    # --------------------------------------------------
+    try:
+        if await handle_pending_bug_report(update, int(chat_id), text):
+            return
+    except Exception as e:
+        logger.exception(f"[PENDING_REPORT_HARD_GATE] failed: {e}")
     # --------------------------------------------------
     # UNIFIED PENDING DASHBOARD OVERRIDE (DETERMINISTIC)
     # --------------------------------------------------
@@ -3575,15 +3584,6 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         trim_messages_for_chat(int(chat_id), keep_last=12)
     except Exception as e:
         logger.exception(f"[SESSION_MEMORY_INBOUND] failed: {e}")
-
-    # --------------------------------------------------
-    # Pending bug report (hard gate before PM/drift)
-    # --------------------------------------------------
-    try:
-        if await handle_pending_bug_report(update, int(chat_id), text):
-            return
-    except Exception as e:
-        logger.exception(f"[PENDING_BUG_REPORT_EARLY] failed: {e}")
         
     # --------------------------------------------------
     # AUTO-FOCUS + PM LOOP
@@ -8070,6 +8070,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
     except Exception as e:
         logger.exception(f"[COMPLETION_LOOP] failed: {e}")
+
+    # --------------------------------------------------
+    # Pending bug/feedback/idea report (hard gate before unified memory/task capture)
+    # --------------------------------------------------
+    try:
+        if await handle_pending_bug_report(update, int(chat_id), text):
+            return
+    except Exception as e:
+        logger.exception(f"[PENDING_REPORT_MEMORY_GATE] failed: {e}")
 
     # Store text input in unified memory layer
     try:
