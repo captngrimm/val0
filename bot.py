@@ -3506,14 +3506,36 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             r"^save this note[:\s]+(.+)$",
         )
 
+        note_prefixes = (
+            "guarda esta nota",
+            "guardar nota",
+            "guarda nota",
+            "anota",
+            "nota",
+            "remember this",
+            "save this note",
+        )
+
         for pat in note_patterns:
             m = re.match(pat, text_norm_greet, flags=re.IGNORECASE)
             if m:
-                # Match using normalized text, but extract from original text to preserve accents.
-                raw_m = re.match(pat, text or "", flags=re.IGNORECASE)
-                if raw_m:
-                    note_text = (raw_m.group(1) or "").strip()
-                else:
+                # Match using normalized text, but extract from original text to preserve casing/accenting.
+                raw_text = (text or "").strip()
+                note_text = ""
+
+                for prefix in note_prefixes:
+                    prefix_norm = unicodedata.normalize("NFKD", prefix.lower())
+                    prefix_norm = "".join(ch for ch in prefix_norm if not unicodedata.combining(ch))
+
+                    if text_norm_greet.startswith(prefix_norm):
+                        # Find the payload start by searching for ':' first; otherwise slice after raw prefix length.
+                        if ":" in raw_text:
+                            note_text = raw_text.split(":", 1)[1].strip()
+                        else:
+                            note_text = raw_text[len(prefix):].strip()
+                        break
+
+                if not note_text:
                     note_text = (m.group(1) or "").strip()
 
                 if not note_text:
