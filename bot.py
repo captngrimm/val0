@@ -3142,17 +3142,20 @@ def build_alpha_onboarding_reply(preferred_name: str = "") -> str:
 
 
 def build_alpha_capability_reply(preferred_name: str = "") -> str:
-    name_line = f"{preferred_name}, " if preferred_name else ""
+    safe_name = (preferred_name or "").strip()
+    name_line = f"{safe_name}, " if safe_name and safe_name.lower() not in ("boss", "jefe") else ""
+
     return (
-        f"{name_line}puedo ayudarte como una capa práctica de memoria, tareas y seguimiento.\n\n"
-        "Lo útil ahora mismo:\n"
+        f"{name_line}puedo ayudarte a bajar el ruido del día: guardar cosas, recordarte pendientes "
+        "y recuperar el hilo cuando se te empieza a llenar la cabeza.\n\n"
+        "Ahora mismo soy útil para:\n"
         "• 📝 Notas: Guarda esta nota: comprar leche\n"
         "• ⏰ Recordatorios: Recuérdame llamar mañana a las 9\n"
         "• ✅ Tareas: Tengo que revisar X\n"
-        "• 📁 Casos/temas: Guarda esto en el caso de...\n"
+        "• 💡 Ideas: Tengo una idea: Val debería ayudarme a no perder foco\n"
         "• 🎙️ Voz: puedes mandarme notas de voz\n"
         "• 🧭 Recuperación: Estoy perdida, ¿qué hago?\n\n"
-        "Siguiente paso: prueba una nota o un recordatorio simple."
+        "Siguiente paso: mándame una nota, idea o recordatorio simple y lo probamos."
     )
 
 
@@ -3486,10 +3489,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         if text_norm_greet in identity_markers:
             reply = (
                 "Soy Valeria, una asistente en founder-beta dentro de Telegram. "
-                "Puedo conversar contigo, ayudarte a guardar notas, crear recordatorios, "
-                "capturar ideas, revisar pendientes y apoyarte con agenda básica.\n\n"
-                "Todavía estoy en beta, así que no prometo magia ni autonomía perfecta, "
-                "pero sí puedo ayudarte a ordenar el caos diario."
+                "Mi trabajo es ayudarte a recordar, ordenar y avanzar sin que todo viva en tu cabeza.\n\n"
+                "Hoy puedo ayudarte con notas, recordatorios, ideas, pendientes, voz y agenda básica. "
+                "Todavía estoy en beta, así que no prometo magia ni autonomía perfecta; "
+                "pero para capturar y organizar el caos diario, ya sirvo."
             )
             await update.message.reply_text(reply)
             return
