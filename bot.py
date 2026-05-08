@@ -3470,6 +3470,30 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(reply)
             return
 
+        identity_markers = (
+            "quien eres",
+            "quién eres",
+            "quien sos",
+            "quién sos",
+            "quien es valeria",
+            "quién es valeria",
+            "que eres",
+            "qué eres",
+            "who are you",
+            "what are you",
+        )
+
+        if text_norm_greet in identity_markers:
+            reply = (
+                "Soy Valeria, una asistente en founder-beta dentro de Telegram. "
+                "Puedo conversar contigo, ayudarte a guardar notas, crear recordatorios, "
+                "capturar ideas, revisar pendientes y apoyarte con agenda básica.\n\n"
+                "Todavía estoy en beta, así que no prometo magia ni autonomía perfecta, "
+                "pero sí puedo ayudarte a ordenar el caos diario."
+            )
+            await update.message.reply_text(reply)
+            return
+
         if text_norm_greet in capability_markers:
             reply = build_alpha_capability_reply(preferred_name)
             await update.message.reply_text(reply)
