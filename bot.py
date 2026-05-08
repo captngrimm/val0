@@ -8528,9 +8528,16 @@ async def _send_reply(update: Update, context: ContextTypes.DEFAULT_TYPE, reply:
     except Exception:
         voice_on = False
 
-    # Voice reply path temporarily disabled for founder-beta safety.
-    # Voice input stays enabled, but replies should remain readable text until TTS is stable.
-    if False and voice_on and _tts_enabled():
+    # Voice reply path remains disabled globally for founder-beta safety.
+    # Test-only override: /voice test forces exactly one short TTS reply.
+    force_tts_once = False
+    try:
+        key = f"force_tts_once:{int(chat_id)}"
+        force_tts_once = bool(context.bot_data.pop(key, False))
+    except Exception:
+        force_tts_once = False
+
+    if force_tts_once and _tts_enabled():
         import os, time, subprocess, re
 
         def _looks_spanish(s: str) -> bool:
@@ -8664,6 +8671,11 @@ async def voice_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         set_chat_voice_enabled(int(chat_id), True)
         await msg.reply_text("🎧 Modo voz: activado. Te responderé con audio cuando tenga sentido.")
         return
+
+    if mode == "test":
+        set_chat_voice_enabled(int(chat_id), True)
+        context.bot_data[f"force_tts_once:{int(chat_id)}"] = True
+        return await _send_reply(update, context, "Prueba corta de voz desde Valeria.")
 
     if mode in ("off", "0", "no", "disable", "disabled"):
         set_chat_voice_enabled(int(chat_id), False)
