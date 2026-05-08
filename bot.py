@@ -8296,6 +8296,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"bucket={bucket} summary={summary} text={text}"
             )
 
+            # HARD EXCLUSION: natural idea phrases must never become tasks/commitments.
+            try:
+                _idea_norm = _norm_text(text or "")
+                _idea_prefixes = (
+                    "tengo una idea",
+                    "idea:",
+                    "se me ocurrio",
+                    "se me ocurrió",
+                )
+                if any(_idea_norm.startswith(pfx) for pfx in _idea_prefixes):
+                    bucket = "idea"
+                    summary = "natural_idea"
+            except Exception:
+                pass
+
             insert_memory_item(
                 chat_id=int(chat_id),
                 bucket=bucket,
