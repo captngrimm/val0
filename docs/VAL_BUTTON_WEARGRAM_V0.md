@@ -44,3 +44,15 @@ Short, direct next step only.
 ## Roadmap rule
 This is a micro-UX lane only.
 Do not expand into native watch app, wake word, Bluetooth automation, or dashboard before founder-beta launch.
+
+## Voice reply test
+PASS — /voice test sent a one-shot Val0 voice reply.
+Audio was heard successfully from the watch.
+
+## Updated status
+Wearable loop confirmed:
+watch voice note → Val0 → one-shot voice reply → watch playback.
+
+## Rule
+Keep global TTS disabled for founder-beta safety.
+Use one-shot /voice test only for controlled testing.
