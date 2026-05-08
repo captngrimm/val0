@@ -3146,7 +3146,7 @@ def build_alpha_capability_reply(preferred_name: str = "") -> str:
     name_line = f"{safe_name}, " if safe_name and safe_name.lower() not in ("boss", "jefe") else ""
 
     return (
-        f"{name_line}puedo ayudarte a bajar el ruido del día: guardar cosas, recordarte pendientes "
+        f"{name_line}Puedo ayudarte a bajar el ruido del día: guardar cosas, recordarte pendientes "
         "y recuperar el hilo cuando se te empieza a llenar la cabeza.\n\n"
         "Ahora mismo soy útil para:\n"
         "• 📝 Notas: Guarda esta nota: comprar leche\n"
