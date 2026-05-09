@@ -29,10 +29,18 @@ async def try_debug_mode(update, chat_id, text) -> bool:
 
     return True
 
+
 def build_user_help_message() -> str:
     return (
         "🧭 Ayuda rápida de Valeria\n\n"
-        "Puedes usarme como una asistente simple por Telegram para memoria, notas, recordatorios y tareas.\n\n"
+        "Estoy para ayudarte a recordar, capturar y organizar cosas simples del día sin que todo viva en tu cabeza.\n\n"
+
+        "🚀 Prueba rápida\n"
+        "1. Guarda esta nota: comprar leche\n"
+        "2. Recuérdame llamar mañana a las 9\n"
+        "3. Tengo una idea: Val debería ayudarme a no perder foco\n"
+        "4. ¿Qué tengo mañana?\n"
+        "5. Estoy perdida, ¿qué hago?\n\n"
 
         "📝 Notas\n"
         "• Guarda esta nota: comprar leche\n"
@@ -54,12 +62,12 @@ def build_user_help_message() -> str:
         "• ¿Qué tengo mañana?\n"
         "• ¿Qué debo hacer hoy?\n\n"
 
-        "🧠 Memoria\n"
-        "• Me llamo Karen\n"
-        "• Mi color favorito es verde\n"
-        "• ¿Qué recuerdas de mí?\n\n"
+        "💡 Ideas\n"
+        "• Tengo una idea: Val debería ayudarme a no perder foco\n"
+        "• /idea\n\n"
 
         "🎙️ Voz\n"
+        "• Puedes mandarme notas de voz\n"
         "• /voice on\n"
         "• /voice off\n\n"
 
@@ -68,7 +76,7 @@ def build_user_help_message() -> str:
         "• /feedback comentario\n"
         "• /idea nueva idea\n\n"
 
-        "Siguiente paso: prueba una nota, recordatorio o tarea simple."
+        "Siguiente paso: copia uno de los ejemplos de Prueba rápida."
     )
 
 
