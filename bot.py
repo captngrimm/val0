@@ -3251,6 +3251,7 @@ Rules:
 - If the user says they have an idea, include idea.
 - If the user describes something to remember without action, include note.
 - If the message contains multiple things, return multiple buckets.
+- If buckets has more than one item, suggested_action should usually be "multi_action".
 - If a person/client/customer/provider/supplier still needs something, include follow_up.
 - If the user says someone "needs" something, "is waiting", "didn't answer", "hasn't replied", or "still needs X", include follow_up.
 - If a supplier/provider/vendor did not answer or caused friction, include follow_up and summarize it as supplier/provider friction.
