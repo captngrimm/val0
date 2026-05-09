@@ -2177,9 +2177,25 @@ async def flowrequest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if v:
             profile_bits.append(f"{k}: {v}")
 
-    profile_context = " | ".join(profile_bits) if profile_bits else "no_profile"
+    active_profile_context = " | ".join(profile_bits) if profile_bits else "no_active_profile"
 
-    summary = f"flow_request: {text} | profile: {profile_context}"
+    # Lightweight target-context inference for roadmap clarity.
+    low = text.lower()
+    target_context = "general"
+    if any(x in low for x in ["carpinter", "carpentry", "carpenter"]):
+        target_context = "carpentry"
+    elif any(x in low for x in ["legal", "caso", "expediente", "audiencia"]):
+        target_context = "legal"
+    elif any(x in low for x in ["solar", "panel", "cotización", "cotizacion", "proveedor"]):
+        target_context = "solar_or_supplier_workflow"
+    elif any(x in low for x in ["limpieza", "cleaning", "casa", "cliente"]):
+        target_context = "cleaning_or_home_services"
+
+    summary = (
+        f"flow_request: {text} | "
+        f"target_context: {target_context} | "
+        f"active_user_profile: {active_profile_context}"
+    )
 
     try:
         from memory_store import insert_memory_item
