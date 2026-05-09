@@ -125,3 +125,27 @@ Base engine fixed.
 Workflows configurable.
 New capability requests become flow_requests.
 User-facing language localized.
+
+## flow_request command checkpoint
+
+/flowrequest is working.
+
+Purpose:
+- capture workflow/capability requests without pretending they already exist
+- store current workaround
+- mark roadmap candidates for Boss / ValPrime review
+- preserve target context separately from active user profile
+
+Test request:
+Carpenter wants to monitor new carpentry tools and paste newsletters/articles for Val to summarize.
+
+Stored as:
+- bucket: parking_lot
+- target_context: carpentry
+- active_user_profile: current user's saved operating profile
+
+Why this matters:
+Val can tell the user:
+"That is not built yet, but we can operate with a manual workaround now, and I’ll save the request for roadmap review."
+
+This prevents overpromising while still giving useful forward motion.
