@@ -3160,14 +3160,17 @@ def build_alpha_capability_reply(preferred_name: str = "") -> str:
 
 
 def build_alpha_lost_reply(preferred_name: str = "") -> str:
-    name_line = f"{preferred_name}, " if preferred_name else ""
+    safe_name = (preferred_name or "").strip()
+    name_line = f"{safe_name}, " if safe_name and safe_name.lower() not in ("boss", "jefe") else ""
+
     return (
-        f"{name_line}tranquila. Empezamos simple.\n\n"
-        "Puedes probar una de estas tres cosas:\n"
-        "1. Guarda esta nota: comprar leche\n"
-        "2. Recuérdame llamar mañana a las 9\n"
-        "3. ¿Qué tengo pendiente?\n\n"
-        "Siguiente paso: mándame una nota o recordatorio de prueba."
+        f"{name_line}tranquilo. No hay que resolver la vida completa ahorita. "
+        "Vamos por una cosa.\n\n"
+        "Escoge una:\n"
+        "1. Revisar qué tienes pendiente\n"
+        "2. Crear un recordatorio\n"
+        "3. Guardar una nota o idea\n\n"
+        "Si no sabes cuál, mándame: ¿Qué tengo pendiente?"
     )
 
 
