@@ -2144,6 +2144,65 @@ async def onboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(intro)
 
 
+
+async def flowrequest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Workflow Designer v1: capture a roadmap/workflow request.
+    Usage:
+    /flowrequest Carpintero quiere rastrear fotos y diseños por proyecto.
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    text = " ".join(context.args or []).strip()
+
+    if not text:
+        await update.message.reply_text(
+            "🧩 Flow request\n\n"
+            "Uso:\n"
+            "/flowrequest Carpintero quiere rastrear fotos y diseños por proyecto.\n\n"
+            "Esto guarda una solicitud para revisar después, no promete que ya esté construido."
+        )
+        return
+
+    try:
+        facts = get_all_facts(chat_id=int(chat_id)) or {}
+    except Exception:
+        facts = {}
+
+    profile_bits = []
+    for k in ("primary_role", "use_case", "main_goal", "friction_points", "current_tools", "tracking_buckets"):
+        v = str(facts.get(k) or "").strip()
+        if v:
+            profile_bits.append(f"{k}: {v}")
+
+    profile_context = " | ".join(profile_bits) if profile_bits else "no_profile"
+
+    summary = f"flow_request: {text} | profile: {profile_context}"
+
+    try:
+        from memory_store import insert_memory_item
+        insert_memory_item(
+            chat_id=int(chat_id),
+            bucket="parking_lot",
+            raw_input=text,
+            summary=summary,
+        )
+    except Exception as e:
+        logger.exception(f"[FLOWREQUEST] storage failed: {e}")
+        await update.message.reply_text(f"No pude guardar el flow request: {e}")
+        return
+
+    await update.message.reply_text(
+        "🧩 Flow request guardado.\n\n"
+        "Lo dejé como solicitud de mejora, no como promesa activa.\n\n"
+        f"Solicitud:\n{text}\n\n"
+        "Modo actual: podemos operar con workaround manual si aplica.\n"
+        "Roadmap: queda marcado para revisión del Boss / ValPrime."
+    )
+
+
 async def onboard_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Shows current onboarding facts.
@@ -10956,6 +11015,7 @@ def main():
     app.add_handler(CommandHandler("exosummary", exosummary_cmd))
     app.add_handler(CommandHandler("exorecent", exorecent_cmd))
     app.add_handler(CommandHandler("onboard", onboard_cmd))
+    app.add_handler(CommandHandler("flowrequest", flowrequest_cmd))
     app.add_handler(CommandHandler("onboardstatus", onboard_status_cmd))
     app.add_handler(CommandHandler("journal", journal_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
