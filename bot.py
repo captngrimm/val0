@@ -4253,6 +4253,131 @@ def build_alpha_capability_reply(preferred_name: str = "") -> str:
 
 
 
+
+def route_operator_intent(
+    chat_id: int,
+    user_text: str,
+    preferred_language: str | None = None,
+) -> dict:
+    """
+    Val0 Operator Router v1.
+    Purpose:
+    - infer whether natural user text should route to a known safe operator action
+    - DO NOT execute actions here
+    - deterministic pipeline decides what to run
+    """
+    import json
+
+    text = (user_text or "").strip()
+    if not text:
+        return {
+            "route": "normal_chat",
+            "confidence": 1.0,
+            "reason": "empty input",
+            "needs_clarification": False,
+            "clarifying_question": "",
+        }
+
+    system_rules = """
+You are Val0's Operator Router v1.
+
+Return ONLY valid JSON. No markdown. No prose.
+
+Your job:
+Classify the user's message into ONE route.
+
+Allowed routes:
+- whatnow
+- exosummary
+- draft_followup
+- journal_capture
+- flow_request
+- normal_chat
+- clarify
+
+Route meanings:
+- whatnow: user asks what to do next, where to start, what now, feels lost and wants next step
+- exosummary: user asks what was saved, what Val remembers from the latest capture, summary of what was captured
+- draft_followup: user asks Val to write/draft/prepare a message, reply, follow-up, or wording based on recent context
+- journal_capture: user is telling a life/work/business update/story that should be saved/sorted
+- flow_request: user asks for a new capability/workflow that is not currently built or wants it added to roadmap
+- normal_chat: general question, explanation, casual chat, or anything that should not trigger a tool/action
+- clarify: user intent is ambiguous and one short clarification is needed
+
+Rules:
+- You route. You do not execute.
+- Prefer normal_chat if unsure.
+- Use high confidence only when intent is clear.
+- If user says "what should I do", "qué hago", "por dónde empiezo", route whatnow.
+- If user says "what did you save", "qué guardaste", "muéstrame el resumen", route exosummary.
+- If user says "write the message", "hazme el mensaje", "redáctame eso", "qué le digo", route draft_followup.
+- If user tells a messy story/update about their day/work/life with enough detail, route journal_capture.
+- If user says "add this to roadmap", "could Val do X later", "feature request", "flow request", route flow_request.
+- Never route to draft_followup unless the user is asking for wording/message/reply/follow-up.
+- Never route to whatnow just because user is emotional unless they ask for next action/help deciding.
+
+JSON schema:
+{
+  "route": "whatnow|exosummary|draft_followup|journal_capture|flow_request|normal_chat|clarify",
+  "confidence": 0.0,
+  "reason": "short factual reason",
+  "needs_clarification": false,
+  "clarifying_question": ""
+}
+"""
+
+    try:
+        raw = call_val_openai(
+            chat_id=int(chat_id),
+            user_text=text,
+            forced_lang=preferred_language or "es",
+            system_rules=system_rules,
+        )
+        raw = (raw or "").strip()
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        data = json.loads(raw)
+
+        if not isinstance(data, dict):
+            raise ValueError("router returned non-dict JSON")
+
+        allowed_routes = {
+            "whatnow",
+            "exosummary",
+            "draft_followup",
+            "journal_capture",
+            "flow_request",
+            "normal_chat",
+            "clarify",
+        }
+
+        route = str(data.get("route") or "normal_chat").strip()
+        if route not in allowed_routes:
+            route = "normal_chat"
+
+        try:
+            confidence = float(data.get("confidence") or 0.0)
+        except Exception:
+            confidence = 0.0
+
+        return {
+            "route": route,
+            "confidence": confidence,
+            "reason": str(data.get("reason") or "").strip(),
+            "needs_clarification": bool(data.get("needs_clarification") or False),
+            "clarifying_question": str(data.get("clarifying_question") or "").strip(),
+        }
+
+    except Exception as e:
+        logger.exception(f"[OPERATOR_ROUTER] failed: {e}")
+        return {
+            "route": "normal_chat",
+            "confidence": 0.0,
+            "reason": f"router failed: {e}",
+            "needs_clarification": False,
+            "clarifying_question": "",
+        }
+
+
 def classify_exocortex_intent(
     chat_id: int,
     user_text: str,
