@@ -71,9 +71,9 @@ It is a crude structured cognition / smart journal / operator loop.
 ## Next recommended milestone
 
 Exocortex Mark 1.1:
-- improve bucket-specific summaries
-- filter /exorecent to Exocortex buckets
-- add /journal or /logday entry path
+- add /journal as user-facing entry point
+- improve bucket-specific summaries later
+- filter /exorecent to Exocortex buckets later
 - add natural "what now?" text routing later
 - prepare one friend/family demo script
 
