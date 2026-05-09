@@ -110,3 +110,22 @@ Remaining polish:
 - natural-language routing without slash commands
 - bucket-specific summaries
 - optional follow-up drafting
+
+## Demo-clean update
+
+/exosummary was localized for Spanish demo flow.
+
+Current recommended demo:
+
+1. /journal <messy life/work update>
+2. /exosummary
+3. /whatnow
+
+Status:
+PASS — demo-clean enough for controlled friends/family showcase.
+
+Remaining polish:
+- local human timestamp
+- natural-language routing without slash commands
+- bucket-specific summaries
+- optional follow-up drafting
