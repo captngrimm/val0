@@ -1813,36 +1813,36 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     created_at = grouped[0].get("created_at") or ""
 
     label_map = {
-        "reflection": "Reflection",
+        "reflection": "Reflexión",
         "care_mode": "Care Mode",
-        "follow_up": "Follow-up",
+        "follow_up": "Seguimiento",
         "idea": "Idea",
-        "note": "Note",
-        "task": "Task",
-        "reminder": "Reminder",
-        "decision": "Decision",
+        "note": "Nota",
+        "task": "Tarea",
+        "reminder": "Recordatorio",
+        "decision": "Decisión",
         "parking_lot": "Parking Lot",
-        "project": "Project",
+        "project": "Proyecto",
     }
 
     lines = []
-    lines.append("🧠 Latest Exocortex capture")
+    lines.append("🧠 Última captura Exocortex")
     lines.append("")
     if created_at:
-        lines.append(f"When: {created_at}")
+        lines.append(f"Fecha guardada: {created_at}")
         lines.append("")
 
-    lines.append("Detected:")
+    lines.append("Detecté:")
     for b in buckets:
         lines.append(f"- {label_map.get(b, b)}")
 
     lines.append("")
-    lines.append("Summary:")
+    lines.append("Resumen:")
     lines.append(summary or latest_raw[:300])
 
     lines.append("")
-    lines.append("Next:")
-    lines.append("Ask /whatnow.")
+    lines.append("Siguiente paso:")
+    lines.append("Pregunta /whatnow.")
 
     await update.message.reply_text("\n".join(lines))
 
