@@ -93,3 +93,42 @@ Principle:
 LLM decides intent.
 Deterministic code executes safe action.
 Val replies human.
+
+## LLM Operator Router / Karen demo final polish
+
+Added LLM Operator Router v1.
+
+Principle:
+LLM decides intent.
+Deterministic code executes safe action.
+Val replies human.
+
+Tested routes:
+- "¿Qué hago ahora?" → whatnow
+- "Muéstrame qué guardaste" → exosummary
+- "Hazme el mensaje" → draft_followup
+- messy story/update → journal_capture
+- new capability idea → flow_request in debug/router test
+
+Live routing:
+- high-confidence whatnow routes to /whatnow
+- high-confidence exosummary routes to /exosummary
+- high-confidence draft_followup routes to /draftfollowup
+- high-confidence journal_capture feeds Smart Journal capture
+- flow_request remains command-based for now to avoid roadmap spam
+
+Bug found and fixed:
+"¿Qué debería hacer primero?" was incorrectly captured as a task.
+Added priority whatnow guard before task capture.
+
+Demo polish:
+- hidden generic task artifacts like task_medium from /exosummary
+- localized whatnow header
+- localized draft header
+- normal user can say:
+  - ¿Qué hago ahora?
+  - Enséñame el resumen de lo que guardaste.
+  - Hazme el mensaje.
+
+Final status:
+Karen-ready controlled showcase.
