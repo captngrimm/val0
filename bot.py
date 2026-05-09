@@ -1940,21 +1940,28 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Group latest capture by raw text. Because /journal stores one row per bucket,
-    # the latest capture should share the same raw_input across buckets.
-    latest_raw = items[0]["raw"]
-    grouped = [x for x in items if x["raw"] == latest_raw]
+    # Group latest capture by timestamp window.
+    # Narrative Capture stores separate raw_span values per extracted item,
+    # so grouping by raw text no longer works.
+    latest_created = items[0].get("created_at") or ""
+    latest_minute = latest_created[:16] if latest_created else ""
 
-    # Fallback if raw text varies slightly.
+    if latest_minute:
+        grouped = [
+            x for x in items
+            if str(x.get("created_at") or "").startswith(latest_minute)
+        ][:8]
+    else:
+        grouped = items[:5]
+
     if not grouped:
-        grouped = items[:3]
+        grouped = items[:5]
 
     buckets = []
     for x in grouped:
         if x["bucket"] not in buckets:
             buckets.append(x["bucket"])
 
-    summary = grouped[0].get("summary") or ""
     created_at = grouped[0].get("created_at") or ""
 
     label_map = {
@@ -1983,7 +1990,11 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lines.append("")
     lines.append("Resumen:")
-    lines.append(summary or latest_raw[:300])
+    for x in grouped:
+        b = x.get("bucket") or ""
+        item_summary = x.get("summary") or x.get("raw") or ""
+        if item_summary:
+            lines.append(f"- {label_map.get(b, b)}: {item_summary}")
 
     lines.append("")
     lines.append("Siguiente paso:")
