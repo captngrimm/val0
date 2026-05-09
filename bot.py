@@ -2104,18 +2104,37 @@ async def journal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         from memory_store import insert_memory_item
 
-        for bucket in buckets:
-            bucket = str(bucket or "").strip()
-            if bucket not in allowed:
-                bucket = "normal_chat"
+        items = data.get("items") or []
 
-            insert_memory_item(
-                chat_id=int(chat_id),
-                bucket=bucket,
-                raw_input=text,
-                summary=summary or f"journal:{bucket}",
-            )
-            stored.append(bucket)
+        if items:
+            for item in items:
+                bucket = str(item.get("bucket") or "").strip()
+                item_summary = str(item.get("summary") or "").strip()
+                raw_span = str(item.get("raw_span") or "").strip()
+
+                if bucket not in allowed:
+                    bucket = "normal_chat"
+
+                insert_memory_item(
+                    chat_id=int(chat_id),
+                    bucket=bucket,
+                    raw_input=raw_span or text,
+                    summary=item_summary or summary or f"journal:{bucket}",
+                )
+                stored.append(bucket)
+        else:
+            for bucket in buckets:
+                bucket = str(bucket or "").strip()
+                if bucket not in allowed:
+                    bucket = "normal_chat"
+
+                insert_memory_item(
+                    chat_id=int(chat_id),
+                    bucket=bucket,
+                    raw_input=text,
+                    summary=summary or f"journal:{bucket}",
+                )
+                stored.append(bucket)
 
     except Exception as e:
         logger.exception(f"[JOURNAL] storage failed: {e}")
