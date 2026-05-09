@@ -1620,6 +1620,124 @@ async def classify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+async def whatnow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Exocortex Mark 1 recovery command.
+    Usage:
+    /whatnow
+
+    Reads recent structured memory and asks Val for one grounded next step.
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+
+    try:
+        preferred_language = get_fact(chat_id=chat_id, fact_key="preferred_language") or "es"
+    except Exception:
+        preferred_language = "es"
+
+    try:
+        from memory_store import fetch_recent_memory
+        rows = fetch_recent_memory(int(chat_id), limit=12)
+    except Exception as e:
+        logger.exception(f"[WHATNOW] fetch failed: {e}")
+        await update.message.reply_text(f"No pude leer memoria reciente: {e}")
+        return
+
+    useful = []
+    allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "parking_lot", "project"}
+
+    for row in rows or []:
+        r = dict(row) if hasattr(row, "keys") else {
+            "id": row[0],
+            "bucket": row[1],
+            "raw_input": row[2],
+            "summary": row[3],
+            "created_at": row[4],
+        }
+
+        bucket = str(r.get("bucket") or "").strip()
+        if bucket not in allowed:
+            continue
+
+        summary = str(r.get("summary") or "").strip()
+        raw = str(r.get("raw_input") or "").strip()
+        created_at = str(r.get("created_at") or "").strip()
+
+        useful.append({
+            "id": r.get("id"),
+            "bucket": bucket,
+            "summary": summary,
+            "raw": raw[:300],
+            "created_at": created_at,
+        })
+
+    if not useful:
+        await update.message.reply_text(
+            "🧭 What now?\n\n"
+            "No tengo suficiente memoria estructurada reciente para recomendar un siguiente paso.\n\n"
+            "Prueba primero con /exotest usando un mensaje real de tu día."
+        )
+        return
+
+    memory_lines = []
+    for item in useful[:8]:
+        memory_lines.append(
+            f"- #{item['id']} · {item['bucket']} · {item['created_at']}\n"
+            f"  Resumen: {item['summary'] or item['raw']}"
+        )
+
+    memory_block = "\n".join(memory_lines)
+
+    system_rules = f"""
+You are Val0 Exocortex Mark 1 recovery mode.
+
+The user is asking: "what now?"
+
+Use the recent structured memory below to recommend ONE grounded next step.
+
+Rules:
+- Be honest and concise.
+- Do not pretend to know more than the memory shows.
+- If there is a follow_up/client/business item, prioritize the item closest to action or money.
+- If there is a reflection/care_mode item, acknowledge emotional load briefly but do not overdo it.
+- Do not give a giant plan.
+- Give exactly:
+  1) "Veo esto:" with 2-4 bullets
+  2) "Mi recomendación:" with one next step
+  3) optional "Puedo ayudarte a..." with one concrete offer
+- Do not claim reminders were created unless memory says so.
+- Respond in Spanish unless the user's language preference is English.
+
+RECENT STRUCTURED MEMORY:
+{memory_block}
+"""
+
+    try:
+        reply = call_val_openai(
+            chat_id=int(chat_id),
+            user_text="What now?",
+            forced_lang=preferred_language,
+            system_rules=system_rules,
+        )
+        reply = (reply or "").strip()
+    except Exception as e:
+        logger.exception(f"[WHATNOW] model failed: {e}")
+        reply = ""
+
+    if not reply:
+        reply = (
+            "🧭 What now?\n\n"
+            "Veo memoria reciente, pero no pude generar una recomendación limpia.\n"
+            "Mi recomendación: revisa el seguimiento más cercano a acción o dinero."
+        )
+
+    await update.message.reply_text("🧭 What now?\n\n" + reply)
+
+
 async def exorecent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Debug-only Exocortex recent memory viewer.
@@ -9894,6 +10012,7 @@ def main():
     #app.add_handler(CommandHandler("cancel", rmd_cmd))
     app.add_handler(CommandHandler("rmd", rmd_cmd))
     app.add_handler(CommandHandler("classify", classify_cmd))
+    app.add_handler(CommandHandler("whatnow", whatnow_cmd))
     app.add_handler(CommandHandler("exorecent", exorecent_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
