@@ -1725,6 +1725,8 @@ Rules:
 - Preserve concrete details from memory whenever available: names, client, supplier/provider, quote/cotización, project type, deadline, blocker.
 - If memory says a named person needs a quote/cotización, treat that person as the client/requester, NOT automatically as the supplier.
 - If memory mentions Carlos needs the solar quote, Carlos is likely the client/requester waiting for the quote.
+- If memory contains "cotización solar" or "solar quote", the draft should mention "cotización solar".
+- If memory contains Carlos and the quote is for Carlos, the draft should mention "para Carlos" or "nuestro cliente Carlos".
 - If the supplier/provider name is unknown, do NOT greet the supplier by the client's name.
 - If the likely recipient is unclear, write the message to the supplier/provider generically: "Hola, buen día."
 - Include client context naturally, e.g. "necesitamos avanzar con la cotización solar para Carlos."
@@ -1761,7 +1763,7 @@ MEMORY:
             "¿Me puedes confirmar el estado y cuándo podrías enviármela? Gracias."
         )
 
-    await update.message.reply_text("✍️ Draft follow-up\n\n" + reply)
+    await update.message.reply_text("✍️ Mensaje de seguimiento\n\n" + reply)
 
 
 async def whatnow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
