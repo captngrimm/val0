@@ -60,3 +60,36 @@ Next work should be:
 2. use the boundary script
 3. run the demo
 4. capture feedback as bug/confusion/feature/trust/pricing/workflow
+
+## Karen-demo polish update
+
+Natural operator routes were added and tested.
+
+The user no longer needs slash commands for the core demo phrases:
+
+- ¿Qué hago ahora?
+- Muéstrame qué guardaste.
+- Hazme el mensaje.
+
+Fixes completed:
+- /whatnow visible header localized to "Qué hago ahora"
+- normal summary hides roadmap/parking_lot noise
+- exosummary points user to natural "¿Qué hago ahora?"
+- draft follow-up header localized to "Mensaje de seguimiento"
+- draft follow-up preserves concrete details like cotización solar and Carlos
+
+Latest tested natural flow:
+- ¿Qué hago ahora?
+- Muéstrame qué guardaste.
+- Hazme el mensaje.
+
+Status:
+PASS for Karen demo polish.
+
+Next improvement:
+Replace rigid phrase matching with LLM Operator Router v1.
+
+Principle:
+LLM decides intent.
+Deterministic code executes safe action.
+Val replies human.
