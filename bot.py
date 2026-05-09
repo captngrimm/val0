@@ -3943,13 +3943,30 @@ Rules:
 - If uncertain, use normal_chat and set needs_clarification true only if needed.
 - Keep summary short and factual, but include concrete action/context items.
 - Do not invent details.
+- For story-like or long messages, extract separate items.
+- Each meaningful memory/action should become its own item.
+- Do not give every item the same generic summary if the message contains multiple distinct things.
+- Example:
+  User says: "Today was awful. Carlos needs the quote. Supplier did not answer. Save idea: track suppliers."
+  items should include:
+  reflection: user had a rough/overwhelming day
+  follow_up: Carlos needs the quote
+  follow_up: supplier did not answer
+  idea: track supplier follow-ups
 
 JSON schema:
 {
   "intent": "short_primary_intent",
   "confidence": 0.0,
   "buckets": ["bucket1"],
-  "summary": "short summary",
+  "summary": "short overall summary",
+  "items": [
+    {
+      "bucket": "reflection|follow_up|idea|note|task|reminder|care_mode|decision|parking_lot|project|normal_chat",
+      "summary": "specific summary for this one item",
+      "raw_span": "short original fragment if useful"
+    }
+  ],
   "suggested_action": "store_reflection|store_note|create_reminder|store_idea|ask_clarifying_question|reply_only|multi_action",
   "needs_clarification": false,
   "clarifying_question": ""
@@ -3975,12 +3992,38 @@ JSON schema:
         data.setdefault("confidence", 0.0)
         data.setdefault("buckets", ["normal_chat"])
         data.setdefault("summary", "")
+        data.setdefault("items", [])
         data.setdefault("suggested_action", "reply_only")
         data.setdefault("needs_clarification", False)
         data.setdefault("clarifying_question", "")
 
         if not isinstance(data.get("buckets"), list):
             data["buckets"] = ["normal_chat"]
+
+        if not isinstance(data.get("items"), list):
+            data["items"] = []
+
+        clean_items = []
+        allowed_item_buckets = {
+            "note", "reminder", "task", "idea", "reflection", "care_mode",
+            "decision", "parking_lot", "project", "follow_up", "normal_chat"
+        }
+
+        for item in data.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            bucket = str(item.get("bucket") or "").strip()
+            if bucket not in allowed_item_buckets:
+                bucket = "normal_chat"
+            item_summary = str(item.get("summary") or "").strip()
+            raw_span = str(item.get("raw_span") or "").strip()
+            clean_items.append({
+                "bucket": bucket,
+                "summary": item_summary,
+                "raw_span": raw_span,
+            })
+
+        data["items"] = clean_items
 
         return data
 
