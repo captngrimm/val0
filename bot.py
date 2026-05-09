@@ -1621,6 +1621,142 @@ async def classify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+async def draftfollowup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Exocortex Mark 1 action demo.
+    Usage:
+    /draftfollowup
+
+    Reads recent follow_up memory and drafts a practical message.
+    Does not send anything.
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+
+    try:
+        preferred_language = get_fact(chat_id=chat_id, fact_key="preferred_language") or "es"
+    except Exception:
+        preferred_language = "es"
+
+    try:
+        from memory_store import fetch_recent_memory
+        rows = fetch_recent_memory(int(chat_id), limit=15)
+    except Exception as e:
+        logger.exception(f"[DRAFTFOLLOWUP] fetch failed: {e}")
+        await update.message.reply_text(f"No pude leer memoria reciente: {e}")
+        return
+
+    followups = []
+    context_items = []
+
+    for row in rows or []:
+        r = dict(row) if hasattr(row, "keys") else {
+            "id": row[0],
+            "bucket": row[1],
+            "raw_input": row[2],
+            "summary": row[3],
+            "created_at": row[4],
+        }
+
+        bucket = str(r.get("bucket") or "").strip()
+        summary = str(r.get("summary") or "").strip()
+        raw = str(r.get("raw_input") or "").strip()
+        created_at = str(r.get("created_at") or "").strip()
+
+        if bucket == "follow_up":
+            followups.append({
+                "id": r.get("id"),
+                "bucket": bucket,
+                "summary": summary,
+                "raw": raw[:500],
+                "created_at": created_at,
+            })
+
+        if bucket in {"reflection", "care_mode", "idea", "note", "project"}:
+            context_items.append({
+                "id": r.get("id"),
+                "bucket": bucket,
+                "summary": summary,
+                "raw": raw[:300],
+                "created_at": created_at,
+            })
+
+    if not followups:
+        await update.message.reply_text(
+            "✍️ Draft follow-up\n\n"
+            "No encontré un seguimiento reciente para redactar.\n\n"
+            "Primero prueba con /journal y menciona algo como: "
+            "Carlos necesita la cotización o el proveedor no respondió."
+        )
+        return
+
+    latest = followups[0]
+
+    context_lines = []
+    context_lines.append(
+        f"FOLLOW_UP PRINCIPAL:\n"
+        f"- id: {latest.get('id')}\n"
+        f"- fecha: {latest.get('created_at')}\n"
+        f"- resumen: {latest.get('summary')}\n"
+        f"- raw: {latest.get('raw')}"
+    )
+
+    if context_items:
+        context_lines.append("\nCONTEXTO RECIENTE:")
+        for item in context_items[:5]:
+            context_lines.append(
+                f"- {item.get('bucket')} #{item.get('id')}: "
+                f"{item.get('summary') or item.get('raw')}"
+            )
+
+    memory_block = "\n".join(context_lines)
+
+    system_rules = f"""
+You are Valeria drafting a practical follow-up message from Exocortex memory.
+
+Task:
+Draft ONE message the user can send.
+
+Rules:
+- Do not send the message.
+- Do not invent names/details not in memory.
+- If the likely recipient is unclear, write a generic supplier/provider follow-up.
+- Keep the message professional, warm, and concise.
+- Include a short intro line before the draft.
+- If Spanish is preferred, draft in Spanish.
+- Avoid hype.
+- Do not mention internal buckets unless useful.
+
+MEMORY:
+{memory_block}
+"""
+
+    try:
+        reply = call_val_openai(
+            chat_id=int(chat_id),
+            user_text="Draft the follow-up message from recent memory.",
+            forced_lang=preferred_language,
+            system_rules=system_rules,
+        )
+        reply = (reply or "").strip()
+    except Exception as e:
+        logger.exception(f"[DRAFTFOLLOWUP] model failed: {e}")
+        reply = ""
+
+    if not reply:
+        reply = (
+            "✍️ Draft follow-up\n\n"
+            "Aquí tienes un borrador simple:\n\n"
+            "Hola, buen día. Quería dar seguimiento a la cotización pendiente. "
+            "¿Me puedes confirmar el estado y cuándo podrías enviármela? Gracias."
+        )
+
+    await update.message.reply_text("✍️ Draft follow-up\n\n" + reply)
+
+
 async def whatnow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Exocortex Mark 1 recovery command.
@@ -10262,6 +10398,7 @@ def main():
     #app.add_handler(CommandHandler("cancel", rmd_cmd))
     app.add_handler(CommandHandler("rmd", rmd_cmd))
     app.add_handler(CommandHandler("classify", classify_cmd))
+    app.add_handler(CommandHandler("draftfollowup", draftfollowup_cmd))
     app.add_handler(CommandHandler("whatnow", whatnow_cmd))
     app.add_handler(CommandHandler("exosummary", exosummary_cmd))
     app.add_handler(CommandHandler("exorecent", exorecent_cmd))
