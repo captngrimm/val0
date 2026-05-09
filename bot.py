@@ -2195,8 +2195,6 @@ async def _maybe_handle_onboarding_answer(update: Update, context: ContextTypes.
             chat_id=int(chat_id),
             fact_key=fact_key,
             fact_value=value,
-            source="onboarding_v1",
-            confidence=0.9,
         )
 
         insert_memory_item(
@@ -2246,15 +2244,11 @@ async def _maybe_handle_onboarding_answer(update: Update, context: ContextTypes.
             chat_id=int(chat_id),
             fact_key="starter_workflow",
             fact_value=starter_workflow,
-            source="onboarding_v1",
-            confidence=0.85,
         )
         upsert_fact(
             chat_id=int(chat_id),
             fact_key="onboarding_status",
             fact_value="complete_v1",
-            source="onboarding_v1",
-            confidence=1.0,
         )
     except Exception as e:
         logger.exception(f"[ONBOARDING] failed completion facts: {e}")
