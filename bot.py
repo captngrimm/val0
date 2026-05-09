@@ -1576,6 +1576,48 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         preferred_name = ""
     await update.message.reply_text(build_alpha_onboarding_reply(preferred_name))
 
+
+async def classify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Debug-only Exocortex classifier test.
+    Usage:
+    /classify Val, today was rough. Remind me tomorrow to call Carlos and save the supplier idea.
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    text = " ".join(context.args or []).strip()
+
+    if not text:
+        await update.message.reply_text(
+            "Uso: /classify <mensaje>\n\n"
+            "Ejemplo:\n"
+            "/classify Val, hoy fue pesado. Recuérdame mañana llamar a Carlos y guarda la idea de seguimiento a proveedores."
+        )
+        return
+
+    try:
+        preferred_language = get_fact(chat_id=chat_id, fact_key="preferred_language") or "es"
+    except Exception:
+        preferred_language = "es"
+
+    data = classify_exocortex_intent(
+        chat_id=int(chat_id),
+        user_text=text,
+        preferred_language=preferred_language,
+    )
+
+    import json
+    pretty = json.dumps(data, ensure_ascii=False, indent=2)
+
+    await update.message.reply_text(
+        "🧠 Exocortex classifier\n\n"
+        f"Input:\n{text}\n\n"
+        f"JSON:\n{pretty}"
+    )
+
+
 async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     facts = get_all_facts(chat_id)
@@ -9675,6 +9717,7 @@ def main():
     app.add_handler(CommandHandler("reminders", reminders_cmd))
     #app.add_handler(CommandHandler("cancel", rmd_cmd))
     app.add_handler(CommandHandler("rmd", rmd_cmd))
+    app.add_handler(CommandHandler("classify", classify_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("tasks", tasks_cmd))
