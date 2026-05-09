@@ -3159,6 +3159,66 @@ def build_alpha_capability_reply(preferred_name: str = "") -> str:
     )
 
 
+def build_dynamic_founder_beta_reply(
+    chat_id: int,
+    user_text: str,
+    kind: str,
+    preferred_name: str = "",
+    preferred_language: str | None = None,
+) -> str | None:
+    """
+    Dynamic founder-beta identity/capability answer.
+    Deterministic intent, model-written wording, safe facts.
+    Falls back to static builders if model fails.
+    """
+    safe_name = (preferred_name or "").strip()
+    name_rule = ""
+    if safe_name and safe_name.lower() not in ("boss", "jefe"):
+        name_rule = f"Puedes usar este nombre si suena natural: {safe_name}."
+
+    safe_facts = """
+FOUNDER-BETA SAFE FACTS:
+- Eres Valeria, dentro de Val0.
+- Val0 está en founder beta.
+- La interfaz actual es Telegram porque es rápida, familiar y permite texto/voz.
+- Telegram es la primera puerta, no necesariamente la identidad final del producto.
+- Ayudas con notas, recordatorios, tareas, ideas, voz, pendientes y agenda básica.
+- No prometas memoria perfecta, autonomía total, app final, ni confiabilidad enterprise.
+- No inventes funciones.
+- Responde breve, cálido, práctico y no corporativo.
+- No suenes como brochure ni repitas siempre la misma estructura.
+- Si explicas capacidades, incluye 2-4 ejemplos concretos.
+- Termina con un paso simple solo si ayuda.
+"""
+
+    if kind == "identity":
+        task = (
+            "El usuario pregunta qué eres. Responde como Valeria en español. "
+            "Explica identidad, Telegram como primera interfaz, beta y utilidad real sin sobreprometer."
+        )
+    elif kind == "capability":
+        task = (
+            "El usuario pregunta qué puedes hacer. Responde como Valeria en español. "
+            "Explica capacidades actuales con ejemplos concretos y límites honestos."
+        )
+    else:
+        return None
+
+    try:
+        reply = call_val_openai(
+            chat_id=int(chat_id),
+            user_text=user_text,
+            forced_lang=preferred_language or "es",
+            system_rules=safe_facts + "\n" + name_rule + "\n" + task,
+        )
+        reply = (reply or "").strip()
+        if not reply:
+            return None
+        return reply
+    except Exception:
+        return None
+
+
 def build_alpha_lost_reply(preferred_name: str = "") -> str:
     safe_name = (preferred_name or "").strip()
     name_line = f"{safe_name}, " if safe_name and safe_name.lower() not in ("boss", "jefe") else ""
@@ -3495,18 +3555,34 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         )
 
         if text_norm_greet in identity_markers:
-            reply = (
-                "Soy Valeria, una asistente en founder-beta dentro de Telegram. "
-                "Mi trabajo es ayudarte a recordar, ordenar y avanzar sin que todo viva en tu cabeza.\n\n"
-                "Hoy puedo ayudarte con notas, recordatorios, ideas, pendientes, voz y agenda básica. "
-                "Todavía estoy en beta, así que no prometo magia ni autonomía perfecta; "
-                "pero para capturar y organizar el caos diario, ya sirvo."
+            reply = build_dynamic_founder_beta_reply(
+                int(chat_id),
+                text,
+                kind="identity",
+                preferred_name=preferred_name,
+                preferred_language=preferred_language,
             )
+            if not reply:
+                reply = (
+                    "Soy Valeria, una asistente en founder-beta dentro de Telegram. "
+                    "Mi trabajo es ayudarte a recordar, ordenar y avanzar sin que todo viva en tu cabeza.\n\n"
+                    "Hoy puedo ayudarte con notas, recordatorios, ideas, pendientes, voz y agenda básica. "
+                    "Todavía estoy en beta, así que no prometo magia ni autonomía perfecta; "
+                    "pero para capturar y organizar el caos diario, ya sirvo."
+                )
             await update.message.reply_text(reply)
             return
 
         if text_norm_greet in capability_markers:
-            reply = build_alpha_capability_reply(preferred_name)
+            reply = build_dynamic_founder_beta_reply(
+                int(chat_id),
+                text,
+                kind="capability",
+                preferred_name=preferred_name,
+                preferred_language=preferred_language,
+            )
+            if not reply:
+                reply = build_alpha_capability_reply(preferred_name)
             await update.message.reply_text(reply)
             return
 
