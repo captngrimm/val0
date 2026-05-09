@@ -4911,6 +4911,76 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         # --------------------------------------------------
+        # NATURAL OPERATOR COMMAND ROUTES (FRIENDLY MARK 1)
+        # --------------------------------------------------
+        try:
+            whatnow_natural_markers = (
+                "que hago ahora",
+                "qué hago ahora",
+                "que hago",
+                "qué hago",
+                "que sigue",
+                "qué sigue",
+                "cual es el siguiente paso",
+                "cuál es el siguiente paso",
+                "por donde empiezo",
+                "por dónde empiezo",
+                "estoy perdida",
+                "estoy perdido",
+                "estoy enredada",
+                "estoy enredado",
+                "no se por donde empezar",
+                "no sé por dónde empezar",
+                "what now",
+                "what should i do",
+                "where do i start",
+            )
+
+            summary_natural_markers = (
+                "que guardaste",
+                "qué guardaste",
+                "que tienes guardado",
+                "qué tienes guardado",
+                "muestrame lo que guardaste",
+                "muéstrame lo que guardaste",
+                "muestrame el resumen",
+                "muéstrame el resumen",
+                "resumen de esto",
+                "show me what you saved",
+                "show me the summary",
+                "what did you save",
+            )
+
+            draft_natural_markers = (
+                "hazme el mensaje",
+                "redactame el mensaje",
+                "redáctame el mensaje",
+                "preparame el mensaje",
+                "prepárame el mensaje",
+                "haz el follow up",
+                "haz el seguimiento",
+                "redacta el seguimiento",
+                "draft the message",
+                "draft the follow up",
+                "write the message",
+            )
+
+            if any(m in text_norm_greet for m in whatnow_natural_markers):
+                await whatnow_cmd(update, context)
+                return
+
+            if any(m in text_norm_greet for m in summary_natural_markers):
+                await exosummary_cmd(update, context)
+                return
+
+            if any(m in text_norm_greet for m in draft_natural_markers):
+                await draftfollowup_cmd(update, context)
+                return
+
+        except Exception as e:
+            logger.exception(f"[NATURAL_OPERATOR_ROUTES] failed: {e}")
+
+        # --------------------------------------------------
         # NATURAL SMART JOURNAL ROUTE (CONSERVATIVE MARK 1)
         # --------------------------------------------------
         try:
