@@ -1791,6 +1791,145 @@ async def exorecent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines).strip())
 
 
+
+async def journal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    User-facing Exocortex Smart Journal Mark 1.
+    Usage:
+    /journal Hoy fue pesado. Carlos necesita la cotización, el proveedor no respondió y estoy abrumado.
+
+    This is the non-debug entry point:
+    - classifies messy journal input
+    - stores structured memory buckets
+    - replies conversationally
+    - does NOT create reminders yet
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    text = " ".join(context.args or []).strip()
+
+    if not text:
+        await update.message.reply_text(
+            "📝 Journal Mark 1\n\n"
+            "Cuéntame cómo va tu día o suelta el desorden completo.\n\n"
+            "Ejemplo:\n"
+            "/journal Hoy fue pesado. Carlos necesita la cotización solar, "
+            "el proveedor no respondió y estoy abrumado."
+        )
+        return
+
+    try:
+        preferred_language = get_fact(chat_id=chat_id, fact_key="preferred_language") or "es"
+    except Exception:
+        preferred_language = "es"
+
+    data = classify_exocortex_intent(
+        chat_id=int(chat_id),
+        user_text=text,
+        preferred_language=preferred_language,
+    )
+
+    buckets = data.get("buckets") or ["normal_chat"]
+    summary = (data.get("summary") or "").strip()
+    confidence = data.get("confidence", 0.0)
+
+    stored = []
+    allowed = {
+        "note",
+        "idea",
+        "reflection",
+        "care_mode",
+        "decision",
+        "parking_lot",
+        "project",
+        "follow_up",
+        "normal_chat",
+        "task",
+        "reminder",
+    }
+
+    try:
+        from memory_store import insert_memory_item
+
+        for bucket in buckets:
+            bucket = str(bucket or "").strip()
+            if bucket not in allowed:
+                bucket = "normal_chat"
+
+            insert_memory_item(
+                chat_id=int(chat_id),
+                bucket=bucket,
+                raw_input=text,
+                summary=summary or f"journal:{bucket}",
+            )
+            stored.append(bucket)
+
+    except Exception as e:
+        logger.exception(f"[JOURNAL] storage failed: {e}")
+        await update.message.reply_text(f"No pude guardar el journal: {e}")
+        return
+
+    label_map = {
+        "reflection": "reflexión",
+        "care_mode": "care mode",
+        "follow_up": "seguimiento",
+        "idea": "idea",
+        "note": "nota",
+        "task": "tarea",
+        "reminder": "recordatorio",
+        "decision": "decisión",
+        "parking_lot": "parking lot",
+        "project": "proyecto",
+        "normal_chat": "conversación",
+    }
+
+    stored_labels = [label_map.get(b, b) for b in stored]
+
+    system_rules = f"""
+You are Valeria in Smart Journal Mark 1.
+
+The user just gave a journal/life/work update.
+
+You must:
+- respond warmly and practically
+- say what was saved
+- do not overpromise
+- do not say reminders were created unless explicitly created by deterministic code
+- if follow_up exists, mention it as something to review, not as a created reminder
+- if reflection or care_mode exists, acknowledge the emotional state briefly
+- end with one useful next step
+- keep it concise
+
+Saved buckets: {stored_labels}
+Classifier summary: {summary}
+Classifier confidence: {confidence}
+"""
+
+    try:
+        reply = call_val_openai(
+            chat_id=int(chat_id),
+            user_text=text,
+            forced_lang=preferred_language,
+            system_rules=system_rules,
+        )
+        reply = (reply or "").strip()
+    except Exception as e:
+        logger.exception(f"[JOURNAL] model reply failed: {e}")
+        reply = ""
+
+    if not reply:
+        reply = (
+            "📝 Guardé este journal.\n\n"
+            f"Detecté: {', '.join(stored_labels)}.\n"
+            f"Resumen: {summary or 'sin resumen'}\n\n"
+            "Siguiente paso: cuando quieras, dime /whatnow y te ayudo a sacar una acción concreta."
+        )
+
+    await update.message.reply_text(reply)
+
+
 async def exotest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Debug-only Exocortex Mark 1 test.
@@ -10014,6 +10153,7 @@ def main():
     app.add_handler(CommandHandler("classify", classify_cmd))
     app.add_handler(CommandHandler("whatnow", whatnow_cmd))
     app.add_handler(CommandHandler("exorecent", exorecent_cmd))
+    app.add_handler(CommandHandler("journal", journal_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
