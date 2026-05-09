@@ -110,3 +110,31 @@ Onboarding Consultant
 → Smart Journal
 → What Now recovery
 → Action support
+
+## Full profile-aware showcase checkpoint
+
+Full showcase passed:
+
+1. /onboardstatus showed operating profile.
+2. Natural story capture worked without /journal.
+3. /exosummary showed structured memory:
+   - idea
+   - follow_up
+   - reflection
+4. /whatnow used operating profile and recent memory.
+5. /draftfollowup drafted a supplier follow-up message.
+
+Product proof:
+first contact profile
+→ messy story
+→ structured memory
+→ recovery
+→ action draft
+
+Current quality:
+Demo-worthy for controlled friends/family explanation.
+
+Remaining polish:
+- /draftfollowup should preserve concrete entities from memory more strongly, such as Carlos, cotización solar, proveedor, quote, deadline.
+- /whatnow and draft follow-up should feel less generic over time.
+- Privacy/data boundary message needed before external tester use.
