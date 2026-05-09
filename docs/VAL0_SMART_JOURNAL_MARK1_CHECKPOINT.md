@@ -156,3 +156,27 @@ Known limitation:
 - /draftfollowup uses recent follow_up memory only.
 - recipient detection is still basic.
 - draft is generic but useful.
+
+## Full showcase checkpoint
+
+The full Smart Journal / Exocortex loop passed:
+
+1. /journal captured messy life/work input.
+2. /exosummary showed clean structured memory.
+3. /whatnow recovered context and recommended a practical next step.
+4. /draftfollowup drafted a usable supplier follow-up message.
+
+Product proof:
+messy input
+→ structured memory
+→ recovery
+→ recommended action
+→ drafted follow-up
+
+This is the first complete Mark 1 Wow Loop.
+
+Current status:
+- Raw but real Mark 1 loop: DONE
+- Controlled friend/family demo: close
+- Self-serve product: not ready
+- Main remaining demo weakness: slash-command entry
