@@ -30,17 +30,19 @@ Send:
 Expected:
 Val acknowledges the pressure, saves the context, and mentions follow-up / supplier tracking.
 
-### 2. Show structured memory
+### 2. Show clean structured memory
 
 Send:
 
-/exorecent
+/exosummary
 
 Expected:
-Recent memory shows separate structured buckets:
+Val shows the latest grouped Exocortex capture:
 - reflection
 - follow_up
 - idea
+
+This avoids dumping noisy raw memory rows during a demo.
 
 ### 3. Ask what now
 

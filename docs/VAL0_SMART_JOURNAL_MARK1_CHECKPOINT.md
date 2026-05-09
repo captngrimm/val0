@@ -78,3 +78,16 @@ Exocortex Mark 1.2:
 ## Current product sentence
 
 Val0 starts as a smart private journal that becomes your operator over time.
+
+## Demo polish update
+
+Added /exosummary as a clean demo viewer.
+
+Recommended demo flow is now:
+1. /journal
+2. /exosummary
+3. /whatnow
+
+Reason:
+- /exorecent proves raw retrieval but is too noisy for friends/family demos.
+- /exosummary shows the latest grouped capture cleanly.
