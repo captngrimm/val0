@@ -1723,9 +1723,12 @@ Draft ONE message the user can send.
 Rules:
 - Do not send the message.
 - Preserve concrete details from memory whenever available: names, client, supplier/provider, quote/cotización, project type, deadline, blocker.
-- If memory mentions Carlos, cotización solar, quote, supplier, provider, or proveedor, include those details naturally.
+- If memory says a named person needs a quote/cotización, treat that person as the client/requester, NOT automatically as the supplier.
+- If memory mentions Carlos needs the solar quote, Carlos is likely the client/requester waiting for the quote.
+- If the supplier/provider name is unknown, do NOT greet the supplier by the client's name.
+- If the likely recipient is unclear, write the message to the supplier/provider generically: "Hola, buen día."
+- Include client context naturally, e.g. "necesitamos avanzar con la cotización solar para Carlos."
 - Do not invent names/details not in memory.
-- If the likely recipient is unclear, write the message to the supplier/provider, not to the client, unless memory clearly says otherwise.
 - Keep the message professional, warm, and concise.
 - Include a short intro line before the draft.
 - If Spanish is preferred, draft in Spanish.
