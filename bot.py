@@ -3154,6 +3154,118 @@ def build_alpha_capability_reply(preferred_name: str = "") -> str:
     )
 
 
+
+def classify_exocortex_intent(
+    chat_id: int,
+    user_text: str,
+    preferred_language: str | None = None,
+) -> dict:
+    """
+    Val0 Exocortex Mark 1 classifier.
+    Purpose:
+    - classify messy user input into structured intent/buckets
+    - DO NOT execute actions here
+    - deterministic code decides storage/reminders/tasks afterward
+    """
+    import json
+
+    text = (user_text or "").strip()
+    if not text:
+        return {
+            "intent": "empty",
+            "confidence": 1.0,
+            "buckets": [],
+            "summary": "",
+            "suggested_action": "ignore",
+            "needs_clarification": False,
+            "clarifying_question": "",
+        }
+
+    system_rules = """
+You are Val0's Exocortex Mark 1 intent classifier.
+
+Return ONLY valid JSON. No markdown. No prose.
+
+Classify the user's message into one or more buckets.
+
+Allowed buckets:
+- note
+- reminder
+- task
+- idea
+- reflection
+- care_mode
+- decision
+- parking_lot
+- project
+- follow_up
+- normal_chat
+
+Rules:
+- You classify. You do not execute.
+- If the user is venting, discouraged, overwhelmed, spiraling, or emotionally processing, include reflection.
+- If the user asks Val to take charge, calm them down, stop them, or decide what to do, include care_mode.
+- If the user mentions a future time/date and wants to be reminded, include reminder.
+- If the user says they have an idea, include idea.
+- If the user describes something to remember without action, include note.
+- If the message contains multiple things, return multiple buckets.
+- If uncertain, use normal_chat and set needs_clarification true only if needed.
+- Keep summary short and factual.
+- Do not invent details.
+
+JSON schema:
+{
+  "intent": "short_primary_intent",
+  "confidence": 0.0,
+  "buckets": ["bucket1"],
+  "summary": "short summary",
+  "suggested_action": "store_reflection|store_note|create_reminder|store_idea|ask_clarifying_question|reply_only|multi_action",
+  "needs_clarification": false,
+  "clarifying_question": ""
+}
+"""
+
+    try:
+        raw = call_val_openai(
+            chat_id=int(chat_id),
+            user_text=text,
+            forced_lang=preferred_language or "es",
+            system_rules=system_rules,
+        )
+        raw = (raw or "").strip()
+        # Strip accidental code fences if model misbehaves.
+        raw = raw.replace("```json", "").replace("```", "").strip()
+        data = json.loads(raw)
+
+        if not isinstance(data, dict):
+            raise ValueError("classifier returned non-dict JSON")
+
+        data.setdefault("intent", "normal_chat")
+        data.setdefault("confidence", 0.0)
+        data.setdefault("buckets", ["normal_chat"])
+        data.setdefault("summary", "")
+        data.setdefault("suggested_action", "reply_only")
+        data.setdefault("needs_clarification", False)
+        data.setdefault("clarifying_question", "")
+
+        if not isinstance(data.get("buckets"), list):
+            data["buckets"] = ["normal_chat"]
+
+        return data
+
+    except Exception as e:
+        logger.exception(f"[EXOCORTEX_CLASSIFIER] failed: {e}")
+        return {
+            "intent": "normal_chat",
+            "confidence": 0.0,
+            "buckets": ["normal_chat"],
+            "summary": text[:180],
+            "suggested_action": "reply_only",
+            "needs_clarification": False,
+            "clarifying_question": "",
+        }
+
+
 def build_dynamic_founder_beta_reply(
     chat_id: int,
     user_text: str,
