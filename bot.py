@@ -1577,6 +1577,48 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(build_alpha_onboarding_reply(preferred_name))
 
 
+
+async def route_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Debug-only Operator Router test.
+    Usage:
+    /route ¿Qué hago ahora?
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    text = " ".join(context.args or []).strip()
+
+    if not text:
+        await update.message.reply_text(
+            "Uso: /route <mensaje>\n\n"
+            "Ejemplo:\n"
+            "/route ¿Qué le digo al proveedor?"
+        )
+        return
+
+    try:
+        preferred_language = get_fact(chat_id=chat_id, fact_key="preferred_language") or "es"
+    except Exception:
+        preferred_language = "es"
+
+    data = route_operator_intent(
+        chat_id=int(chat_id),
+        user_text=text,
+        preferred_language=preferred_language,
+    )
+
+    import json
+    pretty = json.dumps(data, ensure_ascii=False, indent=2)
+
+    await update.message.reply_text(
+        "🧭 Operator router\n\n"
+        f"Input:\n{text}\n\n"
+        f"JSON:\n{pretty}"
+    )
+
+
 async def classify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Debug-only Exocortex classifier test.
@@ -11223,6 +11265,7 @@ def main():
     app.add_handler(CommandHandler("reminders", reminders_cmd))
     #app.add_handler(CommandHandler("cancel", rmd_cmd))
     app.add_handler(CommandHandler("rmd", rmd_cmd))
+    app.add_handler(CommandHandler("route", route_cmd))
     app.add_handler(CommandHandler("classify", classify_cmd))
     app.add_handler(CommandHandler("draftfollowup", draftfollowup_cmd))
     app.add_handler(CommandHandler("whatnow", whatnow_cmd))
