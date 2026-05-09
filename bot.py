@@ -1619,6 +1619,60 @@ async def classify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+async def exorecent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Debug-only Exocortex recent memory viewer.
+    Usage:
+    /exorecent
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+
+    try:
+        from memory_store import fetch_recent_memory
+        rows = fetch_recent_memory(int(chat_id), limit=10)
+    except Exception as e:
+        logger.exception(f"[EXORECENT] failed: {e}")
+        await update.message.reply_text(f"Exocortex recent memory error: {e}")
+        return
+
+    if not rows:
+        await update.message.reply_text("🧠 Exocortex recent memory\n\nNo hay memoria estructurada reciente.")
+        return
+
+    lines = ["🧠 Exocortex recent memory", ""]
+
+    for row in rows:
+        r = dict(row) if hasattr(row, "keys") else {
+            "id": row[0],
+            "bucket": row[1],
+            "raw_input": row[2],
+            "summary": row[3],
+            "created_at": row[4],
+        }
+
+        rid = r.get("id")
+        bucket = str(r.get("bucket") or "").strip()
+        summary = str(r.get("summary") or "").strip()
+        created_at = str(r.get("created_at") or "").strip()
+        raw = str(r.get("raw_input") or "").strip()
+
+        if len(raw) > 180:
+            raw = raw[:177] + "..."
+
+        lines.append(f"#{rid} · {bucket} · {created_at}")
+        if summary:
+            lines.append(f"Resumen: {summary}")
+        if raw:
+            lines.append(f"Raw: {raw}")
+        lines.append("")
+
+    await update.message.reply_text("\n".join(lines).strip())
+
+
 async def exotest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Debug-only Exocortex Mark 1 test.
@@ -9840,6 +9894,7 @@ def main():
     #app.add_handler(CommandHandler("cancel", rmd_cmd))
     app.add_handler(CommandHandler("rmd", rmd_cmd))
     app.add_handler(CommandHandler("classify", classify_cmd))
+    app.add_handler(CommandHandler("exorecent", exorecent_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
