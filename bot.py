@@ -1729,6 +1729,8 @@ Rules:
 - If Spanish is preferred, draft in Spanish.
 - Avoid hype.
 - Do not mention internal buckets unless useful.
+- Do not end with "si quieres" or "quieres que lo haga".
+- End with one concrete next step, such as: "Siguiente paso: copia este mensaje y envíalo al proveedor."
 
 MEMORY:
 {memory_block}
