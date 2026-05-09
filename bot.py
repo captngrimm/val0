@@ -4493,6 +4493,182 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(reply)
             return
 
+        # --------------------------------------------------
+        # NATURAL SMART JOURNAL ROUTE (CONSERVATIVE MARK 1)
+        # --------------------------------------------------
+        try:
+            natural_journal_markers = (
+                "today was",
+                "today has been",
+                "rough day",
+                "bad day",
+                "hard day",
+                "i'm overwhelmed",
+                "im overwhelmed",
+                "i feel overwhelmed",
+                "i'm honestly overwhelmed",
+                "hoy fue",
+                "hoy ha sido",
+                "dia pesado",
+                "día pesado",
+                "dia dificil",
+                "día difícil",
+                "estoy abrumado",
+                "estoy abrumada",
+                "me siento abrumado",
+                "me siento abrumada",
+                "me siento cargado",
+                "me siento cargada",
+            )
+
+            business_journal_markers = (
+                "supplier",
+                "provider",
+                "quote",
+                "client",
+                "customer",
+                "follow-up",
+                "follow up",
+                "didn't answer",
+                "did not answer",
+                "still needs",
+                "proveedor",
+                "cotizacion",
+                "cotización",
+                "cliente",
+                "seguimiento",
+                "no respondio",
+                "no respondió",
+                "necesita",
+            )
+
+            looks_like_journal = (
+                len(text or "") >= 45
+                and (
+                    any(m in text_norm_greet for m in natural_journal_markers)
+                    or (
+                        any(m in text_norm_greet for m in business_journal_markers)
+                        and any(x in text_norm_greet for x in ("save", "guarda", "idea", "abrum", "rough", "pesado", "dificil", "difícil"))
+                    )
+                )
+            )
+
+            if looks_like_journal:
+                data = classify_exocortex_intent(
+                    chat_id=int(chat_id),
+                    user_text=text,
+                    preferred_language=preferred_language or "es",
+                )
+
+                buckets = data.get("buckets") or ["normal_chat"]
+                confidence = float(data.get("confidence") or 0.0)
+
+                exo_buckets = {
+                    "reflection",
+                    "care_mode",
+                    "follow_up",
+                    "idea",
+                    "note",
+                    "decision",
+                    "parking_lot",
+                    "project",
+                }
+
+                should_route_journal = (
+                    confidence >= 0.65
+                    and any(str(b).strip() in exo_buckets for b in buckets)
+                )
+
+                if should_route_journal:
+                    summary = (data.get("summary") or "").strip()
+                    stored = []
+                    allowed = {
+                        "note",
+                        "idea",
+                        "reflection",
+                        "care_mode",
+                        "decision",
+                        "parking_lot",
+                        "project",
+                        "follow_up",
+                        "normal_chat",
+                        "task",
+                        "reminder",
+                    }
+
+                    from memory_store import insert_memory_item
+
+                    for bucket in buckets:
+                        bucket = str(bucket or "").strip()
+                        if bucket not in allowed:
+                            bucket = "normal_chat"
+
+                        insert_memory_item(
+                            chat_id=int(chat_id),
+                            bucket=bucket,
+                            raw_input=text,
+                            summary=summary or f"journal:{bucket}",
+                        )
+                        stored.append(bucket)
+
+                    label_map = {
+                        "reflection": "reflexión",
+                        "care_mode": "care mode",
+                        "follow_up": "seguimiento",
+                        "idea": "idea",
+                        "note": "nota",
+                        "task": "tarea",
+                        "reminder": "recordatorio",
+                        "decision": "decisión",
+                        "parking_lot": "parking lot",
+                        "project": "proyecto",
+                        "normal_chat": "conversación",
+                    }
+                    stored_labels = [label_map.get(b, b) for b in stored]
+
+                    system_rules = f"""
+You are Valeria in Natural Smart Journal Mark 1.
+
+The user gave a natural life/work update without using /journal.
+
+You must:
+- respond warmly and practically
+- say what was saved
+- do not overpromise
+- do not say reminders were created unless explicitly created by deterministic code
+- if follow_up exists, mention it as something to review, not as a created reminder
+- if reflection or care_mode exists, acknowledge the emotional state briefly
+- avoid gendered emotional adjectives unless the user's profile explicitly provides gender
+- prefer neutral wording like "te sientes con mucha carga", "esto pesa", "hay bastante presión", "suena agotador"
+- end with one useful next step
+- keep it concise
+
+Saved buckets: {stored_labels}
+Classifier summary: {summary}
+Classifier confidence: {confidence}
+"""
+                    reply = call_val_openai(
+                        chat_id=int(chat_id),
+                        user_text=text,
+                        forced_lang=preferred_language or "es",
+                        system_rules=system_rules,
+                    )
+                    reply = (reply or "").strip()
+
+                    if not reply:
+                        reply = (
+                            "Guardé esto como journal.\n\n"
+                            f"Detecté: {', '.join(stored_labels)}.\n"
+                            f"Resumen: {summary or 'sin resumen'}\n\n"
+                            "Siguiente paso: dime /whatnow y te ayudo a sacar una acción concreta."
+                        )
+
+                    await update.message.reply_text(reply)
+                    return
+
+        except Exception as e:
+            logger.exception(f"[NATURAL_SMART_JOURNAL] failed: {e}")
+
     except Exception as e:
         logger.exception(f"[GREETING_OVERRIDE] failed: {e}")
 
