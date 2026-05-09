@@ -3215,14 +3215,16 @@ FOUNDER-BETA SAFE FACTS:
             return None
 
         # Founder-beta safety polish: prevent misleading reminder/notification wording.
-        reply = reply.replace(
-            "no genero notificaciones automáticas",
-            "puedo crear recordatorios para avisarte, aunque todavía no soy un calendario completo"
-        )
-        reply = reply.replace(
-            "No genero notificaciones automáticas",
-            "Puedo crear recordatorios para avisarte, aunque todavía no soy un calendario completo"
-        )
+        notification_replacements = {
+            "no genero notificaciones automáticas": "puedo crear recordatorios para avisarte, aunque todavía no soy un calendario completo",
+            "No genero notificaciones automáticas": "Puedo crear recordatorios para avisarte, aunque todavía no soy un calendario completo",
+            "no puedo enviar notificaciones": "puedo crear recordatorios para avisarte",
+            "No puedo enviar notificaciones": "Puedo crear recordatorios para avisarte",
+            "tampoco genero notificaciones automáticas": "sí puedo crear recordatorios para avisarte",
+            "Tampoco genero notificaciones automáticas": "Sí puedo crear recordatorios para avisarte",
+        }
+        for bad, good in notification_replacements.items():
+            reply = reply.replace(bad, good)
 
         return reply
     except Exception:
