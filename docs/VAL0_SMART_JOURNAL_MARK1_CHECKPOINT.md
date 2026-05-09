@@ -180,3 +180,28 @@ Current status:
 - Controlled friend/family demo: close
 - Self-serve product: not ready
 - Main remaining demo weakness: slash-command entry
+
+## Natural routing checkpoint
+
+Natural Smart Journal routing is working.
+
+User can now send messy life/work input without /journal, and Val routes it into the Smart Journal flow.
+
+Example:
+Today was rough. Carlos still needs the solar quote, supplier didn’t answer, and I’m honestly overwhelmed. Also save the idea that Val should help me track supplier follow-ups.
+
+Result:
+- reflection stored
+- follow_up stored
+- idea stored
+- /exosummary shows grouped capture
+- /whatnow recovers context and recommends next action
+
+Product meaning:
+This removes the slash-command feel from the main capture loop.
+
+Next milestone:
+Narrative Capture v1:
+- support longer story-style input
+- extract separate memory items
+- avoid giving every bucket the same generic summary
