@@ -2061,6 +2061,231 @@ async def exorecent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
+
+_ONBOARDING_FIELDS = [
+    ("preferred_name", "¿Cómo quieres que te llame?"),
+    ("primary_role", "¿Qué haces principalmente — trabajo, negocio, estudios, casa, mezcla?"),
+    ("use_case", "¿Quieres usarme más para vida personal, trabajo, negocio, o todo junto?"),
+    ("main_goal", "¿Qué quieres mejorar primero?"),
+    ("friction_points", "¿Dónde se te caen más las cosas: clientes, pendientes, citas, proveedores, pagos, ideas, foco, algo más?"),
+    ("current_tools", "¿Qué usas hoy para organizarte? WhatsApp, Excel, papel, Google Calendar, memoria pura, otra cosa."),
+    ("tracking_buckets", "¿Qué cosas deberíamos empezar a rastrear? Ejemplo: clientes, proveedores, cotizaciones, tareas, ideas, pagos, familia."),
+]
+
+_ONBOARDING_STATE = {}
+
+
+async def onboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Onboarding Consultant v1.
+    Usage:
+    /onboard
+    /onboard reset
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    args = [a.strip().lower() for a in (context.args or [])]
+
+    if args and args[0] in {"reset", "reiniciar", "restart"}:
+        _ONBOARDING_STATE.pop(int(chat_id), None)
+        await update.message.reply_text(
+            "Listo. Reinicié el onboarding.\n\n"
+            "Cuando quieras empezar otra vez, escribe /onboard."
+        )
+        return
+
+    _ONBOARDING_STATE[int(chat_id)] = {"idx": 0, "answers": {}}
+
+    intro = (
+        "Vamos a armar tu perfil operativo Mark 1.\n\n"
+        "No es un formulario eterno. Es para que Val entienda tu mundo y no te trate como usuario genérico.\n\n"
+        f"1/{len(_ONBOARDING_FIELDS)} — {_ONBOARDING_FIELDS[0][1]}"
+    )
+    await update.message.reply_text(intro)
+
+
+async def onboard_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Shows current onboarding facts.
+    Usage:
+    /onboardstatus
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+
+    try:
+        facts = get_all_facts(chat_id=int(chat_id)) or {}
+    except Exception as e:
+        logger.exception(f"[ONBOARD_STATUS] failed: {e}")
+        await update.message.reply_text(f"No pude leer tu perfil operativo: {e}")
+        return
+
+    keys = [
+        "preferred_name",
+        "primary_role",
+        "use_case",
+        "main_goal",
+        "friction_points",
+        "current_tools",
+        "tracking_buckets",
+        "starter_workflow",
+        "onboarding_status",
+    ]
+
+    lines = ["🧭 Perfil operativo Mark 1", ""]
+    found = False
+    for k in keys:
+        v = str(facts.get(k) or "").strip()
+        if v:
+            found = True
+            lines.append(f"- {k}: {v}")
+
+    if not found:
+        lines.append("Todavía no tengo perfil operativo guardado. Empieza con /onboard.")
+
+    await update.message.reply_text("\n".join(lines))
+
+
+async def _maybe_handle_onboarding_answer(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
+    """
+    Handles active onboarding answers in the normal text pipeline.
+    Returns True if consumed.
+    """
+    if not update.message:
+        return False
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    state = _ONBOARDING_STATE.get(int(chat_id))
+    if not state:
+        return False
+
+    answer = (text or "").strip()
+    if not answer:
+        return False
+
+    # Allow user to stop.
+    norm = unicodedata.normalize("NFKD", answer.lower())
+    norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
+    norm = re.sub(r"[¿?¡!.,:;]+", "", norm).strip()
+
+    if norm in {"cancel", "cancelar", "stop", "para", "detener"}:
+        _ONBOARDING_STATE.pop(int(chat_id), None)
+        await update.message.reply_text("Entendido. Pausé el onboarding.")
+        return True
+
+    idx = int(state.get("idx", 0))
+    if idx < 0 or idx >= len(_ONBOARDING_FIELDS):
+        _ONBOARDING_STATE.pop(int(chat_id), None)
+        return False
+
+    fact_key, _question = _ONBOARDING_FIELDS[idx]
+
+    try:
+        from memory_store import upsert_fact, insert_memory_item
+
+        value = answer.strip()
+        if fact_key == "preferred_name":
+            value = value.strip().title()
+
+        upsert_fact(
+            chat_id=int(chat_id),
+            fact_key=fact_key,
+            fact_value=value,
+            source="onboarding_v1",
+            confidence=0.9,
+        )
+
+        insert_memory_item(
+            chat_id=int(chat_id),
+            bucket="project",
+            raw_input=answer,
+            summary=f"onboarding:{fact_key}={value}",
+        )
+
+    except Exception as e:
+        logger.exception(f"[ONBOARDING] failed to store {fact_key}: {e}")
+        await update.message.reply_text(f"No pude guardar esa respuesta: {e}")
+        return True
+
+    state["answers"][fact_key] = value
+    idx += 1
+    state["idx"] = idx
+
+    if idx < len(_ONBOARDING_FIELDS):
+        next_key, next_question = _ONBOARDING_FIELDS[idx]
+        await update.message.reply_text(
+            f"Guardado.\n\n"
+            f"{idx + 1}/{len(_ONBOARDING_FIELDS)} — {next_question}"
+        )
+        return True
+
+    # Complete onboarding.
+    answers = dict(state.get("answers") or {})
+
+    role = answers.get("primary_role", "")
+    use_case = answers.get("use_case", "")
+    friction = answers.get("friction_points", "")
+    buckets = answers.get("tracking_buckets", "")
+
+    starter_workflow = (
+        "Captura diaria → seguimiento de pendientes → /whatnow para decidir el siguiente paso"
+    )
+
+    if any(x in (friction + " " + buckets).lower() for x in ["cliente", "client", "proveedor", "supplier", "cotizacion", "cotización", "quote"]):
+        starter_workflow = (
+            "Clientes/proveedores → cotizaciones/seguimientos → /whatnow → /draftfollowup"
+        )
+
+    try:
+        from memory_store import upsert_fact
+        upsert_fact(
+            chat_id=int(chat_id),
+            fact_key="starter_workflow",
+            fact_value=starter_workflow,
+            source="onboarding_v1",
+            confidence=0.85,
+        )
+        upsert_fact(
+            chat_id=int(chat_id),
+            fact_key="onboarding_status",
+            fact_value="complete_v1",
+            source="onboarding_v1",
+            confidence=1.0,
+        )
+    except Exception as e:
+        logger.exception(f"[ONBOARDING] failed completion facts: {e}")
+
+    _ONBOARDING_STATE.pop(int(chat_id), None)
+
+    lines = []
+    lines.append("Listo. Ya tengo tu perfil operativo Mark 1.")
+    lines.append("")
+    lines.append("Lo que entiendo:")
+    if role:
+        lines.append(f"- Rol/contexto: {role}")
+    if use_case:
+        lines.append(f"- Uso principal: {use_case}")
+    if friction:
+        lines.append(f"- Fricción: {friction}")
+    if buckets:
+        lines.append(f"- Vamos a rastrear: {buckets}")
+    lines.append("")
+    lines.append("Primer workflow recomendado:")
+    lines.append(f"- {starter_workflow}")
+    lines.append("")
+    lines.append("Cómo usarme ahora:")
+    lines.append("- Cuéntame el desorden del día en lenguaje normal.")
+    lines.append("- Yo lo separo en reflexión, seguimiento, idea o tarea.")
+    lines.append("- Luego usa /whatnow para sacar el siguiente paso.")
+
+    await update.message.reply_text("\n".join(lines))
+    return True
+
+
 async def journal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     User-facing Exocortex Smart Journal Mark 1.
@@ -4782,6 +5007,15 @@ Classifier confidence: {confidence}
     text = _strip_smalltalk_prefix(text)
     tg_msg_id = update.message.message_id
     logger.info(f"msg from chat_id={chat_id}: {text!r}")
+
+    # --------------------------------------------------
+    # ONBOARDING CONSULTANT V1 ACTIVE ANSWER GATE
+    # --------------------------------------------------
+    try:
+        if await _maybe_handle_onboarding_answer(update, context, text):
+            return
+    except Exception as e:
+        logger.exception(f"[ONBOARDING_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Pending bug/feedback/idea report (hard gate before notes/tasks/PM)
@@ -10689,6 +10923,8 @@ def main():
     app.add_handler(CommandHandler("whatnow", whatnow_cmd))
     app.add_handler(CommandHandler("exosummary", exosummary_cmd))
     app.add_handler(CommandHandler("exorecent", exorecent_cmd))
+    app.add_handler(CommandHandler("onboard", onboard_cmd))
+    app.add_handler(CommandHandler("onboardstatus", onboard_status_cmd))
     app.add_handler(CommandHandler("journal", journal_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
