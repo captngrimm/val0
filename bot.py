@@ -1785,6 +1785,32 @@ async def whatnow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"No pude leer memoria reciente: {e}")
         return
 
+    try:
+        facts = get_all_facts(chat_id=int(chat_id)) or {}
+    except Exception as e:
+        logger.exception(f"[WHATNOW] facts fetch failed: {e}")
+        facts = {}
+
+    profile_keys = [
+        "preferred_name",
+        "primary_role",
+        "use_case",
+        "main_goal",
+        "friction_points",
+        "current_tools",
+        "tracking_buckets",
+        "starter_workflow",
+        "onboarding_status",
+    ]
+
+    profile_lines = []
+    for k in profile_keys:
+        v = str(facts.get(k) or "").strip()
+        if v:
+            profile_lines.append(f"- {k}: {v}")
+
+    profile_block = "\n".join(profile_lines) if profile_lines else "No operating profile saved yet."
+
     useful = []
     allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "parking_lot", "project"}
 
@@ -1840,7 +1866,11 @@ Use the recent structured memory below to recommend ONE grounded next step.
 Rules:
 - Be honest and concise.
 - Do not pretend to know more than the memory shows.
+- Use the operating profile to understand the user's role, goal, tools, friction points, and starter workflow.
+- If recent memory conflicts with the operating profile, recent memory wins.
 - If there is a follow_up/client/business item, prioritize the item closest to action or money.
+- If the profile includes a main_goal, connect the recommendation to that goal when relevant.
+- If the profile includes friction_points, prefer actions that reduce that friction.
 - If there is a reflection/care_mode item, acknowledge emotional load briefly but do not overdo it.
 - Do not give a giant plan.
 - Structure the answer clearly, but make it sound like Valeria, not a report template.
@@ -1860,6 +1890,9 @@ Rules:
 - Never say "empiezo a contactar", "voy a contactar", "I will contact", or equivalent unless the system actually sends the message.
 - Avoid sounding corporate or generic.
 - Respond in Spanish unless the user's language preference is English.
+
+OPERATING PROFILE:
+{profile_block}
 
 RECENT STRUCTURED MEMORY:
 {memory_block}
