@@ -3120,23 +3120,18 @@ def _extract_copy_target(text: str) -> str:
 def build_alpha_onboarding_reply(preferred_name: str = "") -> str:
     preferred_name = (preferred_name or "").strip()
     greeting = f"👀 Hola, {preferred_name}. " if preferred_name else "👀 Hola. "
-    name_prompt = "" if preferred_name else "\n\nAntes de empezar: ¿cómo quieres que te llame?"
+    name_prompt = "" if preferred_name else "\n\nAntes de empezar: dime cómo quieres que te llame."
 
     return (
-        f"{greeting}Estoy en modo alpha y no voy a fingir magia: soy Valeria, "
-        "software diseñado para ayudarte como segunda memoria y copiloto práctico.\n\n"
-        "Puedo ayudarte con:\n"
-        "1. 📝 Guardar notas\n"
-        "2. ⏰ Crear recordatorios\n"
-        "3. ✅ Organizar tareas\n"
-        "4. 📁 Dar seguimiento a casos o temas importantes\n"
-        "5. 🎙️ Entender mensajes de voz\n"
-        "6. 🧭 Recuperar el hilo cuando te pierdas\n\n"
-        "Para probarme, dime algo como:\n"
-        "• Guarda esta nota: comprar leche\n"
-        "• Recuérdame llamar mañana a las 9\n"
-        "• ¿Qué tengo pendiente?\n"
-        "• Estoy perdida, guíame."
+        f"{greeting}Soy Valeria, una asistente en founder beta dentro de Telegram. "
+        "Estoy para ayudarte a recordar, capturar y organizar cosas simples del día sin que todo viva en tu cabeza.\n\n"
+        "Prueba con una de estas:\n"
+        "1. Guarda esta nota: comprar leche\n"
+        "2. Recuérdame llamar mañana a las 9\n"
+        "3. Tengo una idea: Val debería ayudarme a no perder foco\n"
+        "4. ¿Qué tengo mañana?\n"
+        "5. Estoy perdida, ¿qué hago?\n\n"
+        "Si quieres ver más opciones, escribe: Ayuda"
         f"{name_prompt}"
     )
 
