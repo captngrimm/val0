@@ -138,3 +138,22 @@ Remaining polish:
 - /draftfollowup should preserve concrete entities from memory more strongly, such as Carlos, cotización solar, proveedor, quote, deadline.
 - /whatnow and draft follow-up should feel less generic over time.
 - Privacy/data boundary message needed before external tester use.
+
+## Follow-up draft trust fix
+
+Fixed recipient confusion in /draftfollowup.
+
+Previous bad behavior:
+- If memory mentioned Carlos needed the quote, Val sometimes drafted the supplier message as "Hola, Carlos."
+- This confused the client/requester with the supplier/provider.
+
+Correct behavior:
+- If Carlos needs the quote, Carlos is treated as the client/requester.
+- If provider name is unknown, draft uses a generic supplier greeting.
+- Draft preserves the useful context: cotización solar para Carlos.
+
+Proven output:
+"Hola, buen día. Queremos avanzar con la cotización solar para Carlos..."
+
+Why this matters:
+This prevents a real trust-killer in action drafts.
