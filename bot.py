@@ -1738,6 +1738,115 @@ RECENT STRUCTURED MEMORY:
     await update.message.reply_text("🧭 What now?\n\n" + reply)
 
 
+
+async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Clean Exocortex demo viewer.
+    Shows the latest grouped capture without dumping raw duplicate rows.
+    Usage:
+    /exosummary
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+
+    try:
+        from memory_store import fetch_recent_memory
+        rows = fetch_recent_memory(int(chat_id), limit=15)
+    except Exception as e:
+        logger.exception(f"[EXOSUMMARY] failed: {e}")
+        await update.message.reply_text(f"No pude leer memoria Exocortex reciente: {e}")
+        return
+
+    allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "parking_lot", "project"}
+    items = []
+
+    for row in rows or []:
+        r = dict(row) if hasattr(row, "keys") else {
+            "id": row[0],
+            "bucket": row[1],
+            "raw_input": row[2],
+            "summary": row[3],
+            "created_at": row[4],
+        }
+
+        bucket = str(r.get("bucket") or "").strip()
+        if bucket not in allowed:
+            continue
+
+        raw = str(r.get("raw_input") or "").strip()
+        if not raw:
+            continue
+
+        items.append({
+            "id": r.get("id"),
+            "bucket": bucket,
+            "raw": raw,
+            "summary": str(r.get("summary") or "").strip(),
+            "created_at": str(r.get("created_at") or "").strip(),
+        })
+
+    if not items:
+        await update.message.reply_text(
+            "🧠 Latest Exocortex capture\n\n"
+            "No encontré una captura Exocortex reciente.\n\n"
+            "Prueba primero con /journal."
+        )
+        return
+
+    # Group latest capture by raw text. Because /journal stores one row per bucket,
+    # the latest capture should share the same raw_input across buckets.
+    latest_raw = items[0]["raw"]
+    grouped = [x for x in items if x["raw"] == latest_raw]
+
+    # Fallback if raw text varies slightly.
+    if not grouped:
+        grouped = items[:3]
+
+    buckets = []
+    for x in grouped:
+        if x["bucket"] not in buckets:
+            buckets.append(x["bucket"])
+
+    summary = grouped[0].get("summary") or ""
+    created_at = grouped[0].get("created_at") or ""
+
+    label_map = {
+        "reflection": "Reflection",
+        "care_mode": "Care Mode",
+        "follow_up": "Follow-up",
+        "idea": "Idea",
+        "note": "Note",
+        "task": "Task",
+        "reminder": "Reminder",
+        "decision": "Decision",
+        "parking_lot": "Parking Lot",
+        "project": "Project",
+    }
+
+    lines = []
+    lines.append("🧠 Latest Exocortex capture")
+    lines.append("")
+    if created_at:
+        lines.append(f"When: {created_at}")
+        lines.append("")
+
+    lines.append("Detected:")
+    for b in buckets:
+        lines.append(f"- {label_map.get(b, b)}")
+
+    lines.append("")
+    lines.append("Summary:")
+    lines.append(summary or latest_raw[:300])
+
+    lines.append("")
+    lines.append("Next:")
+    lines.append("Ask /whatnow.")
+
+    await update.message.reply_text("\n".join(lines))
+
+
 async def exorecent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Debug-only Exocortex recent memory viewer.
@@ -10154,6 +10263,7 @@ def main():
     app.add_handler(CommandHandler("rmd", rmd_cmd))
     app.add_handler(CommandHandler("classify", classify_cmd))
     app.add_handler(CommandHandler("whatnow", whatnow_cmd))
+    app.add_handler(CommandHandler("exosummary", exosummary_cmd))
     app.add_handler(CommandHandler("exorecent", exorecent_cmd))
     app.add_handler(CommandHandler("journal", journal_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
