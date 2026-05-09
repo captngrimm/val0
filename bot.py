@@ -3218,6 +3218,17 @@ FOUNDER-BETA SAFE FACTS:
         reply = (reply or "").strip()
         if not reply:
             return None
+
+        # Founder-beta safety polish: prevent misleading reminder/notification wording.
+        reply = reply.replace(
+            "no genero notificaciones automáticas",
+            "puedo crear recordatorios para avisarte, aunque todavía no soy un calendario completo"
+        )
+        reply = reply.replace(
+            "No genero notificaciones automáticas",
+            "Puedo crear recordatorios para avisarte, aunque todavía no soy un calendario completo"
+        )
+
         return reply
     except Exception:
         return None
