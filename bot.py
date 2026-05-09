@@ -3164,7 +3164,7 @@ def build_alpha_lost_reply(preferred_name: str = "") -> str:
     name_line = f"{safe_name}, " if safe_name and safe_name.lower() not in ("boss", "jefe") else ""
 
     return (
-        f"{name_line}tranquilo. No hay que resolver la vida completa ahorita. "
+        f"{name_line}Tranquilo. No hay que resolver la vida completa ahorita. "
         "Vamos por una cosa.\n\n"
         "Escoge una:\n"
         "1. Revisar qué tienes pendiente\n"
