@@ -3476,6 +3476,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(reply)
             return
 
+        if text_norm_greet in lost_markers:
+            reply = build_alpha_lost_reply(preferred_name)
+            await update.message.reply_text(reply)
+            return
+
         identity_markers = (
             "quien eres",
             "quién eres",
