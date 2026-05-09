@@ -59,6 +59,17 @@ Val recovers:
 
 Val recommends one practical next step.
 
+### 4. Draft the follow-up
+
+Send:
+
+/draftfollowup
+
+Expected:
+Val drafts a practical supplier follow-up message based on the recent follow_up memory.
+
+This proves the loop can move from memory into action support.
+
 ## What this proves
 
 messy input

@@ -129,3 +129,30 @@ Remaining polish:
 - natural-language routing without slash commands
 - bucket-specific summaries
 - optional follow-up drafting
+
+## Action layer update
+
+Added /draftfollowup as the first Exocortex action-layer demo.
+
+Current full demo flow:
+
+1. /journal <messy life/work update>
+2. /exosummary
+3. /whatnow
+4. /draftfollowup
+
+Proven behavior:
+- Val captures messy context.
+- Val stores structured memory.
+- Val recovers context.
+- Val recommends a next step.
+- Val drafts a practical follow-up message from recent follow_up memory.
+
+Why this matters:
+This turns the Exocortex loop from passive memory into action support.
+
+Known limitation:
+- /draftfollowup does not send messages.
+- /draftfollowup uses recent follow_up memory only.
+- recipient detection is still basic.
+- draft is generic but useful.
