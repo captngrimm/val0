@@ -2008,6 +2008,13 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             continue
 
         raw = str(r.get("raw_input") or "").strip()
+        summary = str(r.get("summary") or "").strip()
+
+        # Hide low-quality generic classifier artifacts from demo summary.
+        # They may still exist in raw memory, but should not pollute the user-facing view.
+        if bucket == "task" and summary in {"task_low", "task_medium", "task_high"}:
+            continue
+
         if not raw:
             continue
 
@@ -2015,7 +2022,7 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "id": r.get("id"),
             "bucket": bucket,
             "raw": raw,
-            "summary": str(r.get("summary") or "").strip(),
+            "summary": summary,
             "created_at": str(r.get("created_at") or "").strip(),
         })
 
