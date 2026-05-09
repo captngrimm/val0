@@ -1846,7 +1846,9 @@ Rules:
 - Give exactly:
   1) "Veo esto:" with 2-4 bullets
   2) "Mi recomendación:" with one next step
-  3) optional "Puedo ayudarte a..." with one concrete offer
+  3) "Siguiente acción:" with one concrete action the user can take now
+- Do not end with "si quieres" or passive optional wording.
+- Be helpful but directive.
 - Do not claim reminders were created unless memory says so.
 - Respond in Spanish unless the user's language preference is English.
 
