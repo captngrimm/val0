@@ -4350,7 +4350,8 @@ Rules:
 - You route. You do not execute.
 - Prefer normal_chat if unsure.
 - Use high confidence only when intent is clear.
-- If user says "what should I do", "qué hago", "por dónde empiezo", route whatnow.
+- If user says "what should I do", "what should I do first", "what do I do first", "qué hago", "qué debería hacer primero", "qué hago primero", "por dónde empiezo", route whatnow.
+- If the user asks for prioritization, first step, next step, or where to begin, route whatnow.
 - If user says "what did you save", "qué guardaste", "muéstrame el resumen", route exosummary.
 - If user says "write the message", "hazme el mensaje", "redáctame eso", "qué le digo", route draft_followup.
 - If user tells a messy story/update about their day/work/life with enough detail, route journal_capture.
@@ -5079,6 +5080,41 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
             await update.message.reply_text(reply)
             return
+
+        # --------------------------------------------------
+        # PRIORITY DECISION / WHATNOW GUARD
+        # Must run before task/commitment capture so questions like
+        # "¿Qué debería hacer primero?" do not become fake tasks.
+        # --------------------------------------------------
+        try:
+            whatnow_priority_markers = (
+                "que deberia hacer primero",
+                "qué debería hacer primero",
+                "que debo hacer primero",
+                "qué debo hacer primero",
+                "que hago primero",
+                "qué hago primero",
+                "que hago ahora",
+                "qué hago ahora",
+                "por donde empiezo",
+                "por dónde empiezo",
+                "cual es el primer paso",
+                "cuál es el primer paso",
+                "cual es el siguiente paso",
+                "cuál es el siguiente paso",
+                "what should i do first",
+                "what do i do first",
+                "where do i start",
+                "what is the first step",
+                "what is the next step",
+            )
+
+            if any(m in text_norm_greet for m in whatnow_priority_markers):
+                await whatnow_cmd(update, context)
+                return
+
+        except Exception as e:
+            logger.exception(f"[WHATNOW_PRIORITY_GUARD] failed: {e}")
 
         # --------------------------------------------------
         # LLM OPERATOR ROUTER V1
