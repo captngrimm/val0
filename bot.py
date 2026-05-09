@@ -3226,6 +3226,19 @@ FOUNDER-BETA SAFE FACTS:
         for bad, good in notification_replacements.items():
             reply = reply.replace(bad, good)
 
+        # Broader cleanup: the model sometimes says "no esperes notificaciones..."
+        # which is misleading because Val0 can create reminders that notify.
+        reply = re.sub(
+            r"(?i)(no\s+esperes\s+notificaciones\s+autom[aá]ticas)",
+            "puedo crear recordatorios para avisarte",
+            reply,
+        )
+        reply = re.sub(
+            r"(?i)(no\s+(puedo|genera|genero|manejo|env[ií]o)\s+notificaciones\s+autom[aá]ticas)",
+            "puedo crear recordatorios para avisarte",
+            reply,
+        )
+
         return reply
     except Exception:
         return None
