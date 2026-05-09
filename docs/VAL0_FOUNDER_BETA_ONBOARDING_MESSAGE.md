@@ -1,33 +1,20 @@
-# VAL0 FOUNDER-BETA ONBOARDING MESSAGE
-
 Hola 👋
 
-Estoy abriendo una beta limitada de Val0.
+Estoy abriendo una founder beta privada de Val0.
 
-Val0 es una asistente por Telegram que te ayuda a:
-- recordar pendientes
-- organizar tareas
-- guardar notas
-- revisar lo que tienes pendiente
-- manejar cosas simples como recordatorios, agenda, documentos y seguimiento diario
+Val0 es una asistente por Telegram que te ayuda a recordar pendientes, guardar notas, crear recordatorios, capturar ideas y revisar qué tienes pendiente o qué tienes mañana.
 
-Todavía no es una app perfecta ni masiva.
-Es una founder beta guiada.
-
-La idea es simple:
-la pruebas conmigo, me dices qué funciona, qué confunde y qué te gustaría que hiciera mejor.
+Todavía no es una app final ni perfecta. Es una beta guiada: la pruebas conmigo, me dices qué funciona, qué confunde y qué te gustaría mejorar.
 
 Precio founder beta:
 $30/mes
 
-Qué incluye:
+Incluye:
 - onboarding conmigo
-- uso del bot por Telegram
-- soporte directo para reportar errores o ideas
-- mejoras rápidas según feedback real
+- uso privado de Val0 por Telegram
+- soporte directo para errores, ideas y feedback
+- mejoras rápidas según uso real
 
-Importante:
-puede fallar, puede confundirse y todavía estamos puliendo el flujo.
-Pero ya sirve para probar casos reales y mejorar con usuarios reales.
+La idea no es venderte magia. La idea es ver si te ayuda en tu día real.
 
-Si quieres, te puedo hacer una demo rápida y vemos si te sirve.
+Si te interesa, te hago una demo corta y vemos si te sirve.

@@ -1,17 +1,25 @@
-Hola. Estoy probando una alpha temprana de Val0.
+Hola 👋
 
-Val0 es una operadora diseñada para ayudar a pensar, recordar, organizar y ejecutar con menos fricción. Todavía no es un producto terminado, así que no te la estoy presentando como magia ni como algo perfecto. Lo que necesito en esta etapa es uso real y feedback honesto.
+Estoy abriendo una beta privada de Val0.
 
-Si te animas a probarla, la idea es que la uses de forma normal y me digas dónde:
+Val0 es una asistente por Telegram que te ayuda a recordar pendientes, guardar notas, crear recordatorios, capturar ideas y recuperar el hilo cuando tienes demasiadas cosas en la cabeza.
 
-* te ahorró tiempo
-* se sintió útil
-* se confundió
-* perdió el hilo
-* sonó rara
-* falló en voz, recordatorios o agenda
+Todavía está en founder beta: no es perfecta, puede confundirse y no promete magia. Pero ya sirve para casos reales.
 
-El mejor feedback no es “ta cool”, sino ejemplos concretos. Si algo falla, mejor todavía: para eso es la alpha.
+Lo que necesito de los primeros testers es uso real y feedback honesto:
+- qué te ayudó
+- qué te confundió
+- qué se sintió útil
+- qué se sintió raro
+- qué falló en notas, voz, recordatorios o agenda
 
-También te voy a pasar una guía corta de qué cosas probar para que no tengas que adivinar.
+Precio founder beta:
+$30/mes
 
+Incluye:
+- onboarding conmigo
+- uso privado por Telegram
+- soporte directo
+- mejoras rápidas según feedback real
+
+Si te interesa, te hago una demo corta y vemos si te sirve.

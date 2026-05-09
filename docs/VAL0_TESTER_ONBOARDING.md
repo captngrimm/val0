@@ -1,47 +1,69 @@
-# Val0 Tester Onboarding
+# VAL0 TESTER ONBOARDING
 
-## Short Intro
+## Qué es Val0
 
-Bienvenido/a a Val0.
+Val0 es una asistente por Telegram en founder beta.
 
-Val0 es una asistente por Telegram con memoria persistente. Te ayuda a guardar notas, crear recordatorios, llevar tareas pendientes y recuperar qué tienes pendiente.
+Te ayuda a:
+- guardar notas
+- crear recordatorios
+- capturar ideas
+- organizar tareas simples
+- revisar qué tienes pendiente
+- ver qué tienes mañana
+- recuperar el hilo cuando no sabes por dónde seguir
 
-Esto es una beta privada. Puede fallar. Si algo se rompe, repórtalo con /bug.
+Telegram es la primera interfaz porque es rápida, familiar y permite texto y voz. Val0 no es “solo un bot” como visión final; es el primer paso hacia una capa operativa más útil.
 
-## What To Try First
+## Qué probar primero
+
+Manda estos mensajes en orden:
 
 1. Hola
-2. ¿Qué puedes hacer?
-3. Me llamo [tu nombre]
+2. ¿Qué eres?
+3. ¿Qué puedes hacer?
 4. Guarda esta nota: comprar leche
-5. /notes
-6. Recuérdame llamar mañana a las 9
-7. /reminders
-8. ¿Qué tengo pendiente?
+5. Recuérdame llamar mañana a las 9
+6. Tengo una idea: Val debería ayudarme a no perder foco
+7. /cancelreport
+8. Estoy perdida, ¿qué hago?
 9. ¿Qué tengo mañana?
-10. Tengo que revisar algo mañana
-11. /tasks
-12. Ya hice revisar algo
-13. ¿Qué recuerdas de mí?
 
-## Support Commands
+## Comandos útiles
 
-/bug [qué pasó]  
-/feedback [comentario]  
-/idea [idea]  
-/voice on  
-/voice off  
+- /bug — reportar algo que falló
+- /feedback — dejar comentario
+- /idea — registrar una idea
+- /reminders — ver recordatorios
+- /rmd <id> — cancelar un recordatorio
+- /voice on — activar modo voz cuando tenga sentido
+- /voice off — volver a texto normal
 
-## Beta Boundaries
+## Qué NO esperar todavía
 
 Val0 todavía no promete:
-- memoria infinita perfecta
-- automatización total
-- reemplazo de calendario completo
-- sistema empresarial
-- soporte legal/profesional garantizado
+- memoria perfecta
+- autonomía completa
+- calendario profesional completo
+- cero errores
+- app final pulida
+- reemplazar a una asistente humana
 
-## Founder Beta
+## Cómo dar buen feedback
 
-Precio sugerido: $30/mes  
-Incluye: acceso privado, onboarding personal y soporte directo durante la beta.
+El mejor feedback incluye ejemplo concreto.
+
+Formato ideal:
+
+- Quise hacer:
+- Val respondió:
+- Yo esperaba:
+- ¿Fue por texto o voz?
+- ¿Fue confuso, útil, raro o falló?
+
+## Objetivo de la beta
+
+Queremos saber si Val0 realmente reduce fricción diaria.
+
+La pregunta clave:
+¿Te ayuda a recordar, capturar y avanzar con menos esfuerzo?
