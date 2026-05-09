@@ -1817,7 +1817,7 @@ async def whatnow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile_block = "\n".join(profile_lines) if profile_lines else "No operating profile saved yet."
 
     useful = []
-    allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "parking_lot", "project"}
+    allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "project"}
 
     for row in rows or []:
         r = dict(row) if hasattr(row, "keys") else {
@@ -1846,7 +1846,7 @@ async def whatnow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not useful:
         await update.message.reply_text(
-            "🧭 What now?\n\n"
+            "🧭 Qué hago ahora\n\n"
             "No tengo suficiente memoria estructurada reciente para recomendar un siguiente paso.\n\n"
             "Prueba primero con /exotest usando un mensaje real de tu día."
         )
@@ -1885,7 +1885,8 @@ Rules:
   3) "Siguiente acción:" with one concrete action the user can take now
 - Do not end with "si quieres", "dime si quieres", "puedo ayudarte si quieres", or passive optional wording.
 - In "Siguiente acción:", give a concrete command or action.
-- If the next step is drafting a follow-up, explicitly say exactly: "Usa /draftfollowup para preparar el mensaje."
+- If the next step is drafting a follow-up, tell the user naturally: "Dime: hazme el mensaje."
+- Do not tell normal users to use /draftfollowup unless they specifically use commands.
 - Do not add "si quieres" after that instruction.
 - Avoid permission-softening on demo/action commands.
 - Be helpful, direct, and grounded.
@@ -1922,7 +1923,7 @@ RECENT STRUCTURED MEMORY:
             "Mi recomendación: revisa el seguimiento más cercano a acción o dinero."
         )
 
-    await update.message.reply_text("🧭 What now?\n\n" + reply)
+    await update.message.reply_text("🧭 Qué hago ahora\n\n" + reply)
 
 
 
@@ -1946,7 +1947,7 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"No pude leer memoria Exocortex reciente: {e}")
         return
 
-    allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "parking_lot", "project"}
+    allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "project"}
     items = []
 
     for row in rows or []:
@@ -2040,7 +2041,7 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lines.append("")
     lines.append("Siguiente paso:")
-    lines.append("Pregunta /whatnow.")
+    lines.append("Pregunta: ¿Qué hago ahora?")
 
     await update.message.reply_text("\n".join(lines))
 
