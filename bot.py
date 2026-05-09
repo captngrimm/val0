@@ -5081,7 +5081,43 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         # --------------------------------------------------
+        # LLM OPERATOR ROUTER V1
+        # --------------------------------------------------
+        operator_route = "normal_chat"
+        operator_confidence = 0.0
+
+        try:
+            # Keep this conservative: only route meaningful non-tiny messages.
+            if text and len(text.strip()) >= 8:
+                routed = route_operator_intent(
+                    chat_id=int(chat_id),
+                    user_text=text,
+                    preferred_language=preferred_language or "es",
+                )
+                operator_route = str(routed.get("route") or "normal_chat").strip()
+                operator_confidence = float(routed.get("confidence") or 0.0)
+
+                if operator_confidence >= 0.82 and operator_route == "whatnow":
+                    await whatnow_cmd(update, context)
+                    return
+
+                if operator_confidence >= 0.82 and operator_route == "exosummary":
+                    await exosummary_cmd(update, context)
+                    return
+
+                if operator_confidence >= 0.82 and operator_route == "draft_followup":
+                    await draftfollowup_cmd(update, context)
+                    return
+
+                # journal_capture is handled below by Natural Smart Journal.
+                # flow_request remains command-based for now to avoid accidental roadmap spam.
+
+        except Exception as e:
+            logger.exception(f"[LLM_OPERATOR_ROUTER_GATE] failed: {e}")
+
+        # --------------------------------------------------
         # NATURAL OPERATOR COMMAND ROUTES (FRIENDLY MARK 1)
+        # Fallback phrase routes if LLM router fails or confidence is low.
         # --------------------------------------------------
         try:
             whatnow_natural_markers = (
@@ -5200,12 +5236,19 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
 
             looks_like_journal = (
-                len(text or "") >= 45
-                and (
-                    any(m in text_norm_greet for m in natural_journal_markers)
-                    or (
-                        any(m in text_norm_greet for m in business_journal_markers)
-                        and any(x in text_norm_greet for x in ("save", "guarda", "idea", "abrum", "rough", "pesado", "dificil", "difícil"))
+                (
+                    operator_route == "journal_capture"
+                    and operator_confidence >= 0.75
+                    and len(text or "") >= 25
+                )
+                or (
+                    len(text or "") >= 45
+                    and (
+                        any(m in text_norm_greet for m in natural_journal_markers)
+                        or (
+                            any(m in text_norm_greet for m in business_journal_markers)
+                            and any(x in text_norm_greet for x in ("save", "guarda", "idea", "abrum", "rough", "pesado", "dificil", "difícil"))
+                        )
                     )
                 )
             )
