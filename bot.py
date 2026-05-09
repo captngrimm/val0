@@ -1618,6 +1618,123 @@ async def classify_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+
+async def exotest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Debug-only Exocortex Mark 1 test.
+    Usage:
+    /exotest Val, today was rough. Carlos still needs the solar quote, supplier didn’t answer, and I’m honestly overwhelmed. Also save the supplier follow-up idea.
+
+    This command:
+    - classifies messy input
+    - stores classifier buckets into memory_items
+    - replies with a crude Wow Loop summary
+    - does NOT create reminders yet
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    text = " ".join(context.args or []).strip()
+
+    if not text:
+        await update.message.reply_text(
+            "Uso: /exotest <mensaje>\n\n"
+            "Ejemplo:\n"
+            "/exotest Val, hoy fue pesado. Carlos necesita la cotización solar, "
+            "el proveedor no respondió, y estoy abrumado. Guarda la idea de seguimiento a proveedores."
+        )
+        return
+
+    try:
+        preferred_language = get_fact(chat_id=chat_id, fact_key="preferred_language") or "es"
+    except Exception:
+        preferred_language = "es"
+
+    data = classify_exocortex_intent(
+        chat_id=int(chat_id),
+        user_text=text,
+        preferred_language=preferred_language,
+    )
+
+    buckets = data.get("buckets") or ["normal_chat"]
+    summary = (data.get("summary") or "").strip()
+    confidence = data.get("confidence", 0.0)
+    suggested_action = data.get("suggested_action", "reply_only")
+
+    # Safe storage only. No automatic reminders/tasks yet.
+    stored = []
+    try:
+        from memory_store import insert_memory_item
+
+        for bucket in buckets:
+            bucket = str(bucket or "").strip()
+            if not bucket:
+                continue
+
+            # Keep Mark 1 conservative: store only exocortex-relevant buckets.
+            if bucket not in (
+                "note",
+                "idea",
+                "reflection",
+                "care_mode",
+                "decision",
+                "parking_lot",
+                "project",
+                "follow_up",
+                "normal_chat",
+                "task",
+                "reminder",
+            ):
+                bucket = "normal_chat"
+
+            insert_memory_item(
+                chat_id=int(chat_id),
+                bucket=bucket,
+                raw_input=text,
+                summary=summary or f"exocortex:{bucket}",
+            )
+            stored.append(bucket)
+
+    except Exception as e:
+        logger.exception(f"[EXOTEST] storage failed: {e}")
+        await update.message.reply_text(f"Exocortex storage error: {e}")
+        return
+
+    lines = []
+    lines.append("🧠 Exocortex Mark 1 test")
+    lines.append("")
+    lines.append("Estoy sorting that — versión cruda.")
+    lines.append("")
+    lines.append("Detecté:")
+    for bucket in stored:
+        label = {
+            "reflection": "Reflexión",
+            "care_mode": "Care Mode",
+            "follow_up": "Seguimiento",
+            "idea": "Idea",
+            "note": "Nota",
+            "task": "Tarea",
+            "reminder": "Recordatorio",
+            "decision": "Decisión",
+            "parking_lot": "Parking Lot",
+            "project": "Proyecto",
+            "normal_chat": "Conversación",
+        }.get(bucket, bucket)
+        lines.append(f"- {label}")
+
+    lines.append("")
+    lines.append(f"Resumen: {summary or 'sin resumen'}")
+    lines.append(f"Confianza: {confidence}")
+    lines.append(f"Acción sugerida: {suggested_action}")
+    lines.append("")
+    lines.append("Guardé esto como memoria estructurada Mark 1.")
+    lines.append("")
+    lines.append("Siguiente paso demo: pregúntame luego /memory o probamos un /whatnow Mark 1.")
+
+    await update.message.reply_text("\n".join(lines))
+
+
 async def memory_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     facts = get_all_facts(chat_id)
@@ -9723,6 +9840,7 @@ def main():
     #app.add_handler(CommandHandler("cancel", rmd_cmd))
     app.add_handler(CommandHandler("rmd", rmd_cmd))
     app.add_handler(CommandHandler("classify", classify_cmd))
+    app.add_handler(CommandHandler("exotest", exotest_cmd))
     app.add_handler(CommandHandler("memory", memory_cmd))
     app.add_handler(CommandHandler("status", status_cmd))
     app.add_handler(CommandHandler("tasks", tasks_cmd))
