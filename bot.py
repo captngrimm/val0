@@ -3251,8 +3251,12 @@ Rules:
 - If the user says they have an idea, include idea.
 - If the user describes something to remember without action, include note.
 - If the message contains multiple things, return multiple buckets.
+- If a person/client/customer/provider/supplier still needs something, include follow_up.
+- If the user says someone "needs" something, "is waiting", "didn't answer", "hasn't replied", or "still needs X", include follow_up.
+- If a supplier/provider/vendor did not answer or caused friction, include follow_up and summarize it as supplier/provider friction.
+- If business context appears, preserve concrete entities in summary: people, client names, supplier/provider, quote, payment, appointment, delivery.
 - If uncertain, use normal_chat and set needs_clarification true only if needed.
-- Keep summary short and factual.
+- Keep summary short and factual, but include concrete action/context items.
 - Do not invent details.
 
 JSON schema:
