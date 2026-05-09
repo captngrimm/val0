@@ -9,12 +9,18 @@ This is the first impression demo.
 ## Positioning
 Val0 is a Telegram-based personal operator in founder beta.
 
-It helps users:
-- remember
-- capture notes and ideas
-- create reminders
-- recover what is pending
-- reduce daily mental noise
+Telegram is the first interface because it is fast, familiar, and already supports chat and voice notes.
+
+Val0 is not meant to be "just a Telegram bot" forever.
+The long-term direction is a broader personal operator layer, with a dedicated app or richer interface later if users prove the need.
+
+## What Val0 helps with today
+- remembering
+- capturing notes
+- capturing ideas
+- creating reminders
+- checking tomorrow / pending items
+- reducing daily mental noise
 
 ## Demo rule
 Use natural language first.
@@ -66,7 +72,7 @@ User:
 Recuérdame llamar a mamá mañana a las 9
 
 Expected:
-Valeria creates the reminder.
+Valeria creates the reminder or warns if a duplicate exists.
 
 ### 6. Idea capture
 User:
@@ -74,6 +80,11 @@ Tengo una idea: Val debería ayudarme a no perder foco
 
 Expected:
 Valeria routes it as an idea, not a task.
+
+Important:
+Cancel the idea flow before continuing the demo:
+User:
+/cancelreport
 
 ### 7. Recovery
 User:
@@ -95,9 +106,11 @@ Valeria shows tomorrow’s reminders/tasks.
 ## Close
 Say:
 
-Esto es founder beta.
-La promesa no es magia.
-La promesa es que Val0 te ayude a recordar, capturar y avanzar con menos fricción.
+Val0 starts in Telegram on purpose. It is fast, familiar, and easy to test.
+The promise today is not magic.
+The promise is that Val0 helps you remember, capture, and keep moving with less friction.
+
+If this feels useful, the founder beta is $30/month and your feedback shapes what gets built next.
 
 ## Score
 After demo, score:
