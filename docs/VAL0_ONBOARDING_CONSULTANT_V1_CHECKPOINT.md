@@ -75,3 +75,38 @@ Profile-aware /whatnow:
 Example:
 If user is a solar installer and suppliers are the friction, /whatnow should prioritize quote/supplier follow-up over generic advice.
 
+
+## Profile-aware recovery update
+
+Profile-aware /whatnow is working.
+
+After onboarding, /whatnow now uses operating profile facts:
+- preferred_name
+- primary_role
+- use_case
+- main_goal
+- friction_points
+- current_tools
+- tracking_buckets
+- starter_workflow
+- onboarding_status
+
+Proven behavior:
+For a solar installer profile, /whatnow used:
+- goal: cerrar cotizaciones más rápido
+- tools: WhatsApp y Excel
+- friction: proveedores no responden / seguimientos perdidos
+- workflow: clientes/proveedores → cotizaciones/seguimientos → /whatnow → /draftfollowup
+
+Result:
+Val recommended reviewing pending quotes/follow-ups and using /draftfollowup to prepare a reactivation message.
+
+Product meaning:
+Val now connects first-contact onboarding to daily recovery/advice.
+
+This is the first bridge between:
+Onboarding Consultant
+→ Operating Profile
+→ Smart Journal
+→ What Now recovery
+→ Action support
