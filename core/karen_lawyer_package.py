@@ -111,7 +111,7 @@ def _latest_lines(items: list[str], empty: str, limit: int = 3) -> list[str]:
 def _holder_fallback_from_documents(documents: list[str]) -> list[str]:
     """
     If custody was captured inside the inventory text but not saved as a separate
-    holder note, pull the obvious custody sentence into the package.
+    holder note, extract only the custody bits for the lawyer package.
     """
     clean = [x.strip() for x in documents if x and x.strip()]
     if not clean:
@@ -120,10 +120,24 @@ def _holder_fallback_from_documents(documents: list[str]) -> list[str]:
     latest = clean[-1]
     low = latest.lower()
 
-    if not any(x in low for x in ["karen tiene", "frank tiene", "familiar tiene", "tiene algunos", "tiene fotos"]):
-        return []
+    holders = []
 
-    return [latest]
+    if "karen tiene" in low or "karen tiene algunos" in low:
+        holders.append("Karen tiene algunos documentos.")
+
+    if "frank tiene" in low or "fotos por whatsapp" in low:
+        holders.append("Frank tiene fotos por WhatsApp.")
+
+    if "un familiar tiene" in low or "familiar tiene" in low or "papeles físicos" in low or "papeles fisicos" in low:
+        holders.append("Un familiar tiene papeles físicos que hay que revisar o escanear.")
+
+    # Preserve order and remove duplicates.
+    unique = []
+    for item in holders:
+        if item not in unique:
+            unique.append(item)
+
+    return unique
 
 
 def render_lawyer_package(chat_id: int) -> str:
