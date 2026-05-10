@@ -10343,6 +10343,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[COMPLETION_LOOP] failed: {e}")
 
     # --------------------------------------------------
+    # Reminder Priority Gate
+    # Must run before Karen appointment/case gates so "Val, recuérdame..."
+    # creates a real reminder instead of becoming case status/appointment memory.
+    # --------------------------------------------------
+    try:
+        if await handle_reminder_gate(update, chat_id, text, _audit):
+            return
+    except Exception as e:
+        logger.exception(f"[REMINDER_PRIORITY_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # Karen Pasted Transcript Guard gate
     # If a Karen guided flow is active and user pastes a long transcript/log,
     # ask before consuming it as the current answer.

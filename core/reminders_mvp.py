@@ -24,6 +24,16 @@ _RE_HOUR = re.compile(
     rf"(?is)^\s*{_VERB}\s+(?P<what>.+?)\s+en\s+(?P<n>\d{{1,4}})\s+horas?\s*$"
 )
 
+# Natural speech variants:
+# - "recuérdame en 5 minutos revisar documentos"
+# - "recuérdame en 2 horas llamar a Nora"
+_RE_MIN_FIRST = re.compile(
+    rf"(?is)^\s*{_VERB}\s+en\s+(?P<n>\d{{1,4}})\s+minutos?\s+(?P<what>.+?)\s*$"
+)
+_RE_HOUR_FIRST = re.compile(
+    rf"(?is)^\s*{_VERB}\s+en\s+(?P<n>\d{{1,4}})\s+horas?\s+(?P<what>.+?)\s*$"
+)
+
 # time token supports: 15:30, 3pm, 3 pm, 3:15pm, 03:05
 _TIME_TOKEN = r"(?P<t>(?:\d{1,2}:\d{2})|(?:\d{1,2}(?::\d{2})?\s*(?:am|pm))|(?:\d{1,2}))"
 
@@ -218,6 +228,12 @@ async def try_cancel_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
     t = (text or "").strip()
     t = re.sub(r"[.!?]+$", "", t).strip()
+
+    # Allow wake-word prefixes from text/STT:
+    # "Val, recuérdame..." / "Pal, recuérdame..." / "Bal, recuérdame..."
+    # Whisper sometimes hears Val as PAL/Bal.
+    t = re.sub(r"(?is)^\s*(?:val|pal|bal)\s*,?\s+", "", t).strip()
+
     if not t:
         return False
 
@@ -339,7 +355,85 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
     if not t:
         return False
 
-    # 1) "en N minutos"
+    # 0a) "en N minutos X" natural speech order
+    m = _RE_MIN_FIRST.match(t)
+    if m:
+        what = (m.group("what") or "").strip()
+        n = int(m.group("n") or "0")
+        if n <= 0 or n > 1440:
+            await update.message.reply_text("Dame minutos entre 1 y 1440.")
+            return True
+        if not what:
+            await update.message.reply_text("¿Qué quieres que recuerde? Ej: Recuérdame en 10 minutos pagar X.")
+            return True
+
+        due_utc = datetime.now(timezone.utc) + timedelta(minutes=n)
+        due_str = _to_utc_iso(due_utc)
+        parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
+
+        if audit_fn:
+            audit_fn(
+                chat_id=int(chat_id),
+                action="CMD_REMINDER_CREATE",
+                entity_type="reminder",
+                entity_id=str(rid),
+                payload=f"mode=minutes_first | due_at_utc={due_str} | text={what}"[:500],
+                source="dm",
+            )
+
+        await update.message.reply_text(f"Listo. Te lo recuerdo en {n} minuto(s).")
+        return True
+
+    # 0b) "en N horas X" natural speech order
+    m = _RE_HOUR_FIRST.match(t)
+    if m:
+        what = (m.group("what") or "").strip()
+        n = int(m.group("n") or "0")
+        if n <= 0 or n > 24:
+            await update.message.reply_text("Dame horas entre 1 y 24.")
+            return True
+        if not what:
+            await update.message.reply_text("¿Qué quieres que recuerde? Ej: Recuérdame en 2 horas llamar a Nora.")
+            return True
+
+        due_utc = datetime.now(timezone.utc) + timedelta(hours=n)
+        due_str = _to_utc_iso(due_utc)
+        parent_ref = _extract_case_parent_ref(what)
+        if await _warn_duplicate_reminder_if_needed(update, int(chat_id), due_str, what):
+            return True
+        rid = insert_reminder(
+            chat_id=int(chat_id),
+            due_at_utc=due_str,
+            text=what,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=parent_ref,
+        )
+
+        if audit_fn:
+            audit_fn(
+                chat_id=int(chat_id),
+                action="CMD_REMINDER_CREATE",
+                entity_type="reminder",
+                entity_id=str(rid),
+                payload=f"mode=hours_first | due_at_utc={due_str} | text={what}"[:500],
+                source="dm",
+            )
+
+        await update.message.reply_text(f"Listo. Te lo recuerdo en {n} hora(s).")
+        return True
+
+    # 1) "X en N minutos"
     m = _RE_MIN.match(t)
     if m:
         what = (m.group("what") or "").strip()

@@ -85,6 +85,20 @@ async def maybe_handle_karen_appointment(update: Update, context: ContextTypes.D
 
     raw = _clean_appointment_text(text)
 
+    # Reminder phrases must be handled by the reminder system, not appointment memory.
+    # Examples:
+    # - Val, recuérdame en 5 minutos revisar documentos
+    # - recuérdame dos horas antes llevar documentos a Nora
+    reminderish = _norm(raw)
+    if (
+        reminderish.startswith("recuerdame")
+        or reminderish.startswith("recuérdame")
+        or reminderish.startswith("recordatorio")
+        or reminderish.startswith("acuerdame")
+        or reminderish.startswith("acuérdame")
+    ):
+        return False
+
     if not (_looks_like_appointment(raw) or _looks_like_reschedule(raw)):
         return False
 
