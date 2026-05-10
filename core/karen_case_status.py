@@ -73,8 +73,9 @@ def _safe_case_name(items: list[str]) -> str:
     )
 
     low = (picked or "").lower().strip()
+    low_clean = low.strip(" .,:;¡!¿?")
 
-    if not picked or len(picked) < 5 or low in {"o familiar", "familiar", "terreno"}:
+    if not picked or len(picked) < 5 or low_clean in {"o familiar", "familiar", "terreno"}:
         return "Terreno familiar"
 
     return picked
