@@ -3000,6 +3000,20 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         logger.exception(f"[VOICE_TOMORROW_DASHBOARD_OVERRIDE] failed: {e}")
 
+    # --------------------------------------------------
+    # VOICE → TEXT PIPELINE ALIGNMENT
+    # --------------------------------------------------
+    # Voice should behave like the same text typed by the user.
+    # Older code below classifies voice into memory/tasks before Karen routes,
+    # which caused wrong replies like "no hago recordatorios" or "no encuentro ese caso".
+    # For Karen/Val0 reliability, send transcription into the canonical text pipeline first.
+    try:
+        logger.info(f"[VOICE_PIPELINE] routing transcription through text pipeline: {transcribed_text!r}")
+        await _process_text_pipeline(update, context, transcribed_text)
+        return
+    except Exception as e:
+        logger.exception(f"[VOICE_PIPELINE] canonical text pipeline failed, falling back to legacy voice path: {e}")
+
     from memory_store import insert_memory_item
 
     logger.info(f"[MEMORY_TEST] inserting memory for chat_id={chat_id}: {transcribed_text}")
