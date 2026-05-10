@@ -10306,28 +10306,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_TRANSCRIPT_GUARD_GATE] failed: {e}")
 
     # --------------------------------------------------
-    # Karen Interrogator handle_text gate
-    # Must run before unified memory/task capture so "hay que..."
-    # answers are not stolen by task creation.
-    # --------------------------------------------------
-    try:
-        if await maybe_handle_karen_interrogator(update, context, chat_id, text):
-            return
-    except Exception as e:
-        logger.exception(f"[KAREN_INTERROGATOR_HANDLE_TEXT_GATE] failed: {e}")
-
-    # --------------------------------------------------
-    # Karen Document Inventory active-answer gate
-    # If document inventory is active, consume the answer
-    # before memory/task/case layers steal it.
-    # --------------------------------------------------
-    try:
-        if await maybe_handle_document_inventory(update, context, chat_id, text):
-            return
-    except Exception as e:
-        logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
-
-    # --------------------------------------------------
     # Karen Recent Case Activity gate
     # Captures "registra este evento..." and answers "últimos eventos/datos compartidos"
     # before generic facts/status handlers hijack the request.
@@ -10357,6 +10335,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_NATURAL_INVENTORY_START] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Interrogator handle_text gate
+    # Must run before unified memory/task capture so "hay que..."
+    # answers are not stolen by task creation.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_interrogator(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_INTERROGATOR_HANDLE_TEXT_GATE] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Document Inventory active-answer gate
+    # If document inventory is active, consume the answer
+    # before memory/task/case layers steal it.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_document_inventory(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Case Facts query gate
