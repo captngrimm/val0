@@ -64,6 +64,7 @@ from core.karen_interrogator import interrogate_cmd, maybe_handle_karen_interrog
 from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle_karen_lawyer_questions
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
+from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory
 from subprocess import check_output
 
@@ -10289,6 +10290,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_CASE_STATUS_GATE] failed: {e}")
 
     # --------------------------------------------------
+    # Karen Lawyer Package query gate
+    # Lets natural phrases like "prepara paquete para abogado"
+    # generate the attorney-ready case package before generic handlers.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_lawyer_package(update, context, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_LAWYER_PACKAGE_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # Karen Pending Next Action gate
     # Lets short confirmations like OK / dale / sí continue
     # the suggested next workflow.
@@ -11527,6 +11539,7 @@ def main():
     app.add_handler(CommandHandler("interrogate", interrogate_cmd))
     app.add_handler(CommandHandler("karenplan", karen_plan_cmd))
     app.add_handler(CommandHandler("karencase", karen_case_status_cmd))
+    app.add_handler(CommandHandler("lawyerpackage", karen_lawyer_package_cmd))
     app.add_handler(CommandHandler("lawyerquestions", karen_lawyer_questions_cmd))
     app.add_handler(CallbackQueryHandler(karen_next_action_callback, pattern=r"^karen:"))
     app.add_handler(CommandHandler("onboardstatus", onboard_status_cmd))
