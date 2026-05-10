@@ -65,8 +65,9 @@ from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle_karen_lawyer_questions
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
-from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory
+from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
 from core.karen_case_facts import maybe_handle_karen_case_facts, maybe_capture_karen_case_facts
+from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
 from core.karen_transcript_guard import maybe_guard_pasted_transcript, maybe_handle_pending_transcript_choice
 from subprocess import check_output
 
@@ -10325,6 +10326,37 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Recent Case Activity gate
+    # Captures "registra este evento..." and answers "últimos eventos/datos compartidos"
+    # before generic facts/status handlers hijack the request.
+    # --------------------------------------------------
+    try:
+        if await maybe_capture_karen_case_event(update, context, text):
+            return
+        if await maybe_handle_karen_recent_events_summary(update, context, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_RECENT_ACTIVITY_GATE] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Natural Document Inventory start gate
+    # "inventario de documentos" should start Karen inventory, not generic ChatGPT template mode.
+    # --------------------------------------------------
+    try:
+        inv_norm = _norm_text(text or "")
+        if inv_norm in {
+            "inventario de documentos",
+            "empezar inventario de documentos",
+            "iniciar inventario de documentos",
+            "hagamos inventario de documentos",
+            "hacer inventario de documentos",
+        }:
+            await start_document_inventory(update, context)
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NATURAL_INVENTORY_START] failed: {e}")
 
     # --------------------------------------------------
     # Karen Case Facts query gate
