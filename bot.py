@@ -60,6 +60,7 @@ from core.bug_report import (
 )
 
 from core.context_snapshot import build_context_snapshot
+from core.karen_interrogator import interrogate_cmd, maybe_handle_karen_interrogator
 from subprocess import check_output
 
 
@@ -5513,6 +5514,15 @@ Classifier confidence: {confidence}
         logger.exception(f"[ONBOARDING_GATE] failed: {e}")
 
     # --------------------------------------------------
+    # --------------------------------------------------
+    # Karen Interrogator active-answer gate
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_interrogator(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_INTERROGATOR_GATE] failed: {e}")
+
     # Pending bug/feedback/idea report (hard gate before notes/tasks/PM)
     # --------------------------------------------------
     try:
@@ -11421,6 +11431,7 @@ def main():
     app.add_handler(CommandHandler("exorecent", exorecent_cmd))
     app.add_handler(CommandHandler("onboard", onboard_cmd))
     app.add_handler(CommandHandler("flowrequest", flowrequest_cmd))
+    app.add_handler(CommandHandler("interrogate", interrogate_cmd))
     app.add_handler(CommandHandler("onboardstatus", onboard_status_cmd))
     app.add_handler(CommandHandler("journal", journal_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
