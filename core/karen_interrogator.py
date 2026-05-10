@@ -1,5 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from core.karen_flow_state import save_flow_state, load_active_context_state, clear_flow_state
 
 CASE_KEY = "KAREN-LAND-001"
 
@@ -36,12 +37,14 @@ async def interrogate_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         source="interrogator",
     )
 
-    context.user_data["karen_interrogator"] = {
+    state = {
         "active": True,
         "step": 0,
         "case_key": CASE_KEY,
         "case_row_id": int(row_id),
     }
+    context.user_data["karen_interrogator"] = state
+    save_flow_state(int(chat_id), "karen_interrogator", state)
 
     await update.message.reply_text(
         "🕵️‍♀️ Interrogator v0 activado.\n\n"
@@ -55,7 +58,12 @@ async def maybe_handle_karen_interrogator(update: Update, context: ContextTypes.
     if not update.message:
         return False
 
-    state = context.user_data.get("karen_interrogator") or {}
+    state = load_active_context_state(
+        int(chat_id),
+        context,
+        user_data_key="karen_interrogator",
+        flow_key="karen_interrogator",
+    )
     if not state.get("active"):
         return False
 
@@ -65,6 +73,7 @@ async def maybe_handle_karen_interrogator(update: Update, context: ContextTypes.
 
     if answer.lower().strip() in {"cancelar", "salir", "stop", "cancel"}:
         context.user_data.pop("karen_interrogator", None)
+        clear_flow_state(int(chat_id), "karen_interrogator")
         await update.message.reply_text("Listo. Pausé el Interrogator. No perdimos lo ya guardado. 🧠")
         return True
 
@@ -123,6 +132,7 @@ async def maybe_handle_karen_interrogator(update: Update, context: ContextTypes.
     if next_step <= 4:
         state["step"] = next_step
         context.user_data["karen_interrogator"] = state
+        save_flow_state(int(chat_id), "karen_interrogator", state)
         await update.message.reply_text(
             f"Guardado ✅\n\n"
             f"Anoté: {label}.\n\n"
@@ -131,6 +141,7 @@ async def maybe_handle_karen_interrogator(update: Update, context: ContextTypes.
         return True
 
     context.user_data.pop("karen_interrogator", None)
+    clear_flow_state(int(chat_id), "karen_interrogator")
 
     await update.message.reply_text(
         "Listo, Insanity 🧠📁\n\n"
