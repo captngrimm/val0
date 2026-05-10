@@ -138,6 +138,8 @@ def render_recent_case_events(chat_id: int, limit: int = 6) -> str:
         "document_holder_v0",
         "document_registry_details_v0",
         "lawyer_questions_v0",
+        "case_appointment_v0",
+        "case_appointment_reschedule_v0",
     }
 
     items = []
@@ -168,6 +170,12 @@ def render_recent_case_events(chat_id: int, limit: int = 6) -> str:
         elif source == "document_registry_details_v0":
             label = "Datos registrales"
             text = raw.replace("Datos registrales / identificadores mencionados:", "").strip()
+        elif source == "case_appointment_v0":
+            label = "Cita / agenda"
+            text = raw.replace("Cita / agenda del caso:", "").strip()
+        elif source == "case_appointment_reschedule_v0":
+            label = "Cambio de cita / agenda"
+            text = raw.replace("Cambio de cita / agenda del caso:", "").strip()
         else:
             label = "Nota"
             text = raw
