@@ -1997,7 +1997,7 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rows = fetch_recent_memory(int(chat_id), limit=15)
     except Exception as e:
         logger.exception(f"[EXOSUMMARY] failed: {e}")
-        await update.message.reply_text(f"No pude leer memoria Exocortex reciente: {e}")
+        await update.message.reply_text(f"No pude leer lo guardado recientemente: {e}")
         return
 
     allowed = {"reflection", "care_mode", "follow_up", "idea", "note", "task", "reminder", "decision", "project"}
@@ -2037,9 +2037,9 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not items:
         await update.message.reply_text(
-            "🧠 Latest Exocortex capture\n\n"
-            "No encontré una captura Exocortex reciente.\n\n"
-            "Prueba primero con /journal."
+            "🧠 Esto guardé\n\n"
+            "No encontré una captura reciente.\n\n"
+            "Cuéntame algo que quieras guardar y lo ordeno."
         )
         return
 
@@ -2069,7 +2069,7 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     label_map = {
         "reflection": "Reflexión",
-        "care_mode": "Care Mode",
+        "care_mode": "Apoyo / orden personal",
         "follow_up": "Seguimiento",
         "idea": "Idea",
         "note": "Nota",
@@ -2081,7 +2081,7 @@ async def exosummary_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     lines = []
-    lines.append("🧠 Última captura Exocortex")
+    lines.append("🧠 Esto guardé")
     lines.append("")
     if created_at:
         lines.append(f"Fecha guardada: {created_at}")
@@ -2126,10 +2126,10 @@ async def exorecent_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not rows:
-        await update.message.reply_text("🧠 Exocortex recent memory\n\nNo hay memoria estructurada reciente.")
+        await update.message.reply_text("🧠 Memoria reciente\n\nNo hay memoria reciente estructurada.")
         return
 
-    lines = ["🧠 Exocortex recent memory", ""]
+    lines = ["🧠 Memoria reciente", ""]
 
     for row in rows:
         r = dict(row) if hasattr(row, "keys") else {
@@ -2738,7 +2738,7 @@ async def exotest_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for bucket in stored:
         label = {
             "reflection": "Reflexión",
-            "care_mode": "Care Mode",
+            "care_mode": "Apoyo / orden personal",
             "follow_up": "Seguimiento",
             "idea": "Idea",
             "note": "Nota",
