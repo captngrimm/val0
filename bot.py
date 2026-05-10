@@ -5238,6 +5238,17 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     operator_confidence = max(operator_confidence, 0.86)
 
                 if operator_confidence >= 0.82 and operator_route == "exosummary":
+                    # Karen sprint context-aware summary:
+                    # If this chat has Karen land-case facts, show those instead of generic saved-memory view.
+                    try:
+                        from core.karen_case_facts import load_karen_case_facts, render_case_facts
+                        case_facts = load_karen_case_facts(int(chat_id))
+                        if case_facts:
+                            await update.message.reply_text(render_case_facts(case_facts, mode="all"))
+                            return
+                    except Exception as e:
+                        logger.exception(f"[KAREN_CASE_FACTS_ROUTER_SUMMARY] failed: {e}")
+
                     await exosummary_cmd(update, context)
                     return
 
