@@ -108,6 +108,24 @@ def _latest_lines(items: list[str], empty: str, limit: int = 3) -> list[str]:
     return [f"- {_clip(x, 520)}" for x in latest]
 
 
+def _holder_fallback_from_documents(documents: list[str]) -> list[str]:
+    """
+    If custody was captured inside the inventory text but not saved as a separate
+    holder note, pull the obvious custody sentence into the package.
+    """
+    clean = [x.strip() for x in documents if x and x.strip()]
+    if not clean:
+        return []
+
+    latest = clean[-1]
+    low = latest.lower()
+
+    if not any(x in low for x in ["karen tiene", "frank tiene", "familiar tiene", "tiene algunos", "tiene fotos"]):
+        return []
+
+    return [latest]
+
+
 def render_lawyer_package(chat_id: int) -> str:
     """
     Dynamic attorney-facing package for Karen LandOps.
@@ -161,8 +179,9 @@ def render_lawyer_package(chat_id: int) -> str:
     lines.append("")
 
     lines.append("6. Quién tiene documentos / custodia")
+    holder_items = data["holders"] or _holder_fallback_from_documents(data["documents"])
     lines.extend(_latest_lines(
-        data["holders"],
+        holder_items,
         "Pendiente confirmar quién tiene originales, copias, fotos o papeles físicos.",
         limit=2,
     ))
