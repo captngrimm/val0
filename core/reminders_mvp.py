@@ -352,6 +352,12 @@ async def try_create_reminder(update, chat_id: int, text: str, audit_fn=None) ->
 
     t = (text or "").strip()
     t = re.sub(r"[.!?]+$", "", t).strip()
+
+    # Allow assistant wake-word prefixes from text/STT:
+    # "Val, recuérdame..." / "Vale, recuérdame..." / "Pal, recuérdame..."
+    # Whisper may hear Val as Vale/PAL/Bal.
+    t = re.sub(r"(?is)^\s*(?:val|vale|pal|bal)\s*,?\s+", "", t).strip()
+
     if not t:
         return False
 
