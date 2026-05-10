@@ -20,6 +20,16 @@ def _clean_event_text(text: str) -> str:
     raw = (text or "").strip()
 
     prefixes = [
+        "val, registra este evento del caso del terreno.",
+        "val registra este evento del caso del terreno.",
+        "val, registra este evento del caso del terreno:",
+        "val registra este evento del caso del terreno:",
+        "val, registra este evento del caso.",
+        "val registra este evento del caso.",
+        "val, registra este evento:",
+        "val registra este evento:",
+        "val, registra esto del caso:",
+        "val registra esto del caso:",
         "ok registra el siguiente evento,",
         "ok registra el siguiente evento:",
         "registra el siguiente evento,",
