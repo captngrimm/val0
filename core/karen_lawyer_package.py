@@ -4,34 +4,79 @@ from telegram.ext import ContextTypes
 CASE_KEY = "KAREN-LAND-001"
 
 def render_lawyer_package(chat_id: int) -> str:
-    from core.karen_case_status import render_karen_case_status
+    """
+    Compact attorney-facing package for Karen LandOps.
 
-    case_status = render_karen_case_status(int(chat_id))
-
+    This intentionally does not embed /karencase directly.
+    /karencase is operator status.
+    /lawyerpackage is meeting prep.
+    """
     return (
         "⚖️📦 Paquete inicial para abogado — caso del terreno familiar\n\n"
-        "Este paquete es para llegar a la cita con orden, no para reemplazar criterio legal. "
-        "Val organiza hechos, documentos y preguntas; el abogado interpreta y define estrategia. 😌\n\n"
-        "Resumen base:\n\n"
-        f"{case_status}\n\n"
-        "📌 Preguntas clave para abrir la cita:\n"
-        "1. ¿Cuál es el estado legal actual del terreno según estos datos?\n"
-        "2. ¿Qué documentos faltan para hacer una revisión seria?\n"
-        "3. ¿Qué debe verificarse primero en Registro Público?\n"
-        "4. ¿Qué necesita firmar o aprobar cada heredero?\n"
-        "5. ¿Qué pasa si un heredero no coopera?\n"
-        "6. ¿Qué puede adelantar la familia antes de contratar o avanzar más?\n"
-        "7. ¿Cuál sería el primer paso legal/práctico después de revisar documentos?\n"
-        "8. ¿Qué costos y tiempos iniciales debemos esperar?\n\n"
-        "📎 Checklist para antes de la cita:\n"
-        "- Revisar fotos de documentos.\n"
+        "Nota: este resumen organiza información para la cita. No reemplaza revisión legal. "
+        "El abogado debe verificar documentos, estado registral y estrategia. 😌\n\n"
+
+        "1. Resumen corto del caso\n"
+        "- Se trata de un trámite/disputa familiar sobre un terreno.\n"
+        "- Hay cinco herederos involucrados: A, B, C, D y E.\n"
+        "- Karen y Frank están ayudando a organizar la información.\n"
+        "- El trámite tiene antecedentes desde 1986. Algunas fechas/eventos aún deben confirmarse.\n\n"
+
+        "2. Objetivo de la cita\n"
+        "- Entender el estado legal actual del terreno.\n"
+        "- Confirmar qué documentos faltan o deben actualizarse.\n"
+        "- Saber qué puede adelantar la familia antes del siguiente paso legal.\n"
+        "- Definir acciones, responsables y fechas después de la cita.\n\n"
+
+        "3. Documentos disponibles o mencionados\n"
+        "- Documentos del Registro Público.\n"
+        "- Resúmenes en Word.\n"
+        "- Fotos de papeles enviadas por WhatsApp.\n"
+        "- Papeles físicos que hay que revisar o escanear.\n\n"
+
+        "4. Quién tiene documentos\n"
+        "- Karen tiene algunos documentos.\n"
+        "- Frank tiene fotos por WhatsApp.\n"
+        "- Un familiar tiene papeles físicos que deben revisarse o escanearse.\n\n"
+
+        "5. Datos pendientes de verificar\n"
+        "- Finca.\n"
+        "- Folio.\n"
+        "- Inscripción.\n"
+        "- Fecha.\n"
+        "- Tomo.\n"
+        "- Asiento.\n"
+        "- Propietario actual / historial registral, si aplica.\n\n"
+
+        "6. Preguntas clave para el abogado\n"
+        "1. ¿Cuál es el estado legal actual del terreno con la información disponible?\n"
+        "2. ¿Qué debe verificarse primero en Registro Público?\n"
+        "3. ¿Qué documentos son indispensables para hacer una revisión seria?\n"
+        "4. ¿Sirven copias/fotos o se necesitan originales/certificados?\n"
+        "5. ¿Qué necesita firmar o aprobar cada heredero?\n"
+        "6. ¿Qué pasa si un heredero no coopera o no responde?\n"
+        "7. ¿Hay algún riesgo por el tiempo transcurrido desde 1986?\n"
+        "8. ¿Cuál es el primer paso práctico después de revisar los documentos?\n"
+        "9. ¿Qué puede adelantar la familia esta semana?\n"
+        "10. ¿Qué costos y tiempos iniciales debemos esperar?\n\n"
+
+        "7. Checklist antes de llamar o reunirse\n"
+        "- Revisar fotos de documentos y separar las legibles de las borrosas.\n"
         "- Buscar finca, folio, inscripción, tomo, asiento o fecha.\n"
-        "- Separar documentos por tipo: Registro Público, resúmenes, fotos, físicos.\n"
-        "- Confirmar quién tiene originales o copias.\n"
+        "- Escanear o fotografiar papeles físicos con buena luz.\n"
+        "- Confirmar quién tiene originales y quién tiene copias.\n"
         "- Llevar lista de los cinco herederos.\n"
-        "- Anotar qué eventos desde 1986 están confirmados y cuáles son aproximados.\n\n"
-        "Siguiente acción recomendada:\n"
-        "Mandarle esto a Karen y revisar juntas qué dato falta antes de llamar al abogado. 😏"
+        "- Marcar qué datos están confirmados y cuáles son aproximados.\n\n"
+
+        "8. Siguiente acción recomendada\n"
+        "Preparar una carpeta simple para el abogado con:\n"
+        "- este resumen\n"
+        "- timeline inicial desde 1986\n"
+        "- lista de herederos\n"
+        "- documentos disponibles\n"
+        "- documentos pendientes por conseguir/verificar\n\n"
+
+        "Listo. Esto ya se puede usar como guía de reunión sin llegar como pollo sin cabeza. 😏"
     )
 
 async def karen_lawyer_package_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
