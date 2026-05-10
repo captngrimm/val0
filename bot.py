@@ -63,7 +63,7 @@ from core.context_snapshot import build_context_snapshot
 from core.karen_interrogator import interrogate_cmd, maybe_handle_karen_interrogator
 from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle_karen_lawyer_questions
-from core.karen_next_action import maybe_handle_pending_next_action
+from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback
 from subprocess import check_output
 
 
@@ -113,6 +113,7 @@ from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     CommandHandler,
+    CallbackQueryHandler,
     MessageHandler,
     ContextTypes,
     Defaults,
@@ -11503,6 +11504,7 @@ def main():
     app.add_handler(CommandHandler("interrogate", interrogate_cmd))
     app.add_handler(CommandHandler("karenplan", karen_plan_cmd))
     app.add_handler(CommandHandler("lawyerquestions", karen_lawyer_questions_cmd))
+    app.add_handler(CallbackQueryHandler(karen_next_action_callback, pattern=r"^karen:"))
     app.add_handler(CommandHandler("onboardstatus", onboard_status_cmd))
     app.add_handler(CommandHandler("journal", journal_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
