@@ -96,6 +96,30 @@ async def karen_next_action_callback(update: Update, context: ContextTypes.DEFAU
         )
         return
 
+def _detect_document_holders(text: str) -> list[str]:
+    """
+    Detects obvious custody/holder mentions in the same answer as inventory.
+    Conservative Mark 1: only extracts broad holder signals, not perfect mapping.
+    """
+    t = (text or "").lower()
+    found = []
+
+    checks = [
+        ("Karen tiene documentos", ("karen tiene", "los tiene karen", "karen guarda", "karen posee")),
+        ("Frank tiene documentos/fotos", ("frank tiene", "los tiene frank", "frank guarda", "fotos por whatsapp", "whatsapp de frank")),
+        ("Un familiar tiene documentos físicos", ("un familiar tiene", "familiar tiene", "familia tiene", "papeles físicos con un familiar", "papeles fisicos con un familiar")),
+        ("Abogado tiene documentos", ("abogado tiene", "los tiene el abogado", "abogada tiene")),
+        ("Registro Público / institución", ("registro público tiene", "registro publico tiene", "en registro público", "en registro publico")),
+        ("No sabemos todavía quién los tiene", ("no sabemos", "no se sabe", "no sé quién", "no se quien")),
+    ]
+
+    for label, needles in checks:
+        if any(n in t for n in needles):
+            found.append(label)
+
+    return found
+
+
 def _detect_document_categories(text: str) -> list[str]:
     t = (text or "").lower()
     found = []
@@ -152,6 +176,7 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
 
     if step == 0:
         categories = _detect_document_categories(answer)
+        holders = _detect_document_holders(answer)
 
         note_lines = [
             "Inventario inicial de documentos:",
@@ -170,6 +195,53 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
             source="document_inventory_v0",
             telegram_message_id=update.message.message_id,
         )
+
+        # If the user gave custody/holder info in the same answer, save it too
+        # and skip the repeated "who has it?" question.
+        if holders:
+            holder_lines = [
+                "Custodia / ubicación de documentos:",
+                "",
+                answer,
+                "",
+                "Custodia detectada:",
+            ]
+            holder_lines.extend([f"- {h}" for h in holders])
+
+            insert_case_note(
+                chat_id=int(chat_id),
+                case_id=case_key,
+                note_text="\n".join(holder_lines),
+                source="document_holder_v0",
+                telegram_message_id=update.message.message_id,
+            )
+
+            state = {
+                "active": True,
+                "step": 2,
+                "last_inventory_raw": answer,
+                "document_holder_raw": answer,
+                "categories": categories,
+                "holders": holders,
+            }
+            context.user_data["karen_document_inventory"] = state
+            save_flow_state(int(chat_id), "karen_document_inventory", state)
+
+            cat_text = "\n".join([f"- {c}" for c in categories]) if categories else "- Guardé el texto completo."
+            holder_text = "\n".join([f"- {h}" for h in holders])
+
+            await update.message.reply_text(
+                "Guardado ✅📎\n\n"
+                "Te entendí inventario **y** quién tiene documentos en el mismo mensaje. Mira qué fina, aprendiendo a no preguntar dos veces la misma vaina. 😏\n\n"
+                "Documentos detectados:\n"
+                f"{cat_text}\n\n"
+                "Custodia detectada:\n"
+                f"{holder_text}\n\n"
+                "Siguiente pregunta:\n"
+                "¿Alguno de esos documentos tiene número de finca, folio, inscripción, fecha, tomo, asiento o algún dato de Registro Público?\n\n"
+                "Puedes responder: sí, no, no sé, o pegar lo que veas."
+            )
+            return True
 
         state = {
             "active": True,
