@@ -1,6 +1,7 @@
 import re
 from telegram import Update
 from telegram.ext import ContextTypes
+from core.karen_voice import saved_case_intro, consultative_next_step
 
 CASE_KEY = "KAREN-LAND-001"
 
@@ -158,7 +159,7 @@ def load_karen_case_facts(chat_id: int) -> dict:
     return merged
 
 
-def render_case_facts(facts: dict, mode: str = "all") -> str:
+def render_case_facts(facts: dict, mode: str = "all", chat_id: int | None = None) -> str:
     if not facts:
         return (
             "Todavía no tengo datos básicos suficientes de la finca guardados 😕📁\n\n"
@@ -183,7 +184,7 @@ def render_case_facts(facts: dict, mode: str = "all") -> str:
             return "👥 Herederos declarados que tengo guardados:\n\n" + "\n".join([f"- {h}" for h in heirs])
         return "Todavía no tengo la lista de herederos guardada con suficiente claridad."
 
-    lines = ["📁 Datos básicos del caso que tengo guardados:", ""]
+    lines = [saved_case_intro(chat_id), ""]
     labels = [
         ("finca", "Finca"),
         ("tomo_rollo", "Tomo/Rollo"),
@@ -205,8 +206,7 @@ def render_case_facts(facts: dict, mode: str = "all") -> str:
         lines.extend([f"- {h}" for h in facts["herederos"]])
 
     lines.append("")
-    lines.append("Siguiente paso sugerido:")
-    lines.append("Confirma si ya tienes una cita o plan con abogado esta semana para ayudarte a agenda/recordatorios. 😏")
+    lines.append(consultative_next_step("abogado"))
     return "\n".join(lines)
 
 
@@ -237,7 +237,7 @@ async def maybe_handle_karen_case_facts(update: Update, context: ContextTypes.DE
         )
         await update.message.reply_text(
             "Guardé los datos básicos del caso ✅📁\n\n"
-            f"{render_case_facts(incoming_facts, mode='all')}"
+            f"{render_case_facts(incoming_facts, mode='all', chat_id=int(chat_id))}"
         )
         return True
 
@@ -280,15 +280,15 @@ async def maybe_handle_karen_case_facts(update: Update, context: ContextTypes.DE
     )
 
     if any(m in t for m in finca_markers):
-        await update.message.reply_text(render_case_facts(facts, mode="finca"))
+        await update.message.reply_text(render_case_facts(facts, mode="finca", chat_id=int(chat_id)))
         return True
 
     if any(m in t for m in heirs_markers):
-        await update.message.reply_text(render_case_facts(facts, mode="heirs"))
+        await update.message.reply_text(render_case_facts(facts, mode="heirs", chat_id=int(chat_id)))
         return True
 
     if any(m in t for m in basics_markers):
-        await update.message.reply_text(render_case_facts(facts, mode="all"))
+        await update.message.reply_text(render_case_facts(facts, mode="all", chat_id=int(chat_id)))
         return True
 
     return False
@@ -314,7 +314,7 @@ async def maybe_capture_karen_case_facts(update: Update, context: ContextTypes.D
     if strong:
         await update.message.reply_text(
             "Guardé datos básicos del caso ✅📁\n\n"
-            f"{render_case_facts(facts, mode='all')}"
+            f"{render_case_facts(facts, mode='all', chat_id=int(chat_id))}"
         )
         return True
 

@@ -5244,7 +5244,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                         from core.karen_case_facts import load_karen_case_facts, render_case_facts
                         case_facts = load_karen_case_facts(int(chat_id))
                         if case_facts:
-                            await update.message.reply_text(render_case_facts(case_facts, mode="all"))
+                            await update.message.reply_text(render_case_facts(case_facts, mode="all", chat_id=int(chat_id)))
                             return
                     except Exception as e:
                         logger.exception(f"[KAREN_CASE_FACTS_ROUTER_SUMMARY] failed: {e}")
@@ -5330,7 +5330,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     from core.karen_case_facts import load_karen_case_facts, render_case_facts
                     case_facts = load_karen_case_facts(int(chat_id))
                     if case_facts:
-                        await update.message.reply_text(render_case_facts(case_facts, mode="all"))
+                        await update.message.reply_text(render_case_facts(case_facts, mode="all", chat_id=int(chat_id)))
                         return
                 except Exception as e:
                     logger.exception(f"[KAREN_CASE_FACTS_SUMMARY_FALLBACK] failed: {e}")
