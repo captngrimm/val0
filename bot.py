@@ -66,6 +66,7 @@ from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory
+from core.karen_transcript_guard import maybe_guard_pasted_transcript, maybe_handle_pending_transcript_choice
 from subprocess import check_output
 
 
@@ -10255,6 +10256,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
     except Exception as e:
         logger.exception(f"[COMPLETION_LOOP] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Pasted Transcript Guard gate
+    # If a Karen guided flow is active and user pastes a long transcript/log,
+    # ask before consuming it as the current answer.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_pending_transcript_choice(update, context, text):
+            return
+        if await maybe_guard_pasted_transcript(update, context, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TRANSCRIPT_GUARD_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Interrogator handle_text gate
