@@ -66,6 +66,7 @@ from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory
+from core.karen_case_facts import maybe_handle_karen_case_facts, maybe_capture_karen_case_facts
 from core.karen_transcript_guard import maybe_guard_pasted_transcript, maybe_handle_pending_transcript_choice
 from subprocess import check_output
 
@@ -6032,7 +6033,17 @@ Classifier confidence: {confidence}
         text_norm_time = unicodedata.normalize("NFKD", (text or "").lower())
         text_norm_time = "".join(ch for ch in text_norm_time if not unicodedata.combining(ch))
 
-        if (not is_task_intent) and any(x in text_norm_time for x in ["hora", "que hora", "qué hora"]):
+        time_question_patterns = (
+            r"^que hora es\??$",
+            r"^qué hora es\??$",
+            r"^hora actual\??$",
+            r"^dime la hora\??$",
+            r"^me dices la hora\??$",
+        )
+
+        is_time_question = any(re.search(p, text_norm_time.strip()) for p in time_question_patterns)
+
+        if (not is_task_intent) and is_time_question:
             tz = ZoneInfo("America/Panama")
             now_local = datetime.now(tz)
 
@@ -10293,6 +10304,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
 
     # --------------------------------------------------
+    # Karen Case Facts query gate
+    # Direct questions like "dame la finca" or "quiénes son los herederos"
+    # must answer from case facts before generic status/time/chat handlers.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_case_facts(update, context, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_CASE_FACTS_QUERY_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # Karen Case Status query gate
     # Lets natural questions like "¿Qué tengo del caso del terreno?"
     # retrieve Karen LandOps case memory before generic handlers.
@@ -10346,6 +10368,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_LAWYER_QUESTIONS_GATE] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Case Facts passive capture gate
+    # If user pastes registry/basic case data, save it into CASE:KAREN-LAND-001.
+    # --------------------------------------------------
+    try:
+        if await maybe_capture_karen_case_facts(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_CASE_FACTS_CAPTURE_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Pending bug/feedback/idea report (hard gate before unified memory/task capture)
