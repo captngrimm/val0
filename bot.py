@@ -5171,9 +5171,40 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 operator_route = str(routed.get("route") or "normal_chat").strip()
                 operator_confidence = float(routed.get("confidence") or 0.0)
 
-                if operator_confidence >= 0.82 and operator_route == "whatnow":
+                # Rich story beats whatnow:
+                # If the user includes emotional context / multiple life areas / "I don't know where to start",
+                # capture the update first instead of jumping straight to advice.
+                rich_story_markers = (
+                    "tengo muchas cosas",
+                    "cosas mezcladas",
+                    "muchas cosas mezcladas",
+                    "me frustra",
+                    "no quiero que me regañes",
+                    "quiero que me ayudes a ordenar",
+                    "salud",
+                    "pendientes",
+                    "ideas",
+                    "casa",
+                    "familia",
+                    "trabajo",
+                    "todo mezclado",
+                    "i have a lot going on",
+                    "everything is mixed",
+                    "help me organize",
+                )
+
+                looks_like_rich_story = (
+                    len(text or "") >= 55
+                    and any(m in text_norm_greet for m in rich_story_markers)
+                )
+
+                if operator_confidence >= 0.82 and operator_route == "whatnow" and not looks_like_rich_story:
                     await whatnow_cmd(update, context)
                     return
+
+                if looks_like_rich_story:
+                    operator_route = "journal_capture"
+                    operator_confidence = max(operator_confidence, 0.86)
 
                 if operator_confidence >= 0.82 and operator_route == "exosummary":
                     await exosummary_cmd(update, context)
