@@ -5312,6 +5312,18 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 return
 
             if any(m in text_norm_greet for m in summary_natural_markers):
+                # Karen sprint context-aware summary:
+                # If this chat has Karen land-case facts, "qué guardaste" should show
+                # the useful case facts instead of generic Exocortex/debug-ish memory.
+                try:
+                    from core.karen_case_facts import load_karen_case_facts, render_case_facts
+                    case_facts = load_karen_case_facts(int(chat_id))
+                    if case_facts:
+                        await update.message.reply_text(render_case_facts(case_facts, mode="all"))
+                        return
+                except Exception as e:
+                    logger.exception(f"[KAREN_CASE_FACTS_SUMMARY_FALLBACK] failed: {e}")
+
                 await exosummary_cmd(update, context)
                 return
 
