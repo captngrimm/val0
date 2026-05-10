@@ -28,20 +28,41 @@ def save_flow_state(chat_id: int, flow_key: str, state: dict[str, Any]) -> None:
     _ensure_table()
 
     payload = json.dumps(state or {}, ensure_ascii=False)
+    chat_id = int(chat_id)
+    flow_key = str(flow_key)
 
     conn = _get_conn()
     cur = conn.cursor()
+
     cur.execute(
         """
-        INSERT INTO karen_flow_state(chat_id, flow_key, state_json, updated_at)
-        VALUES (?, ?, ?, datetime('now'))
-        ON CONFLICT(chat_id, flow_key)
-        DO UPDATE SET
-            state_json=excluded.state_json,
-            updated_at=datetime('now')
+        SELECT chat_id
+        FROM karen_flow_state
+        WHERE chat_id=? AND flow_key=?
+        LIMIT 1
         """,
-        (int(chat_id), str(flow_key), payload),
+        (chat_id, flow_key),
     )
+    row = cur.fetchone()
+
+    if row:
+        cur.execute(
+            """
+            UPDATE karen_flow_state
+            SET state_json=?, updated_at=datetime('now')
+            WHERE chat_id=? AND flow_key=?
+            """,
+            (payload, chat_id, flow_key),
+        )
+    else:
+        cur.execute(
+            """
+            INSERT INTO karen_flow_state(chat_id, flow_key, state_json, updated_at)
+            VALUES (?, ?, ?, datetime('now'))
+            """,
+            (chat_id, flow_key, payload),
+        )
+
     conn.commit()
     conn.close()
 
