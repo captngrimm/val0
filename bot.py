@@ -61,6 +61,7 @@ from core.bug_report import (
 
 from core.context_snapshot import build_context_snapshot
 from core.karen_interrogator import interrogate_cmd, maybe_handle_karen_interrogator
+from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from subprocess import check_output
 
 
@@ -10262,6 +10263,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_INTERROGATOR_HANDLE_TEXT_GATE] failed: {e}")
 
     # --------------------------------------------------
+    # Karen Plan State query gate
+    # Must run before unified memory/task capture so "qué falta" etc.
+    # does not become a fake task.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_plan_query(update, context, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_PLAN_STATE_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # Pending bug/feedback/idea report (hard gate before unified memory/task capture)
     # --------------------------------------------------
     try:
@@ -11465,6 +11477,7 @@ def main():
     app.add_handler(CommandHandler("onboard", onboard_cmd))
     app.add_handler(CommandHandler("flowrequest", flowrequest_cmd))
     app.add_handler(CommandHandler("interrogate", interrogate_cmd))
+    app.add_handler(CommandHandler("karenplan", karen_plan_cmd))
     app.add_handler(CommandHandler("onboardstatus", onboard_status_cmd))
     app.add_handler(CommandHandler("journal", journal_cmd))
     app.add_handler(CommandHandler("exotest", exotest_cmd))
