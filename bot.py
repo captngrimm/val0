@@ -11667,6 +11667,17 @@ def main():
         # Older versions may not support get_jobs_by_name; ignore and just schedule
         pass
 
+    try:
+        app.job_queue.run_repeating(
+            _reminder_tick,
+            interval=interval,
+            first=5,
+            name=REMINDER_JOB_NAME,
+        )
+        logger.info(f"[REMINDER_RUNNER] scheduled {REMINDER_JOB_NAME} interval={interval}s")
+    except Exception as e:
+        logger.exception(f"[REMINDER_RUNNER] failed to schedule {REMINDER_JOB_NAME}: {e}")
+
 #    app.job_queue.run_repeating(
 #        operator_followup_tick,
 #        interval=3600,
