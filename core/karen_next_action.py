@@ -85,6 +85,96 @@ async def karen_next_action_callback(update: Update, context: ContextTypes.DEFAU
         )
         return
 
+def _detect_document_categories(text: str) -> list[str]:
+    t = (text or "").lower()
+    found = []
+
+    checks = [
+        ("Registro Público", ("registro público", "registro publico", "finca", "folio", "inscripción", "inscripcion")),
+        ("Escrituras / certificados", ("escritura", "certificado", "certificación", "certificacion")),
+        ("Planos", ("plano", "planos")),
+        ("Poderes / autorizaciones", ("poder", "autorización", "autorizacion")),
+        ("Contratos / acuerdos", ("contrato", "acuerdo")),
+        ("Fotos de documentos", ("foto", "fotos", "whatsapp", "imagen", "imágenes", "imagenes")),
+        ("Word / PDF / digital", ("word", "pdf", "digital", "archivo")),
+        ("Resúmenes", ("resumen", "resúmenes", "resumenes")),
+        ("Papeles físicos por revisar/escanear", ("papel", "papeles", "físico", "fisico", "escanear", "escáner", "scanner")),
+        ("Recibos / pagos", ("recibo", "recibos", "pago", "pagos")),
+    ]
+
+    for label, needles in checks:
+        if any(n in t for n in needles):
+            found.append(label)
+
+    return found
+
+
+async def maybe_handle_document_inventory(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str) -> bool:
+    if not update.message:
+        return False
+
+    state = context.user_data.get("karen_document_inventory") or {}
+    if not state.get("active"):
+        return False
+
+    answer = (text or "").strip()
+    if not answer:
+        return False
+
+    if answer.lower().strip() in {"cancelar", "salir", "stop", "cancel"}:
+        context.user_data.pop("karen_document_inventory", None)
+        await update.message.reply_text("Listo. Pausé el inventario de documentos. Lo que ya guardamos queda en el caso. 📎")
+        return True
+
+    from memory_store import insert_case_note, set_active_case_id
+
+    case_key = "KAREN-LAND-001"
+    set_active_case_id(int(chat_id), case_key)
+
+    categories = _detect_document_categories(answer)
+
+    note_lines = [
+        "Inventario inicial de documentos:",
+        "",
+        answer,
+    ]
+
+    if categories:
+        note_lines.extend(["", "Categorías detectadas:"])
+        note_lines.extend([f"- {c}" for c in categories])
+
+    insert_case_note(
+        chat_id=int(chat_id),
+        case_id=case_key,
+        note_text="\n".join(note_lines),
+        source="document_inventory_v0",
+        telegram_message_id=update.message.message_id,
+    )
+
+    context.user_data["karen_document_inventory"] = {
+        "active": True,
+        "step": 1,
+        "last_inventory_raw": answer,
+        "categories": categories,
+    }
+
+    if categories:
+        cat_text = "\n".join([f"- {c}" for c in categories])
+    else:
+        cat_text = "- No detecté categorías claras todavía, pero guardé el texto completo."
+
+    await update.message.reply_text(
+        "Guardado ✅📎\n\n"
+        "Dejé esto como inventario inicial de documentos del caso.\n\n"
+        "Detecté:\n"
+        f"{cat_text}\n\n"
+        "Siguiente pregunta:\n"
+        "¿Quién tiene esos documentos ahora mismo?\n\n"
+        "Ejemplo: Karen, Frank, un familiar, abogado, Registro Público, o no sabemos todavía."
+    )
+    return True
+
+
 async def maybe_handle_pending_next_action(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
     if not update.message:
         return False
