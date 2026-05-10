@@ -108,6 +108,35 @@ def _latest_lines(items: list[str], empty: str, limit: int = 3) -> list[str]:
     return [f"- {_clip(x, 520)}" for x in latest]
 
 
+def _extract_holder_lines(text: str) -> list[str]:
+    """
+    Extract clean custody lines from either holder notes or inventory text.
+    """
+    raw = (text or "").strip()
+    low = raw.lower()
+
+    holders = []
+
+    if "karen tiene" in low or "karen tiene algunos" in low or "karen tiene documentos" in low:
+        holders.append("Karen tiene algunos documentos.")
+
+    if "frank tiene" in low or "fotos por whatsapp" in low:
+        holders.append("Frank tiene fotos por WhatsApp.")
+
+    if "un familiar tiene" in low or "familiar tiene" in low or "papeles físicos" in low or "papeles fisicos" in low:
+        holders.append("Un familiar tiene papeles físicos que hay que revisar o escanear.")
+
+    if "abogado tiene" in low or "abogada tiene" in low:
+        holders.append("La abogada/abogado tiene documentos relacionados.")
+
+    unique = []
+    for item in holders:
+        if item not in unique:
+            unique.append(item)
+
+    return unique
+
+
 def _holder_fallback_from_documents(documents: list[str]) -> list[str]:
     """
     If custody was captured inside the inventory text but not saved as a separate
@@ -117,27 +146,7 @@ def _holder_fallback_from_documents(documents: list[str]) -> list[str]:
     if not clean:
         return []
 
-    latest = clean[-1]
-    low = latest.lower()
-
-    holders = []
-
-    if "karen tiene" in low or "karen tiene algunos" in low:
-        holders.append("Karen tiene algunos documentos.")
-
-    if "frank tiene" in low or "fotos por whatsapp" in low:
-        holders.append("Frank tiene fotos por WhatsApp.")
-
-    if "un familiar tiene" in low or "familiar tiene" in low or "papeles físicos" in low or "papeles fisicos" in low:
-        holders.append("Un familiar tiene papeles físicos que hay que revisar o escanear.")
-
-    # Preserve order and remove duplicates.
-    unique = []
-    for item in holders:
-        if item not in unique:
-            unique.append(item)
-
-    return unique
+    return _extract_holder_lines(clean[-1])
 
 
 def render_lawyer_package(chat_id: int) -> str:
@@ -193,11 +202,17 @@ def render_lawyer_package(chat_id: int) -> str:
     lines.append("")
 
     lines.append("6. Quién tiene documentos / custodia")
-    holder_items = data["holders"] or _holder_fallback_from_documents(data["documents"])
+    holder_items = []
+    for h in data["holders"]:
+        holder_items.extend(_extract_holder_lines(h))
+
+    if not holder_items:
+        holder_items = _holder_fallback_from_documents(data["documents"])
+
     lines.extend(_latest_lines(
         holder_items,
         "Pendiente confirmar quién tiene originales, copias, fotos o papeles físicos.",
-        limit=2,
+        limit=4,
     ))
     lines.append("")
 
