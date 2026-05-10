@@ -2326,9 +2326,12 @@ async def onboard_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if tracking_buckets:
         lines.append(f"- Vamos a empezar rastreando: {tracking_buckets}.")
     if starter_workflow:
+        display_workflow = starter_workflow.replace("/whatnow", "“¿Qué hago ahora?”")
+        display_workflow = display_workflow.replace("/draftfollowup", "“Hazme el mensaje”")
+
         lines.append("")
         lines.append("Primer flujo sugerido:")
-        lines.append(f"- {starter_workflow}")
+        lines.append(f"- {display_workflow}")
 
     lines.append("")
     lines.append("Cómo usarme:")
