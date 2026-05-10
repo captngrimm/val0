@@ -3042,6 +3042,17 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     low = (transcribed_text or "").lower().strip()
 
+    # --------------------------------------------------
+    # KAREN_INTERROGATOR_VOICE_GATE
+    # Voice answers should continue the active Interrogator session
+    # instead of being swallowed by task/background Forge routing.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_interrogator(update, context, chat_id, transcribed_text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_INTERROGATOR_VOICE_GATE] failed: {e}")
+
     is_query = (
         "que tengo" in low or
         "qué tengo" in low or
@@ -4968,6 +4979,17 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             preferred_language = None
     except Exception:
         preferred_language = None
+
+    # --------------------------------------------------
+    # KAREN_INTERROGATOR_EARLY_GATE
+    # If an Interrogator session is active, consume the user's answer
+    # before greeting/router/journal/task layers can steal it.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_interrogator(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_INTERROGATOR_EARLY_GATE] failed: {e}")
 
     # --------------------------------------------------
     # GREETING OVERRIDE (DETERMINISTIC)
