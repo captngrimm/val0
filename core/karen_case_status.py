@@ -43,6 +43,43 @@ def _clean_note_text(text: str) -> str:
     return text.strip()
 
 
+def _pick_best(items: list[str], required_any: tuple[str, ...] = (), reject_any: tuple[str, ...] = ()) -> str:
+    """
+    Pick the best human-facing item from noisy historical test notes.
+    Prefer newer items, but reject obvious cross-contamination.
+    """
+    clean_items = [(x or "").strip() for x in items if (x or "").strip()]
+    if not clean_items:
+        return ""
+
+    for item in reversed(clean_items):
+        low = item.lower()
+
+        if reject_any and any(r in low for r in reject_any):
+            continue
+
+        if required_any and not any(k in low for k in required_any):
+            continue
+
+        return item
+
+    return clean_items[-1]
+
+
+def _safe_case_name(items: list[str]) -> str:
+    picked = _pick_best(
+        items,
+        reject_any=("documento", "registro público", "registro publico", "abogado", "próxima acción", "proxima accion"),
+    )
+
+    low = (picked or "").lower().strip()
+
+    if not picked or len(picked) < 5 or low in {"o familiar", "familiar", "terreno"}:
+        return "Terreno familiar"
+
+    return picked
+
+
 def _bucket_notes(notes: list[dict]) -> dict:
     buckets = {
         "case_name": [],
@@ -110,23 +147,40 @@ def render_karen_case_status(chat_id: int) -> str:
 
     lines.append("")
     lines.append("🧠 Base del caso:")
-    if buckets["case_name"]:
-        lines.append(f"- Caso: {_clip(buckets['case_name'][-1], 180)}")
-    else:
-        lines.append("- Caso: Terreno familiar")
+    case_name = _safe_case_name(buckets["case_name"])
 
-    if buckets["people"]:
-        lines.append(f"- Personas/herederos: {_clip(buckets['people'][-1], 220)}")
-    else:
-        lines.append("- Personas/herederos: pendiente de limpiar/confirmar")
+    people = _pick_best(
+        buckets["people"],
+        required_any=("heredero", "herederos", "cinco", "karen", "frank"),
+        reject_any=("documento", "registro público", "registro publico", "papeles", "escanear"),
+    )
 
-    if buckets["timeline"]:
-        lines.append(f"- Timeline inicial: {_clip(buckets['timeline'][-1], 220)}")
-    else:
-        lines.append("- Timeline inicial: pendiente")
+    timeline = _pick_best(
+        buckets["timeline"],
+        required_any=("1986", "trámite", "tramite", "empezó", "empezo", "fecha", "evento"),
+        reject_any=("abogado", "próxima acción", "proxima accion", "documento", "papeles"),
+    )
 
-    if buckets["urgency"]:
-        lines.append(f"- Urgencia/cita: {_clip(buckets['urgency'][-1], 220)}")
+    urgency = _pick_best(
+        buckets["urgency"],
+        required_any=("abogado", "cita", "próxima semana", "proxima semana", "urgencia", "fecha límite", "fecha limite"),
+        reject_any=("registro público", "registro publico", "papeles físicos", "papeles fisicos"),
+    )
+
+    lines.append(f"- Caso: {_clip(case_name, 180)}")
+
+    if people:
+        lines.append(f"- Personas/herederos: {_clip(people, 220)}")
+    else:
+        lines.append("- Personas/herederos: cinco herederos; Karen y Frank ayudan a organizar. Pendiente confirmar nombres reales.")
+
+    if timeline:
+        lines.append(f"- Timeline inicial: {_clip(timeline, 220)}")
+    else:
+        lines.append("- Timeline inicial: trámite familiar desde 1986, con eventos por confirmar.")
+
+    if urgency:
+        lines.append(f"- Urgencia/cita: {_clip(urgency, 220)}")
 
     if buckets["documents"]:
         lines.append("")
