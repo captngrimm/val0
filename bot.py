@@ -10251,6 +10251,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[COMPLETION_LOOP] failed: {e}")
 
     # --------------------------------------------------
+    # Karen Interrogator handle_text gate
+    # Must run before unified memory/task capture so "hay que..."
+    # answers are not stolen by task creation.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_interrogator(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_INTERROGATOR_HANDLE_TEXT_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # Pending bug/feedback/idea report (hard gate before unified memory/task capture)
     # --------------------------------------------------
     try:
