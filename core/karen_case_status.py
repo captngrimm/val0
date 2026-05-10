@@ -9,9 +9,46 @@ def _clip(text: str, limit: int = 260) -> str:
         return text
     return text[:limit].rstrip() + "..."
 
+def _looks_like_pasted_transcript(text: str) -> bool:
+    t = text or ""
+    return (
+        "[5/" in t
+        or "Valeria:" in t
+        or "Frank:" in t
+        or t.count("\n") >= 12
+    )
+
+
+def _clean_note_text(text: str) -> str:
+    text = (text or "").strip()
+
+    prefixes = (
+        "Inventario inicial de documentos:",
+        "Custodia / ubicación de documentos:",
+        "Datos registrales / identificadores mencionados:",
+        "Nombre del caso:",
+        "Personas/herederos involucrados:",
+        "Evento más antiguo recordado:",
+        "Cita, fecha límite o urgencia de esta semana:",
+    )
+
+    for pfx in prefixes:
+        if text.startswith(pfx):
+            text = text[len(pfx):].strip()
+
+    # Remove category appendix for compact display.
+    if "\nCategorías detectadas:" in text:
+        text = text.split("\nCategorías detectadas:", 1)[0].strip()
+
+    return text.strip()
+
+
 def _bucket_notes(notes: list[dict]) -> dict:
     buckets = {
-        "interrogator": [],
+        "case_name": [],
+        "people": [],
+        "timeline": [],
+        "urgency": [],
         "lawyer_questions": [],
         "documents": [],
         "holders": [],
@@ -21,12 +58,31 @@ def _bucket_notes(notes: list[dict]) -> dict:
 
     for n in notes:
         source = str(n.get("source") or "").strip()
-        txt = str(n.get("note_text") or "").strip()
+        raw = str(n.get("note_text") or "").strip()
+        if not raw:
+            continue
+
+        # Test noise / transcripts should not pollute the user-facing case status.
+        if raw == "Interrogator v0 iniciado para caso de terreno familiar.":
+            continue
+
+        if source == "document_registry_details_v0" and _looks_like_pasted_transcript(raw):
+            # Keep the section useful instead of showing pasted Telegram transcript trash.
+            buckets["registry"].append("Pendiente: revisar fotos y papeles físicos para confirmar finca, folio, inscripción, fecha, tomo o asiento.")
+            continue
+
+        txt = _clean_note_text(raw)
         if not txt:
             continue
 
-        if source.startswith("interrogator"):
-            buckets["interrogator"].append(txt)
+        if source == "interrogator_step_0":
+            buckets["case_name"].append(txt)
+        elif source == "interrogator_step_1":
+            buckets["people"].append(txt)
+        elif source == "interrogator_step_2":
+            buckets["timeline"].append(txt)
+        elif source == "interrogator_step_4":
+            buckets["urgency"].append(txt)
         elif source == "lawyer_questions_v0":
             buckets["lawyer_questions"].append(txt)
         elif source == "document_inventory_v0":
@@ -52,29 +108,44 @@ def render_karen_case_status(chat_id: int) -> str:
 
     lines.append("Lo que tengo hasta ahora:")
 
-    if buckets["interrogator"]:
-        lines.append("")
-        lines.append("🧠 Arranque del caso:")
-        for txt in reversed(buckets["interrogator"][-5:]):
-            lines.append(f"- {_clip(txt, 180)}")
+    lines.append("")
+    lines.append("🧠 Base del caso:")
+    if buckets["case_name"]:
+        lines.append(f"- Caso: {_clip(buckets['case_name'][-1], 180)}")
+    else:
+        lines.append("- Caso: Terreno familiar")
+
+    if buckets["people"]:
+        lines.append(f"- Personas/herederos: {_clip(buckets['people'][-1], 220)}")
+    else:
+        lines.append("- Personas/herederos: pendiente de limpiar/confirmar")
+
+    if buckets["timeline"]:
+        lines.append(f"- Timeline inicial: {_clip(buckets['timeline'][-1], 220)}")
+    else:
+        lines.append("- Timeline inicial: pendiente")
+
+    if buckets["urgency"]:
+        lines.append(f"- Urgencia/cita: {_clip(buckets['urgency'][-1], 220)}")
 
     if buckets["documents"]:
         lines.append("")
         lines.append("📎 Documentos mencionados:")
-        for txt in reversed(buckets["documents"][-2:]):
-            lines.append(f"- {_clip(txt, 220)}")
+        lines.append(f"- {_clip(buckets['documents'][-1], 300)}")
 
     if buckets["holders"]:
         lines.append("")
         lines.append("📍 Quién tiene documentos:")
-        for txt in reversed(buckets["holders"][-2:]):
-            lines.append(f"- {_clip(txt, 220)}")
+        lines.append(f"- {_clip(buckets['holders'][-1], 260)}")
 
     if buckets["registry"]:
         lines.append("")
         lines.append("🏛️ Datos registrales / pendientes de verificar:")
-        for txt in reversed(buckets["registry"][-2:]):
-            lines.append(f"- {_clip(txt, 220)}")
+        lines.append(f"- {_clip(buckets['registry'][-1], 260)}")
+    else:
+        lines.append("")
+        lines.append("🏛️ Datos registrales / pendientes de verificar:")
+        lines.append("- Falta revisar si los documentos tienen finca, folio, inscripción, tomo, asiento o fecha.")
 
     if buckets["lawyer_questions"]:
         lines.append("")
