@@ -1,5 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes
+from core.karen_next_action import set_pending_next_action
 
 CASE_KEY = "KAREN-LAND-001"
 
@@ -96,12 +97,18 @@ async def maybe_handle_karen_lawyer_questions(update: Update, context: ContextTy
             telegram_message_id=update.message.message_id,
         )
 
+        set_pending_next_action(
+            context,
+            action="start_document_inventory",
+            label="inventario de documentos",
+        )
+
         await update.message.reply_text(
             "Guardado ✅📁\n\n"
             "Dejé las preguntas para el abogado dentro del caso del terreno.\n\n"
             "Siguiente paso recomendado:\n"
             "hacer inventario de documentos.\n\n"
-            "Dime: empecemos inventario de documentos."
+            "¿Seguimos con eso ahora? Responde OK y arrancamos."
         )
         return True
 
