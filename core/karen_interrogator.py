@@ -9,7 +9,7 @@ def question(step: int) -> str:
         1: "Perfecto. Ahora la gente del arroz con mango familiar 🧠📁\n\n¿Quiénes son los herederos o personas principales involucradas?",
         2: "Vamos al timeline.\n\n¿Cuál es el evento más antiguo que recuerdas del caso?\nSi no recuerdas exacto, dime aproximado.",
         3: "Ahora documentos 📎\n\n¿Qué documentos tienen o saben que existen?\nRegistro Público, escritura, certificado, plano, poder, contrato, recibo, foto, Word, PDF.\n\n¿Están físicos, digitales, fotos de WhatsApp o mezclados como gaveta de cables?",
-        4: "Última pregunta de arranque, prometido, no soy notaría con WiFi 😌\n\n¿Qué hay que hacer esta semana para mover el caso?",
+        4: "Última pregunta de arranque, prometido, no soy notaría con WiFi 😌\n\n¿Ya hay alguna cita, fecha límite o urgencia esta semana?\n\nEjemplo: cita con abogado, documento que pedir, reunión familiar, llamada pendiente.",
     }
     return qs.get(step, "")
 
@@ -81,7 +81,7 @@ async def maybe_handle_karen_interrogator(update: Update, context: ContextTypes.
         1: "Personas/herederos involucrados",
         2: "Evento más antiguo recordado",
         3: "Documentos disponibles",
-        4: "Próxima acción de esta semana",
+        4: "Cita, fecha límite o urgencia de esta semana",
     }
 
     label = labels.get(step, f"Respuesta paso {step}")
@@ -139,11 +139,18 @@ async def maybe_handle_karen_interrogator(update: Update, context: ContextTypes.
         "- personas principales\n"
         "- primer evento del timeline\n"
         "- documentos disponibles\n"
-        "- próxima acción\n\n"
-        "Está rudo, sí. Pero ya no está flotando en el aire como papelito en abanico. 😌\n\n"
-        "Ahora puedes decir:\n"
-        "“¿Qué tengo del caso del terreno?”\n"
-        "o\n"
-        "“¿Qué hago ahora?”"
+        "- urgencia o cita de esta semana\n\n"
+        "Te propongo este plan inicial:\n\n"
+        "1. Armar el timeline base desde 1986 hasta hoy.\n"
+        "2. Hacer inventario de documentos: Registro Público, resúmenes y papeles físicos.\n"
+        "3. Marcar qué documentos faltan, cuáles hay que escanear y quién los tiene.\n"
+        "4. Preparar preguntas para abogado.\n"
+        "5. Programar las citas con abogados para la próxima semana.\n"
+        "6. Después de cada cita, registrar nuevas acciones, fechas y responsables.\n\n"
+        "Primera acción recomendada:\n"
+        "Preparar un paquete simple para el abogado con timeline inicial + documentos disponibles + preguntas clave.\n\n"
+        "Está rudo, sí. Pero ya dejó de ser humo en abanico. 😌\n\n"
+        "Siguiente paso sugerido:\n"
+        "Dime: armemos preguntas para el abogado."
     )
     return True
