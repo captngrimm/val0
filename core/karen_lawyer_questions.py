@@ -66,6 +66,45 @@ async def maybe_handle_karen_lawyer_questions(update: Update, context: ContextTy
         return False
 
     t = (text or "").lower().strip()
+
+    save_markers = (
+        "guardemos estas preguntas en el caso",
+        "guarda estas preguntas en el caso",
+        "guardar estas preguntas en el caso",
+        "guarda las preguntas en el caso",
+        "guardar las preguntas en el caso",
+        "guardemos las preguntas en el caso",
+        "guardar preguntas en el caso",
+        "guarda preguntas en el caso",
+        "deja estas preguntas en el caso",
+        "deja las preguntas en el caso",
+        "mete estas preguntas en el caso",
+        "mete las preguntas en el caso",
+    )
+
+    if any(m in t for m in save_markers):
+        from memory_store import insert_case_note, set_active_case_id
+
+        chat_id = int(update.effective_chat.id)
+        set_active_case_id(chat_id, CASE_KEY)
+
+        insert_case_note(
+            chat_id=chat_id,
+            case_id=CASE_KEY,
+            note_text="Preguntas para abogado registradas:\n\n" + LAWYER_QUESTIONS_TEXT,
+            source="lawyer_questions_v0",
+            telegram_message_id=update.message.message_id,
+        )
+
+        await update.message.reply_text(
+            "Guardado ✅📁\n\n"
+            "Dejé las preguntas para el abogado dentro del caso del terreno.\n\n"
+            "Siguiente paso recomendado:\n"
+            "hacer inventario de documentos.\n\n"
+            "Dime: empecemos inventario de documentos."
+        )
+        return True
+
     markers = (
         "armemos preguntas para el abogado",
         "preguntas para el abogado",
