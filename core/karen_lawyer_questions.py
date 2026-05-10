@@ -1,6 +1,6 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from core.karen_next_action import set_pending_next_action
+from core.karen_next_action import set_pending_next_action, document_inventory_keyboard
 
 CASE_KEY = "KAREN-LAND-001"
 
@@ -108,7 +108,8 @@ async def maybe_handle_karen_lawyer_questions(update: Update, context: ContextTy
             "Dejé las preguntas para el abogado dentro del caso del terreno.\n\n"
             "Siguiente paso recomendado:\n"
             "hacer inventario de documentos.\n\n"
-            "¿Seguimos con eso ahora? Responde OK y arrancamos."
+            "¿Arrancamos ahora el inventario?",
+            reply_markup=document_inventory_keyboard(),
         )
         return True
 

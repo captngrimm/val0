@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 def set_pending_next_action(context: ContextTypes.DEFAULT_TYPE, action: str, label: str):
@@ -33,6 +33,58 @@ def is_confirmation(text: str) -> bool:
     }
     return t in confirmations
 
+def document_inventory_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Sí, empezar inventario", callback_data="karen:start_document_inventory")],
+        [InlineKeyboardButton("⏸️ Después", callback_data="karen:later_document_inventory")],
+    ])
+
+async def start_document_inventory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["karen_document_inventory"] = {
+        "active": True,
+        "step": 0,
+    }
+
+    text = (
+        "Perfecto 😏📎 Empecemos el inventario de documentos.\n\n"
+        "Primera pregunta:\n"
+        "¿Qué documentos tienes ahora mismo del caso?\n\n"
+        "Puedes responder desordenado, por ejemplo:\n"
+        "- Registro Público\n"
+        "- escrituras\n"
+        "- fotos de papeles\n"
+        "- Word/PDF\n"
+        "- resúmenes\n"
+        "- papeles físicos que hay que escanear"
+    )
+
+    if getattr(update, "callback_query", None):
+        await update.callback_query.edit_message_text(text)
+    elif update.message:
+        await update.message.reply_text(text)
+
+async def karen_next_action_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query:
+        return
+
+    await query.answer()
+
+    data = query.data or ""
+
+    if data == "karen:start_document_inventory":
+        clear_pending_next_action(context)
+        await start_document_inventory(update, context)
+        return
+
+    if data == "karen:later_document_inventory":
+        clear_pending_next_action(context)
+        await query.edit_message_text(
+            "Perfecto, lo dejamos para después 😌📎\n\n"
+            "Cuando quieras seguir, dime: inventario de documentos."
+        )
+        return
+
 async def maybe_handle_pending_next_action(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
     if not update.message:
         return False
@@ -48,22 +100,7 @@ async def maybe_handle_pending_next_action(update: Update, context: ContextTypes
     clear_pending_next_action(context)
 
     if action == "start_document_inventory":
-        await update.message.reply_text(
-            "Perfecto 😏📎 Empecemos el inventario de documentos.\n\n"
-            "Primera pregunta:\n"
-            "¿Qué documentos tienes ahora mismo del caso?\n\n"
-            "Puedes responder desordenado, por ejemplo:\n"
-            "- Registro Público\n"
-            "- escrituras\n"
-            "- fotos de papeles\n"
-            "- Word/PDF\n"
-            "- resúmenes\n"
-            "- papeles físicos que hay que escanear"
-        )
-        context.user_data["karen_document_inventory"] = {
-            "active": True,
-            "step": 0,
-        }
+        await start_document_inventory(update, context)
         return True
 
     return False
