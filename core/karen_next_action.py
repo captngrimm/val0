@@ -131,48 +131,105 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
     case_key = "KAREN-LAND-001"
     set_active_case_id(int(chat_id), case_key)
 
-    categories = _detect_document_categories(answer)
+    step = int(state.get("step") or 0)
 
-    note_lines = [
-        "Inventario inicial de documentos:",
-        "",
-        answer,
-    ]
+    if step == 0:
+        categories = _detect_document_categories(answer)
 
-    if categories:
-        note_lines.extend(["", "Categorías detectadas:"])
-        note_lines.extend([f"- {c}" for c in categories])
+        note_lines = [
+            "Inventario inicial de documentos:",
+            "",
+            answer,
+        ]
 
-    insert_case_note(
-        chat_id=int(chat_id),
-        case_id=case_key,
-        note_text="\n".join(note_lines),
-        source="document_inventory_v0",
-        telegram_message_id=update.message.message_id,
-    )
+        if categories:
+            note_lines.extend(["", "Categorías detectadas:"])
+            note_lines.extend([f"- {c}" for c in categories])
 
-    context.user_data["karen_document_inventory"] = {
-        "active": True,
-        "step": 1,
-        "last_inventory_raw": answer,
-        "categories": categories,
-    }
+        insert_case_note(
+            chat_id=int(chat_id),
+            case_id=case_key,
+            note_text="\n".join(note_lines),
+            source="document_inventory_v0",
+            telegram_message_id=update.message.message_id,
+        )
 
-    if categories:
-        cat_text = "\n".join([f"- {c}" for c in categories])
-    else:
-        cat_text = "- No detecté categorías claras todavía, pero guardé el texto completo."
+        context.user_data["karen_document_inventory"] = {
+            "active": True,
+            "step": 1,
+            "last_inventory_raw": answer,
+            "categories": categories,
+        }
 
-    await update.message.reply_text(
-        "Guardado ✅📎\n\n"
-        "Dejé esto como inventario inicial de documentos del caso.\n\n"
-        "Detecté:\n"
-        f"{cat_text}\n\n"
-        "Siguiente pregunta:\n"
-        "¿Quién tiene esos documentos ahora mismo?\n\n"
-        "Ejemplo: Karen, Frank, un familiar, abogado, Registro Público, o no sabemos todavía."
-    )
-    return True
+        if categories:
+            cat_text = "\n".join([f"- {c}" for c in categories])
+        else:
+            cat_text = "- No detecté categorías claras todavía, pero guardé el texto completo."
+
+        await update.message.reply_text(
+            "Guardado ✅📎\n\n"
+            "Dejé esto como inventario inicial de documentos del caso.\n\n"
+            "Detecté:\n"
+            f"{cat_text}\n\n"
+            "Siguiente pregunta:\n"
+            "¿Quién tiene esos documentos ahora mismo?\n\n"
+            "Ejemplo: Karen, Frank, un familiar, abogado, Registro Público, o no sabemos todavía."
+        )
+        return True
+
+    if step == 1:
+        insert_case_note(
+            chat_id=int(chat_id),
+            case_id=case_key,
+            note_text="Custodia / ubicación de documentos:\n\n" + answer,
+            source="document_holder_v0",
+            telegram_message_id=update.message.message_id,
+        )
+
+        context.user_data["karen_document_inventory"] = {
+            "active": True,
+            "step": 2,
+            "document_holder_raw": answer,
+            "last_inventory_raw": state.get("last_inventory_raw"),
+            "categories": state.get("categories") or [],
+        }
+
+        await update.message.reply_text(
+            "Guardado ✅📍\n\n"
+            "Anoté quién tiene o dónde están los documentos.\n\n"
+            "Siguiente pregunta:\n"
+            "¿Alguno de esos documentos tiene número de finca, folio, inscripción, fecha, tomo, asiento o algún dato de Registro Público?\n\n"
+            "Puedes responder: sí, no, no sé, o pegar lo que veas."
+        )
+        return True
+
+    if step == 2:
+        insert_case_note(
+            chat_id=int(chat_id),
+            case_id=case_key,
+            note_text="Datos registrales / identificadores mencionados:\n\n" + answer,
+            source="document_registry_details_v0",
+            telegram_message_id=update.message.message_id,
+        )
+
+        context.user_data.pop("karen_document_inventory", None)
+
+        await update.message.reply_text(
+            "Guardado ✅🏛️\n\n"
+            "Dejé anotados los datos registrales o la falta de ellos.\n\n"
+            "Inventario documental v0 completado.\n\n"
+            "Siguiente acción recomendada:\n"
+            "preparar un paquete para abogado con:\n"
+            "- timeline inicial\n"
+            "- lista de herederos\n"
+            "- documentos disponibles\n"
+            "- quién tiene cada documento\n"
+            "- preguntas para abogado\n\n"
+            "Dime: ¿cuál es el plan? para ver dónde vamos."
+        )
+        return True
+
+    return False
 
 
 async def maybe_handle_pending_next_action(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
