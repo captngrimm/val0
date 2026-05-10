@@ -62,7 +62,10 @@ async def reminder_tick(context):
                     continue
 
                 try:
-                    await context.bot.send_message(chat_id=chat_id, text=text)
+                    # User-facing reminder message should not arrive as raw orphan text.
+                    # Keep it simple for v0: clear label + original reminder text.
+                    rendered = f"⏰ Recordatorio:\n{text}"
+                    await context.bot.send_message(chat_id=chat_id, text=rendered)
                     mark_reminder_sent(rid)
                     logger.info("ReminderRunner: sent id=%s chat_id=%s", rid, chat_id)
                 except Exception as e:
