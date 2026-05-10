@@ -1,5 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from core.karen_flow_state import save_flow_state, load_active_context_state, clear_flow_state
 
 def set_pending_next_action(context: ContextTypes.DEFAULT_TYPE, action: str, label: str):
     context.user_data["karen_pending_next_action"] = {
@@ -40,10 +41,20 @@ def document_inventory_keyboard() -> InlineKeyboardMarkup:
     ])
 
 async def start_document_inventory(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["karen_document_inventory"] = {
+    state = {
         "active": True,
         "step": 0,
     }
+    context.user_data["karen_document_inventory"] = state
+
+    chat_id = None
+    if getattr(update, "effective_chat", None):
+        chat_id = update.effective_chat.id
+    elif getattr(update, "callback_query", None) and update.callback_query.message:
+        chat_id = update.callback_query.message.chat_id
+
+    if chat_id is not None:
+        save_flow_state(int(chat_id), "karen_document_inventory", state)
 
     text = (
         "Perfecto 😏📎 Empecemos el inventario de documentos.\n\n"
@@ -113,7 +124,12 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
     if not update.message:
         return False
 
-    state = context.user_data.get("karen_document_inventory") or {}
+    state = load_active_context_state(
+        int(chat_id),
+        context,
+        user_data_key="karen_document_inventory",
+        flow_key="karen_document_inventory",
+    )
     if not state.get("active"):
         return False
 
@@ -123,6 +139,7 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
 
     if answer.lower().strip() in {"cancelar", "salir", "stop", "cancel"}:
         context.user_data.pop("karen_document_inventory", None)
+        clear_flow_state(int(chat_id), "karen_document_inventory")
         await update.message.reply_text("Listo. Pausé el inventario de documentos. Lo que ya guardamos queda en el caso. 📎")
         return True
 
@@ -154,12 +171,14 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
             telegram_message_id=update.message.message_id,
         )
 
-        context.user_data["karen_document_inventory"] = {
+        state = {
             "active": True,
             "step": 1,
             "last_inventory_raw": answer,
             "categories": categories,
         }
+        context.user_data["karen_document_inventory"] = state
+        save_flow_state(int(chat_id), "karen_document_inventory", state)
 
         if categories:
             cat_text = "\n".join([f"- {c}" for c in categories])
@@ -186,13 +205,15 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
             telegram_message_id=update.message.message_id,
         )
 
-        context.user_data["karen_document_inventory"] = {
+        state = {
             "active": True,
             "step": 2,
             "document_holder_raw": answer,
             "last_inventory_raw": state.get("last_inventory_raw"),
             "categories": state.get("categories") or [],
         }
+        context.user_data["karen_document_inventory"] = state
+        save_flow_state(int(chat_id), "karen_document_inventory", state)
 
         await update.message.reply_text(
             "Guardado ✅📍\n\n"
@@ -213,6 +234,7 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
         )
 
         context.user_data.pop("karen_document_inventory", None)
+        clear_flow_state(int(chat_id), "karen_document_inventory")
 
         await update.message.reply_text(
             "Guardado ✅🏛️\n\n"
