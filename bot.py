@@ -68,6 +68,7 @@ from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_kar
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
 from core.karen_case_facts import maybe_handle_karen_case_facts, maybe_capture_karen_case_facts
 from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
+from core.karen_appointments import maybe_handle_karen_appointment
 from core.karen_transcript_guard import maybe_guard_pasted_transcript, maybe_handle_pending_transcript_choice
 from subprocess import check_output
 
@@ -3010,6 +3011,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         from core.karen_next_action import start_document_inventory
 
         voice_norm_karen = _norm_text(transcribed_text or "")
+
+        from core.karen_appointments import maybe_handle_karen_appointment
+
+        if await maybe_handle_karen_appointment(update, context, transcribed_text):
+            return
 
         if await maybe_capture_karen_case_event(update, context, transcribed_text):
             return
@@ -10348,6 +10354,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_TRANSCRIPT_GUARD_GATE] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Appointment / Reschedule gate
+    # Captures natural cita/reunión/cambio de cita before generic reminders/case handlers.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_appointment(update, context, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_APPOINTMENT_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Recent Case Activity gate
