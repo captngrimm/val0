@@ -2289,28 +2289,56 @@ async def onboard_status_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(f"No pude leer tu perfil operativo: {e}")
         return
 
-    keys = [
-        "preferred_name",
-        "primary_role",
-        "use_case",
-        "main_goal",
-        "friction_points",
-        "current_tools",
-        "tracking_buckets",
-        "starter_workflow",
-        "onboarding_status",
-    ]
+    preferred_name = str(facts.get("preferred_name") or "").strip()
+    primary_role = str(facts.get("primary_role") or "").strip()
+    use_case = str(facts.get("use_case") or "").strip()
+    main_goal = str(facts.get("main_goal") or "").strip()
+    friction_points = str(facts.get("friction_points") or "").strip()
+    current_tools = str(facts.get("current_tools") or "").strip()
+    tracking_buckets = str(facts.get("tracking_buckets") or "").strip()
+    starter_workflow = str(facts.get("starter_workflow") or "").strip()
+    onboarding_status = str(facts.get("onboarding_status") or "").strip()
 
-    lines = ["🧭 Perfil operativo Mark 1", ""]
-    found = False
-    for k in keys:
-        v = str(facts.get(k) or "").strip()
-        if v:
-            found = True
-            lines.append(f"- {k}: {v}")
+    if not any([preferred_name, primary_role, use_case, main_goal, friction_points, current_tools, tracking_buckets]):
+        await update.message.reply_text(
+            "Todavía no tengo un perfil tuyo guardado.\n\n"
+            "Empieza con /onboard y te hago unas preguntas rápidas para entender tu mundo."
+        )
+        return
 
-    if not found:
-        lines.append("Todavía no tengo perfil operativo guardado. Empieza con /onboard.")
+    name = preferred_name or "ti"
+
+    lines = []
+    lines.append("🧭 Esto sé de ti hasta ahora")
+    lines.append("")
+    if preferred_name:
+        lines.append(f"- Te puedo llamar {preferred_name}.")
+    if primary_role:
+        lines.append(f"- Tu contexto principal ahora mismo es: {primary_role}.")
+    if use_case:
+        lines.append(f"- Quieres usarme para: {use_case}.")
+    if main_goal:
+        lines.append(f"- Lo primero que quieres mejorar es: {main_goal}.")
+    if friction_points:
+        lines.append(f"- Donde más se te caen las cosas: {friction_points}.")
+    if current_tools:
+        lines.append(f"- Hoy te organizas con: {current_tools}.")
+    if tracking_buckets:
+        lines.append(f"- Vamos a empezar rastreando: {tracking_buckets}.")
+    if starter_workflow:
+        lines.append("")
+        lines.append("Primer flujo sugerido:")
+        lines.append(f"- {starter_workflow}")
+
+    lines.append("")
+    lines.append("Cómo usarme:")
+    lines.append("- Cuéntame cosas en lenguaje normal.")
+    lines.append("- Yo intento separarlas en ideas, tareas, eventos, seguimientos o recordatorios.")
+    lines.append("- Si no sabes por dónde empezar, dime: ¿Qué hago ahora?")
+
+    lines.append("")
+    lines.append("Si algo está mal, dime algo como:")
+    lines.append("“Corrige mi perfil: ...”")
 
     await update.message.reply_text("\n".join(lines))
 
