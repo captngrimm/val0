@@ -114,3 +114,24 @@ Start with:
 Attachment Logging v0 in Val0.
 
 Then bridge to Forge OCR once the existing Miguel pipeline is located.
+
+## Launchpad note
+
+Launchpad is also part of the likely bridge.
+
+Possible role:
+- capture large command output safely
+- move files/inspection results between Forge/ValPrime and ChatGPT
+- support OCR/PDF pipeline inspection
+- act as the handoff surface for document-processing results
+
+Potential future flow:
+1. Karen sends document/photo to Val0.
+2. Val0 logs the attachment metadata and associates it with KAREN-LAND-001.
+3. If OCR/review is needed, Val0 or operator exports/downloads file for Forge/Launchpad processing.
+4. Launchpad captures OCR output or analysis result.
+5. Val/Frank reviews result.
+6. Confirmed summary/facts are written back into Karen case memory.
+
+Important:
+Do not rebuild OCR blindly inside Val0 until Forge/ValPrime/Launchpad OCR trail is inspected.
