@@ -127,3 +127,36 @@ Does this help Karen with:
 5. or feedback?
 
 If not, parking lot.
+
+## UX polish discovered during Karen live test
+
+### Karen Care Voice v1
+
+Issue:
+When Karen shared mixed personal/life/health overwhelm, Val understood part of it but replied too dry, generic, and paragraph-heavy.
+
+Target:
+For Karen-style personal overwhelm, Val should:
+- respond warmly
+- use light emojis
+- avoid giant gray paragraphs
+- say what was understood/saved
+- separate areas clearly
+- avoid weight-loss pressure or regañona tone
+- guide with one tiny next step
+- sound like supportive operator, not checklist robot
+
+Example target tone:
+"Ok, Insanity 🧠💛
+No vamos a arreglar toda tu vida en un mensaje. Primero la sacamos de tu cabeza.
+
+Guardé esto:
+🌿 Salud: quieres organizarte mejor.
+🏠 Casa: tienes pendientes mezclados.
+💡 Ideas: se te olvidan si no las capturas.
+😤 Estado: estás frustrada y no quieres regaño, quieres orden.
+
+Primer paso: dime 3 cosas que tienes dando vueltas ahora mismo. Yo las separo."
+
+Status:
+P0 for Karen demo quality.
