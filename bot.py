@@ -3001,6 +3001,36 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.exception(f"[VOICE_TOMORROW_DASHBOARD_OVERRIDE] failed: {e}")
 
     # --------------------------------------------------
+    # KAREN VOICE DIRECT GATE
+    # --------------------------------------------------
+    # Voice transcription can hit older generic legal routes inside the text pipeline.
+    # For Karen LandOps, catch explicit event/summary/inventory commands directly here first.
+    try:
+        from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
+        from core.karen_next_action import start_document_inventory
+
+        voice_norm_karen = _norm_text(transcribed_text or "")
+
+        if await maybe_capture_karen_case_event(update, context, transcribed_text):
+            return
+
+        if await maybe_handle_karen_recent_events_summary(update, context, transcribed_text):
+            return
+
+        if voice_norm_karen in {
+            "inventario de documentos",
+            "empezar inventario de documentos",
+            "iniciar inventario de documentos",
+            "hagamos inventario de documentos",
+            "hacer inventario de documentos",
+        }:
+            await start_document_inventory(update, context)
+            return
+
+    except Exception as e:
+        logger.exception(f"[KAREN_VOICE_DIRECT_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # VOICE → TEXT PIPELINE ALIGNMENT
     # --------------------------------------------------
     # Voice should behave like the same text typed by the user.
