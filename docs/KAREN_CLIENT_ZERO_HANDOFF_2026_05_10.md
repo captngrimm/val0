@@ -207,3 +207,26 @@ Perfecto, Karen. Hoy ya validamos bastante:
 - También empezó a funcionar por voz para guardar eventos.
 
 Lo siguiente es probar mañana o pasado si sigue recordando todo correctamente y pulir recordatorios/citas.
+
+## Post-handoff update — Appointment / Reschedule v0
+
+After the main handoff, Karen appointment/reschedule capture was added and validated.
+
+Latest commit:
+531b33f docs: checkpoint Karen appointment reschedule pass
+
+Validated:
+- User can say: "Val, tengo cita con la abogada Nora Santa el lunes 11 a las 10 AM para revisar el caso del terreno."
+- Val saves it as case appointment/agenda.
+- User can say: "Val, cambiaron la cita con Nora. Ya no es lunes 11, ahora queda para martes 12 a las 9 AM."
+- Val saves the change/reschedule.
+- "Dame un resumen de los últimos eventos compartidos" now includes both original appointment and reschedule.
+
+Boundary:
+This is not full calendar editing yet.
+It is case agenda/follow-up memory v0.
+
+Next:
+- persistence retest tomorrow/day-after
+- reminder due-time validation
+- optional calendar integration after permissions/account validation
