@@ -24,7 +24,7 @@ def extract_karen_case_facts(text: str) -> dict:
     if m:
         facts["finca"] = m.group(1)
 
-    m = re.search(r"(?:tomo|rollo|tomo/rollo)\s*[:#]?\s*(\d+)", raw, flags=re.I)
+    m = re.search(r"(?:tomo\s*/\s*rollo|tomo|rollo)\s*[:#]?\s*(\d+)", raw, flags=re.I)
     if not m:
         m = re.search(r"(?:Tomo/Rollo|Tomo|Rollo)(\d+)", compact, flags=re.I)
     if m:
@@ -216,6 +216,30 @@ async def maybe_handle_karen_case_facts(update: Update, context: ContextTypes.DE
 
     chat_id = update.effective_chat.id
     t = _norm(text)
+
+    # If the user pasted obvious case facts, save them BEFORE trying to answer.
+    # Otherwise a pasted block containing "Finca" can be mistaken for a query and return "no data".
+    incoming_facts = extract_karen_case_facts(text)
+    incoming_is_strong = bool(
+        incoming_facts.get("finca")
+        and (
+            incoming_facts.get("folio")
+            or incoming_facts.get("tomo_rollo")
+            or incoming_facts.get("herederos")
+        )
+    )
+
+    if incoming_is_strong:
+        save_karen_case_facts(
+            int(chat_id),
+            text,
+            telegram_message_id=update.message.message_id,
+        )
+        await update.message.reply_text(
+            "Guardé los datos básicos del caso ✅📁\n\n"
+            f"{render_case_facts(incoming_facts, mode='all')}"
+        )
+        return True
 
     facts = load_karen_case_facts(int(chat_id))
 
