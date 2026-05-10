@@ -63,7 +63,7 @@ from core.context_snapshot import build_context_snapshot
 from core.karen_interrogator import interrogate_cmd, maybe_handle_karen_interrogator
 from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle_karen_lawyer_questions
-from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback
+from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory
 from subprocess import check_output
 
 
@@ -10264,6 +10264,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_INTERROGATOR_HANDLE_TEXT_GATE] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Document Inventory active-answer gate
+    # If document inventory is active, consume the answer
+    # before memory/task/case layers steal it.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_document_inventory(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Pending Next Action gate
