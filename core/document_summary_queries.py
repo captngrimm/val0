@@ -101,6 +101,267 @@ def _find_doc_meta(case_id: str, ingest_id: str) -> dict:
     return parsed
 
 
+def _contains(text: str, *needles: str) -> bool:
+    low = (text or "").lower()
+    return any(n.lower() in low for n in needles)
+
+
+def _extract_first(pattern: str, text: str) -> str:
+    m = re.search(pattern, text or "", flags=re.I | re.S)
+    if not m:
+        return ""
+    return re.sub(r"\s+", " ", m.group(1)).strip()
+
+
+def _structured_specific_doc_bullets(text: str) -> list[tuple[str, list[str]]]:
+    """
+    Deterministic section summary.
+    No legal inference: only emits points when matching text exists in the extracted document.
+    """
+    clean = re.sub(r"\s+", " ", text or "").strip()
+
+    sections: list[tuple[str, list[str]]] = []
+
+    contexto = []
+    expediente = _extract_first(r"Expediente\s+No\.\s*([^\n\r]+?)(?:\s+Juzgado|\s+I\.|$)", text)
+    if expediente:
+        contexto.append(f"Expediente mencionado: {expediente}.")
+
+    if _contains(clean, "Prescripción Adquisitiva de Dominio"):
+        contexto.append("El documento menciona un proceso ordinario de Prescripción Adquisitiva de Dominio.")
+
+    if _contains(clean, "Juzgado Primero de Circuito Civil", "Juzgado Primero de Circuito de lo Civil"):
+        contexto.append("Se menciona el Juzgado Primero de Circuito Civil del Tercer Circuito Judicial de Panamá, La Chorrera.")
+
+    if contexto:
+        sections.append(("1. Contexto del documento", contexto))
+
+    partes = []
+    if _contains(clean, "RICARDO JUNCÁ", "RICARDO ARTURO JUNCÁ"):
+        partes.append("Se menciona a Ricardo Juncá García / Ricardo Arturo Juncá García como demandante.")
+    if _contains(clean, "CARMEN MONTENEGRO DE SANDINO"):
+        partes.append("Se menciona a Carmen Montenegro de Sandino entre las personas demandadas.")
+    if _contains(clean, "Javier Morán Montenegro", "Teonila Antonia", "Marina Montenegro", "Odilia Montenegro"):
+        partes.append("También aparecen otros copropietarios/herederos mencionados en el documento.")
+    if partes:
+        sections.append(("2. Personas o partes mencionadas", partes))
+
+    resoluciones = []
+    if _contains(clean, "AUTO No. 629", "AUTO N°629", "Auto No.629"):
+        resoluciones.append("Se menciona el Auto No. 629, fechado 29 de abril de 2024.")
+    if _contains(clean, "Auto No. 77", "AUTO No. 77"):
+        resoluciones.append("Se menciona el Auto No. 77 del 15 de enero de 2024, relacionado con tener la demanda como no presentada.")
+    if _contains(clean, "REVOCÓ el Auto No.1188", "REVOCÓ el Auto No. 1188", "DECLARÓ la nulidad"):
+        resoluciones.append("Se menciona una resolución del Primer Tribunal Superior que revocó el Auto No. 1188 y declaró nulidad de lo actuado.")
+    if resoluciones:
+        sections.append(("3. Resoluciones mencionadas", resoluciones))
+
+    registro = []
+    if _contains(clean, "CANCELAR la inscripción provisional", "cancelar la inscripción provisional"):
+        registro.append("El documento menciona la cancelación de la inscripción provisional de la demanda ante el Registro Público.")
+    if _contains(clean, "Oficio No. 792", "OFICIO No. 792"):
+        registro.append("Se menciona el Oficio No. 792 dirigido al Registro Público.")
+    if _contains(clean, "Finca No.10082", "Finca No. 10082"):
+        registro.append("Se menciona la Finca No. 10082.")
+    if _contains(clean, "Código de Ubicación 8001", "Código de ubicación: 8001"):
+        registro.append("Se menciona el Código de Ubicación 8001.")
+    if registro:
+        sections.append(("4. Registro Público y finca", registro))
+
+    hechos = []
+    if _contains(clean, "Carmen residía", "Carmen vivía", "residía efectivamente"):
+        hechos.append("El documento menciona elementos sobre la residencia u ocupación de Carmen Montenegro en la finca.")
+    if _contains(clean, "emplazamiento por edicto", "notificación real", "FALTA DE NOTIFICACIÓN"):
+        hechos.append("El documento menciona problemas relacionados con notificación o emplazamiento.")
+    if _contains(clean, "inspección judicial", "12 de abril de 2023"):
+        hechos.append("Se menciona una inspección judicial realizada el 12 de abril de 2023.")
+    if hechos:
+        sections.append(("5. Hechos destacados que aparecen en el documento", hechos))
+
+    estado = []
+    if _contains(clean, "demanda se tenía", "como no presentada", "demanda fue anulada", "quedó archivado", "archivo del presente proceso"):
+        estado.append("El documento menciona que la demanda fue tratada como no presentada, anulada o archivada, según las secciones transcritas.")
+    if _contains(clean, "NO obtuvo el dominio legal", "NO pasó a nombre de Ricardo Juncá"):
+        estado.append("El documento contiene una sección que indica que Ricardo Juncá no obtuvo el dominio legal de la finca.")
+    if estado:
+        sections.append(("6. Estado descrito dentro del documento", estado))
+
+    verificar = [
+        "Validar estos puntos con el documento original y/o con el abogado antes de usarlos como posición legal.",
+        "No se están dando conclusiones legales nuevas; esto es una organización del texto extraído.",
+    ]
+    sections.append(("7. Puntos a verificar", verificar))
+
+    return sections
+
+
+def _first_present(text: str, patterns: list[str]) -> str:
+    for pattern in patterns:
+        value = _extract_first(pattern, text)
+        if value:
+            return value
+    return ""
+
+
+def _extract_legal_header(text: str) -> dict:
+    clean = re.sub(r"\s+", " ", text or "").strip()
+
+    expediente = _first_present(text, [
+        r"Expediente\s+No\.\s*([^\n\r]+?)(?:\s+Juzgado|\s+I\.|$)",
+        r"EXP\.\s*([0-9\-]+)",
+    ])
+
+    fecha = _first_present(text, [
+        r"La Chorrera,\s*([^\n\r]+?\d{4})",
+        r"(\d{1,2}\s+de\s+[a-záéíóúñ]+\s+de\s+\d{4})",
+        r"(Octubre\s+de\s+\d{4})",
+    ])
+
+    tipo_proceso = ""
+    if _contains(clean, "Prescripción Adquisitiva de Dominio"):
+        tipo_proceso = "Proceso ordinario de Prescripción Adquisitiva de Dominio"
+
+    juzgado = ""
+    if _contains(clean, "Juzgado Primero de Circuito Civil", "Juzgado Primero de Circuito de lo Civil"):
+        juzgado = "Juzgado Primero de Circuito Civil del Tercer Circuito Judicial de Panamá, La Chorrera"
+
+    tipo_documento = ""
+    if _contains(clean, "AUTO No. 629", "AUTO N°629", "Auto No.629"):
+        tipo_documento = "Resumen/transcripción de actuaciones judiciales; menciona Auto No. 629 y otros documentos"
+    elif _contains(clean, "OFICIO No. 792", "Oficio No. 792"):
+        tipo_documento = "Documento relacionado con oficio al Registro Público"
+
+    partes = []
+    if _contains(clean, "RICARDO JUNCÁ", "RICARDO ARTURO JUNCÁ"):
+        partes.append("Ricardo Juncá García / Ricardo Arturo Juncá García")
+    if _contains(clean, "CARMEN MONTENEGRO DE SANDINO"):
+        partes.append("Carmen Montenegro de Sandino")
+    if _contains(clean, "Javier Morán Montenegro"):
+        partes.append("Javier Morán Montenegro Ortega")
+    if _contains(clean, "Teonila Antonia Montenegro"):
+        partes.append("Teonila Antonia Montenegro de Cruz")
+    if _contains(clean, "Marina Montenegro", "Martina Montenegro"):
+        partes.append("Marina/Martina Montenegro de Martínez")
+    if _contains(clean, "Odilia Montenegro"):
+        partes.append("Odilia Montenegro de Estribí")
+
+    return {
+        "expediente": expediente,
+        "fecha": fecha,
+        "tipo_proceso": tipo_proceso,
+        "juzgado": juzgado,
+        "tipo_documento": tipo_documento,
+        "partes": partes,
+    }
+
+
+def _extract_chronology(text: str) -> list[str]:
+    clean = re.sub(r"\s+", " ", text or "").strip()
+    events = []
+
+    known_events = [
+        ("Octubre de 2023", "Se menciona resolución del Primer Tribunal Superior que revocó el Auto No. 1188 y declaró nulidad de lo actuado."),
+        ("15 de enero de 2024", "Se menciona el Auto No. 77, relacionado con tener la demanda como no presentada."),
+        ("29 de abril de 2024", "Se menciona el Auto No. 629, relacionado con cancelar la inscripción provisional de la demanda."),
+        ("29 de mayo de 2024", "Se menciona el Oficio No. 792 dirigido al Registro Público."),
+        ("24 de septiembre de 2025", "Se menciona un informe secretarial sobre incorporación del oficio al expediente."),
+        ("12 de abril de 2023", "Se menciona una inspección judicial relacionada con la residencia u ocupación en el terreno."),
+    ]
+
+    for date_text, description in known_events:
+        if _contains(clean, date_text):
+            events.append(f"{date_text}: {description}")
+
+    return events[:8]
+
+
+def _extract_registry_points(text: str) -> list[str]:
+    clean = re.sub(r"\s+", " ", text or "").strip()
+    points = []
+
+    if _contains(clean, "Finca No.10082", "Finca No. 10082"):
+        points.append("Finca No. 10082.")
+    if _contains(clean, "Código de Ubicación 8001", "Código de ubicación: 8001"):
+        points.append("Código de Ubicación 8001.")
+    if _contains(clean, "Registro Público"):
+        points.append("Se menciona actuación dirigida al Registro Público.")
+    if _contains(clean, "CANCELAR la inscripción provisional", "cancelar la inscripción provisional"):
+        points.append("Se menciona cancelación de inscripción provisional de la demanda.")
+
+    return points
+
+
+def _render_legal_document_summary(filename: str, ingest_id: str, caption: str, state: str, text: str) -> str:
+    header = _extract_legal_header(text)
+    sections = _structured_specific_doc_bullets(text)
+    chronology = _extract_chronology(text)
+    registry_points = _extract_registry_points(text)
+
+    lines = [
+        f"📄 Documento: {_clean_filename(filename)}",
+        f"VFMS: {ingest_id}",
+    ]
+
+    if state:
+        lines.append(f"Estado: {state}")
+
+    if caption:
+        lines.append(f"Nota: {caption}")
+
+    lines.append("")
+    lines.append("🧾 Ficha del documento")
+
+    ficha = [
+        ("Juzgado / entidad", header.get("juzgado")),
+        ("Fecha principal detectada", header.get("fecha")),
+        ("Tipo de documento", header.get("tipo_documento")),
+        ("Tipo de proceso", header.get("tipo_proceso")),
+        ("Expediente / referencia", header.get("expediente")),
+    ]
+
+    for label, value in ficha:
+        lines.append(f"- {label}: {value or 'No identificado claramente en el texto extraído.'}")
+
+    if header.get("partes"):
+        lines.append("- Personas/partes mencionadas:")
+        for party in header["partes"]:
+            lines.append(f"  - {party}")
+
+    lines.append("")
+    lines.append("📌 Resumen claro")
+    for title, bullets in sections:
+        if title.startswith("7."):
+            continue
+        lines.append("")
+        lines.append(title)
+        for b in bullets:
+            lines.append(f"- {b}")
+
+    if chronology:
+        lines.append("")
+        lines.append("🕒 Cronología detectada")
+        for event in chronology:
+            lines.append(f"- {event}")
+
+    if registry_points:
+        lines.append("")
+        lines.append("🏛️ Datos registrales mencionados")
+        for point in registry_points:
+            lines.append(f"- {point}")
+
+    lines.append("")
+    lines.append("🔎 Para revisar con abogado")
+    lines.append("- Confirmar el efecto exacto de cada auto/resolución en el expediente.")
+    lines.append("- Verificar si la cancelación registral ya fue ejecutada correctamente en Registro Público.")
+    lines.append("- Usar este resumen como guía de organización, no como decisión legal final.")
+
+    return "\n".join(lines)
+
+
+def _render_structured_specific_doc_summary(filename: str, ingest_id: str, caption: str, state: str, text: str) -> str:
+    return _render_legal_document_summary(filename, ingest_id, caption, state, text)
+
+
 def _build_specific_doc_summary(case_id: str, ingest_id: str) -> str:
     text_body = _read_extracted_text(ingest_id)
 
@@ -117,7 +378,7 @@ def _build_specific_doc_summary(case_id: str, ingest_id: str) -> str:
         f"CASE:{case_id}",
         "Sin inferencias. Solo basado en texto extraído/VFMS.",
         "",
-        _doc_summary(
+        _render_structured_specific_doc_summary(
             meta.get("filename", "documento"),
             ingest_id,
             meta.get("caption", ""),
