@@ -2896,6 +2896,115 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
+
+# --------------------------------------------------
+# Attachment handler — Karen/VFMS bridge v0
+# --------------------------------------------------
+async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    v0 bridge:
+    - receives Telegram document/photo
+    - downloads to Val0 local storage
+    - registers file through VFMS ingest
+    - best-effort extract/index for text-like files
+    - does NOT promise OCR/analysis yet
+    """
+    if not update.message:
+        return
+
+    chat_id = update.effective_chat.id
+    msg_id = update.message.message_id
+    user = update.effective_user
+
+    upload_root = "/opt/val0/vfms_data/telegram_uploads"
+    os.makedirs(upload_root, exist_ok=True)
+
+    file_id = None
+    original_name = None
+    kind = None
+
+    if update.message.document:
+        doc = update.message.document
+        file_id = doc.file_id
+        original_name = doc.file_name or f"document_{msg_id}"
+        kind = "document"
+    elif update.message.photo:
+        photo = update.message.photo[-1]
+        file_id = photo.file_id
+        original_name = f"photo_{chat_id}_{msg_id}.jpg"
+        kind = "photo"
+    else:
+        return
+
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", original_name).strip("_") or f"upload_{msg_id}"
+    local_dir = os.path.join(upload_root, str(chat_id))
+    os.makedirs(local_dir, exist_ok=True)
+    local_path = os.path.join(local_dir, f"{msg_id}__{safe_name}")
+
+    try:
+        tg_file = await context.bot.get_file(file_id)
+        await tg_file.download_to_drive(local_path)
+    except Exception as e:
+        logger.exception(f"Attachment download failed: {e}")
+        await update.message.reply_text("No pude descargar ese archivo. Intenta mandarlo otra vez.")
+        return
+
+    ingest_id = None
+    vfms_status = "registrado"
+    extract_status = "no extraído todavía"
+
+    try:
+        proc = subprocess.run(
+            ["/opt/val0/.venv/bin/python", "/opt/val0/vfms.py", "ingest", local_path],
+            cwd="/opt/val0",
+            text=True,
+            capture_output=True,
+            timeout=60,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(proc.stderr.strip() or proc.stdout.strip())
+        ingest_id = proc.stdout.strip().splitlines()[-1].strip()
+
+        ext = os.path.splitext(local_path)[1].lower()
+        if ext in {".txt", ".md", ".csv", ".tsv"}:
+            subprocess.run(
+                ["/opt/val0/.venv/bin/python", "/opt/val0/vfms.py", "extract", ingest_id, "--ocr", "off"],
+                cwd="/opt/val0",
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=True,
+            )
+            subprocess.run(
+                ["/opt/val0/.venv/bin/python", "/opt/val0/vfms.py", "index", ingest_id],
+                cwd="/opt/val0",
+                text=True,
+                capture_output=True,
+                timeout=60,
+                check=True,
+            )
+            extract_status = "texto extraído e indexado"
+        else:
+            extract_status = "archivo guardado; OCR/análisis queda como paso manual"
+
+    except Exception as e:
+        logger.exception(f"VFMS attachment registration failed: {e}")
+        vfms_status = "guardado localmente, pero VFMS falló"
+        extract_status = str(e)[:180]
+
+    reply = (
+        "📎 Documento recibido.\n"
+        f"Tipo: {kind}\n"
+        f"Archivo: {safe_name}\n"
+        f"VFMS: {vfms_status}\n"
+    )
+    if ingest_id:
+        reply += f"ID VFMS: {ingest_id}\n"
+    reply += f"Estado: {extract_status}"
+
+    await update.message.reply_text(reply)
+
+
 # --------------------------------------------------
 # Voice handler (Whisper via OpenAI)
 # --------------------------------------------------
@@ -11766,6 +11875,7 @@ def main():
     # Messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(filters.VOICE, handle_voice))
+    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_attachment))
 
     app.run_polling(drop_pending_updates=True)
 
