@@ -76,26 +76,94 @@ def _clean_lines(text: str) -> list[str]:
     return out
 
 
+def _is_heading_only(line: str) -> bool:
+    line = (line or "").strip()
+    if not line:
+        return True
+
+    normalized = line.strip().strip("-").strip().lower()
+
+    headings = {
+        "base del caso:",
+        "base del caso",
+        "documentos mencionados:",
+        "documentos mencionados",
+        "datos registrales / pendientes de verificar:",
+        "datos registrales / pendientes de verificar",
+        "siguiente acción recomendada:",
+        "siguiente accion recomendada:",
+        "siguiente acción recomendada",
+        "siguiente accion recomendada",
+        "lo que tengo hasta ahora:",
+        "lo que tengo hasta ahora",
+    }
+
+    return normalized in headings
+
+
+def _clean_bullet_text(line: str) -> str:
+    line = (line or "").strip()
+
+    # Remove repeated markdown/list prefixes from OCR or generated docs.
+    line = re.sub(r"^(?:[-•]\s*)+", "", line).strip()
+    line = re.sub(r"\s+", " ", line).strip()
+
+    if len(line) > 240:
+        line = line[:237].rstrip() + "..."
+
+    return line
+
+
+def _join_wrapped_lines(lines: list[str]) -> list[str]:
+    joined = []
+
+    for raw in lines:
+        line = _clean_bullet_text(raw)
+
+        if not line or _is_heading_only(line):
+            continue
+
+        # If the previous line does not end like a finished thought,
+        # and this line looks like continuation text, merge it.
+        if joined:
+            prev = joined[-1]
+            starts_new = bool(re.match(
+                r"^(caso|documentos|datos|siguiente|finca|folio|tomo|rollo|escritura|registro|juzgado)\b",
+                line,
+                flags=re.I,
+            ))
+
+            if (
+                not starts_new
+                and not prev.endswith((".", ":", ";"))
+                and len(prev) < 220
+            ):
+                joined[-1] = (prev + " " + line).strip()
+                continue
+
+        joined.append(line)
+
+    return joined
+
+
 def _pick_grounded_bullets(text: str, limit: int = 6) -> list[str]:
-    lines = _clean_lines(text)
+    lines = _join_wrapped_lines(_clean_lines(text))
     picked = []
 
     priority_markers = (
         "caso",
-        "base del caso",
-        "documentos mencionados",
-        "datos registrales",
+        "juzgado",
+        "documentos",
+        "registro público",
+        "registro publico",
         "finca",
         "folio",
         "tomo",
         "rollo",
         "escritura",
+        "abogado",
         "siguiente acción",
         "siguiente accion",
-        "abogado",
-        "juzgado",
-        "registro público",
-        "registro publico",
     )
 
     for line in lines:
@@ -106,22 +174,23 @@ def _pick_grounded_bullets(text: str, limit: int = 6) -> list[str]:
             break
 
     if not picked:
-        for line in lines[:limit]:
-            picked.append(line)
+        picked = lines[:limit]
 
-    # Keep bullets readable.
     clean = []
     seen = set()
+
     for item in picked:
-        item = re.sub(r"\s+", " ", item).strip()
-        if not item:
+        item = _clean_bullet_text(item)
+
+        if not item or _is_heading_only(item):
             continue
-        key = item.lower()
+
+        key = re.sub(r"\s+", " ", item.lower()).strip()
+
         if key in seen:
             continue
+
         seen.add(key)
-        if len(item) > 220:
-            item = item[:217].rstrip() + "..."
         clean.append(item)
 
     return clean[:limit]
