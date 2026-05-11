@@ -10,6 +10,10 @@ SUMMARY_MARKERS = (
     "resumen de los documentos",
     "dame resumen de documentos",
     "dame un resumen de documentos",
+    "dame un resumen general",
+    "resumen general",
+    "resumen claro",
+    "resumen estructurado",
     "resumen del documento",
     "resume documentos",
     "resume los documentos",
@@ -17,6 +21,7 @@ SUMMARY_MARKERS = (
     "que dicen los documentos",
     "qué dicen los pdf",
     "que dicen los pdf",
+    "vfms",
 )
 
 EXTRACTED_DIR = Path("/opt/val0/vfms_data/extracted")
@@ -55,6 +60,73 @@ def _read_extracted_text(ingest_id: str) -> str:
         return ""
 
     return path.read_text(encoding="utf-8", errors="replace").strip()
+
+
+def _extract_vfms_id(text: str) -> str:
+    m = re.search(r"\b(20\d{6}_\d{6})\b", text or "")
+    return m.group(1).strip() if m else ""
+
+
+def _find_doc_meta(case_id: str, ingest_id: str) -> dict:
+    conn = _get_conn()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT note_text
+        FROM case_notes
+        WHERE case_id=?
+          AND source='telegram_attachment_vfms'
+          AND note_text LIKE ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (case_id, f"%{ingest_id}%"),
+    )
+
+    row = cur.fetchone()
+    conn.close()
+
+    if not row:
+        return {
+            "filename": "documento",
+            "ingest_id": ingest_id,
+            "caption": "",
+            "state": "",
+        }
+
+    note = row[0] if not isinstance(row, dict) else row["note_text"]
+    parsed = _parse_note(note)
+    parsed["ingest_id"] = parsed.get("ingest_id") or ingest_id
+    return parsed
+
+
+def _build_specific_doc_summary(case_id: str, ingest_id: str) -> str:
+    text_body = _read_extracted_text(ingest_id)
+
+    if not text_body:
+        return (
+            f"No encontré texto extraído para el documento VFMS {ingest_id} "
+            f"en CASE:{case_id}. Puede estar registrado, pero no resumible todavía."
+        )
+
+    meta = _find_doc_meta(case_id, ingest_id)
+
+    return "\n".join([
+        f"🧾 Resumen grounded del documento VFMS {ingest_id}",
+        f"CASE:{case_id}",
+        "Sin inferencias. Solo basado en texto extraído/VFMS.",
+        "",
+        _doc_summary(
+            meta.get("filename", "documento"),
+            ingest_id,
+            meta.get("caption", ""),
+            meta.get("state", ""),
+            text_body,
+        ),
+        "",
+        "Nota: no estoy dando una conclusión legal; solo organizo lo que aparece en el documento.",
+    ]).strip()
 
 
 def _normalize_body(text: str) -> str:
@@ -230,6 +302,12 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     case_id = get_active_case_id(int(chat_id))
     if not case_id:
         return False
+
+    specific_vfms_id = _extract_vfms_id(text)
+    if specific_vfms_id:
+        reply = _build_specific_doc_summary(str(case_id), specific_vfms_id)
+        await update.message.reply_text(reply)
+        return True
 
     conn = _get_conn()
     cur = conn.cursor()
