@@ -38,7 +38,7 @@ def _extract_query(text: str) -> str:
             m2 = re.search(
                 r"escritura\s+(\d+)",
                 q,
-                flags=re.I
+                flags=re.I,
             )
 
             if m2:
@@ -47,6 +47,53 @@ def _extract_query(text: str) -> str:
             return q.strip()
 
     return t.strip()
+
+
+def _clean_filename(filename: str) -> str:
+    filename = (filename or "documento").strip()
+
+    # Telegram/VFMS sometimes stores names as "8456__Document4.pdf".
+    if "__" in filename:
+        filename = filename.split("__", 1)[1].strip()
+
+    return filename or "documento"
+
+
+def _normalize_for_dedupe(text: str) -> str:
+    text = (text or "").lower()
+    text = text.replace("--- page 1 ---", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _make_snippet(chunk_text: str, query: str) -> str:
+    clean = (chunk_text or "").replace("\n", " ").strip()
+    clean = clean.replace("--- Page 1 ---", "").strip()
+
+    if not clean:
+        return ""
+
+    idx = clean.lower().find((query or "").lower())
+
+    if idx >= 0:
+        start = max(0, idx - 120)
+        end = min(len(clean), idx + 220)
+        snippet = clean[start:end].strip()
+
+        if start > 0:
+            snippet = "…" + snippet
+
+        if end < len(clean):
+            snippet = snippet + "…"
+
+        return snippet
+
+    snippet = clean[:260].strip()
+
+    if len(clean) > 260:
+        snippet += "…"
+
+    return snippet
 
 
 async def maybe_handle_document_semantic_query(update, context, chat_id: int, text: str) -> bool:
@@ -76,38 +123,43 @@ async def maybe_handle_document_semantic_query(update, context, chat_id: int, te
         ORDER BY id DESC
         LIMIT 100
         """,
-        (case_id,)
+        (case_id,),
     )
 
     note_rows = cur.fetchall()
     conn.close()
 
-    allowed_ingest_ids = set()
+    allowed_ingest_ids = []
+    seen_ingest_ids = set()
 
     for row in note_rows:
         note = row[0] if not isinstance(row, dict) else row["note_text"]
-
         m = re.search(r"- VFMS ingest_id:\s*(.+)", note or "")
 
-        if m:
-            allowed_ingest_ids.add(m.group(1).strip())
+        if not m:
+            continue
+
+        ingest_id = m.group(1).strip()
+
+        if ingest_id in seen_ingest_ids:
+            continue
+
+        seen_ingest_ids.add(ingest_id)
+        allowed_ingest_ids.append(ingest_id)
 
     rows = []
 
+    # Keep newest case-linked attachments first because note_rows are DESC.
     for ingest_id in allowed_ingest_ids:
         try:
             matches = query_db(
                 query,
                 top=5,
-                ingest_id=ingest_id
+                ingest_id=ingest_id,
             )
-
             rows.extend(matches)
-
         except Exception:
-            pass
-
-    rows = rows[:5]
+            continue
 
     if not rows:
         await update.message.reply_text(
@@ -117,38 +169,46 @@ async def maybe_handle_document_semantic_query(update, context, chat_id: int, te
 
     lines = [f"🔎 Coincidencias para: {query}\n"]
 
-    seen = set()
+    seen_files = set()
+    seen_snippets = set()
+    shown = 0
 
     for ingest_id, filename, chunk_id, chunk_text in rows:
-        key = f"{filename}:{chunk_id}"
+        clean_filename = _clean_filename(filename)
+        snippet = _make_snippet(chunk_text, query)
 
-        if key in seen:
+        if not snippet:
             continue
 
-        seen.add(key)
+        file_key = clean_filename.lower().strip()
+        snippet_key = _normalize_for_dedupe(snippet)
 
-        clean = chunk_text.replace("\n", " ").strip()
+        # Avoid showing the same PDF name repeatedly and collapse repeated body text.
+        if file_key in seen_files:
+            continue
 
-        idx = clean.lower().find(query.lower())
+        if snippet_key in seen_snippets:
+            continue
 
-        if idx >= 0:
-            start = max(0, idx - 120)
-            end = min(len(clean), idx + 220)
-            snippet = clean[start:end].strip()
-        else:
-            snippet = clean[:260].strip()
+        seen_files.add(file_key)
+        seen_snippets.add(snippet_key)
 
-        if start > 0:
-            snippet = "…" + snippet
-
-        if end < len(clean):
-            snippet = snippet + "…"
-
-        lines.append(f"📄 {filename}")
+        lines.append(f"📄 {clean_filename}")
         lines.append(f"VFMS: {ingest_id}")
         lines.append("Coincidencia:")
         lines.append(f"“{snippet}”")
         lines.append("")
+
+        shown += 1
+
+        if shown >= 5:
+            break
+
+    if shown == 0:
+        await update.message.reply_text(
+            f"No encontré coincidencias únicas para: {query}"
+        )
+        return True
 
     await update.message.reply_text("\n".join(lines).strip())
     return True
