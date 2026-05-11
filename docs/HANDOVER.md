@@ -28,3 +28,40 @@ You are the Val0 cockpit for VFMS + Telegram document intelligence.
 ## Ask me for (when stuck)
 - “Give me the exact command to (X)”
 - “Show me how to validate (Y) without inference”
+
+## 2026-05-10 — Karen semantic document retrieval pass
+
+Commit:
+112026c fix: scope semantic VFMS retrieval to active case ingest ids
+
+Validated:
+- Active-case scoped VFMS retrieval works
+- Semantic-ish natural language queries work
+- OCR/indexed PDF retrieval works
+- Cross-case/global VFMS bleed fixed
+- Queries like:
+  - "qué documento menciona escritura 920"
+  - "dónde sale folio 308"
+  now return grounded Karen-case snippets only
+
+Current architecture:
+- OCR/extraction -> VFMS
+- VFMS chunk index -> SQLite LIKE retrieval
+- Retrieval scoped by active case ingest_ids
+- Grounded snippets returned conversationally
+
+Known limitations:
+- Literal substring retrieval only
+- No embeddings/vector search yet
+- Duplicate chunk bodies still possible
+- No page extraction yet
+
+Recommended next step:
+- Deduplicate repeated chunk bodies/snippets
+- Add page metadata later if OCR pipeline supports it
+
+
+Recommended next step:
+- Deduplicate repeated chunk bodies/snippets
+- Add page metadata later if OCR pipeline supports it
+

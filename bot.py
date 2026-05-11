@@ -67,6 +67,7 @@ from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_cas
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
 from core.document_inventory_queries import maybe_handle_document_query
+from core.document_semantic_queries import maybe_handle_document_semantic_query
 from core.karen_case_facts import maybe_handle_karen_case_facts, maybe_capture_karen_case_facts
 from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
 from core.karen_appointments import maybe_handle_karen_appointment
@@ -10593,6 +10594,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await maybe_handle_document_query(update, context, chat_id, text):
+            return
+
+        if await maybe_handle_document_semantic_query(update, context, chat_id, text):
             return
 
         if await maybe_handle_document_inventory(update, context, chat_id, text):

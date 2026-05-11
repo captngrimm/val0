@@ -279,8 +279,29 @@ async def maybe_handle_karen_case_facts(update: Update, context: ContextTypes.DE
         "tienes en memoria información básica",
     )
 
-    if any(m in t for m in finca_markers):
-        await update.message.reply_text(render_case_facts(facts, mode="finca", chat_id=int(chat_id)))
+    summary_blockers = (
+        "resume",
+        "resumen",
+        "qué dicen los documentos",
+        "que dicen los documentos",
+        "busca",
+        "buscar",
+        "menciona",
+        "dónde sale",
+        "donde sale",
+    )
+
+    if (
+        any(m in t for m in finca_markers)
+        and not any(b in t for b in summary_blockers)
+    ):
+        await update.message.reply_text(
+            render_case_facts(
+                facts,
+                mode="finca",
+                chat_id=int(chat_id)
+            )
+        )
         return True
 
     if any(m in t for m in heirs_markers):

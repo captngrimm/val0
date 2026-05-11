@@ -552,11 +552,33 @@ def cmd_query(args: argparse.Namespace) -> int:
         conn.close()
         return 0
 
+    seen_files = set()
+
     for rank, (chunk_id, ingest_id, page, chunk_text) in enumerate(rows, start=1):
         meta = get_doc_meta(conn, ingest_id)
         filename = meta[0] if meta else ingest_id
+
+        # cleanup ugly telegram-prefixed filenames
+        if "__" in filename:
+            filename = filename.split("__", 1)[1]
+
+        # hide smoke artifacts from user-facing retrieval
+        if "smoke" in filename.lower():
+            continue
+
+        dedupe_name = filename.lower().strip()
+
+        if dedupe_name in seen_files:
+            continue
+
+        seen_files.add(dedupe_name)
+
         page_str = f"page {page}" if page is not None else "page ?"
+
         excerpt = chunk_text.strip().replace("\n", " ")
+
+        # cleanup noisy OCR/page markers
+        excerpt = excerpt.replace("--- Page 1 ---", "").strip()
         if len(excerpt) > 260:
             excerpt = excerpt[:257] + "..."
         print(f"{rank}) {filename} | ingest_id={ingest_id} | {page_str} | chunk_id={chunk_id}")
