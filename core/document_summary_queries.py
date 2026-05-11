@@ -1,7 +1,54 @@
 import re
 from pathlib import Path
 
+
+
 from memory_store import get_active_case_id, _get_conn
+
+
+async def _reply_text_chunked(update, text: str, limit: int = 3800):
+    """Telegram-safe reply helper for long document summaries."""
+    if not update or not getattr(update, "message", None):
+        return []
+
+    text = (text or "").strip()
+    if not text:
+        return []
+
+    chunks = []
+    current = ""
+
+    for block in text.split("\n\n"):
+        candidate = block if not current else current + "\n\n" + block
+
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+
+        if current:
+            chunks.append(current)
+            current = ""
+
+        if len(block) <= limit:
+            current = block
+        else:
+            start = 0
+            while start < len(block):
+                chunks.append(block[start:start + limit])
+                start += limit
+
+    if current:
+        chunks.append(current)
+
+    if len(chunks) <= 1:
+        return [await update.message.reply_text(text)]
+
+    sent = []
+    total = len(chunks)
+    for idx, chunk in enumerate(chunks, start=1):
+        prefix = f"[{idx}/{total}]\n"
+        sent.append(await update.message.reply_text(prefix + chunk))
+    return sent
 
 
 SUMMARY_MARKERS = (
@@ -347,9 +394,21 @@ def _render_legal_document_summary(filename: str, ingest_id: str, caption: str, 
 
     if chronology:
         lines.append("")
-        lines.append("🕒 Cronología detectada")
+        lines.append("🕒 TABLA CRONOLÓGICA / FECHAS IMPORTANTES")
+        lines.append("Fecha | Evento / documento | Por qué importa")
+        lines.append("--- | --- | ---")
         for event in chronology:
-            lines.append(f"- {event}")
+            if ":" in event:
+                date_part, detail_part = event.split(":", 1)
+                date_part = date_part.strip()
+                detail_part = detail_part.strip()
+            else:
+                date_part = "Fecha mencionada"
+                detail_part = event.strip()
+
+            lines.append(
+                f"{date_part} | {detail_part} | Revisar efecto exacto con abogado"
+            )
 
     if registry_points:
         lines.append("")
@@ -608,15 +667,17 @@ Para llevarlo más presentable a consulta.
 Ejemplo:
 “El documento menciona un proceso de prescripción adquisitiva, las partes involucradas, resoluciones relevantes y puntos que conviene revisar con el abogado antes de tomar decisiones.”
 
-4. Cronología 🕒
+4. Tabla cronológica 🕒
 Para ordenar el relajo por fechas, porque estos casos parecen serie larga con capítulos perdidos.
 
 Ejemplo:
-- 2023: resolución del tribunal.
-- Enero 2024: Auto No. 77.
-- Abril 2024: Auto No. 629.
-- Mayo 2024: oficio al Registro Público.
-- Septiembre 2025: informe secretarial.
+Fecha | Evento | Importancia
+--- | --- | ---
+2023 | Resolución del tribunal | Revisar efecto procesal
+Enero 2024 | Auto No. 77 | Confirmar consecuencia
+Abril 2024 | Auto No. 629 | Confirmar efecto registral
+Mayo 2024 | Oficio al Registro Público | Verificar ejecución
+Septiembre 2025 | Informe secretarial | Revisar estado actual
 
 5. Tabla de datos importantes 🧾
 Para ver los datos duros sin novela.
@@ -651,7 +712,7 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     specific_vfms_id = _extract_vfms_id(text)
     if specific_vfms_id:
         reply = _build_specific_doc_summary(str(case_id), specific_vfms_id)
-        await update.message.reply_text(reply)
+        await _reply_text_chunked(update, reply)
         return True
 
     conn = _get_conn()
@@ -726,5 +787,5 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
         )
         parts.append("")
 
-    await update.message.reply_text("\n".join(parts).strip())
+    await _reply_text_chunked(update, "\n".join(parts).strip())
     return True
