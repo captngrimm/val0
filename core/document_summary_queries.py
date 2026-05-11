@@ -21,6 +21,14 @@ SUMMARY_MARKERS = (
     "que dicen los documentos",
     "qué dicen los pdf",
     "que dicen los pdf",
+    "formatos",
+    "formato",
+    "opciones de resumen",
+    "versiones",
+    "cómo puedes resumir",
+    "como puedes resumir",
+    "qué formatos tienes",
+    "que formatos tienes",
     "vfms",
 )
 
@@ -554,11 +562,87 @@ def _doc_summary(filename: str, ingest_id: str, caption: str, state: str, text: 
     return "\n".join(lines)
 
 
+def _looks_like_format_preview_request(text: str) -> bool:
+    t = (text or "").lower()
+    markers = (
+        "formatos",
+        "formato",
+        "opciones de resumen",
+        "versiones",
+        "cómo puedes resumir",
+        "como puedes resumir",
+        "qué formatos tienes",
+        "que formatos tienes",
+        "muéstrame opciones",
+        "muestrame opciones",
+    )
+    return any(m in t for m in markers)
+
+
+def _format_preview_reply() -> str:
+    return """Karen, te puedo mostrar el mismo documento en varios sabores 😄
+
+La idea no es que adivines cuál quieres. Te doy mini ejemplos y tú escoges el que más te sirva.
+
+1. Resumen corto 🧃
+Para entender rápido sin meterte en la maleza.
+
+Ejemplo:
+“Este documento trata de un proceso de prescripción adquisitiva relacionado con la Finca 10082. Menciona autos judiciales, actuaciones del Registro Público y una cancelación de inscripción provisional.”
+
+2. Ficha legal 📎
+Para tener los datos ordenados como ficha.
+
+Ejemplo:
+- Juzgado / entidad:
+- Expediente:
+- Fecha principal:
+- Partes mencionadas:
+- Finca:
+- Autos / oficios:
+- Datos registrales:
+
+3. Informe para abogado ⚖️
+Para llevarlo más presentable a consulta.
+
+Ejemplo:
+“El documento menciona un proceso de prescripción adquisitiva, las partes involucradas, resoluciones relevantes y puntos que conviene revisar con el abogado antes de tomar decisiones.”
+
+4. Cronología 🕒
+Para ordenar el relajo por fechas, porque estos casos parecen serie larga con capítulos perdidos.
+
+Ejemplo:
+- 2023: resolución del tribunal.
+- Enero 2024: Auto No. 77.
+- Abril 2024: Auto No. 629.
+- Mayo 2024: oficio al Registro Público.
+- Septiembre 2025: informe secretarial.
+
+5. Tabla de datos importantes 🧾
+Para ver los datos duros sin novela.
+
+Ejemplo:
+- Expediente:
+- Finca:
+- Código de ubicación:
+- Juzgado:
+- Personas:
+- Autos:
+- Oficios:
+- Fechas importantes:
+
+Dime cuál quieres, o dime “mezcla de varias” y te lo armo sin drama. Cero formulario del gobierno, prometido 😌"""
+
+
 async def maybe_handle_document_summary_query(update, context, chat_id: int, text: str) -> bool:
     raw = (text or "").strip().lower()
 
     if not any(m in raw for m in SUMMARY_MARKERS):
         return False
+
+    if _looks_like_format_preview_request(text):
+        await update.message.reply_text(_format_preview_reply())
+        return True
 
     case_id = get_active_case_id(int(chat_id))
     if not case_id:
