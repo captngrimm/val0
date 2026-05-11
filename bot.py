@@ -148,6 +148,8 @@ from memory_store import (
     upsert_daily_log,
     get_daily_logs,
     search_daily_logs,
+    get_active_case_id,
+    insert_case_note,
     log_action,
     has_processed_event,
     mark_processed_event,
@@ -2915,6 +2917,7 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     chat_id = update.effective_chat.id
     msg_id = update.message.message_id
     user = update.effective_user
+    caption_text = (update.message.caption or "").strip()
 
     upload_root = "/opt/val0/vfms_data/telegram_uploads"
     os.makedirs(upload_root, exist_ok=True)
@@ -2952,6 +2955,8 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     ingest_id = None
     vfms_status = "registrado"
     extract_status = "no extraído todavía"
+    active_case_id = ""
+    case_note_status = ""
 
     try:
         proc = subprocess.run(
@@ -2966,9 +2971,25 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         ingest_id = proc.stdout.strip().splitlines()[-1].strip()
 
         ext = os.path.splitext(local_path)[1].lower()
-        if ext in {".txt", ".md", ".csv", ".tsv"}:
+
+        auto_extract_exts = {
+            ".txt",
+            ".md",
+            ".csv",
+            ".tsv",
+            ".pdf",
+        }
+
+        if ext in auto_extract_exts:
             subprocess.run(
-                ["/opt/val0/.venv/bin/python", "/opt/val0/vfms.py", "extract", ingest_id, "--ocr", "off"],
+                [
+                    "/opt/val0/.venv/bin/python",
+                    "/opt/val0/vfms.py",
+                    "extract",
+                    ingest_id,
+                    "--ocr",
+                    "auto" if ext == ".pdf" else "off",
+                ],
                 cwd="/opt/val0",
                 text=True,
                 capture_output=True,
@@ -2987,6 +3008,31 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         else:
             extract_status = "archivo guardado; OCR/análisis queda como paso manual"
 
+        try:
+            active_case_id = get_active_case_id(int(chat_id))
+            if active_case_id:
+                note_text = (
+                    "Documento recibido vía Telegram y registrado en VFMS.\n"
+                    f"- Archivo: {safe_name}\n"
+                    f"- Tipo: {kind}\n"
+                    f"- VFMS ingest_id: {ingest_id}\n"
+                    f"- Ruta local: {local_path}\n"
+                    f"- Estado: {extract_status}\n"
+                )
+                if caption_text:
+                    note_text += f"- Nota usuario: {caption_text}\n"
+                insert_case_note(
+                    chat_id=int(chat_id),
+                    case_id=str(active_case_id),
+                    note_text=note_text,
+                    source="telegram_attachment_vfms",
+                    telegram_message_id=int(msg_id),
+                )
+                case_note_status = f"asociado al caso CASE:{active_case_id}"
+        except Exception as e:
+            logger.exception(f"Failed to link attachment to active case: {e}")
+            case_note_status = "registrado en VFMS; no pude asociarlo al caso activo"
+
     except Exception as e:
         logger.exception(f"VFMS attachment registration failed: {e}")
         vfms_status = "guardado localmente, pero VFMS falló"
@@ -3001,6 +3047,10 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if ingest_id:
         reply += f"ID VFMS: {ingest_id}\n"
     reply += f"Estado: {extract_status}"
+    if caption_text:
+        reply += "\n📝 Nota asociada al documento."
+    if case_note_status:
+        reply += f"\nCaso: {case_note_status}"
 
     await update.message.reply_text(reply)
 
