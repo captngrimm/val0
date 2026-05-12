@@ -170,6 +170,44 @@ def _extract_holder_lines(text: str) -> list[str]:
     return unique
 
 
+def _document_category_lines(documents: list[str]) -> list[str]:
+    """
+    Convert raw inventory-flow notes into clean package bullets.
+    Avoid dumping duplicated 'Categorías detectadas' blocks into attorney package.
+    """
+    raw = "\n".join([x.strip() for x in documents if x and x.strip()])
+    low = raw.lower()
+
+    categories = []
+
+    checks = [
+        ("Registro Público", ("registro público", "registro publico")),
+        ("Fotos de documentos", ("fotos", "whatsapp")),
+        ("Word / PDF / digital", ("word", "pdf", "digital")),
+        ("Resúmenes", ("resumen", "resúmenes", "resumenes")),
+        ("Papeles físicos por revisar/escanear", ("papeles físicos", "papeles fisicos", "escanear")),
+        ("Escrituras / documentos notariales", ("escritura", "notaría", "notaria")),
+    ]
+
+    for label, needles in checks:
+        if any(n in low for n in needles):
+            categories.append(label)
+
+    unique = []
+    for item in categories:
+        if item not in unique:
+            unique.append(item)
+
+    if unique:
+        return [f"- {x}" for x in unique]
+
+    clean = [x.strip() for x in documents if x and x.strip()]
+    if not clean:
+        return ["- Pendiente completar inventario documental."]
+
+    return [f"- {_clip(clean[-1], 360)}"]
+
+
 def _holder_fallback_from_documents(documents: list[str]) -> list[str]:
     """
     If custody was captured inside the inventory text but not saved as a separate
@@ -193,21 +231,22 @@ def render_lawyer_package(chat_id: int) -> str:
     facts = data["facts"]
 
     lines = []
-    lines.append("⚖️📦 Paquete para abogada — caso del terreno familiar")
+    lines.append("⚖️📦 Paquete para la abogada Nora Santa — caso del terreno familiar")
     lines.append("")
     lines.append(
-        "Nota rápida: esto organiza hechos, documentos y preguntas para la consulta. "
-        "No reemplaza revisión legal; la abogada debe validar estrategia, documentos y riesgos. 😌"
+        "Insanity, aquí va el paquete ordenado para que la abogada pueda revisar sin tener que bucear "
+        "en 40 años de arroz con mango familiar. Esto organiza hechos, documentos y preguntas; "
+        "no reemplaza la revisión legal ni inventa certeza donde todavía falta validar. 😌"
     )
     lines.append("")
 
-    lines.append("1. Resumen corto del caso")
-    lines.append("- Se trata de un trámite/disputa familiar sobre la finca hereditaria.")
+    lines.append("1. Resumen ejecutivo")
+    lines.append("- Caso familiar relacionado con una finca hereditaria y su situación registral/procesal.")
     if facts.get("finca"):
         lines.append(f"- La finca principal identificada es la Finca {facts['finca']}.")
     if facts.get("tipo_proceso"):
         lines.append(f"- El proceso base identificado es: {facts['tipo_proceso']}.")
-    lines.append("- Karen/Insanity y Frank están organizando información, eventos, documentos y próximos pasos.")
+    lines.append("- Karen/Insanity y Frank están ordenando hechos, documentos, custodia y próximos pasos para consulta legal.")
     lines.append("")
 
     lines.append("2. Datos básicos identificados")
@@ -226,12 +265,8 @@ def render_lawyer_package(chat_id: int) -> str:
     ))
     lines.append("")
 
-    lines.append("5. Documentos disponibles o mencionados")
-    lines.extend(_latest_lines(
-        data["documents"],
-        "Pendiente completar inventario documental.",
-        limit=2,
-    ))
+    lines.append("5. Documentos disponibles / mencionados")
+    lines.extend(_document_category_lines(data["documents"]))
     lines.append("")
 
     lines.append("6. Quién tiene documentos / custodia")
@@ -275,20 +310,19 @@ def render_lawyer_package(chat_id: int) -> str:
     lines.append("8. ¿Qué puede adelantar la familia esta semana antes de una siguiente cita?")
     lines.append("")
 
-    lines.append("10. Checklist antes de la reunión")
-    lines.append("- Llevar o compartir fotos legibles de documentos.")
-    lines.append("- Separar documentos de Registro Público, Word/resúmenes, fotos de WhatsApp y papeles físicos.")
-    lines.append("- Confirmar quién tiene originales y quién tiene copias.")
-    lines.append("- Tener a mano Finca/Tomo/Folio/Escritura/fechas.")
-    lines.append("- Llevar lista de herederos declarados.")
-    lines.append("- Anotar preguntas sobre costos, plazos y próximos pasos.")
+    lines.append("10. Checklist para llegar lista a la reunión")
+    lines.append("- Llevar fotos legibles o copias de todos los documentos disponibles.")
+    lines.append("- Separar por tipo: Registro Público, escrituras, Word/resúmenes, WhatsApp/fotos y papeles físicos.")
+    lines.append("- Marcar quién tiene originales, quién tiene copias y qué falta escanear.")
+    lines.append("- Tener visible: Finca, Tomo/Rollo, Folio, Escritura, fechas y nombres de herederos.")
+    lines.append("- Preguntar costos, plazos, riesgos, documentos faltantes y primera acción concreta.")
     lines.append("")
 
     lines.append("11. Siguiente acción recomendada")
     lines.append(
-        "Confirmar si ya hay cita, llamada o entrega de documentos con la abogada. "
-        "Si hay fecha/hora, Val puede dejarlo como seguimiento o recordatorio. "
-        "Nada de confiarle 40 años de arroz con mango familiar a la memoria humana, por favor. 😏"
+        "Confirmar la próxima cita, llamada o entrega de documentos con Nora Santa. "
+        "Si ya hay fecha/hora, Val puede dejarlo como recordatorio y seguimiento. "
+        "Porque confiarle este novelón familiar a la memoria humana sería una falta de respeto al caos. 😏"
     )
 
     return "\n".join(lines)
