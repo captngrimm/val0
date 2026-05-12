@@ -10498,6 +10498,30 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         source="group" if int(chat_id) < 0 else "dm",
     )
 
+    # --------------------------------------------------
+    # Karen/VFMS Document Summary Priority Gate
+    # Explicit VFMS/document-summary requests must beat generic memory,
+    # follow-up, recent-activity, and guided-flow handlers.
+    # Example: "Resumen VFMS 20260511_000012"
+    # --------------------------------------------------
+    try:
+        priority_doc_norm = (text or "").lower()
+        priority_doc_markers = (
+            "vfms",
+            "resumen del documento",
+            "resumen de documento",
+            "resumen de documentos",
+            "tabla cronológica",
+            "tabla cronologica",
+            "ficha legal",
+            "datos registrales",
+        )
+        if any(m in priority_doc_norm for m in priority_doc_markers):
+            if await maybe_handle_document_summary_query(update, context, chat_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_VFMS_PRIORITY_SUMMARY_GATE] failed: {e}")
+
     # Completion loop: mark commitments as done
     try:
         if _looks_like_completion(text):
