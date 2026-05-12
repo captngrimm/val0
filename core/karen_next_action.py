@@ -105,7 +105,18 @@ def _detect_document_holders(text: str) -> list[str]:
     found = []
 
     checks = [
-        ("Karen tiene documentos", ("karen tiene", "los tiene karen", "karen guarda", "karen posee")),
+        ("Karen tiene documentos", (
+            "karen tiene",
+            "los tiene karen",
+            "karen guarda",
+            "karen posee",
+            "con karen",
+            "papeles fisicos con karen",
+            "papeles físicos con karen",
+            "documentos con karen",
+            "los documentos estan con karen",
+            "los documentos están con karen",
+        )),
         ("Frank tiene documentos/fotos", ("frank tiene", "los tiene frank", "frank guarda", "fotos por whatsapp", "whatsapp de frank")),
         ("Un familiar tiene documentos físicos", ("un familiar tiene", "familiar tiene", "familia tiene", "papeles físicos con un familiar", "papeles fisicos con un familiar")),
         ("Abogado tiene documentos", ("abogado tiene", "los tiene el abogado", "abogada tiene")),
