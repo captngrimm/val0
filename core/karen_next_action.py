@@ -172,6 +172,33 @@ async def maybe_handle_document_inventory(update: Update, context: ContextTypes.
     if not answer:
         return False
 
+    # If the user asks for a lawyer package while inventory is active,
+    # do not swallow it as inventory/registry data. Pause this flow and let
+    # the main Karen lawyer-package gate handle the request.
+    package_markers = (
+        "prepara paquete para abogado",
+        "preparar paquete para abogado",
+        "paquete para abogado",
+        "hazme el paquete para abogado",
+        "armar paquete para abogado",
+        "armemos paquete para abogado",
+        "resumen para abogado",
+        "prepara resumen para abogado",
+        "paquete para abogada",
+        "prepara paquete para abogada",
+        "resumen para abogada",
+        "prepara resumen para abogada",
+        "prepara un paquete para la abogada",
+        "prepara un paquete para el abogado",
+        "paquete para la abogada",
+        "paquete para el abogado",
+    )
+    answer_low = answer.lower()
+    if any(m in answer_low for m in package_markers):
+        context.user_data.pop("karen_document_inventory", None)
+        clear_flow_state(int(chat_id), "karen_document_inventory")
+        return False
+
     if answer.lower().strip() in {"cancelar", "salir", "stop", "cancel"}:
         context.user_data.pop("karen_document_inventory", None)
         clear_flow_state(int(chat_id), "karen_document_inventory")

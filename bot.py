@@ -5412,6 +5412,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         operator_route = "normal_chat"
         operator_confidence = 0.0
 
+        # Karen lawyer-package requests must beat generic draft/follow-up routing.
+        # Phrases like "prepara un paquete para la abogada Nora Santa..."
+        # are attorney package requests, not sales follow-up drafts.
+        try:
+            if await maybe_handle_karen_lawyer_package(update, context, text):
+                return
+        except Exception as e:
+            logger.exception(f"[KAREN_LAWYER_PACKAGE_EARLY_PIPELINE_GATE] failed: {e}")
+
         try:
             # Keep this conservative: only route meaningful non-tiny messages.
             if text and len(text.strip()) >= 8:

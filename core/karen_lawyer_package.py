@@ -1,6 +1,39 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+
+async def _reply_text_chunked(update: Update, text: str, limit: int = 3500):
+    """
+    Send long lawyer-package output safely under Telegram message limits.
+    Local helper to keep Karen package independent from bot.py internals.
+    """
+    if not update.message:
+        return
+
+    text = (text or "").strip()
+    if not text:
+        return
+
+    chunks = []
+    remaining = text
+    while len(remaining) > limit:
+        cut = remaining.rfind("\n\n", 0, limit)
+        if cut < 1200:
+            cut = remaining.rfind("\n", 0, limit)
+        if cut < 1200:
+            cut = limit
+        chunks.append(remaining[:cut].strip())
+        remaining = remaining[cut:].strip()
+
+    if remaining:
+        chunks.append(remaining)
+
+    total = len(chunks)
+    for i, chunk in enumerate(chunks, start=1):
+        prefix = f"[{i}/{total}]\n" if total > 1 else ""
+        await update.message.reply_text(prefix + chunk)
+
+
 CASE_KEY = "KAREN-LAND-001"
 
 
@@ -266,7 +299,7 @@ async def karen_lawyer_package_cmd(update: Update, context: ContextTypes.DEFAULT
         return
 
     chat_id = update.effective_chat.id
-    await update.message.reply_text(render_lawyer_package(int(chat_id)))
+    await _reply_text_chunked(update, render_lawyer_package(int(chat_id)))
 
 
 async def maybe_handle_karen_lawyer_package(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str) -> bool:
@@ -288,11 +321,21 @@ async def maybe_handle_karen_lawyer_package(update: Update, context: ContextType
         "prepara paquete para abogada",
         "resumen para abogada",
         "prepara resumen para abogada",
+        "prepara un paquete para la abogada",
+        "prepara un paquete para el abogado",
+        "preparar un paquete para la abogada",
+        "preparar un paquete para el abogado",
+        "paquete para la abogada",
+        "paquete para el abogado",
+        "paquete para nora",
+        "paquete para nora santa",
+        "prepara un paquete para nora",
+        "prepara un paquete para nora santa",
     )
 
     if any(m in t for m in markers):
         chat_id = update.effective_chat.id
-        await update.message.reply_text(render_lawyer_package(int(chat_id)))
+        await _reply_text_chunked(update, render_lawyer_package(int(chat_id)))
         return True
 
     return False
