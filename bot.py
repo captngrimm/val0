@@ -10614,10 +10614,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --------------------------------------------------
     # Karen Document Inventory active-answer gate
-    # If document inventory is active, consume the answer
-    # before memory/task/case layers steal it.
+    # If document inventory is active, it must consume the answer
+    # before document lookup/summary/semantic query handlers steal it.
     # --------------------------------------------------
     try:
+        if await maybe_handle_document_inventory(update, context, chat_id, text):
+            return
+
         if await maybe_handle_document_query(update, context, chat_id, text):
             return
 
@@ -10625,9 +10628,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if await maybe_handle_document_semantic_query(update, context, chat_id, text):
-            return
-
-        if await maybe_handle_document_inventory(update, context, chat_id, text):
             return
     except Exception as e:
         logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
