@@ -62,6 +62,17 @@ SUMMARY_MARKERS = (
     "resumen claro",
     "resumen estructurado",
     "resumen del documento",
+    "resumen legal",
+    "resumen legal del documento",
+    "resumen legal de documento",
+    "resumen legal de los documentos",
+    "cronología",
+    "cronologia",
+    "tabla cronológica",
+    "tabla cronologica",
+    "observaciones",
+    "recomendaciones para hablar con la abogada",
+    "hablar con la abogada",
     "resume documentos",
     "resume los documentos",
     "qué dicen los documentos",
@@ -638,6 +649,175 @@ def _looks_like_format_preview_request(text: str) -> bool:
     return any(m in t for m in markers)
 
 
+def _looks_like_combined_legal_summary_request(text: str) -> bool:
+    """
+    Detects Karen-style natural requests that ask for a legal/document summary
+    with chronology, key data, observations, and lawyer-prep recommendations.
+    """
+    raw = (text or "").lower()
+    norm = raw
+    replacements = {
+        "á": "a",
+        "é": "e",
+        "í": "i",
+        "ó": "o",
+        "ú": "u",
+        "ñ": "n",
+    }
+    for src, dst in replacements.items():
+        norm = norm.replace(src, dst)
+
+    legal_summary_markers = (
+        "resumen legal",
+        "resumen del documento",
+        "resumen de documento",
+        "resumen de documentos",
+    )
+    structure_markers = (
+        "cronologia",
+        "datos clave",
+        "observaciones",
+        "recomendaciones",
+        "abogada",
+        "abogado",
+        "hablar con la abogada",
+        "hablar con el abogado",
+    )
+
+    return (
+        any(m in norm for m in legal_summary_markers)
+        and any(m in norm for m in structure_markers)
+    )
+
+
+def _render_combined_legal_documents_summary(case_id: str, docs: list[dict]) -> str:
+    """
+    Warmer Karen-facing combined legal summary.
+    Uses grounded extracted text only; no invented legal certainty.
+    """
+    extracted_docs = [d for d in docs if (d.get("text") or "").strip()]
+    pending_docs = [d for d in docs if not (d.get("text") or "").strip()]
+
+    lines = [
+        f"⚖️📚 Resumen legal organizado para CASE:{case_id}",
+        "",
+        "Insanity, aquí va ordenado para hablar con la abogada sin tener que nadar en papeles como si esto fuera novela de 40 temporadas. 😌",
+        "Ojo: esto está basado solo en texto extraído/VFMS. No reemplaza criterio legal y no inventa certezas donde el documento no las da.",
+        "",
+    ]
+
+    if not extracted_docs:
+        lines.extend([
+            "📌 Estado rápido",
+            "- Tengo documentos registrados, pero ninguno tiene texto extraído suficiente para armar cronología o análisis grounded todavía.",
+            "- Las fotos/documentos sin OCR quedan como revisión manual pendiente.",
+            "",
+            "➡️ Recomendación práctica",
+            "- Llevar los archivos/fotos a Nora Santa y pedirle que confirme cuáles tienen valor legal, cuáles faltan y cuáles deben pedirse al Registro Público o al juzgado.",
+        ])
+        return "\n".join(lines).strip()
+
+    lines.append("1. Resumen ejecutivo")
+    lines.append("- Hay documentos registrados del caso del terreno familiar.")
+    lines.append("- Algunos documentos tienen texto extraído y permiten organizar hechos, fechas, datos registrales y puntos para consulta.")
+    if pending_docs:
+        lines.append(f"- También hay {len(pending_docs)} documento(s)/foto(s) registrados sin texto extraído suficiente; esos quedan para OCR o revisión manual.")
+    lines.append("")
+
+    all_chronology = []
+    all_registry = []
+    all_review_points = []
+
+    for doc in extracted_docs[:3]:
+        filename = _clean_filename(doc.get("filename", "documento"))
+        ingest_id = doc.get("ingest_id", "")
+        doc_text = doc.get("text", "") or ""
+
+        chronology = _extract_chronology(doc_text)
+        registry = _extract_registry_points(doc_text)
+        header = _extract_legal_header(doc_text)
+
+        lines.append(f"2. Documento revisado: {filename}")
+        lines.append(f"- VFMS: {ingest_id}")
+        if doc.get("caption"):
+            lines.append(f"- Nota: {doc.get('caption')}")
+        if doc.get("state"):
+            lines.append(f"- Estado: {doc.get('state')}")
+
+        doc_type = header.get("tipo_documento") or "No identificado claramente en el texto extraído."
+        court = header.get("juzgado") or "No identificado claramente en el texto extraído."
+        process = header.get("tipo_proceso") or "No identificado claramente en el texto extraído."
+        expediente = header.get("expediente") or "No identificado claramente en el texto extraído."
+
+        lines.append("- Tipo de documento: " + doc_type)
+        lines.append("- Juzgado / entidad: " + court)
+        lines.append("- Tipo de proceso: " + process)
+        lines.append("- Expediente / referencia: " + expediente)
+
+        if header.get("partes"):
+            lines.append("- Partes/personas mencionadas:")
+            for party in header["partes"][:8]:
+                lines.append(f"  - {party}")
+
+        if registry:
+            lines.append("- Datos registrales detectados:")
+            for point in registry:
+                lines.append(f"  - {point}")
+                all_registry.append(point)
+
+        if chronology:
+            for event in chronology:
+                all_chronology.append((filename, event))
+
+        lines.append("")
+
+    lines.append("3. Cronología detectada")
+    if all_chronology:
+        for filename, event in all_chronology[:10]:
+            lines.append(f"- {event} ({filename})")
+    else:
+        lines.append("- No detecté fechas suficientes en el texto extraído para una cronología confiable.")
+    lines.append("")
+
+    lines.append("4. Datos clave para llevar a Nora")
+    if all_registry:
+        seen = set()
+        for point in all_registry:
+            key = point.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            lines.append(f"- {point}")
+    else:
+        lines.append("- No detecté datos registrales claros en los textos extraídos revisados.")
+    lines.append("- Confirmar con Nora el efecto exacto de cada auto, oficio o actuación mencionada.")
+    lines.append("")
+
+    lines.append("5. Observaciones")
+    lines.append("- Lo más útil ahora no es sacar conclusiones legales aquí, sino ordenar documentos, fechas y preguntas.")
+    lines.append("- Cuando el documento diga que algo fue cancelado, archivado, revocado o tenido como no presentado, Nora debe confirmar el efecto procesal y registral exacto.")
+    if pending_docs:
+        lines.append("- Las fotos/documentos sin texto extraído están guardados, pero necesitan OCR o revisión manual antes de resumirse con confianza.")
+    lines.append("")
+
+    lines.append("6. Recomendaciones para hablar con la abogada")
+    lines.append("- Preguntar qué documento prueba mejor el estado actual de la finca y del proceso.")
+    lines.append("- Preguntar si la cancelación de inscripción provisional ya aparece reflejada en Registro Público.")
+    lines.append("- Preguntar qué falta pedir: certificación registral actualizada, copia íntegra del expediente, autos/oficios específicos o documentos notariales.")
+    lines.append("- Pedirle a Nora que priorice próximos pasos por urgencia: Registro Público, juzgado, herederos/documentos familiares, o corrección de información faltante.")
+    lines.append("")
+
+    lines.append("7. Pendiente manual / OCR")
+    if pending_docs:
+        for doc in pending_docs[:5]:
+            lines.append(f"- { _clean_filename(doc.get('filename', 'documento')) }: registrado, pero sin texto extraído suficiente para resumir.")
+    else:
+        lines.append("- No veo documentos pendientes sin texto dentro de los últimos documentos revisados.")
+
+    return "\n".join(lines).strip()
+
+
+
 def _format_preview_reply() -> str:
     return """Karen, te puedo mostrar el mismo documento en varios sabores 😄
 
@@ -827,6 +1007,11 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     # ---------------------------
     # Step 9: Build summary parts
     # ---------------------------
+    if _looks_like_combined_legal_summary_request(text):
+        reply = _render_combined_legal_documents_summary(str(case_id), docs)
+        await _reply_text_chunked(update, reply)
+        return True
+
     parts = [
         f"🧾 Resumen grounded de documentos para CASE:{case_id}",
         "Sin inferencias. Solo basado en texto extraído/VFMS.\n",

@@ -5421,6 +5421,40 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             logger.exception(f"[KAREN_LAWYER_PACKAGE_EARLY_PIPELINE_GATE] failed: {e}")
 
+        # Karen combined legal/document summary requests must beat generic draft-follow-up routing.
+        # Example:
+        # "Val, hazme un resumen legal del documento con cronología, datos clave,
+        # observaciones y recomendaciones para hablar con la abogada."
+        try:
+            early_doc_norm = _norm_text(text or "")
+            early_doc_summary_markers = (
+                "resumen legal",
+                "resumen del documento",
+                "resumen de documento",
+                "resumen de documentos",
+                "cronologia",
+                "tabla cronologica",
+            )
+            early_doc_context_markers = (
+                "documento",
+                "documentos",
+                "vfms",
+                "datos clave",
+                "observaciones",
+                "recomendaciones",
+                "abogada",
+                "abogado",
+            )
+
+            if (
+                any(m in early_doc_norm for m in early_doc_summary_markers)
+                and any(m in early_doc_norm for m in early_doc_context_markers)
+            ):
+                if await maybe_handle_document_summary_query(update, context, chat_id, text):
+                    return
+        except Exception as e:
+            logger.exception(f"[KAREN_COMBINED_LEGAL_DOC_SUMMARY_GATE] failed: {e}")
+
         try:
             # Keep this conservative: only route meaningful non-tiny messages.
             if text and len(text.strip()) >= 8:
