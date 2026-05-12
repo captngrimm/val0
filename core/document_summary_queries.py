@@ -696,47 +696,102 @@ Dime cuál quieres, o dime “mezcla de varias” y te lo armo sin drama. Cero f
 
 
 async def maybe_handle_document_summary_query(update, context, chat_id: int, text: str) -> bool:
+    """
+    Handles VFMS document summary requests in Telegram.
+
+    Adds:
+    - _reply_text_chunked for long messages
+    - Privacy guard for Karen documents
+    """
+
     raw = (text or "").strip().lower()
 
+    # ---------------------------
+    # Step 0: Early exit if not a summary request
+    # ---------------------------
     if not any(m in raw for m in SUMMARY_MARKERS):
         return False
 
+    # ---------------------------
+    # Step 1: Preview requests
+    # ---------------------------
     if _looks_like_format_preview_request(text):
         await update.message.reply_text(_format_preview_reply())
         return True
 
+    # ---------------------------
+    # Step 2: Get active case
+    # ---------------------------
     case_id = get_active_case_id(int(chat_id))
     if not case_id:
         return False
 
+    # ---------------------------
+    # Step 3: Extract VFMS ID from text
+    # ---------------------------
     specific_vfms_id = _extract_vfms_id(text)
+
+    # ---------------------------
+    # Step 4: PRIVACY GUARD
+    # ---------------------------
+    # A VFMS document can only be summarized from the same Telegram chat
+    # that owns the original attachment note.
+    if specific_vfms_id:
+        guard_conn = _get_conn()
+        guard_cur = guard_conn.cursor()
+        guard_cur.execute(
+            """
+            SELECT 1
+            FROM case_notes
+            WHERE case_id=?
+              AND chat_id=?
+              AND source='telegram_attachment_vfms'
+              AND note_text LIKE ?
+            LIMIT 1
+            """,
+            (str(case_id), int(chat_id), f"%{specific_vfms_id}%"),
+        )
+        allowed_doc = guard_cur.fetchone()
+        guard_conn.close()
+
+        if not allowed_doc:
+            await update.message.reply_text(
+                "⚠️ Acceso denegado: este documento pertenece a otro expediente/chat."
+            )
+            return True
+
+    # ---------------------------
+    # Step 5: Return specific doc if requested
+    # ---------------------------
     if specific_vfms_id:
         reply = _build_specific_doc_summary(str(case_id), specific_vfms_id)
         await _reply_text_chunked(update, reply)
         return True
 
+    # ---------------------------
+    # Step 6: Fetch last 100 VFMS notes from DB
+    # ---------------------------
     conn = _get_conn()
     cur = conn.cursor()
-
     cur.execute(
         """
         SELECT note_text
         FROM case_notes
-        WHERE case_id=?
-          AND source='telegram_attachment_vfms'
+        WHERE case_id=? AND chat_id=? AND source='telegram_attachment_vfms'
         ORDER BY id DESC
         LIMIT 100
         """,
-        (case_id,),
+        (case_id, int(chat_id)),
     )
-
     rows = cur.fetchall()
     conn.close()
 
+    # ---------------------------
+    # Step 7: Deduplicate docs
+    # ---------------------------
     docs = []
     seen_ingest = set()
     seen_body = set()
-
     for row in rows:
         note = row[0] if not isinstance(row, dict) else row["note_text"]
         parsed = _parse_note(note)
@@ -748,7 +803,6 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
         text_body = _read_extracted_text(ingest_id)
         body_key = _normalize_body(text_body)
 
-        # Avoid repeating identical extracted documents.
         if body_key and body_key in seen_body:
             continue
 
@@ -756,25 +810,27 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
         if body_key:
             seen_body.add(body_key)
 
-        docs.append({
-            **parsed,
-            "text": text_body,
-        })
+        docs.append({**parsed, "text": text_body})
 
         if len(docs) >= 5:
             break
 
+    # ---------------------------
+    # Step 8: No docs found
+    # ---------------------------
     if not docs:
         await update.message.reply_text(
             f"No encontré documentos extraídos para resumir en CASE:{case_id}."
         )
         return True
 
+    # ---------------------------
+    # Step 9: Build summary parts
+    # ---------------------------
     parts = [
         f"🧾 Resumen grounded de documentos para CASE:{case_id}",
         "Sin inferencias. Solo basado en texto extraído/VFMS.\n",
     ]
-
     for doc in docs:
         parts.append(
             _doc_summary(
@@ -787,5 +843,8 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
         )
         parts.append("")
 
+    # ---------------------------
+    # Step 10: Send chunked summary
+    # ---------------------------
     await _reply_text_chunked(update, "\n".join(parts).strip())
     return True
