@@ -728,7 +728,7 @@ def _render_combined_legal_documents_summary(case_id: str, docs: list[dict]) -> 
     all_registry = []
     all_review_points = []
 
-    for doc in extracted_docs[:3]:
+    for idx, doc in enumerate(extracted_docs[:3], start=1):
         filename = _clean_filename(doc.get("filename", "documento"))
         ingest_id = doc.get("ingest_id", "")
         doc_text = doc.get("text", "") or ""
@@ -737,7 +737,7 @@ def _render_combined_legal_documents_summary(case_id: str, docs: list[dict]) -> 
         registry = _extract_registry_points(doc_text)
         header = _extract_legal_header(doc_text)
 
-        lines.append(f"2. Documento revisado: {filename}")
+        lines.append(f"2.{idx}. Documento revisado: {filename}")
         lines.append(f"- VFMS: {ingest_id}")
         if doc.get("caption"):
             lines.append(f"- Nota: {doc.get('caption')}")
