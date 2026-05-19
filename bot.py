@@ -5551,6 +5551,80 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             logger.exception(f"[KAREN_CARPETA_CLARA_ONBOARDING_GATE] failed: {e}")
 
         # --------------------------------------------------
+        # KAREN NATURAL ABOGADA DOCUMENT PREP GATE
+        # Catches voice/natural phrases like:
+        # "tengo que llevarle documentos a la abogada"
+        # "preparar documentos para la abogada"
+        # before whatnow/task capture hijacks them.
+        # --------------------------------------------------
+        try:
+            prep_norm = text_norm_greet
+            prep_context = (
+                "abogada" in prep_norm
+                or "abogado" in prep_norm
+                or "nora" in prep_norm
+            )
+            prep_doc_markers = (
+                "llevarle documentos",
+                "llevarle los documentos",
+                "llevarle mis documentos",
+                "llevar documentos",
+                "llevar los documentos",
+                "llevar mis documentos",
+                "llevarle papeles",
+                "llevarle los papeles",
+                "llevarle mis papeles",
+                "llevar papeles",
+                "llevar los papeles",
+                "llevar mis papeles",
+                "preparar documentos",
+                "preparar los documentos",
+                "preparar mis documentos",
+                "preparar papeles",
+                "preparar los papeles",
+                "preparar mis papeles",
+                "documentos para la abogada",
+                "los documentos para la abogada",
+                "mis documentos para la abogada",
+                "papeles para la abogada",
+                "los papeles para la abogada",
+                "mis papeles para la abogada",
+                "documentos para nora",
+                "los documentos para nora",
+                "mis documentos para nora",
+                "papeles para nora",
+                "los papeles para nora",
+                "mis papeles para nora",
+            )
+            prep_help_markers = (
+                "ayudame",
+                "ayúdame",
+                "prepararme",
+                "prepararlos",
+                "prepararlo",
+                "que hago",
+                "qué hago",
+                "como me preparo",
+                "cómo me preparo",
+            )
+
+            if (
+                prep_context
+                and any(m in prep_norm for m in prep_doc_markers)
+                and (
+                    any(m in prep_norm for m in prep_help_markers)
+                    or "tengo que" in prep_norm
+                    or "necesito" in prep_norm
+                )
+            ):
+                from core.karen_lawyer_package import render_lawyer_package
+                await reply_text_chunked_safe(update, render_lawyer_package(int(chat_id)))
+                return
+
+        except Exception as e:
+            logger.exception(f"[KAREN_NATURAL_ABOGADA_DOC_PREP_GATE] failed: {e}")
+
+        # --------------------------------------------------
         # PRIORITY DECISION / WHATNOW GUARD
         # Must run before task/commitment capture so questions like
         # "¿Qué debería hacer primero?" do not become fake tasks.
@@ -10707,6 +10781,58 @@ def build_user_memory_dashboard(chat_id: int) -> str:
     lines.append("Siguiente paso: puedo guardar una preferencia, nota, tarea o recordatorio.")
 
     return "\n".join(lines)
+
+
+
+
+async def reply_text_chunked_safe(update, text: str, chunk_size: int = 3800):
+    """Send long Telegram text safely in chunks from any handler scope."""
+    text = str(text or "").strip()
+    if not text:
+        return
+
+    chunks = []
+    remaining = text
+
+    while len(remaining) > chunk_size:
+        split_at = remaining.rfind("\n\n", 0, chunk_size)
+        if split_at < 1000:
+            split_at = remaining.rfind("\n", 0, chunk_size)
+        if split_at < 1000:
+            split_at = chunk_size
+
+        chunks.append(remaining[:split_at].strip())
+        remaining = remaining[split_at:].strip()
+
+    if remaining:
+        chunks.append(remaining)
+
+    total = len(chunks)
+    for i, chunk in enumerate(chunks, 1):
+        if total > 1:
+            chunk = f"[{i}/{total}]\n{chunk}"
+        await update.message.reply_text(chunk)
+
+
+def render_karen_abogada_doc_prep_response() -> str:
+    return (
+        "⚖️📁 Claro, Insanity. Si tienes que llevarle documentos a la abogada, vamos a prepararte sin convertir esto en una avalancha de papeles con trauma generacional. 😌\n\n"
+        "Para llegar lista con Nora, haz esto:\n\n"
+        "1. Separa lo que ya está registrado\n"
+        "- Pide: “Val, ¿qué documentos tengo registrados?”\n"
+        "- Así vemos qué ya existe en Val y qué está solo en físico/foto.\n\n"
+        "2. Revisa qué falta validar\n"
+        "- Pide: “Val, ¿qué falta revisar antes de hablar con la abogada?”\n"
+        "- Ahí te doy la lista corta de pendientes: OCR, fotos, originales, copias, Registro Público y dudas clave.\n\n"
+        "3. Lleva el paquete ordenado\n"
+        "- Pide: “Val, prepárame el paquete para Nora.”\n"
+        "- Eso te saca el resumen completo con datos, eventos, documentos, preguntas y checklist.\n\n"
+        "4. Antes de salir\n"
+        "- Confirma fecha y hora de la cita.\n"
+        "- Confirma qué papeles físicos tienes en mano.\n"
+        "- Si quieres recordatorio, dime la hora exacta de la cita y te ayudo a dejarlo anotado.\n\n"
+        "Mi recomendación: primero revisemos documentos registrados, luego faltantes, y después saco el paquete para Nora. Una cosa a la vez, porque el caos familiar no necesita esteroides. 😏"
+    )
 
 
 def render_karen_missing_review_checklist() -> str:

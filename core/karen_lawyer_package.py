@@ -154,7 +154,7 @@ def _extract_holder_lines(text: str) -> list[str]:
         holders.append("Karen tiene algunos documentos.")
 
     if "frank tiene" in low or "fotos por whatsapp" in low:
-        holders.append("Frank tiene fotos por WhatsApp.")
+        holders.append("Frank tiene o compartió fotos por WhatsApp.")
 
     if "un familiar tiene" in low or "familiar tiene" in low or "papeles físicos" in low or "papeles fisicos" in low:
         holders.append("Un familiar tiene papeles físicos que hay que revisar o escanear.")
@@ -234,9 +234,9 @@ def render_lawyer_package(chat_id: int) -> str:
     lines.append("⚖️📦 Paquete para la abogada Nora Santa — caso del terreno familiar")
     lines.append("")
     lines.append(
-        "Insanity, aquí va el paquete ordenado para que la abogada pueda revisar sin tener que bucear "
-        "en 40 años de arroz con mango familiar. Esto organiza hechos, documentos y preguntas; "
-        "no reemplaza la revisión legal ni inventa certeza donde todavía falta validar. 😌"
+        "Insanity, aquí va el paquete ordenado para Nora. "
+        "Esto organiza hechos, documentos y preguntas; no reemplaza la revisión legal "
+        "ni inventa certeza donde todavía falta validar. 😌"
     )
     lines.append("")
 
@@ -246,7 +246,7 @@ def render_lawyer_package(chat_id: int) -> str:
         lines.append(f"- La finca principal identificada es la Finca {facts['finca']}.")
     if facts.get("tipo_proceso"):
         lines.append(f"- El proceso base identificado es: {facts['tipo_proceso']}.")
-    lines.append("- Karen/Insanity y Frank están ordenando hechos, documentos, custodia y próximos pasos para consulta legal.")
+    lines.append("- Karen, a quien Val llama Insanity, y Frank están ordenando hechos, documentos, custodia y próximos pasos para consulta legal.")
     lines.append("")
 
     lines.append("2. Datos básicos identificados")
@@ -321,8 +321,7 @@ def render_lawyer_package(chat_id: int) -> str:
     lines.append("11. Siguiente acción recomendada")
     lines.append(
         "Confirmar la próxima cita, llamada o entrega de documentos con Nora Santa. "
-        "Si ya hay fecha/hora, Val puede dejarlo como recordatorio y seguimiento. "
-        "Porque confiarle este novelón familiar a la memoria humana sería una falta de respeto al caos. 😏"
+        "Si ya hay fecha/hora, Val puede dejarlo como recordatorio y seguimiento."
     )
 
     return "\n".join(lines)
