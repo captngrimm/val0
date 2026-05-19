@@ -10755,6 +10755,153 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # --------------------------------------------------
+    # FRANK OPERATOR MODE V0
+    # Personal cockpit phrases for Frank/Boss.
+    # Small, deterministic, and safe: capture ideas, parking lot,
+    # drift recovery, status, and next-action routing.
+    # --------------------------------------------------
+    try:
+        fom_norm = _norm_text(text or "").strip()
+        fom_norm = re.sub(r"^(?:val|valeria)[,:]?\s+", "", fom_norm).strip()
+        fom_raw = (text or "").strip()
+
+        # Drift / bring me back
+        drift_markers = (
+            "estoy drifting",
+            "estoy drifteando",
+            "me estoy desviando",
+            "me fui por las ramas",
+            "traeme al carril",
+            "tráeme al carril",
+            "bring me back",
+            "back to mission",
+        )
+
+        if any(m in fom_norm for m in drift_markers):
+            try:
+                priority = get_fact(chat_id=chat_id, fact_key="current_priority") or ""
+            except Exception:
+                priority = ""
+
+            if not priority:
+                priority = "revisar el último checkpoint activo y bajar a la próxima acción concreta del cockpit personal."
+
+            reply = (
+                "Ojo, Boss 😌⚓\n\n"
+                "Sí: estás drifting un poco. No pasa nada; te agarro por el cuello de la camisa antes de que el conejo blanco nos meta en otra cueva.\n\n"
+                f"🎯 Prioridad actual:\n{priority}\n\n"
+                "Siguiente acción: dime “Val, qué sigue” y te bajo a una acción concreta."
+            )
+            await update.message.reply_text(reply)
+            return
+
+        # Next action
+        next_action_markers = (
+            "que sigue",
+            "qué sigue",
+            "que hago ahora",
+            "qué hago ahora",
+            "siguiente accion",
+            "siguiente acción",
+            "next action",
+            "what now",
+        )
+
+        if any(m == fom_norm for m in next_action_markers):
+            await whatnow_cmd(update, context)
+            return
+
+        # Mini operator status
+        status_markers = (
+            "estado operador",
+            "status operador",
+            "operator status",
+            "estado boss",
+            "boss status",
+        )
+
+        if any(m == fom_norm for m in status_markers):
+            try:
+                priority = get_fact(chat_id=chat_id, fact_key="current_priority") or ""
+            except Exception:
+                priority = ""
+
+            lines = [
+                "🧭 Boss Mode / Operator Status",
+                "",
+                "Modo: Val0 personal cockpit v0",
+                "Funciones activas:",
+                "- Capturar ideas",
+                "- Parking lot",
+                "- Drift recovery",
+                "- Next action / whatnow",
+                "- Notas y recordatorios básicos",
+                "",
+                f"Prioridad actual: {priority or 'No tengo una prioridad explícita guardada todavía.'}",
+                "",
+                "Prueba:",
+                "• Val, estoy drifting",
+                "• Val, captura idea: ...",
+                "• Val, parking lot: ...",
+                "• Val, qué sigue",
+            ]
+            await update.message.reply_text("\n".join(lines))
+            return
+
+        # Capture idea
+        idea_prefixes = (
+            "captura idea",
+            "capturar idea",
+            "guarda idea",
+            "guardar idea",
+            "idea",
+        )
+
+        for prefix in idea_prefixes:
+            if fom_norm.startswith(prefix):
+                idea_text = fom_raw
+                if ":" in idea_text:
+                    idea_text = idea_text.split(":", 1)[1].strip()
+                else:
+                    idea_text = re.sub(r"(?is)^\s*(val[,:]?\s*)?(captura idea|capturar idea|guarda idea|guardar idea|idea)\s+", "", idea_text).strip()
+
+                if not idea_text:
+                    await update.message.reply_text("Dame la idea después de los dos puntos, Boss. Ejemplo: Val, captura idea: botón rápido para voice notes.")
+                    return
+
+                note_id = add_note(chat_id, f"IDEA: {idea_text}")
+                await update.message.reply_text(f"💡 Guardé la idea #{note_id}, Boss. No se nos escapa al pantano. 😌\n\n{idea_text}")
+                return
+
+        # Parking lot
+        parking_prefixes = (
+            "parking lot",
+            "manda esto al parking lot",
+            "manda al parking lot",
+            "parquealo",
+            "parquéalo",
+        )
+
+        for prefix in parking_prefixes:
+            if fom_norm.startswith(prefix):
+                parking_text = fom_raw
+                if ":" in parking_text:
+                    parking_text = parking_text.split(":", 1)[1].strip()
+                else:
+                    parking_text = re.sub(r"(?is)^\s*(val[,:]?\s*)?(parking lot|manda esto al parking lot|manda al parking lot|parquealo|parquéalo)\s+", "", parking_text).strip()
+
+                if not parking_text:
+                    await update.message.reply_text("Dame qué quieres mandar al Parking Lot, Boss. Ejemplo: Val, parking lot: Safe Runner con Run ID.")
+                    return
+
+                note_id = add_note(chat_id, f"PARKING_LOT: {parking_text}")
+                await update.message.reply_text(f"🅿️ Parking Lot guardado #{note_id}, Boss. Lo parqueo sin dejarlo morir en el limbo. 😏\n\n{parking_text}")
+                return
+
+    except Exception as e:
+        logger.exception(f"[FRANK_OPERATOR_MODE_V0] failed: {e}")
+
+    # --------------------------------------------------
     # Karen Reminder / Agenda / Multi-intent Shield
     # Must run before Karen legal/doc routes so phrases like
     # "Val, recuérdame una hora antes..." do not get hijacked
