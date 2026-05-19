@@ -5372,6 +5372,136 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         # --------------------------------------------------
+        # KAREN UPPER REMINDER / AGENDA / MULTI-INTENT SHIELD
+        # Must run before Carpeta Clara / whatnow / document gates.
+        # This prevents "recuérdame..." and "agenda" from being hijacked
+        # by land-case/document routes.
+        # --------------------------------------------------
+        try:
+            karen_upper_norm = text_norm_greet
+            karen_upper_norm = re.sub(r"^val\s+", "", karen_upper_norm).strip()
+
+            # Multi-intent shield: 1/2/3-style bundled request.
+            has_numbered_multi = (
+                ("1" in karen_upper_norm or "uno" in karen_upper_norm)
+                and ("2" in karen_upper_norm or "dos" in karen_upper_norm)
+                and ("3" in karen_upper_norm or "tres" in karen_upper_norm)
+            )
+            has_karen_multi_content = (
+                ("paquete" in karen_upper_norm and "nora" in karen_upper_norm)
+                or ("preguntas" in karen_upper_norm and ("reunion" in karen_upper_norm or "reunión" in karen_upper_norm))
+                or ("recordatorio" in karen_upper_norm or "recuerdame" in karen_upper_norm)
+            )
+
+            if has_numbered_multi and has_karen_multi_content:
+                reply = (
+                    "Veo varias instrucciones juntas, Insanity 😌📌\n\n"
+                    "Te las separo para que no se vuelva sopa de letras legal:\n\n"
+                    "1️⃣ Paquete para Nora: puedo prepararlo.\n"
+                    "2️⃣ Preguntas principales para la reunión: puedo sacarlas del paquete.\n"
+                    "3️⃣ Recordatorio para la cita: necesito la hora exacta de la cita para calcular “una hora antes”.\n\n"
+                    "Mándame una de estas ahora:\n"
+                    "• “Val, prepárame el paquete para Nora”\n"
+                    "• “Val, dame las preguntas principales para Nora”\n"
+                    "• “Val, la cita es hoy a las 3:00 pm, recuérdame una hora antes preparar documentos”\n\n"
+                    "Una por una, y yo las voy ejecutando sin hacer malabares con machetes. 😏"
+                )
+                await update.message.reply_text(reply)
+                return
+
+            # Reminder list shield.
+            reminder_list_markers = (
+                "que tengo registrado como recordatorio",
+                "que tienes registrado como recordatorio",
+                "que tengo en recordatorio",
+                "que recordatorios tengo",
+                "dime mis recordatorios",
+                "muestrame mis recordatorios",
+            )
+
+            if any(m in karen_upper_norm for m in reminder_list_markers):
+                await reminders_cmd(update, context)
+                return
+
+            # Agenda query shield.
+            agenda_direct_markers = (
+                "que tengo hoy",
+                "que hay hoy",
+                "que debo hacer hoy",
+                "que tengo manana",
+                "que tengo mañana",
+                "que hay manana",
+                "que hay mañana",
+                "que tengo esta semana",
+            )
+
+            if any(m == karen_upper_norm for m in agenda_direct_markers):
+                if "esta semana" in karen_upper_norm:
+                    if await try_week_horizon(update, chat_id, text):
+                        return
+                elif "manana" in karen_upper_norm or "mañana" in karen_upper_norm:
+                    if await try_agenda_tomorrow_natural(update, chat_id, text):
+                        return
+                else:
+                    if await try_due_today_natural(update, chat_id, text):
+                        return
+
+                await update.message.reply_text(
+                    "No veo nada claro en agenda para esa ventana, Insanity 😌📅"
+                )
+                return
+
+            agenda_query_markers = (
+                "que tengo en agenda",
+                "dime que tengo en agenda",
+                "mi agenda",
+            )
+
+            if any(m in karen_upper_norm for m in agenda_query_markers):
+                reply = (
+                    "Claro, Insanity 😌📅\n\n"
+                    "Para agenda puedo revisar por ventana de tiempo. Dime una de estas:\n\n"
+                    "• “Val, ¿qué tengo hoy?”\n"
+                    "• “Val, ¿qué tengo mañana?”\n"
+                    "• “Val, ¿qué tengo esta semana?”\n\n"
+                    "Así no mezclo agenda real con el novelón del terreno, porque ahí es donde el caos se pone creativo. 😏"
+                )
+                await update.message.reply_text(reply)
+                return
+
+            # Relative reminder shield.
+            reminder_prefixes = (
+                "recuerdame",
+                "recordarme",
+                "recordatorio",
+            )
+            relative_before_markers = (
+                "una hora antes",
+                "1 hora antes",
+                "una hora antes de",
+                "1 hora antes de",
+            )
+            has_explicit_clock = bool(re.search(r"\b(?:a las|a la)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b", karen_upper_norm))
+
+            if (
+                any(p in karen_upper_norm for p in reminder_prefixes)
+                and any(m in karen_upper_norm for m in relative_before_markers)
+                and not has_explicit_clock
+            ):
+                reply = (
+                    "Sí, puedo hacerlo, Insanity ⏰📁\n\n"
+                    "Pero necesito la hora exacta de la cita para calcular “una hora antes”. "
+                    "Todavía no voy a adivinar horarios como bruja de feria, gracias. 😌\n\n"
+                    "Mándamelo así:\n"
+                    "“Val, la cita es hoy a las 3:00 pm, recuérdame una hora antes preparar documentos.”"
+                )
+                await update.message.reply_text(reply)
+                return
+
+        except Exception as e:
+            logger.exception(f"[KAREN_UPPER_REMINDER_AGENDA_SHIELD] failed: {e}")
+
+        # --------------------------------------------------
         # KAREN / CARPETA CLARA DOCUMENT ONBOARDING GATE
         # Must run before generic whatnow.
         # --------------------------------------------------
@@ -10623,6 +10753,150 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         payload=text[:500],
         source="group" if int(chat_id) < 0 else "dm",
     )
+
+    # --------------------------------------------------
+    # Karen Reminder / Agenda / Multi-intent Shield
+    # Must run before Karen legal/doc routes so phrases like
+    # "Val, recuérdame una hora antes..." do not get hijacked
+    # by document inventory / case memory.
+    # --------------------------------------------------
+    try:
+        kr_norm = _norm_text(text or "").strip()
+        kr_norm = re.sub(r"^val\s+", "", kr_norm).strip()
+
+        # 1) Multi-intent beta shield:
+        # Karen may paste several numbered instructions in one message.
+        # For now, identify the split and ask for the missing reminder anchor
+        # instead of pretending it was one instruction.
+        has_numbered_multi = (
+            ("1." in kr_norm or "1)" in kr_norm or "uno" in kr_norm)
+            and ("2." in kr_norm or "2)" in kr_norm or "dos" in kr_norm)
+            and ("3." in kr_norm or "3)" in kr_norm or "tres" in kr_norm)
+        )
+        has_karen_multi_content = (
+            ("paquete" in kr_norm and "nora" in kr_norm)
+            or ("preguntas" in kr_norm and ("reunion" in kr_norm or "reunión" in kr_norm))
+            or ("recordatorio" in kr_norm or "recuerdame" in kr_norm or "recuérdame" in kr_norm)
+        )
+
+        if has_numbered_multi and has_karen_multi_content:
+            reply = (
+                "Veo varias instrucciones juntas, Insanity 😌📌\n\n"
+                "Te las separo para que no se vuelva sopa de letras legal:\n\n"
+                "1️⃣ Paquete para Nora: puedo prepararlo.\n"
+                "2️⃣ Preguntas principales para la reunión: puedo sacarlas del paquete.\n"
+                "3️⃣ Recordatorio para la cita: necesito la hora exacta de la cita para calcular “una hora antes”.\n\n"
+                "Mándame una de estas ahora:\n"
+                "• “Val, prepárame el paquete para Nora”\n"
+                "• “Val, dame las preguntas principales para Nora”\n"
+                "• “Val, la cita es hoy a las 3:00 pm, recuérdame una hora antes preparar documentos”\n\n"
+                "Una por una, y yo las voy ejecutando sin hacer malabares con machetes. 😏"
+            )
+            await update.message.reply_text(reply)
+            return
+
+        # 1B) Direct agenda window shield:
+        # "Val que tengo hoy" / "qué tengo mañana" / "qué tengo esta semana"
+        # must hit agenda/due gates before document inventory can hijack it.
+        agenda_direct_markers = (
+            "que tengo hoy",
+            "que hay hoy",
+            "que debo hacer hoy",
+            "que tengo manana",
+            "que tengo mañana",
+            "que hay manana",
+            "que hay mañana",
+            "que tengo esta semana",
+        )
+
+        if any(m == kr_norm for m in agenda_direct_markers):
+            agenda_text = kr_norm
+            if "esta semana" in agenda_text:
+                if await try_week_horizon(update, chat_id, agenda_text):
+                    return
+            elif "manana" in agenda_text or "mañana" in agenda_text:
+                if await try_agenda_tomorrow_natural(update, chat_id, agenda_text):
+                    return
+            else:
+                if await try_due_today_natural(update, chat_id, agenda_text):
+                    return
+
+            await update.message.reply_text(
+                "No veo nada claro en agenda para esa ventana, Insanity 😌📅"
+            )
+            return
+
+        # 2) Reminder list / agenda query shield.
+        reminder_list_markers = (
+            "que tengo registrado como recordatorio",
+            "qué tengo registrado como recordatorio",
+            "que tengo en recordatorio",
+            "qué tengo en recordatorio",
+            "que recordatorios tengo",
+            "qué recordatorios tengo",
+            "dime mis recordatorios",
+            "muestrame mis recordatorios",
+            "muéstrame mis recordatorios",
+        )
+
+        if any(m in kr_norm for m in reminder_list_markers):
+            await reminders_cmd(update, context)
+            return
+
+        agenda_query_markers = (
+            "que tengo en agenda",
+            "qué tengo en agenda",
+            "dime que tengo en agenda",
+            "dime qué tengo en agenda",
+            "mi agenda",
+        )
+
+        if any(m in kr_norm for m in agenda_query_markers):
+            reply = (
+                "Claro, Insanity 😌📅\n\n"
+                "Para agenda puedo revisar por ventana de tiempo. Dime una de estas:\n\n"
+                "• “Val, ¿qué tengo hoy?”\n"
+                "• “Val, ¿qué tengo mañana?”\n"
+                "• “Val, ¿qué tengo esta semana?”\n\n"
+                "Así no mezclo agenda real con el novelón del terreno, porque ahí es donde el caos se pone creativo. 😏"
+            )
+            await update.message.reply_text(reply)
+            return
+
+        # 3) Relative reminder shield:
+        # "recuérdame una hora antes..." needs a real appointment time.
+        # If no explicit anchor hour exists, ask for it before document/case gates hijack it.
+        reminder_prefixes = (
+            "recuerdame",
+            "recuérdame",
+            "recordarme",
+            "recordatorio",
+        )
+        relative_before_markers = (
+            "una hora antes",
+            "1 hora antes",
+            "una hora antes de",
+            "1 hora antes de",
+        )
+        has_explicit_clock = bool(re.search(r"\b(?:a las|a la)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b", kr_norm))
+
+        if (
+            any(p in kr_norm for p in reminder_prefixes)
+            and any(m in kr_norm for m in relative_before_markers)
+            and not has_explicit_clock
+        ):
+            reply = (
+                "Sí, puedo hacerlo, Insanity ⏰📁\n\n"
+                "Pero necesito la hora exacta de la cita para calcular “una hora antes”. "
+                "Todavía no voy a adivinar horarios como bruja de feria, gracias. 😌\n\n"
+                "Mándamelo así:\n"
+                "“Val, la cita es hoy a las 3:00 pm, recuérdame una hora antes preparar documentos.”"
+            )
+            await update.message.reply_text(reply)
+            return
+
+    except Exception as e:
+        logger.exception(f"[KAREN_REMINDER_AGENDA_SHIELD] failed: {e}")
 
     # --------------------------------------------------
     # Karen / Nora attorney-prep priority gate
