@@ -5628,6 +5628,30 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 "paquete para la abogada",
             )
             if nora_early_context and any(m in nora_early_norm for m in nora_early_markers):
+                missing_review_markers = (
+                    "que me falta revisar",
+                    "qué me falta revisar",
+                    "que falta revisar",
+                    "qué falta revisar",
+                    "que me falta conseguir",
+                    "qué me falta conseguir",
+                    "que falta conseguir",
+                    "qué falta conseguir",
+                    "antes de hablar",
+                )
+                package_markers = (
+                    "paquete para nora",
+                    "paquete para la abogada",
+                    "preparame un resumen",
+                    "prepárame un resumen",
+                    "resumen claro",
+                    "llevarle esto",
+                )
+
+                if any(m in nora_early_norm for m in missing_review_markers) and not any(m in nora_early_norm for m in package_markers):
+                    await update.message.reply_text(render_karen_missing_review_checklist())
+                    return
+
                 from core.karen_lawyer_package import render_lawyer_package
                 await _reply_text_chunked(update, render_lawyer_package(int(chat_id)))
                 return
@@ -10684,6 +10708,37 @@ def build_user_memory_dashboard(chat_id: int) -> str:
 
     return "\n".join(lines)
 
+
+def render_karen_missing_review_checklist() -> str:
+    return (
+        "📋🔎 Insanity, antes de hablar con Nora falta revisar esto, sin convertir la mesa en zona de desastre legal. 😌\n\n"
+        "1. Documentos con texto extraído vs. documentos solo guardados\n"
+        "- Ya hay PDFs con texto extraído/indexado.\n"
+        "- Las fotos y algunos archivos guardados todavía pueden necesitar OCR o revisión manual.\n\n"
+        "2. Fotos / scans pendientes\n"
+        "- Confirmar qué fotos son legibles.\n"
+        "- Separar lo que necesita escaneo, OCR o transcripción manual.\n\n"
+        "3. Originales, copias y custodia\n"
+        "- Marcar quién tiene originales.\n"
+        "- Marcar quién tiene copias/fotos.\n"
+        "- Identificar qué papeles físicos faltan por revisar.\n\n"
+        "4. Datos registrales clave\n"
+        "- Confirmar Finca 10082.\n"
+        "- Confirmar Tomo/Rollo 316.\n"
+        "- Confirmar Folio 308.\n"
+        "- Confirmar Escritura Pública No. 920 y fecha del 16 de agosto de 2002.\n\n"
+        "5. Tema Registro Público / Juncá\n"
+        "- Llevar clara la inconsistencia detectada con Registro Público.\n"
+        "- Preguntar qué efecto tiene la cancelación del caso de Juncá en 2024.\n\n"
+        "6. Preguntas para Nora\n"
+        "- Qué documento falta para que ella pueda opinar con seguridad.\n"
+        "- Qué se debe pedir en Registro Público.\n"
+        "- Qué puede adelantar la familia esta semana.\n"
+        "- Costos, riesgos, responsables y siguiente paso concreto.\n\n"
+        "Siguiente paso sugerido: si quieres, dime “Val, prepárame el paquete para Nora” y te saco el paquete completo para llevarlo ordenado. 📦⚖️"
+    )
+
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -11075,8 +11130,32 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if nora_context and any(m in nora_norm for m in nora_intent_markers):
+            missing_review_markers = (
+                "que me falta revisar",
+                "qué me falta revisar",
+                "que falta revisar",
+                "qué falta revisar",
+                "que me falta conseguir",
+                "qué me falta conseguir",
+                "que falta conseguir",
+                "qué falta conseguir",
+                "antes de hablar",
+            )
+            package_markers = (
+                "paquete para nora",
+                "paquete para la abogada",
+                "preparame un resumen",
+                "prepárame un resumen",
+                "resumen claro",
+                "llevarle esto",
+            )
+
+            if any(m in nora_norm for m in missing_review_markers) and not any(m in nora_norm for m in package_markers):
+                await update.message.reply_text(render_karen_missing_review_checklist())
+                return
+
             from core.karen_lawyer_package import render_lawyer_package
-            await update.message.reply_text(render_lawyer_package(int(chat_id)))
+            await _reply_text_chunked(update, render_lawyer_package(int(chat_id)))
             return
     except Exception as e:
         logger.exception(f"[KAREN_NORA_PREP_PRIORITY_GATE] failed: {e}")
