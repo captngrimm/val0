@@ -887,6 +887,44 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     raw = (text or "").strip().lower()
 
     # ---------------------------
+    # Karen / Nora attorney-prep escape hatch
+    # If the user asks for a clear summary for Nora / abogada or asks
+    # what is missing before talking to the lawyer, do NOT return raw
+    # grounded VFMS. Return the polished lawyer package.
+    # ---------------------------
+    try:
+        nora_context = (
+            "nora" in raw
+            or "abogada" in raw
+            or "abogado" in raw
+        )
+        nora_intent_markers = (
+            "preparame un resumen",
+            "prepárame un resumen",
+            "resumen claro",
+            "llevarle esto",
+            "que me falta revisar",
+            "qué me falta revisar",
+            "que falta revisar",
+            "qué falta revisar",
+            "que me falta conseguir",
+            "qué me falta conseguir",
+            "que falta conseguir",
+            "qué falta conseguir",
+            "antes de hablar",
+            "paquete para nora",
+            "paquete para la abogada",
+        )
+
+        if nora_context and any(m in raw for m in nora_intent_markers):
+            from core.karen_lawyer_package import render_lawyer_package
+            await _reply_text_chunked(update, render_lawyer_package(int(chat_id)))
+            return True
+    except Exception:
+        # Do not break normal summary behavior if the package import/render fails.
+        pass
+
+    # ---------------------------
     # Step 0: Early exit if not a summary request
     # ---------------------------
     if not any(m in raw for m in SUMMARY_MARKERS):

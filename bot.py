@@ -5372,6 +5372,55 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         # --------------------------------------------------
+        # KAREN / CARPETA CLARA DOCUMENT ONBOARDING GATE
+        # Must run before generic whatnow.
+        # --------------------------------------------------
+        try:
+            carpeta_norm = text_norm_greet
+            carpeta_doc_markers = (
+                "organizar documentos",
+                "ordenar documentos",
+                "documentos de mi caso",
+                "documentos del caso",
+                "papeles del caso",
+                "quiero organizar documentos",
+                "quiero ordenar documentos",
+            )
+            carpeta_start_markers = (
+                "por donde empezamos",
+                "por dónde empezamos",
+                "por donde empiezo",
+                "por dónde empiezo",
+                "como empezamos",
+                "cómo empezamos",
+                "que hago primero",
+                "qué hago primero",
+            )
+
+            if (
+                any(m in carpeta_norm for m in carpeta_doc_markers)
+                and (
+                    any(m in carpeta_norm for m in carpeta_start_markers)
+                    or "empezamos" in carpeta_norm
+                    or "empiezo" in carpeta_norm
+                )
+            ):
+                reply = (
+                    "📁✨ Empezamos ordenando el caso por partes, Insanity. Sin drama, sin bolsa de papeles explotando en la mesa. 😌\n\n"
+                    "1. Primero vemos qué documentos/fotos ya tengo registrados.\n"
+                    "2. Después separo qué tiene texto extraído y qué necesita OCR o revisión manual.\n"
+                    "3. Luego preparo un resumen claro: cronología, datos clave, pendientes y preguntas para Nora.\n\n"
+                    "Puedes seguir con una de estas:\n"
+                    "- “Val, ¿qué documentos tengo registrados?”\n"
+                    "- “Val, ¿qué falta revisar antes de hablar con la abogada?”\n"
+                    "- “Val, prepárame el paquete para Nora.”"
+                )
+                await update.message.reply_text(reply)
+                return
+        except Exception as e:
+            logger.exception(f"[KAREN_CARPETA_CLARA_ONBOARDING_GATE] failed: {e}")
+
+        # --------------------------------------------------
         # PRIORITY DECISION / WHATNOW GUARD
         # Must run before task/commitment capture so questions like
         # "¿Qué debería hacer primero?" do not become fake tasks.
@@ -5420,6 +5469,40 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 return
         except Exception as e:
             logger.exception(f"[KAREN_LAWYER_PACKAGE_EARLY_PIPELINE_GATE] failed: {e}")
+
+        # Karen / Nora attorney-prep EARLY gate
+        # Must beat document_summary_query so "resumen claro para Nora" and
+        # "qué falta revisar antes de hablar con la abogada" return the polished package.
+        try:
+            nora_early_norm = _norm_text(text or "")
+            nora_early_context = (
+                "nora" in nora_early_norm
+                or "abogada" in nora_early_norm
+                or "abogado" in nora_early_norm
+            )
+            nora_early_markers = (
+                "preparame un resumen",
+                "prepárame un resumen",
+                "resumen claro",
+                "llevarle esto",
+                "que me falta revisar",
+                "qué me falta revisar",
+                "que falta revisar",
+                "qué falta revisar",
+                "que me falta conseguir",
+                "qué me falta conseguir",
+                "que falta conseguir",
+                "qué falta conseguir",
+                "antes de hablar",
+                "paquete para nora",
+                "paquete para la abogada",
+            )
+            if nora_early_context and any(m in nora_early_norm for m in nora_early_markers):
+                from core.karen_lawyer_package import render_lawyer_package
+                await _reply_text_chunked(update, render_lawyer_package(int(chat_id)))
+                return
+        except Exception as e:
+            logger.exception(f"[KAREN_NORA_PREP_EARLY_GATE] failed: {e}")
 
         # Karen combined legal/document summary requests must beat generic draft-follow-up routing.
         # Example:
@@ -10540,6 +10623,42 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         payload=text[:500],
         source="group" if int(chat_id) < 0 else "dm",
     )
+
+    # --------------------------------------------------
+    # Karen / Nora attorney-prep priority gate
+    # Must beat generic document summary.
+    # --------------------------------------------------
+    try:
+        nora_norm = _norm_text(text or "")
+        nora_context = (
+            "nora" in nora_norm
+            or "abogada" in nora_norm
+            or "abogado" in nora_norm
+        )
+        nora_intent_markers = (
+            "preparame un resumen",
+            "prepárame un resumen",
+            "resumen claro",
+            "llevarle esto",
+            "que me falta revisar",
+            "qué me falta revisar",
+            "que falta revisar",
+            "qué falta revisar",
+            "que me falta conseguir",
+            "qué me falta conseguir",
+            "que falta conseguir",
+            "qué falta conseguir",
+            "antes de hablar",
+            "paquete para nora",
+            "paquete para la abogada",
+        )
+
+        if nora_context and any(m in nora_norm for m in nora_intent_markers):
+            from core.karen_lawyer_package import render_lawyer_package
+            await update.message.reply_text(render_lawyer_package(int(chat_id)))
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NORA_PREP_PRIORITY_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen/VFMS Document Summary Priority Gate
