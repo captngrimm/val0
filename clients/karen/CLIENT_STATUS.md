@@ -33,8 +33,8 @@ Founder-beta / client-zero personal.
 
 ## Next recommended build block
 
-Create client context reader:
-- answer “qué puedes hacer hoy”
-- answer “qué viene después”
-- answer “estamos a tiempo”
-- capture “tengo una idea”
+Build grocery/list capture v0:
+- capture simple supermarket items
+- show current grocery/list items
+- keep it as backlog/personal operator expansion
+- avoid pretending this is full ChatGPT-style conversation
