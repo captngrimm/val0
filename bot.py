@@ -5502,6 +5502,20 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             logger.exception(f"[KAREN_UPPER_REMINDER_AGENDA_SHIELD] failed: {e}")
 
         # --------------------------------------------------
+        # KAREN CLIENT CONTEXT READER V0
+        # Lets Karen ask about current capabilities, roadmap, status, and ideas.
+        # Read-only for now; idea persistence will come later.
+        # --------------------------------------------------
+        try:
+            from core.client_context_reader import render_client_context_answer
+            client_context_reply = render_client_context_answer(text or "", client_id="karen")
+            if client_context_reply:
+                await update.message.reply_text(client_context_reply)
+                return
+        except Exception as e:
+            logger.exception(f"[KAREN_CLIENT_CONTEXT_READER_V0] failed: {e}")
+
+        # --------------------------------------------------
         # KAREN NATURAL INTENT ROUTER V0
         # Deterministic classifier over internal tools.
         # Connect legal/docs intents first; leave agenda/reminders to existing gates.
