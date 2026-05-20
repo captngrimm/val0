@@ -11133,6 +11133,48 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[FRANK_OPERATOR_MODE_V0] failed: {e}")
 
     # --------------------------------------------------
+    # Karen Grocery/List Priority Gate v0
+    # Must run before reminder/drift routing so grocery commands like
+    # "Val, borra pan de la lista del súper" do not become reminder deletes.
+    try:
+        from core.client_context_reader import (
+            classify_client_context_query,
+            render_client_context_answer,
+            render_client_grocery_delete,
+            _extract_grocery_delete_items,
+            _ensure_grocery_file,
+            _norm,
+        )
+
+        grocery_text = text or ""
+        grocery_qtype = classify_client_context_query(grocery_text)
+        grocery_reply = None
+
+        if grocery_qtype in ("grocery_add", "grocery_list", "grocery_delete"):
+            grocery_reply = render_client_context_answer(grocery_text, client_id="karen")
+
+        else:
+            # Human shortcut support: "quitar leche", "borra pan".
+            # Only treat as grocery delete if the target already exists in Karen's grocery file.
+            delete_targets = _extract_grocery_delete_items(grocery_text)
+            if delete_targets:
+                grocery_path = _ensure_grocery_file("karen")
+                if grocery_path and grocery_path.exists():
+                    grocery_lines = [
+                        line.strip()[2:].strip()
+                        for line in grocery_path.read_text(encoding="utf-8").splitlines()
+                        if line.strip().startswith("- ")
+                    ]
+                    grocery_items_norm = {_norm(item) for item in grocery_lines}
+                    if any(_norm(target) in grocery_items_norm for target in delete_targets):
+                        grocery_reply = render_client_grocery_delete(grocery_text, client_id="karen", persist=True)
+
+        if grocery_reply:
+            await update.message.reply_text(grocery_reply)
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_GROCERY_PRIORITY_GATE] failed: {e}")
+
     # Karen Reminder / Agenda / Multi-intent Shield
     # Must run before Karen legal/doc routes so phrases like
     # "Val, recuérdame una hora antes..." do not get hijacked

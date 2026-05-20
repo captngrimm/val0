@@ -94,6 +94,12 @@ def classify_client_context_query(text: str) -> str:
     )):
         return "idea_list"
 
+    if (
+        any(x in t for x in ("borra", "elimina", "quita", "saca"))
+        and any(x in t for x in ("super", "súper", "supermercado", "compras", "lista"))
+    ):
+        return "grocery_delete"
+
     if any(x in t for x in (
         "que tengo en la lista del super",
         "qué tengo en la lista del súper",
@@ -378,6 +384,110 @@ def render_client_grocery_add(text: str, client_id: str = "karen", persist: bool
     )
 
 
+
+def _extract_grocery_delete_items(text: str) -> list[str]:
+    raw = (text or "").strip()
+
+    # Only extract delete targets when the phrase actually starts like a delete command.
+    # Supports:
+    # - "Val, borra pan de la lista del súper"
+    # - "Vale, borra pan"
+    # - "quitar leche"
+    # - "elimina café"
+    match = re.match(
+        r"(?is)^\s*(?:val|vale|valeria)?[\s,.:;]*(?:quitar|quita|borrar|borra|eliminar|elimina|sacar|saca)\b\s*(.+?)\s*$",
+        raw,
+    )
+    if not match:
+        return []
+
+    cleaned = match.group(1).strip()
+
+    cleaned = re.sub(
+        r"(?is)\s*(?:de|del|en|a|para)\s+(?:la\s+)?(?:lista\s+)?(?:del\s+)?(?:super|súper|supermercado|compras|lista)\s*[.!?¡¿]*\s*$",
+        "",
+        cleaned,
+    ).strip()
+
+    cleaned = re.sub(r"(?i)\s+y\s+", ", ", cleaned)
+    parts = [x.strip(" .;-") for x in cleaned.split(",")]
+    return [x for x in parts if len(x) >= 2]
+
+
+def delete_client_grocery_items(client_id: str, text: str) -> tuple[bool, list[str], list[str]]:
+    path = _ensure_grocery_file(client_id)
+    if path is None:
+        return False, [], []
+
+    targets = _extract_grocery_delete_items(text)
+    if not targets:
+        return False, [], []
+
+    original = path.read_text(encoding="utf-8")
+    lines = original.splitlines()
+
+    removed: list[str] = []
+    kept_lines: list[str] = []
+
+    target_norms = {_norm(x) for x in targets}
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            item = stripped[2:].strip()
+            if _norm(item) in target_norms:
+                removed.append(item)
+                continue
+        kept_lines.append(line)
+
+    if removed:
+        # If no list items remain, restore placeholder.
+        has_items = any(x.strip().startswith("- ") for x in kept_lines)
+        new_text = "\n".join(kept_lines).rstrip() + "\n"
+        if not has_items:
+            new_text = (
+                "# CLIENT_GROCERY — Karen / Val Personal\n\n"
+                "## Current list\n\n"
+                "_No hay productos guardados todavía._\n"
+            )
+        path.write_text(new_text, encoding="utf-8")
+
+    missing = [x for x in targets if _norm(x) not in {_norm(r) for r in removed}]
+    return bool(removed), removed, missing
+
+
+def render_client_grocery_delete(text: str, client_id: str = "karen", persist: bool = True) -> str:
+    targets = _extract_grocery_delete_items(text)
+    if not targets:
+        return (
+            "🛒 Te entendí que quieres borrar algo de la lista, Insanity, "
+            "pero no vi qué producto. Prueba: “Val, borra leche de la lista del súper.”"
+        )
+
+    removed: list[str] = []
+    missing: list[str] = []
+
+    if persist:
+        ok, removed, missing = delete_client_grocery_items(client_id, text)
+    else:
+        ok = True
+        removed = targets
+        missing = []
+
+    if removed:
+        bullets = "\n".join(f"- {x}" for x in removed)
+        msg = "🛒 Listo, Insanity. Quité de la lista:\n\n" + bullets
+        if missing:
+            msg += "\n\nNo encontré esto para borrar:\n" + "\n".join(f"- {x}" for x in missing)
+        return msg
+
+    return (
+        "🛒 Revisé la lista, Insanity, pero no encontré eso para borrar:\n\n"
+        + "\n".join(f"- {x}" for x in targets)
+    )
+
+
+
 def render_client_grocery_list(client_id: str = "karen") -> str:
     path = _ensure_grocery_file(client_id)
     if path is None:
@@ -411,6 +521,8 @@ def render_client_context_answer(text: str, client_id: str = "karen", persist_id
         return render_client_status(client_id)
     if qtype == "idea_list":
         return render_client_ideas_list(client_id)
+    if qtype == "grocery_delete":
+        return render_client_grocery_delete(text, client_id, persist=persist_ideas)
     if qtype == "grocery_list":
         return render_client_grocery_list(client_id)
     if qtype == "grocery_add":
@@ -430,6 +542,7 @@ if __name__ == "__main__":
         "Val, qué ideas tengo guardadas?",
         "Val, anota arroz, leche y jabón para el súper.",
         "Val, qué tengo en la lista del súper?",
+        "Val, borra leche de la lista del súper.",
         "Val, dime cualquier cosa random",
     ]
 
