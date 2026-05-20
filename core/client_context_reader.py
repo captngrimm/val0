@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
 import re
 import unicodedata
 
@@ -155,14 +156,74 @@ def render_client_status(client_id: str = "karen") -> str:
     )
 
 
-def render_client_idea_intake(text: str, client_id: str = "karen") -> str:
-    idea = (text or "").strip()
+def _extract_idea_text(text: str) -> str:
+    raw = (text or "").strip()
+    cleaned = re.sub(
+        r"(?is)^\s*(val|valeria)?[\s,.:;]*(tengo una idea|se me ocurrio|se me ocurrió|idea para val|agrega esta idea)\s*[:,-]*\s*",
+        "",
+        raw,
+    ).strip()
+    return cleaned or raw
+
+
+def append_client_idea(client_id: str, text: str, source: str = "telegram") -> bool:
+    """Append a roadmap idea to CLIENT_IDEAS.md. Controlled local persistence v0."""
+    safe_client = re.sub(r"[^a-zA-Z0-9_-]", "", client_id or "")
+    if not safe_client:
+        return False
+
+    idea = _extract_idea_text(text)
+    if not idea or len(idea) < 4:
+        return False
+
+    path = CLIENTS_DIR / safe_client / "CLIENT_IDEAS.md"
+    if not path.exists():
+        return False
+
+    existing = path.read_text(encoding="utf-8")
+
+    # Lightweight dedupe guard:
+    # do not append the exact same normalized idea again if already captured.
+    if f"  - idea: {idea}\n" in existing:
+        return True
+
+    now = datetime.now().isoformat(timespec="seconds")
+    entry = (
+        "\n\n## Captured ideas\n"
+        if "## Captured ideas" not in existing
+        else "\n"
+    )
+    entry += (
+        f"- [{now}] source={source}\n"
+        f"  - raw: {text.strip()}\n"
+        f"  - idea: {idea}\n"
+        f"  - status: open/admin-review\n"
+    )
+
+    with path.open("a", encoding="utf-8") as f:
+        f.write(entry)
+
+    return True
+
+
+def render_client_idea_intake(text: str, client_id: str = "karen", persist: bool = False) -> str:
+    idea = _extract_idea_text(text)
+    saved = False
+    if persist:
+        saved = append_client_idea(client_id, text, source="telegram")
+
+    save_line = (
+        "La dejé guardada en el backlog para revisión. 🧷"
+        if saved
+        else "La clasifico como idea de roadmap; si quieres, luego la dejamos guardada en el backlog."
+    )
+
     return (
         "💡 Idea capturada para el roadmap, Insanity.\n\n"
         f"Idea:\n{idea}\n\n"
         "La pondría tentativamente en el backlog de Valdía. "
         "Si es sobre supermercado, escuela, trabajo, agenda, recordatorios o documentos, entra perfecto en la visión de Mes 1–3.\n\n"
-        "Todavía falta guardarla automáticamente en CLIENT_IDEAS, pero ya sé clasificarla como idea de roadmap."
+        f"{save_line}"
     )
 
 
@@ -176,7 +237,7 @@ def render_client_context_answer(text: str, client_id: str = "karen") -> str | N
     if qtype == "status":
         return render_client_status(client_id)
     if qtype == "idea_intake":
-        return render_client_idea_intake(text, client_id)
+        return render_client_idea_intake(text, client_id, persist=True)
 
     return None
 
@@ -194,3 +255,5 @@ if __name__ == "__main__":
         q = classify_client_context_query(t)
         ans = render_client_context_answer(t, "karen")
         print(f"{t!r} -> {q} -> {'ANSWER' if ans else 'NO_ANSWER'}")
+
+    print("extract_idea:", _extract_idea_text("Val, tengo una idea: que me ayudes con supermercado."))
