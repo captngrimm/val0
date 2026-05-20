@@ -5502,6 +5502,42 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             logger.exception(f"[KAREN_UPPER_REMINDER_AGENDA_SHIELD] failed: {e}")
 
         # --------------------------------------------------
+        # KAREN NATURAL INTENT ROUTER V0
+        # Deterministic classifier over internal tools.
+        # Connect legal/docs intents first; leave agenda/reminders to existing gates.
+        # --------------------------------------------------
+        try:
+            from core.karen_intent_router import classify_karen_intent
+            karen_intent = classify_karen_intent(text or "")
+
+            if karen_intent.confidence >= 0.85:
+                if karen_intent.name == "prepare_lawyer":
+                    from core.karen_lawyer_package import render_lawyer_package
+                    await reply_text_chunked_safe(update, render_lawyer_package(int(chat_id)))
+                    return
+
+                if karen_intent.name == "review_missing":
+                    await update.message.reply_text(render_karen_missing_review_checklist())
+                    return
+
+                if karen_intent.name == "organize_documents":
+                    reply = (
+                        "📁✨ Empezamos ordenando el caso por partes, Insanity. Sin drama, sin bolsa de papeles explotando en la mesa. 😌\n\n"
+                        "1. Primero vemos qué documentos/fotos ya tengo registrados.\n"
+                        "2. Después separo qué tiene texto extraído y qué necesita OCR o revisión manual.\n"
+                        "3. Luego preparo un resumen claro: cronología, datos clave, pendientes y preguntas para Nora.\n\n"
+                        "Puedes seguir con una de estas:\n"
+                        "- “Val, ¿qué documentos tengo registrados?”\n"
+                        "- “Val, ¿qué falta revisar antes de hablar con la abogada?”\n"
+                        "- “Val, prepárame el paquete para Nora.”"
+                    )
+                    await update.message.reply_text(reply)
+                    return
+
+        except Exception as e:
+            logger.exception(f"[KAREN_NATURAL_INTENT_ROUTER_V0] failed: {e}")
+
+        # --------------------------------------------------
         # KAREN / CARPETA CLARA DOCUMENT ONBOARDING GATE
         # Must run before generic whatnow.
         # --------------------------------------------------
