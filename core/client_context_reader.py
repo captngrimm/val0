@@ -33,6 +33,7 @@ def load_client_context(client_id: str) -> dict:
         "roadmap": _read_client_file(client_id, "CLIENT_ROADMAP.md"),
         "ideas": _read_client_file(client_id, "CLIENT_IDEAS.md"),
         "status": _read_client_file(client_id, "CLIENT_STATUS.md"),
+        "grocery": _read_client_file(client_id, "CLIENT_GROCERY.md"),
     }
 
 
@@ -92,6 +93,27 @@ def classify_client_context_query(text: str) -> str:
         "qué ideas hay",
     )):
         return "idea_list"
+
+    if any(x in t for x in (
+        "que tengo en la lista del super",
+        "qué tengo en la lista del súper",
+        "que tengo en la lista del súper",
+        "lista del super",
+        "lista del súper",
+        "lista de super",
+        "lista de súper",
+        "lista supermercado",
+        "lista del supermercado",
+        "que hay en la lista de compras",
+        "qué hay en la lista de compras",
+    )):
+        return "grocery_list"
+
+    if (
+        any(x in t for x in ("anota", "apunta", "agrega", "añade", "mete"))
+        and any(x in t for x in ("super", "súper", "supermercado", "compras", "lista"))
+    ):
+        return "grocery_add"
 
     if any(x in t for x in (
         "tengo una idea",
@@ -164,7 +186,7 @@ def render_client_status(client_id: str = "karen") -> str:
         "- No es ChatGPT completo todavía.\n"
         "- OCR/fotos aún no está completo.\n"
         "- Algunas rutas siguen siendo determinísticas.\n\n"
-        "Siguiente construcción recomendada: que Val lea este contexto y pueda contestar roadmap, estado e ideas sin inventar."
+        "Siguiente construcción recomendada: empezar captura simple de supermercado/listas y seguimiento básico de pendientes personales."
     )
 
 
@@ -254,6 +276,130 @@ def render_client_idea_intake(text: str, client_id: str = "karen", persist: bool
     )
 
 
+
+def _extract_grocery_items(text: str) -> list[str]:
+    raw = (text or "").strip()
+
+    cleaned = re.sub(
+        r"(?is)^\s*(val|valeria)?[\s,.:;]*(anota|apunta|agrega|añade|mete)\s*",
+        "",
+        raw,
+    ).strip()
+
+    # Remove trailing destination/context phrases before splitting items.
+    # Handles: "para el súper", "para super", "en la lista de compras", etc.
+    cleaned = re.sub(
+        r"(?is)\s*(para|en|a)\s+(el|la)?\s*(super|súper|supermercado|lista de compras|lista)\s*[.!?¡¿]*\s*$",
+        "",
+        cleaned,
+    ).strip()
+
+    cleaned = re.sub(r"(?i)\s+y\s+", ", ", cleaned)
+    parts = [x.strip(" .;-") for x in cleaned.split(",")]
+    return [x for x in parts if len(x) >= 2]
+
+
+def _ensure_grocery_file(client_id: str = "karen") -> Path | None:
+    safe_client = re.sub(r"[^a-zA-Z0-9_-]", "", client_id or "")
+    if not safe_client:
+        return None
+
+    client_dir = CLIENTS_DIR / safe_client
+    if not client_dir.exists():
+        return None
+
+    path = client_dir / "CLIENT_GROCERY.md"
+    if not path.exists():
+        path.write_text(
+            "# CLIENT_GROCERY — Karen / Val Personal\n\n"
+            "## Current list\n\n"
+            "_No hay productos guardados todavía._\n",
+            encoding="utf-8",
+        )
+    return path
+
+
+def append_client_grocery_items(client_id: str, text: str, source: str = "telegram") -> tuple[bool, list[str]]:
+    path = _ensure_grocery_file(client_id)
+    if path is None:
+        return False, []
+
+    items = _extract_grocery_items(text)
+    if not items:
+        return False, []
+
+    existing = path.read_text(encoding="utf-8")
+    existing_norm = _norm(existing)
+
+    # If this is the first real item, remove placeholder.
+    existing = existing.replace("_No hay productos guardados todavía._\n", "")
+
+    added: list[str] = []
+    for item in items:
+        line = f"- {item}"
+        if _norm(line) in existing_norm:
+            continue
+        added.append(item)
+        existing += f"{line}\n"
+
+    if added:
+        path.write_text(existing.rstrip() + "\n", encoding="utf-8")
+
+    return True, added
+
+
+def render_client_grocery_add(text: str, client_id: str = "karen", persist: bool = True) -> str:
+    items = _extract_grocery_items(text)
+    if not items:
+        return (
+            "🛒 Te entendí que quieres anotar algo para el súper, Insanity, "
+            "pero no vi productos claros. Prueba: “Val, anota arroz, leche y jabón para el súper.”"
+        )
+
+    saved = False
+    added: list[str] = []
+    if persist:
+        saved, added = append_client_grocery_items(client_id, text, source="telegram")
+
+    shown = added if added else items
+    bullets = "\n".join(f"- {x}" for x in shown)
+
+    if saved:
+        return (
+            "🛒 Listo, Insanity. Lo anoté para el súper:\n\n"
+            f"{bullets}\n\n"
+            "Cuando quieras revisar, dime: “Val, ¿qué tengo en la lista del súper?”"
+        )
+
+    return (
+        "🛒 Lo clasifiqué como lista de súper:\n\n"
+        f"{bullets}\n\n"
+        "Pero no pude guardarlo todavía. Qué dramática la tecnología, pero por lo menos no lo inventé. 😌"
+    )
+
+
+def render_client_grocery_list(client_id: str = "karen") -> str:
+    path = _ensure_grocery_file(client_id)
+    if path is None:
+        return "🛒 No encontré archivo de lista de súper para este cliente todavía."
+
+    grocery = path.read_text(encoding="utf-8").strip()
+    lines = [
+        line for line in grocery.splitlines()
+        if line.strip().startswith("- ")
+    ]
+
+    if not lines:
+        return "🛒 Tu lista de súper está vacía por ahora, Insanity."
+
+    return (
+        "🛒 Lista de súper guardada, Insanity:\n\n"
+        + "\n".join(lines)
+        + "\n\nPor ahora puedo guardar y mostrar la lista. Borrar/editar viene después, sin ponerse intensa todavía. 😌"
+    )
+
+
+
 def render_client_context_answer(text: str, client_id: str = "karen", persist_ideas: bool = True) -> str | None:
     qtype = classify_client_context_query(text)
 
@@ -265,6 +411,10 @@ def render_client_context_answer(text: str, client_id: str = "karen", persist_id
         return render_client_status(client_id)
     if qtype == "idea_list":
         return render_client_ideas_list(client_id)
+    if qtype == "grocery_list":
+        return render_client_grocery_list(client_id)
+    if qtype == "grocery_add":
+        return render_client_grocery_add(text, client_id, persist=persist_ideas)
     if qtype == "idea_intake":
         return render_client_idea_intake(text, client_id, persist=persist_ideas)
 
@@ -278,6 +428,8 @@ if __name__ == "__main__":
         "Val, estamos a tiempo?",
         "Val, tengo una idea: que me ayudes con supermercado.",
         "Val, qué ideas tengo guardadas?",
+        "Val, anota arroz, leche y jabón para el súper.",
+        "Val, qué tengo en la lista del súper?",
         "Val, dime cualquier cosa random",
     ]
 
