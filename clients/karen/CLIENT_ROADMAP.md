@@ -1,7 +1,7 @@
-# CLIENT_ROADMAP — Karen / Valdía
+# CLIENT_ROADMAP — Karen / Val Personal
 
 Current sealed roadmap source:
-- docs/VALDIA_KAREN_M1_INTENT_ROADMAP.md
+- docs/VAL_PERSONAL_KAREN_M1_INTENT_ROADMAP.md
 
 ## Current status
 
@@ -14,7 +14,7 @@ Sealed capabilities:
 - natural intent router v0 for legal/docs
 - voice pipeline reaching text pipeline
 - basic reminders/agenda routes exist
-- Valdía founder-client roadmap documented
+- Val Personal founder-client roadmap documented
 
 ## Before 2026-05-25
 

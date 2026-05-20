@@ -9,7 +9,7 @@ Owner/admin: Frank / ValPrime
 
 ## Core context
 
-Karen is client-zero for Valdía personal operator workflows.
+Karen is client-zero for Val Personal personal operator workflows.
 
 Current main workflow:
 - family land/legal-administrative case

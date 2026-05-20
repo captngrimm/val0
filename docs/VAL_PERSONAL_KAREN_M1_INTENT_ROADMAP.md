@@ -1,4 +1,4 @@
-# Valdía / Karen Client-Zero — Mes 1 Intent Roadmap
+# Val Personal / Karen Client-Zero — Mes 1 Intent Roadmap
 
 Fecha base: 2026-05-19  
 Branch: karen-client-zero-mvp-2026-05-25  
@@ -6,7 +6,7 @@ Estado actual sellado: `edec7be Add Karen natural intent router v0`
 
 ## Objetivo del producto
 
-Valdía no debe ser solo un bot del caso de la finca.  
+Val Personal no debe ser solo un bot del caso de la finca.  
 La finca es el primer caso real para probar el músculo de una operadora personal.
 
 Meta: que Karen pueda hablarle a Val por texto o voz de forma natural sobre:
@@ -240,7 +240,7 @@ Si falta dato:
 Karen es client-zero personal.  
 El primer cliente corporativo será corporate-client-zero.
 
-La idea no es construir cada Val desde cero. Cada cliente enseña un flujo real y ese flujo se convierte en capacidad reusable de Valdía.
+La idea no es construir cada Val desde cero. Cada cliente enseña un flujo real y ese flujo se convierte en capacidad reusable de Val Personal.
 
 ### Patrón Borg / capacidades reusables
 

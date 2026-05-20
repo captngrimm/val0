@@ -1,4 +1,4 @@
-# CLIENT_STATUS — Karen / Valdía
+# CLIENT_STATUS — Karen / Val Personal
 
 Last updated: 2026-05-19
 
@@ -8,7 +8,7 @@ Founder-beta / client-zero personal.
 
 ## Current sealed commits
 
-- 848e184 Document Valdia Karen founder-client roadmap
+- 848e184 Document Val Personal Karen founder-client roadmap
 - edec7be Add Karen natural intent router v0
 - a3ffe43 Polish Karen natural lawyer prep flow
 - b5cde46 Add Karen missing-review checklist route

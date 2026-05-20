@@ -82,6 +82,18 @@ def classify_client_context_query(text: str) -> str:
         return "status"
 
     if any(x in t for x in (
+        "que ideas tengo",
+        "qué ideas tengo",
+        "ideas guardadas",
+        "ideas capturadas",
+        "lista de ideas",
+        "backlog de ideas",
+        "que ideas hay",
+        "qué ideas hay",
+    )):
+        return "idea_list"
+
+    if any(x in t for x in (
         "tengo una idea",
         "se me ocurrio",
         "se me ocurrió",
@@ -109,7 +121,7 @@ def render_client_capabilities_today(client_id: str = "karen") -> str:
         "2. Agenda y recordatorios básicos\n"
         "- Revisar qué tienes hoy, mañana o esta semana si está registrado.\n"
         "- Crear recordatorios cuando me das fecha/hora clara.\n\n"
-        "3. Roadmap de Valdía\n"
+        "3. Roadmap de Val Personal\n"
         "- Decirte qué está listo.\n"
         "- Decirte qué viene después.\n"
         "- Capturar ideas para mejorar Val.\n\n"
@@ -119,7 +131,7 @@ def render_client_capabilities_today(client_id: str = "karen") -> str:
 
 def render_client_roadmap(client_id: str = "karen") -> str:
     return (
-        "🗺️ Roadmap Valdía / Karen\n\n"
+        "🗺️ Roadmap Val Personal / Karen\n\n"
         "Antes del 25 de mayo:\n"
         "- Estabilizar caso/finca/legal.\n"
         "- Mejorar voz e intención natural.\n"
@@ -139,7 +151,7 @@ def render_client_roadmap(client_id: str = "karen") -> str:
 
 def render_client_status(client_id: str = "karen") -> str:
     return (
-        "📍 Estado actual Valdía / Karen\n\n"
+        "📍 Estado actual Val Personal / Karen\n\n"
         "Estamos en founder-beta / client-zero personal.\n\n"
         "Ya sellado:\n"
         "- Paquete para Nora.\n"
@@ -206,6 +218,21 @@ def append_client_idea(client_id: str, text: str, source: str = "telegram") -> b
     return True
 
 
+def render_client_ideas_list(client_id: str = "karen") -> str:
+    ctx = load_client_context(client_id)
+    ideas = ctx.get("ideas", "").strip()
+
+    if not ideas:
+        return "💡 No encontré ideas guardadas todavía, Insanity."
+
+    # Keep v0 simple/readable: return the ideas file with a short intro.
+    return (
+        "💡 Ideas guardadas para el roadmap de Val Personal:\n\n"
+        f"{ideas}\n\n"
+        "Estas ideas son backlog: no significan promesa automática, pero sí quedan visibles para revisión y priorización."
+    )
+
+
 def render_client_idea_intake(text: str, client_id: str = "karen", persist: bool = False) -> str:
     idea = _extract_idea_text(text)
     saved = False
@@ -221,13 +248,13 @@ def render_client_idea_intake(text: str, client_id: str = "karen", persist: bool
     return (
         "💡 Idea capturada para el roadmap, Insanity.\n\n"
         f"Idea:\n{idea}\n\n"
-        "La pondría tentativamente en el backlog de Valdía. "
+        "La pondría tentativamente en el backlog de Val Personal. "
         "Si es sobre supermercado, escuela, trabajo, agenda, recordatorios o documentos, entra perfecto en la visión de Mes 1–3.\n\n"
         f"{save_line}"
     )
 
 
-def render_client_context_answer(text: str, client_id: str = "karen") -> str | None:
+def render_client_context_answer(text: str, client_id: str = "karen", persist_ideas: bool = True) -> str | None:
     qtype = classify_client_context_query(text)
 
     if qtype == "capabilities_today":
@@ -236,8 +263,10 @@ def render_client_context_answer(text: str, client_id: str = "karen") -> str | N
         return render_client_roadmap(client_id)
     if qtype == "status":
         return render_client_status(client_id)
+    if qtype == "idea_list":
+        return render_client_ideas_list(client_id)
     if qtype == "idea_intake":
-        return render_client_idea_intake(text, client_id, persist=True)
+        return render_client_idea_intake(text, client_id, persist=persist_ideas)
 
     return None
 
@@ -248,12 +277,13 @@ if __name__ == "__main__":
         "Val, qué viene después?",
         "Val, estamos a tiempo?",
         "Val, tengo una idea: que me ayudes con supermercado.",
+        "Val, qué ideas tengo guardadas?",
         "Val, dime cualquier cosa random",
     ]
 
     for t in tests:
         q = classify_client_context_query(t)
-        ans = render_client_context_answer(t, "karen")
+        ans = render_client_context_answer(t, "karen", persist_ideas=False)
         print(f"{t!r} -> {q} -> {'ANSWER' if ans else 'NO_ANSWER'}")
 
     print("extract_idea:", _extract_idea_text("Val, tengo una idea: que me ayudes con supermercado."))

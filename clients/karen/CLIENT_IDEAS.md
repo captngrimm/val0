@@ -1,4 +1,4 @@
-# CLIENT_IDEAS — Karen / Valdía
+# CLIENT_IDEAS — Karen / Val Personal
 
 ## Open ideas
 
@@ -20,7 +20,7 @@
 
 
 ## Captured ideas
-- [2026-05-19T22:37:45] source=telegram
-  - raw: Val, tengo una idea: que me ayudes a recordar productos del supermercado.
-  - idea: que me ayudes a recordar productos del supermercado.
+- [2026-05-19T22:53:45] source=telegram
+  - raw: Val, tengo una idea: que me ayudes con supermercado / recordar productos del supermercado.
+  - idea: ayudar con supermercado, listas y recordatorio de productos.
   - status: open/admin-review
