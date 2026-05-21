@@ -56,6 +56,32 @@ def _parse_note(note: str) -> dict:
     }
 
 async def maybe_handle_document_query(update, context, chat_id: int, text: str) -> bool:
+    # CAPABILITIES ESCAPE GUARD
+    # This query handler must not hijack "Val, qué puedes hacer hoy?"
+    # and return CASE document inventory. Capabilities belongs to client_context_reader.
+    try:
+        import re
+        import unicodedata
+
+        dq_norm = unicodedata.normalize("NFKD", (text or "").lower())
+        dq_norm = "".join(ch for ch in dq_norm if not unicodedata.combining(ch))
+        dq_norm = re.sub(r"[¿?¡!.,:;]+", " ", dq_norm)
+        dq_norm = re.sub(r"\s+", " ", dq_norm).strip()
+        dq_norm = re.sub(r"^(val|valeria)\s+", "", dq_norm).strip()
+
+        capability_markers = (
+            "que puedes hacer hoy",
+            "que puedes hacer",
+            "que sabes hacer",
+            "como me puedes ayudar",
+            "capacidades",
+        )
+
+        if any(m in dq_norm for m in capability_markers):
+            return False
+    except Exception:
+        pass
+
     intents = detect_intents(text)
 
     if not intents:

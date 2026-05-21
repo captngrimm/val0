@@ -100,6 +100,13 @@ def classify_client_context_query(text: str) -> str:
     ):
         return "grocery_delete"
 
+    # Karen founder-beta: after the grocery flow is active, short delete commands
+    # like "Borra jabón" or "quita café" should stay in grocery instead of
+    # falling into reminders/legal/case.
+    if t.startswith(("borra ", "elimina ", "quita ", "saca ")):
+        if not any(x in t for x in ("caso", "finca", "terreno", "documento", "nora", "abogada", "recordatorio", "cita")):
+            return "grocery_delete"
+
     if any(x in t for x in (
         "que tengo en la lista del super",
         "qué tengo en la lista del súper",
@@ -112,6 +119,14 @@ def classify_client_context_query(text: str) -> str:
         "lista del supermercado",
         "que hay en la lista de compras",
         "qué hay en la lista de compras",
+        "que tengo registrado en supermercado",
+        "que tienes registrado en supermercado",
+        "dime lo que tienes registrado en supermercado",
+        "dime lo que tengo registrado en supermercado",
+        "registrado en supermercado",
+        "registrado del supermercado",
+        "que tengo en supermercado",
+        "qué tengo en supermercado",
     )):
         return "grocery_list"
 
@@ -120,6 +135,15 @@ def classify_client_context_query(text: str) -> str:
         and any(x in t for x in ("super", "súper", "supermercado", "compras", "lista"))
     ):
         return "grocery_add"
+
+    # Karen founder-beta shortcut:
+    # "Agrega pan azúcar café" should be treated as grocery/list add when it is
+    # a short item-like command and not an obvious roadmap/legal/agenda command.
+    if t.startswith(("anota ", "apunta ", "agrega ", "añade ", "mete ")):
+        blocked = ("idea", "roadmap", "caso", "finca", "terreno", "documento", "nora", "abogada", "cita", "recordatorio", "reunion", "reunión")
+        words = t.split()
+        if not any(x in t for x in blocked) and 2 <= len(words) <= 8:
+            return "grocery_add"
 
     if any(x in t for x in (
         "tengo una idea",
@@ -199,10 +223,11 @@ def render_client_status(client_id: str = "karen") -> str:
 def _extract_idea_text(text: str) -> str:
     raw = (text or "").strip()
     cleaned = re.sub(
-        r"(?is)^\s*(val|valeria)?[\s,.:;]*(tengo una idea|se me ocurrio|se me ocurrió|idea para val|agrega esta idea)\s*[:,-]*\s*",
+        r"(?is)^\s*(val|valeria)?[\s,.:;]*(tengo una idea|se me ocurrio|se me ocurrió|idea para val|agrega esta idea)\s*[\s,.:;¡!¿?\-]*\s*",
         "",
         raw,
     ).strip()
+    cleaned = cleaned.strip(" .,:;¡!¿?-")
     return cleaned or raw
 
 
@@ -301,6 +326,14 @@ def _extract_grocery_items(text: str) -> list[str]:
     ).strip()
 
     cleaned = re.sub(r"(?i)\s+y\s+", ", ", cleaned)
+
+    # If user gives "Agrega pan azúcar café" with no commas, treat it as a
+    # short item list. This is intentionally conservative for founder-beta.
+    if "," not in cleaned:
+        words = [x.strip(" .;-") for x in cleaned.split() if x.strip(" .;-")]
+        if 2 <= len(words) <= 8:
+            return [x for x in words if len(x) >= 2]
+
     parts = [x.strip(" .;-") for x in cleaned.split(",")]
     return [x for x in parts if len(x) >= 2]
 
@@ -410,6 +443,14 @@ def _extract_grocery_delete_items(text: str) -> list[str]:
     ).strip()
 
     cleaned = re.sub(r"(?i)\s+y\s+", ", ", cleaned)
+
+    # If user gives "Agrega pan azúcar café" with no commas, treat it as a
+    # short item list. This is intentionally conservative for founder-beta.
+    if "," not in cleaned:
+        words = [x.strip(" .;-") for x in cleaned.split() if x.strip(" .;-")]
+        if 2 <= len(words) <= 8:
+            return [x for x in words if len(x) >= 2]
+
     parts = [x.strip(" .;-") for x in cleaned.split(",")]
     return [x for x in parts if len(x) >= 2]
 

@@ -5210,6 +5210,35 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         preferred_language = None
 
     # --------------------------------------------------
+    # KAREN EARLY CAPABILITIES HARD GATE
+    # Must run before document/case routes. Karen asked this in live test and
+    # it was hijacked by CASE:KAREN-LAND-001 document listing.
+    # --------------------------------------------------
+    try:
+        early_norm = unicodedata.normalize("NFKD", (text or "").lower())
+        early_norm = "".join(ch for ch in early_norm if not unicodedata.combining(ch))
+        early_norm = re.sub(r"[¿?¡!.,:;]+", " ", early_norm)
+        early_norm = re.sub(r"\s+", " ", early_norm).strip()
+        early_norm = re.sub(r"^(val|valeria)\s+", "", early_norm).strip()
+
+        early_capability_markers = (
+            "que puedes hacer hoy",
+            "que puedes hacer",
+            "que sabes hacer",
+            "como me puedes ayudar",
+            "capacidades",
+        )
+
+        if any(m in early_norm for m in early_capability_markers):
+            from core.client_context_reader import render_client_context_answer
+            reply = render_client_context_answer(text or "", client_id="karen")
+            if reply:
+                await update.message.reply_text(reply)
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_EARLY_CAPABILITIES_HARD_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # KAREN_INTERROGATOR_EARLY_GATE
     # If an Interrogator session is active, consume the user's answer
     # before greeting/router/journal/task layers can steal it.
@@ -5500,6 +5529,84 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         except Exception as e:
             logger.exception(f"[KAREN_UPPER_REMINDER_AGENDA_SHIELD] failed: {e}")
+
+        # --------------------------------------------------
+        # KAREN TRUST-KILLER PRIORITY SHIELD V0
+        # Runs before legal/docs routing so supermarket/capabilities/agenda
+        # do not get hijacked by the land-case routes.
+        # --------------------------------------------------
+        try:
+            kr_priority_norm = text_norm_greet
+            kr_priority_norm = re.sub(r"^val\s+", "", kr_priority_norm).strip()
+
+            # Capabilities must answer the founder-beta capabilities, not documents/case.
+            capability_priority_markers = (
+                "que puedes hacer hoy",
+                "que puedes hacer",
+                "que sabes hacer",
+                "como me puedes ayudar",
+                "cómo me puedes ayudar",
+                "capacidades",
+            )
+            if any(m in kr_priority_norm for m in capability_priority_markers):
+                from core.client_context_reader import render_client_context_answer
+                reply = render_client_context_answer(text or "", client_id="karen")
+                if reply:
+                    await update.message.reply_text(reply)
+                    return
+
+            # Grocery/list must beat legal/case routes.
+            grocery_priority_markers = (
+                "super",
+                "súper",
+                "supermercado",
+                "lista de compras",
+                "lista del super",
+                "lista del súper",
+            )
+            grocery_verbs = (
+                "agrega ",
+                "añade ",
+                "anota ",
+                "apunta ",
+                "mete ",
+                "borra ",
+                "quita ",
+                "elimina ",
+                "saca ",
+            )
+            if any(m in kr_priority_norm for m in grocery_priority_markers) or kr_priority_norm.startswith(grocery_verbs):
+                from core.client_context_reader import render_client_context_answer
+                reply = render_client_context_answer(text or "", client_id="karen")
+                if reply:
+                    await update.message.reply_text(reply)
+                    return
+
+            # Appointment/date lookup must not fall into the land-case response.
+            appointment_lookup_markers = (
+                "que cita tengo",
+                "qué cita tengo",
+                "que citas tengo",
+                "qué citas tengo",
+                "que tengo para el",
+                "qué tengo para el",
+                "cita para el",
+                "citas para el",
+            )
+            if any(m in kr_priority_norm for m in appointment_lookup_markers):
+                try:
+                    await reminders_cmd(update, context)
+                    return
+                except Exception:
+                    await update.message.reply_text(
+                        "Insanity, eso suena a consulta de agenda/cita 📅\n\n"
+                        "Todavía estoy afinando búsqueda por fecha exacta, pero no lo voy a mezclar con el caso del terreno. "
+                        "Prueba también: “Val, ¿qué tengo hoy?”, “Val, ¿qué tengo mañana?” o “Val, dime mis recordatorios”."
+                    )
+                    return
+
+        except Exception as e:
+            logger.exception(f"[KAREN_TRUST_KILLER_PRIORITY_SHIELD_V0] failed: {e}")
 
         # --------------------------------------------------
         # KAREN CLIENT CONTEXT READER V0
@@ -11714,6 +11821,35 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---------------------------------------
     # 4. PIPELINE (LLM LAST)
     # ---------------------------------------
+
+    # KAREN HANDLE_TEXT CAPABILITIES GUARD
+    # This must run before maybe_handle_document_query(), because document query
+    # was hijacking "Val, qué puedes hacer hoy?" and returning CASE documents.
+    try:
+        ht_norm = _norm_text(text or "").strip()
+        ht_norm = re.sub(r"^val\s+", "", ht_norm).strip()
+
+        ht_capability_markers = (
+            "que puedes hacer hoy",
+            "qué puedes hacer hoy",
+            "que puedes hacer",
+            "qué puedes hacer",
+            "que sabes hacer",
+            "qué sabes hacer",
+            "como me puedes ayudar",
+            "cómo me puedes ayudar",
+            "capacidades",
+        )
+
+        if any(m in ht_norm for m in ht_capability_markers):
+            from core.client_context_reader import render_client_context_answer
+            reply = render_client_context_answer(text or "", client_id="karen")
+            if reply:
+                await update.message.reply_text(reply)
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_HANDLE_TEXT_CAPABILITIES_GUARD] failed: {e}")
+
     if await maybe_handle_document_query(update, context, chat_id, text):
         return
 

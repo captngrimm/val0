@@ -4,3 +4,6 @@
 
 - arroz
 - huevos
+- pan
+- azúcar
+- café
