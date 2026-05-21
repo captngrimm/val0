@@ -3,5 +3,4 @@
 ## Current list
 
 - arroz
-- jabón
 - huevos

@@ -24,3 +24,8 @@
   - raw: Val, tengo una idea: que me ayudes con supermercado / recordar productos del supermercado.
   - idea: ayudar con supermercado, listas y recordatorio de productos.
   - status: open/admin-review
+
+- [2026-05-21T07:47:51] source=telegram
+  - raw: Val, tengo una idea. Ayúdame con registrar o crear un dashboard de accesos de sucursales para PC.
+  - idea: registrar o crear un dashboard de accesos de sucursales para PC.
+  - status: open/admin-review
