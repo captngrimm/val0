@@ -216,3 +216,61 @@ Next patch recommended:
 
 Client-facing follow-up:
 Thank Karen and tell her the test was very useful because it found exactly where Val is confusing supermarket, agenda, and legal context. Tell her we will patch those routes before asking her to test again.
+
+
+---
+
+## Entry 2026-05-21 — Routing trust-killers patch PASS
+
+Date:
+2026-05-21
+
+Source:
+Telegram / Karen live retest
+
+Tester:
+Karen
+
+Tested flows:
+- what_can_do: PASS
+- grocery_add: PASS
+- grocery_list: PASS
+- grocery_delete: PASS from earlier live test
+- agenda_appointment_lookup: PARTIAL
+- legal_docs_optional: PASS, but now less aggressive
+
+Overall result:
+PASS / with agenda lookup still partial
+
+What worked:
+- “Val, qué puedes hacer hoy?” now returns the Val Personal capabilities menu instead of CASE:KAREN-LAND-001 document inventory.
+- “Val dime lo que tienes registrado en supermercado” returns grocery list.
+- “Agrega pan azúcar café” persists items correctly.
+- “Que tengo en la lista de super” shows updated list:
+  arroz, huevos, pan, azúcar, café.
+- Document inventory no longer hijacks the capabilities question.
+
+What confused the tester:
+- Appointment/date lookup still needs stronger implementation.
+- “Que cita tengo para el 28” no longer routes to legal/case, but returns no pending reminders if none exist.
+
+What failed:
+- No current failure on tested grocery/capabilities routing after patch.
+- Agenda lookup by arbitrary date remains incomplete.
+
+Top friction resolved:
+1. Document inventory hijacking “qué puedes hacer hoy”.
+2. Grocery add shortcut not persisting items.
+3. Generic supermarket query routing incorrectly.
+
+Decision:
+Routing trust-killers patch sealed.
+
+Patch committed:
+4b60468 Fix Karen routing trust killers
+
+Next patch recommended:
+Improve agenda/date lookup and/or create a safer appointment memory flow after current pass is checkpointed.
+
+Client-facing follow-up:
+Tell Karen the corrections were made and ask her to keep testing naturally, especially supermarket, “qué puedes hacer hoy”, and later agenda/citas.
