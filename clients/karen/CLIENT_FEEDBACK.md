@@ -341,3 +341,64 @@ Tell Karen that the agenda mini-loop now works:
 - ask Val to remind her before the cita
 - Google Calendar is still pending, so for now it lives in Val’s internal agenda.
 
+
+---
+
+## Entry 2026-05-21 — Richer Agenda List PASS
+
+Date:
+2026-05-21
+
+Source:
+Telegram live test / Karen
+
+Tester:
+Karen
+
+Tested flows:
+- agenda_summary: PASS
+- appointment_visibility: PASS
+- anchored_reminder_visibility: PASS
+- google_calendar_boundary: PASS
+
+Overall result:
+PASS
+
+What worked:
+- Karen asked: “Val, qué tengo en agenda?”
+- Val returned “Agenda interna de Val”.
+- Val showed upcoming appointment #85: Friday May 29, 3:00 PM — cita con Nora.
+- Val showed reminder #86: Friday May 29, 2:00 PM — preparar la cita con Nora.
+- Val explained that Google Calendar is not connected yet and this is internal Val agenda only.
+
+What confused the tester:
+- None observed in this test.
+
+What failed:
+- Nothing in the final live test.
+
+What did the tester expect:
+- A simple agenda overview without needing a specific date.
+
+Top friction:
+1. Google Calendar is still pending per-client OAuth.
+2. Agenda is internal only for now.
+3. Future cleanup/dedup may be needed because earlier tests created legacy case-note style appointment entries.
+
+Decision:
+- record evidence
+- keep agenda mini-loop as current client-safe demo capability
+- defer Google Calendar sync to Lab/OAuth planning
+
+Next patch recommended:
+- appointment cleanup/dedup
+- or client-specific Google Calendar OAuth Lab plan
+- or agenda wording polish if Karen gives tone feedback
+
+Client-facing follow-up:
+Tell Karen she can now try:
+- “Val, tengo cita con Nora el 29 a las 3pm”
+- “Val, qué cita tengo para el 29?”
+- “Val, recuérdame una hora antes de la cita con Nora”
+- “Val, qué tengo en agenda?”
+
