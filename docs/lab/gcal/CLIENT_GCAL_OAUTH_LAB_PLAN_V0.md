@@ -270,3 +270,21 @@ Verification:
 
 Rule:
 Do not expose publicly and do not send auth links to clients until callback/token exchange safety is complete.
+
+---
+
+## Access log safety update — 2026-05-21
+
+Finding:
+Sidecar access logs initially included full request URLs, which can include OAuth callback code query parameters.
+
+Action:
+Disabled Uvicorn access logs for val0-gcal-oauth.service using:
+
+--no-access-log
+
+Verification:
+A fake callback code was not found in new journal logs after restart.
+
+Rule:
+Live token exchange must not proceed if OAuth authorization codes can appear in service logs.

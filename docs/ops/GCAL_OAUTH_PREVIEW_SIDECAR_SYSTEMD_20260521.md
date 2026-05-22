@@ -57,3 +57,31 @@ Next safe steps:
    - avoid logging code/token
    - confirm read-only scope
    - create disconnect/revoke plan
+
+---
+
+## Access log safety update — 2026-05-21
+
+Finding:
+Uvicorn access logs were logging full callback URLs, including query parameters.
+
+Risk:
+OAuth callback URLs may include authorization codes. Logging full URLs could expose sensitive OAuth authorization codes in journal logs.
+
+Action:
+Updated systemd ExecStart for val0-gcal-oauth.service to include:
+
+--no-access-log
+
+Current ExecStart:
+PYTHONPATH=/opt/val0 /opt/val0/.venv/bin/python -m uvicorn tools.gcal_oauth_sidecar:app --host 127.0.0.1 --port 8080 --no-access-log
+
+Verification:
+- systemd daemon-reload completed
+- val0-gcal-oauth.service restarted successfully
+- service active/running
+- callback with fake code returned safe rejection
+- journal check for new fake code returned LOG_LEAK_FIXED=YES
+
+Rule:
+Do not proceed to live OAuth token exchange unless access logging remains disabled or callback logs are safely redacted.
