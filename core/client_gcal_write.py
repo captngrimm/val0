@@ -41,6 +41,7 @@ class ClientGCalWriteResult:
     title: str = ""
     start: str = ""
     end: str = ""
+    deleted_event_id: str = ""
 
 
 def _safe_client_id(client_id: str) -> str:
@@ -203,4 +204,117 @@ def create_client_event(
         title=clean_title,
         start=start_dt.isoformat(),
         end=end_dt.isoformat(),
+    )
+
+
+
+def find_client_events_by_title(
+    client_id: str,
+    title_query: str,
+    start_dt: datetime,
+    days_ahead: int = 30,
+    limit: int = 10,
+) -> list[dict]:
+    """
+    Guarded lookup for delete flow.
+    Searches upcoming client calendar events by exact-ish title match.
+    Does not delete anything.
+    """
+    cid = _safe_client_id(client_id)
+    clean_query = (title_query or "").strip().lower()
+    if not clean_query:
+        return []
+
+    status = client_gcal_write_status(cid)
+    if not status.get("ready"):
+        return []
+
+    tz = ZoneInfo(VAL0_TZ)
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=tz)
+    start_dt = start_dt.astimezone(tz)
+    end_dt = start_dt + timedelta(days=days_ahead)
+
+    creds = _load_client_write_creds(cid)
+    svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    resp = svc.events().list(
+        calendarId=_calendar_id(cid),
+        timeMin=start_dt.isoformat(),
+        timeMax=end_dt.isoformat(),
+        singleEvents=True,
+        orderBy="startTime",
+        maxResults=limit,
+        q=title_query,
+    ).execute()
+
+    matches = []
+    for ev in resp.get("items", []):
+        summary = (ev.get("summary") or "").strip()
+        if clean_query in summary.lower() or summary.lower() in clean_query:
+            start = ev.get("start", {}).get("dateTime") or ev.get("start", {}).get("date") or ""
+            end = ev.get("end", {}).get("dateTime") or ev.get("end", {}).get("date") or ""
+            matches.append({
+                "id": ev.get("id") or "",
+                "summary": summary,
+                "start": start,
+                "end": end,
+                "htmlLink": ev.get("htmlLink") or "",
+            })
+
+    return matches
+
+
+def delete_client_event(
+    client_id: str,
+    event_id: str,
+    dry_run: bool = True,
+) -> ClientGCalWriteResult:
+    """
+    Guarded event deletion.
+    Requires same write gates as create.
+    Caller must perform human confirmation before dry_run=False.
+    """
+    cid = _safe_client_id(client_id)
+    clean_event_id = (event_id or "").strip()
+
+    if not clean_event_id:
+        return ClientGCalWriteResult(
+            status="rejected",
+            client_id=cid,
+            reason="missing_event_id",
+        )
+
+    status = client_gcal_write_status(cid)
+
+    if dry_run:
+        return ClientGCalWriteResult(
+            status="dry_run",
+            client_id=cid,
+            reason="dry_run_no_google_delete",
+            event_id=clean_event_id,
+        )
+
+    if not status.get("ready"):
+        return ClientGCalWriteResult(
+            status="blocked",
+            client_id=cid,
+            reason=f"write_not_ready:{status}",
+            event_id=clean_event_id,
+        )
+
+    creds = _load_client_write_creds(cid)
+    svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
+
+    svc.events().delete(
+        calendarId=_calendar_id(cid),
+        eventId=clean_event_id,
+    ).execute()
+
+    return ClientGCalWriteResult(
+        status="deleted",
+        client_id=cid,
+        reason="deleted_from_client_google_calendar",
+        event_id=clean_event_id,
+        deleted_event_id=clean_event_id,
     )
