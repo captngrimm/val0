@@ -10210,6 +10210,172 @@ def _strip_smalltalk_prefix(text: str) -> str:
 
 
 
+
+async def try_anchored_reminder_before_appointment_natural(update, chat_id, text) -> bool:
+    """
+    Anchored Reminder v0.
+
+    Example:
+    - Val, recuérdame una hora antes de la cita con Nora
+    - Val, recuérdame 1 hora antes de la cita de Nora preparar documentos
+    """
+    import re
+    import unicodedata
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    raw = (text or "").strip()
+    t = raw.lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    t = re.sub(r"[¿?¡!.,;]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria)\s+", "", t).strip()
+
+    if not (t.startswith("recuerdame") or t.startswith("recordarme") or t.startswith("recordatorio")):
+        return False
+
+    if not any(x in t for x in ("antes de la cita", "antes de mi cita", "antes de cita", "antes de la reunion", "antes de reunión", "antes de reunion")):
+        return False
+
+    # Offset: currently support 1/una hour, N hours, 30 minutes.
+    offset_minutes = None
+    if "una hora antes" in t or "1 hora antes" in t:
+        offset_minutes = 60
+    else:
+        hm = re.search(r"\b(?P<n>\d{1,2})\s+horas?\s+antes\b", t)
+        mm = re.search(r"\b(?P<n>\d{1,3})\s+minutos?\s+antes\b", t)
+        if hm:
+            offset_minutes = int(hm.group("n")) * 60
+        elif mm:
+            offset_minutes = int(mm.group("n"))
+
+    if not offset_minutes:
+        await update.message.reply_text(
+            "Puedo hacerlo, Insanity ⏰📅\n\n"
+            "Dime cuánto antes. Por ahora entiendo cosas como:\n"
+            "• “Val, recuérdame una hora antes de la cita con Nora”\n"
+            "• “Val, recuérdame 30 minutos antes de la cita con Nora”"
+        )
+        return True
+
+    # Try to extract appointment keyword/person after "cita con/de ..."
+    target = ""
+    m = re.search(r"\bcita\s+(?:con|de)\s+(?P<target>[a-z0-9áéíóúñü\s]+)", raw, re.IGNORECASE)
+    if m:
+        target = m.group("target").strip()
+        target = re.split(r"\b(preparar|llevar|revisar|recordar|para)\b", target, flags=re.IGNORECASE)[0].strip()
+
+    # Fallback: common named anchor in Karen flow.
+    if not target and "nora" in t:
+        target = "Nora"
+
+    if not target:
+        await update.message.reply_text(
+            "Sí puedo crear el recordatorio, pero necesito saber de cuál cita hablamos.\n\n"
+            "Ejemplo: “Val, recuérdame una hora antes de la cita con Nora”."
+        )
+        return True
+
+    # Reminder task text. If user says "preparar documentos", preserve that; otherwise default.
+    action = ""
+    am = re.search(r"\b(preparar|llevar|revisar|recordar)\b(?P<rest>.+)$", raw, re.IGNORECASE)
+    if am:
+        action = (am.group(0) or "").strip()
+    if not action:
+        action = f"preparar la cita con {target}"
+
+    try:
+        import memory_store
+        conn = memory_store._get_conn()
+        cur = conn.cursor()
+
+        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        like = f"%{target.strip()}%"
+
+        row = cur.execute(
+            """
+            SELECT id, due_at_utc, text
+            FROM reminders
+            WHERE chat_id = ?
+              AND entity_type = 'appointment'
+              AND status = 'pending'
+              AND due_at_utc >= ?
+              AND lower(text) LIKE lower(?)
+            ORDER BY due_at_utc ASC, id ASC
+            LIMIT 1
+            """,
+            (int(chat_id), now_utc, like),
+        ).fetchone()
+        conn.close()
+    except Exception:
+        row = None
+
+    if not row:
+        await update.message.reply_text(
+            f"No encontré una cita pendiente con {target} para anclar el recordatorio.\n\n"
+            "Primero guarda la cita, por ejemplo:\n"
+            "“Val, tengo cita con Nora el 29 a las 3pm”."
+        )
+        return True
+
+    rd = dict(row) if hasattr(row, "keys") else {"id": row[0], "due_at_utc": row[1], "text": row[2]}
+    appt_id = int(rd["id"])
+    appt_text = (rd.get("text") or "").strip()
+    appt_due = rd.get("due_at_utc")
+
+    try:
+        appt_dt_utc = datetime.strptime(appt_due, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        reminder_dt_utc = appt_dt_utc - timedelta(minutes=int(offset_minutes))
+    except Exception:
+        await update.message.reply_text("Encontré la cita, pero no pude calcular la hora del recordatorio. Eso sí está feo; no lo voy a fingir. 😌")
+        return True
+
+    if reminder_dt_utc <= datetime.now(timezone.utc):
+        await update.message.reply_text(
+            "Ese recordatorio caería en el pasado, Insanity. Dame otra ventana o revisamos la cita."
+        )
+        return True
+
+    due_utc = reminder_dt_utc.strftime("%Y-%m-%d %H:%M:%S")
+    reminder_text = action.rstrip(".") + "."
+
+    try:
+        from memory_store import insert_reminder
+        rid = insert_reminder(
+            int(chat_id),
+            due_utc,
+            reminder_text,
+            status="pending",
+            entity_type="reminder",
+            parent_ref=f"APPOINTMENT:{appt_id}",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"No pude guardar el recordatorio anclado ahora mismo. Error: {e}")
+        return True
+
+    tz = ZoneInfo("America/Panama")
+    rem_local = reminder_dt_utc.astimezone(tz)
+    appt_local = appt_dt_utc.astimezone(tz)
+    weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][rem_local.weekday()]
+    month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][rem_local.month]
+
+    msg = (
+        "⏰ Listo, Insanity. Guardé el recordatorio antes de la cita.\n\n"
+        f"• Recordatorio: {weekday} {rem_local.day} de {month_name}, {rem_local.strftime('%I:%M %p').lstrip('0')}\n"
+        f"• Acción: {reminder_text}\n"
+        f"• Cita anclada: {appt_local.strftime('%I:%M %p').lstrip('0')} — {appt_text}\n"
+        f"• Reminder ID: #{rid}\n"
+        f"• Appointment ID: #{appt_id}"
+    )
+    await update.message.reply_text(msg)
+    return True
+
+
+
 async def try_appointment_save_natural(update, chat_id, text) -> bool:
     """
     Natural Appointment Save v0.
@@ -11757,6 +11923,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(reply)
             return
+
+        # 1A0) Anchored Reminder Before Appointment v0:
+        # "recuérdame una hora antes de la cita con Nora"
+        anchored_reminder_markers = (
+            "recuerdame",
+            "recuérdame",
+            "recordarme",
+            "recordatorio",
+        )
+
+        if any(m in kr_norm for m in anchored_reminder_markers) and "antes de" in kr_norm and "cita" in kr_norm:
+            if await try_anchored_reminder_before_appointment_natural(update, chat_id, text):
+                return
 
         # 1A) Natural Appointment Save v0:
         # Must run before legacy Karen appointment/case-note handler.
