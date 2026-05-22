@@ -421,7 +421,7 @@ def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
     gcal_dir.mkdir(parents=True, exist_ok=True)
     gcal_dir.chmod(0o700)
 
-    refresh_token_path.write_text(refresh_token.strip() + "\\n", encoding="utf-8")
+    refresh_token_path.write_text(refresh_token.strip() + "\n", encoding="utf-8")
     refresh_token_path.chmod(0o600)
 
     if not calendar_id_path.exists():
