@@ -5179,6 +5179,132 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
     return "\n".join(lines)
 
+
+def _format_client_gcal_events_section(client_id: str, start_local, end_local, tz_name: str = "America/Panama", limit: int = 10) -> str:
+    """
+    Read-only Google Calendar section for client agenda dashboards.
+
+    Safety:
+    - read-only only
+    - no event creation/update/delete
+    - clearly labels source as Google Calendar
+    - does not expose attendee/details/description
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    try:
+        from core.client_gcal_read import get_client_events_between
+
+        result = get_client_events_between(
+            client_id,
+            start_local,
+            end_local,
+            tz=tz_name,
+            limit=limit,
+        )
+
+        lines = ["🌐 Google Calendar · solo lectura"]
+
+        if result.status == "not_connected":
+            lines.append("- No está conectado para este cliente.")
+            return "\n".join(lines)
+
+        if result.status != "ok":
+            lines.append(f"- No pude leer Google Calendar: {result.reason or result.status}")
+            return "\n".join(lines)
+
+        if not result.events:
+            lines.append("- No hay eventos en esta ventana.")
+            return "\n".join(lines)
+
+        tz = ZoneInfo(tz_name)
+
+        for ev in result.events:
+            raw_start = str(ev.get("start") or "").strip()
+            title = str(ev.get("summary") or "(sin título)").strip()
+
+            label = raw_start
+            try:
+                if "T" in raw_start:
+                    dt = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
+                    if dt.tzinfo is not None:
+                        dt = dt.astimezone(tz)
+                    label = dt.strftime("%a %d/%m %I:%M %p").replace(" 0", " ")
+                elif raw_start:
+                    label = raw_start
+            except Exception:
+                pass
+
+            lines.append(f"- {label} · {title}")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return "🌐 Google Calendar · solo lectura\n- No pude leer Google Calendar ahora mismo."
+
+
+def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> str:
+    """
+    Combined client agenda dashboard:
+    - Google Calendar read-only
+    - Val internal agenda/reminders/tasks
+
+    V0 is intentionally conservative and source-labeled.
+    """
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    tz_name = "America/Panama"
+    tz = ZoneInfo(tz_name)
+    now = datetime.now(tz)
+
+    if window == "tomorrow":
+        target = now + timedelta(days=1)
+        start_local = datetime(target.year, target.month, target.day, 0, 0, 0, tzinfo=tz)
+        end_local = start_local + timedelta(days=1)
+        title = "📅 Agenda de mañana"
+        try:
+            internal = build_unified_tomorrow_dashboard(int(chat_id))
+        except Exception as e:
+            internal = f"No pude leer agenda interna de mañana: {e}"
+
+    elif window == "week":
+        start_local = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=tz)
+        end_local = start_local + timedelta(days=7)
+        title = "📅 Agenda de los próximos 7 días"
+        try:
+            internal = _generate_week_horizon(int(chat_id), days=7)
+        except Exception as e:
+            internal = f"No pude leer agenda interna semanal: {e}"
+
+    else:
+        start_local = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=tz)
+        end_local = start_local + timedelta(days=1)
+        title = "📅 Agenda de hoy"
+        try:
+            internal = _generate_morning_brief_det(int(chat_id), start_local.date().isoformat())
+        except Exception as e:
+            internal = f"No pude leer agenda interna de hoy: {e}"
+
+        if not internal:
+            internal = "No veo recordatorios ni términos internos para hoy."
+
+    gcal = _format_client_gcal_events_section(
+        client_id=client_id,
+        start_local=start_local,
+        end_local=end_local,
+        tz_name=tz_name,
+        limit=10,
+    )
+
+    return "\n\n".join([
+        title,
+        gcal,
+        "📌 Agenda interna de Val\n" + internal,
+        "Modo: lectura solamente. No creé, cambié ni borré eventos.",
+    ])
+
 # --------------------------------------------------
 # Core Message Pipeline
 # --------------------------------------------------
@@ -5549,18 +5675,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
             if any(m == karen_upper_norm for m in agenda_direct_markers):
                 if "esta semana" in karen_upper_norm:
-                    if await try_week_horizon(update, chat_id, text):
-                        return
+                    reply = build_client_agenda_dashboard("karen", chat_id, "week")
                 elif "manana" in karen_upper_norm or "mañana" in karen_upper_norm:
-                    if await try_agenda_tomorrow_natural(update, chat_id, text):
-                        return
+                    reply = build_client_agenda_dashboard("karen", chat_id, "tomorrow")
                 else:
-                    if await try_due_today_natural(update, chat_id, text):
-                        return
+                    reply = build_client_agenda_dashboard("karen", chat_id, "today")
 
-                await update.message.reply_text(
-                    "No veo nada claro en agenda para esa ventana, Insanity 😌📅"
-                )
+                await update.message.reply_text(reply, disable_web_page_preview=True)
                 return
 
             agenda_query_markers = (
