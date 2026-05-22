@@ -19,7 +19,7 @@ from fastapi.responses import PlainTextResponse
 
 from core.client_gcal_oauth import (
     render_client_oauth_callback_exchange_result,
-    render_client_oauth_callback_exchange_result,
+    render_client_oauth_callback_preview,
 )
 
 app = FastAPI(title="Val0 GCal OAuth Sidecar", version="0.2.0")
@@ -47,7 +47,7 @@ def oauth2callback(
 ) -> str:
     # Never echo code. Preview path only receives boolean presence.
     if not exchange_enabled():
-        return render_client_oauth_callback_exchange_result(
+        return render_client_oauth_callback_preview(
             state=state,
             code_present=bool(code),
         )
