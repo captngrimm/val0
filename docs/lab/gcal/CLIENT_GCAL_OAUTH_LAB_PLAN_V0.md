@@ -178,3 +178,30 @@ This can move from Lab to Production only when:
 - disconnect/revoke process exists
 - evidence log records test PASS
 
+
+---
+
+## Safety audit update — 2026-05-21
+
+Finding:
+Existing legacy GCal infrastructure uses global paths:
+
+- /etc/val0/gcal/client_secret.json
+- /etc/val0/gcal/refresh_token
+- /etc/val0/gcal/calendar_id
+
+Existing write toggle was enabled at systemd level:
+
+- VAL0_CALENDAR_WRITE_ENABLED=true
+
+Action:
+Global calendar write was disabled through systemd drop-in:
+
+- /etc/systemd/system/val0-bot.service.d/zz-gcal-write.conf
+- VAL0_CALENDAR_WRITE_ENABLED=false
+
+Interpretation:
+This does not implement client OAuth. It only reduces risk while client-specific read-only OAuth is designed.
+
+Rule reinforced:
+Karen/client calendar work must not use legacy global /etc/val0/gcal credentials.
