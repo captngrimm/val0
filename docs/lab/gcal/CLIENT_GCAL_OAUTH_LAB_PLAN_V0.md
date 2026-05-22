@@ -205,3 +205,21 @@ This does not implement client OAuth. It only reduces risk while client-specific
 
 Rule reinforced:
 Karen/client calendar work must not use legacy global /etc/val0/gcal credentials.
+
+---
+
+## Callback safety design update
+
+Before implementing token exchange, use:
+
+docs/lab/gcal/CLIENT_GCAL_OAUTH_CALLBACK_SAFETY_V0.md
+
+Rule:
+No live callback/token storage until callback safety rules are implemented:
+- validate state
+- read-only scope only
+- store refresh token per client
+- chmod 600
+- no token logging
+- disconnect/revoke path
+- no auto-write
