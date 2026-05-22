@@ -5470,6 +5470,21 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 await update.message.reply_text(render_client_calendar_status("karen"))
                 return
 
+            # Natural Appointment Save v0.
+            appointment_save_markers = (
+                "tengo cita",
+                "tengo una cita",
+                "cita con",
+                "reunion con",
+                "reunión con",
+                "tengo reunion",
+                "tengo reunión",
+            )
+
+            if any(m in karen_upper_norm for m in appointment_save_markers):
+                if await try_appointment_save_natural(update, chat_id, text):
+                    return
+
             # Agenda Bridge v0: specific date lookup.
             agenda_date_lookup_markers = (
                 "que cita tengo",
@@ -10194,6 +10209,175 @@ def _strip_smalltalk_prefix(text: str) -> str:
     return t
 
 
+
+async def try_appointment_save_natural(update, chat_id, text) -> bool:
+    """
+    Natural Appointment Save v0.
+
+    Examples:
+    - Val, tengo cita con Nora el 28 a las 3pm
+    - Val, cita con la abogada el 28 de mayo a la 1
+    - Val, tengo reunión con Nora el 28 a las 15:00
+    """
+    import re
+    import unicodedata
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    raw = (text or "").strip()
+    t = raw.lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    t = re.sub(r"[¿?¡!.,;]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria)\s+", "", t).strip()
+
+    save_markers = (
+        "tengo cita",
+        "tengo una cita",
+        "cita con",
+        "reunion con",
+        "reunión con",
+        "tengo reunion",
+        "tengo reunión",
+    )
+    if not any(m in t for m in save_markers):
+        return False
+
+    # Avoid hijacking lookup questions.
+    if t.startswith(("que ", "qué ", "dime ", "cual ", "cuál ")):
+        return False
+
+    months = {
+        "enero": 1, "ene": 1,
+        "febrero": 2, "feb": 2,
+        "marzo": 3, "mar": 3,
+        "abril": 4, "abr": 4,
+        "mayo": 5, "may": 5,
+        "junio": 6, "jun": 6,
+        "julio": 7, "jul": 7,
+        "agosto": 8, "ago": 8,
+        "septiembre": 9, "setiembre": 9, "sep": 9, "sept": 9,
+        "octubre": 10, "oct": 10,
+        "noviembre": 11, "nov": 11,
+        "diciembre": 12, "dic": 12,
+    }
+
+    tz = ZoneInfo("America/Panama")
+    now = datetime.now(tz)
+
+    day = None
+    month = None
+    year = now.year
+
+    # Date: "28 de mayo" / "28 mayo" / "el 28"
+    m = re.search(r"\b(?:el\s+)?(?P<day>[0-3]?\d)\s*(?:de\s+)?(?P<month>enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|jul|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)\b", t)
+    explicit_month = bool(m)
+    if m:
+        day = int(m.group("day"))
+        month = months.get(m.group("month"))
+    else:
+        m = re.search(r"\b(?:el|para el|dia)\s+(?P<day>[0-3]?\d)\b", t)
+        if m:
+            day = int(m.group("day"))
+            month = now.month
+
+    if not day or not month:
+        await update.message.reply_text(
+            "Sí puedo guardar la cita, Insanity 📅\n\n"
+            "Pero necesito la fecha. Dímelo así:\n"
+            "“Val, tengo cita con Nora el 28 a las 3pm”."
+        )
+        return True
+
+    # Time: "a las 3pm", "a la 1", "a las 15:30"
+    tm = re.search(r"\b(?:a\s+las|a\s+la)\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?\b", t)
+    if not tm:
+        await update.message.reply_text(
+            "Tengo la fecha, pero me falta la hora, Insanity ⏰\n\n"
+            "Mándamelo así:\n"
+            "“Val, tengo cita con Nora el 28 a las 3pm”."
+        )
+        return True
+
+    hour = int(tm.group("hour"))
+    minute = int(tm.group("minute") or "0")
+    ampm = tm.group("ampm")
+
+    if ampm == "pm" and hour < 12:
+        hour += 12
+    elif ampm == "am" and hour == 12:
+        hour = 0
+    elif ampm is None and 1 <= hour <= 7:
+        # Practical default for appointments like "a las 3" = afternoon.
+        hour += 12
+
+    try:
+        due_local = datetime(year, month, day, hour, minute, 0, tzinfo=tz)
+    except ValueError:
+        await update.message.reply_text("Esa fecha/hora no me cuadra. Dame día, mes y hora para no hacer brujería barata. 😌")
+        return True
+
+    if due_local < now and not explicit_month:
+        next_month = month + 1
+        next_year = year
+        if next_month > 12:
+            next_month = 1
+            next_year += 1
+        try:
+            due_local = datetime(next_year, next_month, day, hour, minute, 0, tzinfo=tz)
+        except ValueError:
+            pass
+
+    due_utc = due_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    # Extract a compact title.
+    title = raw
+    title = re.sub(r"^\s*(val|valeria)[,:]?\s*", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\b(el|para el)\s+\d{1,2}(\s+de\s+\w+)?\b.*$", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\ba\s+la?s?\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b.*$", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(tengo\s+una\s+|tengo\s+)", "", title, flags=re.IGNORECASE).strip()
+    if not title:
+        title = "Cita"
+
+    reminder_text = f"{title}."
+
+    try:
+        from memory_store import insert_reminder
+        rid = insert_reminder(
+            int(chat_id),
+            due_utc,
+            reminder_text,
+            status="pending",
+            entity_type="appointment",
+            parent_ref="CLIENT:karen:agenda",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"No pude guardar la cita ahora mismo. Error: {e}")
+        return True
+
+    weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][due_local.weekday()]
+    month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][due_local.month]
+    pretty_date = f"{weekday} {due_local.day} de {month_name}"
+    pretty_time = due_local.strftime("%I:%M %p").lstrip("0")
+
+    msg = (
+        "📅 Listo, Insanity. Guardé la cita en agenda interna de Val.\n\n"
+        f"• {pretty_date}\n"
+        f"• {pretty_time}\n"
+        f"• {reminder_text}\n"
+        f"• ID: #{rid}\n\n"
+        "Google Calendar todavía no está conectado para Karen, así que por ahora queda en Val. "
+        "Cuando conectemos su calendario, esto ya tiene camino para sincronizarse sin mezclar cuentas."
+    )
+    await update.message.reply_text(msg)
+    return True
+
+
+
 async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
     """
     Agenda Bridge v0: specific date lookup for Karen-style phrases.
@@ -11573,6 +11757,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(reply)
             return
+
+        # 1A) Natural Appointment Save v0:
+        # Must run before legacy Karen appointment/case-note handler.
+        appointment_save_markers = (
+            "tengo cita",
+            "tengo una cita",
+            "cita con",
+            "reunion con",
+            "reunión con",
+            "tengo reunion",
+            "tengo reunión",
+        )
+
+        if any(m in kr_norm for m in appointment_save_markers):
+            if await try_appointment_save_natural(update, chat_id, text):
+                return
 
         # 1B) Direct agenda window shield:
         # "Val que tengo hoy" / "qué tengo mañana" / "qué tengo esta semana"
