@@ -5396,7 +5396,9 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         early_norm = "".join(ch for ch in early_norm if not unicodedata.combining(ch))
         early_norm = re.sub(r"[¿?¡!.,:;]+", " ", early_norm)
         early_norm = re.sub(r"\s+", " ", early_norm).strip()
+        early_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", early_norm).strip()
         early_norm = re.sub(r"^(val|valeria|vale)\s+", "", early_norm).strip()
+        early_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", early_norm).strip()
 
         # EARLY KAREN AGENDA HARD OVERRIDE
         # Must beat document/case routes. "Qué tengo hoy" was being hijacked
@@ -12315,7 +12317,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Example: "Val, ¿qué tengo hoy?" must become "que tengo hoy".
         kr_norm = re.sub(r"[¿?¡!.,:;]+", " ", kr_norm)
         kr_norm = re.sub(r"\s+", " ", kr_norm).strip()
+        kr_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", kr_norm).strip()
         kr_norm = re.sub(r"^(val|valeria|vale)\s+", "", kr_norm).strip()
+        kr_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", kr_norm).strip()
 
         # 1) Multi-intent beta shield:
         # Karen may paste several numbered instructions in one message.
