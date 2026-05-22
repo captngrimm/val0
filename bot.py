@@ -5215,7 +5215,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
             return "\n".join(lines)
 
         if not result.events:
-            lines.append("- No hay eventos en esta ventana.")
+            lines.append("- No encontré eventos en Google Calendar para esta ventana.")
             return "\n".join(lines)
 
         tz = ZoneInfo(tz_name)
@@ -5241,7 +5241,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
         return "\n".join(lines)
 
     except Exception as e:
-        return "🌐 Google Calendar · solo lectura\n- No pude leer Google Calendar ahora mismo."
+        return "🌐 Google Calendar · solo lectura\n- No pude leer Google Calendar ahora mismo. Lo intento de nuevo más tarde."
 
 
 def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> str:

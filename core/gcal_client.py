@@ -86,7 +86,7 @@ def get_events_between(
             "id": e.get("id") or "",
             "start": start,
             "end": end,
-            "summary": e.get("summary") or "(no title)",
+            "summary": e.get("summary") or "Evento sin título",
             "htmlLink": e.get("htmlLink") or "",
         })
     return out

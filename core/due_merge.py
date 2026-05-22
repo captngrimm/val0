@@ -236,7 +236,7 @@ def merge_due_items(
             dropped_oob += 1
             continue
 
-        title = (ev.get("summary") or "(no title)").strip()
+        title = (ev.get("summary") or "Evento sin título").strip()
         case_id = _extract_case_id_from_title(title)
         if total_ev <= 5:
             logger.info(
