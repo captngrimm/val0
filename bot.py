@@ -12197,7 +12197,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         kr_norm = _norm_text(text or "").strip()
-        kr_norm = re.sub(r"^val\s+", "", kr_norm).strip()
+        # Normalize Val prefix and punctuation before agenda matching.
+        # Example: "Val, ¿qué tengo hoy?" must become "que tengo hoy".
+        kr_norm = re.sub(r"[¿?¡!.,:;]+", " ", kr_norm)
+        kr_norm = re.sub(r"\s+", " ", kr_norm).strip()
+        kr_norm = re.sub(r"^(val|valeria)\s+", "", kr_norm).strip()
 
         # 1) Multi-intent beta shield:
         # Karen may paste several numbered instructions in one message.
