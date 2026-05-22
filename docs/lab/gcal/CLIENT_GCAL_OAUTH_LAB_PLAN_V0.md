@@ -346,3 +346,33 @@ Remaining before real client connection:
 - verify no code/token logs
 - confirm read-only connected status
 - then test agenda read-only merge
+
+---
+
+## Full OAuth refresh/read circuit PASS — 2026-05-22
+
+Result:
+PASS.
+
+Confirmed:
+- OAuth callback accepted
+- fresh access token worked
+- refresh token stored per-client
+- refresh token refreshed successfully
+- Google Calendar events read successfully
+- no secret leakage found in recent sidecar logs
+- exchange mode disabled after test
+
+Final smoke:
+- TOKEN_REFRESH_OK=YES
+- GCAL_MODULE_READ_STATUS=ok
+- RECENT_SECRET_LOG_LEAK=NO
+
+Root cause of invalid_grant:
+refresh_token was being written with literal "\\n" instead of a real newline.
+
+Fix committed:
+Fix Google Calendar refresh token newline storage.
+
+Production boundary:
+Read-only only. Replace lab token with the real client's Google account token before production use.
