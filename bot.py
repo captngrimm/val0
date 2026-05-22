@@ -12557,6 +12557,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[FRANK_OPERATOR_MODE_V0] failed: {e}")
 
     # --------------------------------------------------
+    # Karen Google Calendar Delete Priority Gate v0
+    # Must run before grocery/list delete so:
+    # "Val, borra Cabalgata Intensa" does not become supermarket cleanup.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            return
+        if await try_gcal_delete_natural(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_DELETE_PRIORITY_GATE] failed: {e}")
+
+    # --------------------------------------------------
     # Karen Grocery/List Priority Gate v0
     # Must run before reminder/drift routing so grocery commands like
     # "Val, borra pan de la lista del súper" do not become reminder deletes.
@@ -12617,14 +12630,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 0) Pending Google Calendar appointment confirmation.
         # Must run before appointment parsing so "sí"/"dale" confirms the draft.
         if await maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text):
-            return
-
-        # 0B) Pending Google Calendar delete confirmation.
-        if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
-            return
-
-        # 0C) Natural Google Calendar delete request.
-        if await try_gcal_delete_natural(update, chat_id, text):
             return
 
         # 1) Multi-intent beta shield:
