@@ -164,6 +164,78 @@ def parse_client_oauth_state(state: str) -> dict:
         "reason": "ok",
     }
 
+
+def preview_client_oauth_callback(state: str, code_present: bool) -> dict:
+    """
+    Validate an OAuth callback request without exchanging tokens.
+
+    V0 safety behavior:
+    - validates state
+    - checks whether code is present
+    - does NOT call Google
+    - does NOT write refresh tokens
+    - does NOT log secrets
+    - returns a safe structured preview
+    """
+    parsed = parse_client_oauth_state(state)
+
+    if not parsed.get("ok"):
+        return {
+            "ok": False,
+            "client_id": parsed.get("client_id"),
+            "status": "rejected",
+            "reason": parsed.get("reason"),
+            "would_exchange_token": False,
+            "would_store_token": False,
+        }
+
+    if not code_present:
+        return {
+            "ok": False,
+            "client_id": parsed.get("client_id"),
+            "status": "rejected",
+            "reason": "missing_authorization_code",
+            "would_exchange_token": False,
+            "would_store_token": False,
+        }
+
+    return {
+        "ok": True,
+        "client_id": parsed.get("client_id"),
+        "status": "validated_preview_only",
+        "reason": "state_valid_code_present_no_token_exchange",
+        "would_exchange_token": False,
+        "would_store_token": False,
+        "target_token_path": str(_client_gcal_dir(parsed.get("client_id")) / "refresh_token"),
+        "mode": "read_only",
+    }
+
+
+def render_client_oauth_callback_preview(state: str, code_present: bool) -> str:
+    """
+    Render a safe human-readable callback preview.
+
+    No secrets. No code echo. No token exchange.
+    """
+    result = preview_client_oauth_callback(state, code_present)
+
+    if not result.get("ok"):
+        return (
+            "📅 Google Calendar OAuth callback\n\n"
+            "Estado: rechazado\n"
+            f"Razón: {result.get('reason')}\n\n"
+            "No se intercambió token y no se guardó nada."
+        )
+
+    return (
+        "📅 Google Calendar OAuth callback\n\n"
+        "Estado: validado en modo preview.\n"
+        f"Cliente: {result.get('client_id')}\n"
+        "Modo: solo lectura\n\n"
+        "No se intercambió token y no se guardó nada todavía.\n"
+        f"Ruta futura del token: {result.get('target_token_path')}"
+    )
+
 def render_client_gcal_connect_message(client_id: str) -> str:
     link = build_client_gcal_auth_url(client_id)
 
