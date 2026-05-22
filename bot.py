@@ -10745,6 +10745,167 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     return True
 
 
+# --------------------------------------------------
+# Karen Google Calendar delete confirmation v0
+# Natural flow:
+# user: "Val, borra Cabalgata Intensa"
+# Val: finds matching upcoming event + asks confirmation
+# user: "sí" / "dale" / "confirmo"
+# Val: deletes that specific event_id only
+# --------------------------------------------------
+_PENDING_GCAL_DELETE_DRAFTS = {}
+
+
+async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -> bool:
+    from core.client_gcal_write import delete_client_event
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    key = int(chat_id)
+    pending = _PENDING_GCAL_DELETE_DRAFTS.get(key)
+    if not pending:
+        return False
+
+    norm = _norm_gcal_confirm_text(text)
+
+    confirm_words = {
+        "si", "sí", "ok", "okay", "dale", "confirmo", "confirmar",
+        "borralo", "bórralo", "eliminalo", "elimínalo", "hazlo", "yes",
+    }
+    cancel_words = {
+        "no", "cancelar", "cancela", "mejor no", "olvidalo", "olvídalo", "stop",
+    }
+
+    if norm in cancel_words:
+        _PENDING_GCAL_DELETE_DRAFTS.pop(key, None)
+        await update.message.reply_text(
+            "Listo, Insanity. No borré nada de Google Calendar. 🛑📅"
+        )
+        return True
+
+    if norm not in confirm_words:
+        return False
+
+    result = delete_client_event(
+        "karen",
+        pending["event_id"],
+        dry_run=False,
+    )
+
+    if result.status == "deleted":
+        _PENDING_GCAL_DELETE_DRAFTS.pop(key, None)
+        await update.message.reply_text(
+            "🗑️ Listo, Insanity. Borré ese evento de Google Calendar.\n\n"
+            f"• {pending['summary']}\n"
+            f"• {pending['start']}\n\n"
+            "Solo borré ese evento específico. No toqué nada más."
+        )
+        return True
+
+    await update.message.reply_text(
+        "No pude borrar el evento todavía. 😬\n\n"
+        f"Estado: {result.status}\n"
+        f"Razón: {result.reason}\n\n"
+        "No se borró ningún evento."
+    )
+    return True
+
+
+async def try_gcal_delete_natural(update, chat_id, text) -> bool:
+    import re
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from core.client_gcal_write import find_client_events_by_title
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    raw = (text or "").strip()
+    norm = _norm_gcal_confirm_text(raw)
+
+    delete_prefixes = (
+        "borra evento",
+        "borrar evento",
+        "borra la cita",
+        "borrar la cita",
+        "borra cita",
+        "borrar cita",
+        "elimina evento",
+        "eliminar evento",
+        "elimina la cita",
+        "eliminar la cita",
+        "elimina cita",
+        "eliminar cita",
+        "borra",
+        "elimina",
+    )
+
+    if not any(norm.startswith(p) for p in delete_prefixes):
+        return False
+
+    query = norm
+    for prefix in sorted(delete_prefixes, key=len, reverse=True):
+        if query.startswith(prefix):
+            query = query[len(prefix):].strip()
+            break
+
+    query = re.sub(r"^(de|del|la|el)\s+", "", query).strip()
+
+    if not query:
+        await update.message.reply_text(
+            "Puedo borrar un evento, pero dime cuál. Ejemplo:\n"
+            "“Val, borra Cabalgata Intensa”."
+        )
+        return True
+
+    tz = ZoneInfo("America/Panama")
+    matches = find_client_events_by_title(
+        "karen",
+        query,
+        datetime.now(tz),
+        days_ahead=30,
+        limit=10,
+    )
+
+    if not matches:
+        await update.message.reply_text(
+            "No encontré un evento futuro con ese nombre en Google Calendar. 😬\n\n"
+            f"Búsqueda: {query}\n\n"
+            "No borré nada."
+        )
+        return True
+
+    if len(matches) > 1:
+        lines = [
+            "Encontré más de un evento parecido. No voy a borrar a ciegas, obviamente. 😌",
+            "",
+        ]
+        for i, m in enumerate(matches[:5], 1):
+            lines.append(f"{i}. {m.get('start')} · {m.get('summary')}")
+        lines.append("")
+        lines.append("Por ahora dime el nombre más exacto o lo hacemos manual.")
+        await update.message.reply_text("\n".join(lines))
+        return True
+
+    m = matches[0]
+    _PENDING_GCAL_DELETE_DRAFTS[int(chat_id)] = {
+        "event_id": m.get("id") or "",
+        "summary": m.get("summary") or "",
+        "start": m.get("start") or "",
+        "end": m.get("end") or "",
+    }
+
+    await update.message.reply_text(
+        "🗑️ Encontré este evento en Google Calendar:\n\n"
+        f"• {m.get('start')}\n"
+        f"• {m.get('summary')}\n\n"
+        "¿Confirmas que lo borre?\n"
+        "Respóndeme: “sí”, “dale” o “cancelar”."
+    )
+    return True
+
+
 async def try_appointment_save_natural(update, chat_id, text) -> bool:
     """
     Natural Appointment Save v0.
@@ -12456,6 +12617,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 0) Pending Google Calendar appointment confirmation.
         # Must run before appointment parsing so "sí"/"dale" confirms the draft.
         if await maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text):
+            return
+
+        # 0B) Pending Google Calendar delete confirmation.
+        if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            return
+
+        # 0C) Natural Google Calendar delete request.
+        if await try_gcal_delete_natural(update, chat_id, text):
             return
 
         # 1) Multi-intent beta shield:
