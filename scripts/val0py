@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd /opt/val0
+
+# Load app env when present.
+if [ -f /opt/val0/.env ]; then
+  set -a
+  . /opt/val0/.env
+  set +a
+fi
+
+# Match val0-bot.service DB environment.
+export VAL0_DB_PATH="${VAL0_DB_PATH:-/opt/val0/val0_memory.enc.db}"
+export VAL0_DB_KEY_FILE="${VAL0_DB_KEY_FILE:-/etc/val0/db_key}"
+export VAL0_TZ="${VAL0_TZ:-America/Panama}"
+
+exec /opt/val0/.venv/bin/python "$@"
