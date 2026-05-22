@@ -314,3 +314,35 @@ Verification:
 
 Rule:
 Before token exchange, update VAL0_GCAL_OAUTH_REDIRECT_URI and Google Cloud OAuth redirect settings to the exact HTTPS callback URL.
+
+---
+
+## Google OAuth redirect preview PASS — 2026-05-21
+
+Manual browser test:
+Opened a generated Google OAuth auth URL for client karen.
+
+Result:
+Google accepted the configured redirect URI and returned to:
+
+https://auth.holaval.com/oauth2callback
+
+Sidecar response:
+- Estado: validado en modo preview
+- Cliente: karen
+- Modo: solo lectura
+- No token exchange
+- No token storage
+- Future token path:
+  /etc/val0/clients/karen/gcal/refresh_token
+
+Interpretation:
+DNS, HTTPS, Google Cloud authorized redirect URI, Nginx proxy, and preview sidecar routing are working together.
+
+Remaining before real client connection:
+- implement controlled token exchange
+- store refresh token only under client-specific path
+- enforce chmod 600
+- verify no code/token logs
+- confirm read-only connected status
+- then test agenda read-only merge
