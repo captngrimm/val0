@@ -236,6 +236,58 @@ def render_client_oauth_callback_preview(state: str, code_present: bool) -> str:
         f"Ruta futura del token: {result.get('target_token_path')}"
     )
 
+
+def exchange_client_oauth_code_preview_safe(state: str, code: str) -> dict:
+    """
+    Phase B token exchange skeleton.
+
+    Safety behavior in this function:
+    - validates state
+    - checks code presence
+    - prepares per-client token paths
+    - does NOT exchange token yet
+    - does NOT store token yet
+    - does NOT echo or return code
+    """
+    parsed = parse_client_oauth_state(state)
+
+    if not parsed.get("ok"):
+        return {
+            "ok": False,
+            "status": "rejected",
+            "client_id": parsed.get("client_id"),
+            "reason": parsed.get("reason"),
+            "token_exchanged": False,
+            "token_stored": False,
+        }
+
+    if not (code or "").strip():
+        return {
+            "ok": False,
+            "status": "rejected",
+            "client_id": parsed.get("client_id"),
+            "reason": "missing_authorization_code",
+            "token_exchanged": False,
+            "token_stored": False,
+        }
+
+    client_id = parsed.get("client_id")
+    gcal_dir = _client_gcal_dir(client_id)
+
+    return {
+        "ok": True,
+        "status": "ready_for_token_exchange",
+        "client_id": client_id,
+        "reason": "state_valid_code_present_ready_for_controlled_exchange",
+        "token_exchanged": False,
+        "token_stored": False,
+        "target_dir": str(gcal_dir),
+        "target_refresh_token_path": str(gcal_dir / "refresh_token"),
+        "target_calendar_id_path": str(gcal_dir / "calendar_id"),
+        "scope": " ".join(SCOPES),
+        "redirect_uri": DEFAULT_REDIRECT_URI,
+    }
+
 def render_client_gcal_connect_message(client_id: str) -> str:
     link = build_client_gcal_auth_url(client_id)
 
