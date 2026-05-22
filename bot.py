@@ -5022,7 +5022,7 @@ def build_unified_pending_dashboard(chat_id: int) -> str:
     Combines open tasks + pending reminders so "¿Qué tengo pendiente?"
     does not fall into narrow legal/today-only priority logic.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     from zoneinfo import ZoneInfo
     from memory_store import _get_conn, fetch_open_commitments
 
@@ -10678,6 +10678,19 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     tz = ZoneInfo("America/Panama")
     now = datetime.now(tz)
 
+    relative_date_label = None
+    relative_date_dt = None
+
+    if "pasado mañana" in t or "pasado manana" in t:
+        relative_date_dt = now + timedelta(days=2)
+        relative_date_label = "pasado mañana"
+    elif "mañana" in t or "manana" in t:
+        relative_date_dt = now + timedelta(days=1)
+        relative_date_label = "mañana"
+    elif "hoy" in t:
+        relative_date_dt = now
+        relative_date_label = "hoy"
+
     day = None
     month = None
     year = now.year
@@ -10694,6 +10707,11 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
             day = int(m.group("day"))
             month = now.month
 
+    if relative_date_dt is not None:
+        day = relative_date_dt.day
+        month = relative_date_dt.month
+        year = relative_date_dt.year
+
     if not day or not month:
         await update.message.reply_text(
             "Sí puedo guardar la cita, Insanity 📅\n\n"
@@ -10705,11 +10723,19 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     # Time: "a las 3pm", "a la 1", "a las 15:30"
     tm = re.search(r"\b(?:a\s+las|a\s+la)\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?\b", t)
     if not tm:
-        await update.message.reply_text(
-            "Tengo la fecha, pero me falta la hora, Insanity ⏰\n\n"
-            "Mándamelo así:\n"
-            "“Val, tengo cita con Nora el 28 a las 3pm”."
-        )
+        if relative_date_label:
+            await update.message.reply_text(
+                "Sí puedo guardar la cita, Insanity 📅\n\n"
+                f"Tengo la fecha: {relative_date_label}.\n"
+                "Pero necesito la hora. Dímelo así:\n"
+                "“Val, tengo cita con Mabel mañana a las 3pm”."
+            )
+        else:
+            await update.message.reply_text(
+                "Tengo la fecha, pero me falta la hora, Insanity ⏰\n\n"
+                "Mándamelo así:\n"
+                "“Val, tengo cita con Nora el 28 a las 3pm”."
+            )
         return True
 
     hour = int(tm.group("hour"))
