@@ -102,6 +102,68 @@ def build_client_gcal_auth_url(client_id: str) -> ClientGCalOAuthLink:
     )
 
 
+
+def parse_client_oauth_state(state: str) -> dict:
+    """
+    Parse and validate client OAuth state.
+
+    Expected format:
+    client:<client_id>:<random>
+
+    V0 rules:
+    - must start with client:
+    - client_id must sanitize cleanly
+    - random part must be present and long enough
+    - returns safe structured result
+    """
+    raw = (state or "").strip()
+
+    if not raw:
+        return {
+            "ok": False,
+            "client_id": None,
+            "reason": "missing_state",
+        }
+
+    parts = raw.split(":", 2)
+    if len(parts) != 3 or parts[0] != "client":
+        return {
+            "ok": False,
+            "client_id": None,
+            "reason": "malformed_state",
+        }
+
+    raw_client_id = parts[1].strip()
+    cid = _safe_client_id(raw_client_id)
+    nonce = parts[2].strip()
+
+    if cid == "unknown":
+        return {
+            "ok": False,
+            "client_id": None,
+            "reason": "missing_client_id",
+        }
+
+    if raw_client_id != cid:
+        return {
+            "ok": False,
+            "client_id": cid,
+            "reason": "client_id_not_canonical",
+        }
+
+    if len(nonce) < 16:
+        return {
+            "ok": False,
+            "client_id": cid,
+            "reason": "nonce_too_short",
+        }
+
+    return {
+        "ok": True,
+        "client_id": cid,
+        "reason": "ok",
+    }
+
 def render_client_gcal_connect_message(client_id: str) -> str:
     link = build_client_gcal_auth_url(client_id)
 
