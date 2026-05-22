@@ -5470,6 +5470,21 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 await update.message.reply_text(render_client_calendar_status("karen"))
                 return
 
+            # Agenda Bridge v0: specific date lookup.
+            agenda_date_lookup_markers = (
+                "que cita tengo",
+                "que citas tengo",
+                "que tengo para el",
+                "que tengo el",
+                "tengo algo el",
+                "hay algo el",
+                "agenda para el",
+            )
+
+            if any(m in karen_upper_norm for m in agenda_date_lookup_markers):
+                if await try_agenda_date_lookup_natural(update, chat_id, text):
+                    return
+
             # Agenda query shield.
             agenda_direct_markers = (
                 "que tengo hoy",
@@ -10177,6 +10192,225 @@ def _strip_smalltalk_prefix(text: str) -> str:
         t = re.sub(pattern, "", t)
 
     return t
+
+
+async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
+    """
+    Agenda Bridge v0: specific date lookup for Karen-style phrases.
+
+    Examples:
+    - Que cita tengo para el 28
+    - Qué tengo el 28
+    - Qué tengo para el 28 de mayo
+    - Tengo algo el 28?
+    """
+    import re
+    import unicodedata
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    raw = (text or "").strip()
+    t = raw.lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    t = re.sub(r"[¿?¡!.,:;]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria)\s+", "", t).strip()
+
+    intent_markers = (
+        "que cita tengo",
+        "que citas tengo",
+        "que tengo",
+        "tengo algo",
+        "hay algo",
+        "mi agenda",
+        "agenda",
+        "cita",
+        "citas",
+    )
+    if not any(m in t for m in intent_markers):
+        return False
+
+    months = {
+        "enero": 1, "ene": 1,
+        "febrero": 2, "feb": 2,
+        "marzo": 3, "mar": 3,
+        "abril": 4, "abr": 4,
+        "mayo": 5, "may": 5,
+        "junio": 6, "jun": 6,
+        "julio": 7, "jul": 7,
+        "agosto": 8, "ago": 8,
+        "septiembre": 9, "setiembre": 9, "sep": 9, "sept": 9,
+        "octubre": 10, "oct": 10,
+        "noviembre": 11, "nov": 11,
+        "diciembre": 12, "dic": 12,
+    }
+
+    tz = ZoneInfo("America/Panama")
+    now = datetime.now(tz)
+
+    day = None
+    month = None
+    year = now.year
+
+    # "28 de mayo" / "28 mayo"
+    m = re.search(r"\b(?:el\s+)?(?P<day>[0-3]?\d)\s*(?:de\s+)?(?P<month>enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|jul|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)\b", t)
+    if m:
+        day = int(m.group("day"))
+        month = months.get(m.group("month"))
+    else:
+        # "para el 28" / "el 28" / "dia 28"
+        m = re.search(r"\b(?:para\s+el|para|el|dia)\s+(?P<day>[0-3]?\d)\b", t)
+        if not m:
+            # cautious fallback only if agenda/cita intent exists
+            m = re.search(r"\b(?P<day>[0-3]?\d)\b", t)
+        if m:
+            day = int(m.group("day"))
+            month = now.month
+
+    if not day or not month:
+        return False
+
+    try:
+        target_start = datetime(year, month, day, 0, 0, 0, tzinfo=tz)
+    except ValueError:
+        await update.message.reply_text("Esa fecha no me cuadra, Insanity. Dame día y mes para no inventar calendario. 😌")
+        return True
+
+    # If user only gave day number and that day already passed this month, assume next month.
+    if target_start.date() < now.date() and not re.search(r"(enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|jul|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)", t):
+        next_month = month + 1
+        next_year = year
+        if next_month > 12:
+            next_month = 1
+            next_year += 1
+        try:
+            target_start = datetime(next_year, next_month, day, 0, 0, 0, tzinfo=tz)
+        except ValueError:
+            pass
+
+    target_end = target_start.replace(hour=23, minute=59, second=59)
+
+    start_utc = target_start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    end_utc = target_end.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    reminders = []
+    case_hits = []
+
+    try:
+        import memory_store
+        conn = memory_store._get_conn()
+        cur = conn.cursor()
+
+        reminders = cur.execute(
+            """
+            SELECT id, text, due_at_utc, status, entity_type, parent_ref
+            FROM reminders
+            WHERE chat_id = ?
+              AND due_at_utc >= ?
+              AND due_at_utc <= ?
+              AND status IN ('pending', 'sending', 'sent')
+            ORDER BY due_at_utc ASC, id ASC
+            LIMIT 20
+            """,
+            (int(chat_id), start_utc, end_utc),
+        ).fetchall()
+
+        # Secondary context only: search appointment/cita-ish case notes.
+        date_tokens = [
+            str(day),
+            f"{day:02d}",
+            target_start.strftime("%Y-%m-%d"),
+        ]
+        rows = cur.execute(
+            """
+            SELECT id, note_text, source, created_at, parent_ref
+            FROM case_notes
+            WHERE chat_id = ?
+              AND (
+                lower(note_text) LIKE '%cita%'
+                OR lower(note_text) LIKE '%agenda%'
+                OR lower(note_text) LIKE '%abogada%'
+                OR lower(note_text) LIKE '%nora%'
+              )
+            ORDER BY id DESC
+            LIMIT 15
+            """,
+            (int(chat_id),),
+        ).fetchall()
+
+        for r in rows:
+            note = (r["note_text"] if hasattr(r, "keys") else r[1]) or ""
+            note_low = note.lower()
+            if any(tok in note_low for tok in date_tokens):
+                case_hits.append(r)
+
+        conn.close()
+    except Exception:
+        reminders = []
+        case_hits = []
+
+    weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][target_start.weekday()]
+    month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][target_start.month]
+    pretty = f"{weekday} {target_start.day} de {month_name}"
+
+    lines = [f"📅 Agenda para {pretty}"]
+
+    found = False
+
+    if reminders:
+        found = True
+        lines.append("")
+        lines.append("Recordatorios de Val:")
+        for r in reminders:
+            rd = dict(r) if hasattr(r, "keys") else {
+                "id": r[0], "text": r[1], "due_at_utc": r[2], "status": r[3],
+                "entity_type": r[4], "parent_ref": r[5],
+            }
+            txt = (rd.get("text") or "").replace("\n", " ").strip()
+            due = (rd.get("due_at_utc") or "").strip()
+            time_label = "sin hora"
+            try:
+                dt_utc = datetime.strptime(due, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                time_label = dt_utc.astimezone(tz).strftime("%I:%M %p").lstrip("0")
+            except Exception:
+                pass
+            lines.append(f"• {time_label} — {txt}")
+
+    if case_hits:
+        found = True
+        lines.append("")
+        lines.append("Notas del caso que podrían estar relacionadas:")
+        for r in case_hits[:5]:
+            rd = dict(r) if hasattr(r, "keys") else {
+                "id": r[0], "note_text": r[1], "source": r[2], "created_at": r[3], "parent_ref": r[4],
+            }
+            note = (rd.get("note_text") or "").replace("\n", " ").strip()
+            if len(note) > 180:
+                note = note[:180] + "…"
+            lines.append(f"• {note}")
+
+    try:
+        from core.client_calendar_config import get_client_calendar_config
+        cfg = get_client_calendar_config("karen")
+        if cfg.connection_status != "connected":
+            lines.append("")
+            lines.append("Google Calendar todavía no está conectado para Karen, así que revisé solo memoria/recordatorios internos.")
+    except Exception:
+        pass
+
+    if not found:
+        lines.append("")
+        lines.append("No veo citas ni recordatorios guardados para esa fecha.")
+        lines.append("Si esa cita existe, dime fecha y hora y la guardo sin inventarme la novela. 😌")
+
+    await update.message.reply_text("\n".join(lines))
+    return True
+
+
 
 async def try_week_horizon(update, chat_id, text) -> bool:
     """
