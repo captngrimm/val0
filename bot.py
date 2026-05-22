@@ -10795,12 +10795,29 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
 
     due_utc = due_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
-    # Extract a compact title.
+    # Extract a compact title for display.
+    # Keep useful context after the time, e.g. "tema libro Finca 10082".
     title = raw
-    title = re.sub(r"^\s*(val|valeria)[,:]?\s*", "", title, flags=re.IGNORECASE).strip()
-    title = re.sub(r"\b(el|para el)\s+\d{1,2}(\s+de\s+\w+)?\b.*$", "", title, flags=re.IGNORECASE).strip()
-    title = re.sub(r"\ba\s+la?s?\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b.*$", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^\s*(val|valeria|vale)[,:]?\s*", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(registra|registrar|guarda|guardar|agenda|agendar|programa|programar)\s+cita\s*", "cita ", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(tengo\s+una\s+|tengo\s+)", "", title, flags=re.IGNORECASE).strip()
+
+    # Remove explicit/relative date words but do not destroy the subject/context.
+    title = re.sub(r"\b(el|para el)\s+\d{1,2}(\s+de\s+\w+)?\b", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\b(hoy|mañana|manana|pasado mañana|pasado manana)\b", "", title, flags=re.IGNORECASE).strip()
+
+    # Remove only the time expression, preserving text after it.
+    title = re.sub(r"\ba\s+la?s?\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b", "", title, flags=re.IGNORECASE).strip()
+
+    title = re.sub(r"\s*,\s*", ", ", title).strip(" ,.;:-")
+    title = re.sub(r"\s+", " ", title).strip()
+
+    # Normalize leading appointment phrasing.
+    title = re.sub(r"^cita\s+para\s+", "Cita para ", title, flags=re.IGNORECASE)
+    title = re.sub(r"^cita\s+con\s+", "Cita con ", title, flags=re.IGNORECASE)
+    if title and not title.lower().startswith("cita"):
+        title = "Cita: " + title
+
     if not title:
         title = "Cita"
 
