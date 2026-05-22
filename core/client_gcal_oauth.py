@@ -22,11 +22,7 @@ from typing import Optional
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-READ_READ_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
-WRITE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
-
-# Default remains read-only unless explicitly requested.
-SCOPES = READ_SCOPES
+READ_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 WRITE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 # Default remains read-only unless explicitly requested.
@@ -86,7 +82,12 @@ def build_client_gcal_auth_url(client_id: str, mode: str = "read") -> ClientGCal
             reason=f"missing_oauth_client_secret:{APP_CLIENT_SECRET_PATH}",
         )
 
-    state = f"client:{cid}:{secrets.token_urlsafe(24)}"
+    oauth_mode = "write" if scopes == WRITE_SCOPES else "read"
+    state = f"client:{cid}:{oauth_mode}_{secrets.token_urlsafe(24)}"
+
+    nonce = (state or "").split(":", 2)[2] if len((state or "").split(":", 2)) == 3 else ""
+    oauth_mode = "write" if nonce.startswith("write_") else "read"
+    scopes = WRITE_SCOPES if oauth_mode == "write" else READ_SCOPES
 
     flow = Flow.from_client_secrets_file(
         str(APP_CLIENT_SECRET_PATH),
@@ -294,7 +295,7 @@ def exchange_client_oauth_code_preview_safe(state: str, code: str) -> dict:
         "target_dir": str(gcal_dir),
         "target_refresh_token_path": str(gcal_dir / "refresh_token"),
         "target_calendar_id_path": str(gcal_dir / "calendar_id"),
-        "scope": " ".join(SCOPES),
+        "scope": " ".join(scopes),
         "redirect_uri": DEFAULT_REDIRECT_URI,
     }
 
@@ -439,15 +440,16 @@ def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
 
     return {
         "ok": True,
-        "status": "connected_read_only",
+        "status": "connected_write" if oauth_mode == "write" else "connected_read_only",
         "client_id": client_id,
         "reason": "refresh_token_stored_per_client",
         "token_exchanged": True,
         "token_stored": True,
         "refresh_token_path": str(refresh_token_path),
         "calendar_id_path": str(calendar_id_path),
-        "scope": " ".join(SCOPES),
+        "scope": " ".join(scopes),
         "redirect_uri": DEFAULT_REDIRECT_URI,
+        "oauth_mode": oauth_mode,
         "fresh_access_token_diag": fresh_diag,
     }
 
@@ -470,11 +472,11 @@ def render_client_oauth_callback_exchange_result(state: str, code: str) -> str:
 
     return (
         "📅 Google Calendar conectado\n\n"
-        "Estado: conectado en modo solo lectura.\n"
+        f"Estado: conectado en modo {'escritura autorizada' if result.get('oauth_mode') == 'write' else 'solo lectura'}.\n"
         f"Cliente: {result.get('client_id')}\n"
         f"Diagnóstico access token: {result.get('fresh_access_token_diag', {}).get('reason')}\n\n"
-        "Val ya puede usar este calendario como fuente de lectura cuando activemos la consulta de agenda.\n"
-        "No voy a crear, cambiar ni borrar eventos."
+        "Val ya puede usar este calendario según el modo autorizado.\n"
+        "La escritura sigue protegida por confirmación y switches internos."
     )
 
 def render_client_gcal_connect_message(client_id: str) -> str:
