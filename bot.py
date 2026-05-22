@@ -10776,7 +10776,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
                 f"• {pending['pretty_date']}\n"
                 f"• {pending['pretty_time']}\n"
                 f"• {pending['title']}\n\n"
-                "Cero clones raros en la agenda. 😌"
+                "Tu agenda queda limpia y sin eventos repetidos. 😌"
             )
             return True
     except Exception as e:
@@ -10806,7 +10806,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
             f"• {pending['pretty_date']}\n"
             f"• {pending['pretty_time']}\n"
             f"• {result.title}\n\n"
-            "Quedó en Google Calendar. No borré ni edité nada más."
+            "Solo creé este evento. No borré ni edité nada más."
         )
         return True
 
@@ -10938,7 +10938,7 @@ async def try_gcal_delete_natural(update, chat_id, text) -> bool:
     if not query:
         await update.message.reply_text(
             "Puedo borrar un evento, pero dime cuál. Ejemplo:\n"
-            "“Val, borra Cabalgata Intensa”."
+            "“Val, borra cita con Mabel”."
         )
         return True
 
@@ -10953,7 +10953,7 @@ async def try_gcal_delete_natural(update, chat_id, text) -> bool:
 
     if not matches:
         await update.message.reply_text(
-            "No encontré un evento futuro con ese nombre en Google Calendar. 😬\n\n"
+            "No encontré un evento futuro con ese nombre en Google Calendar, Insanity. 😬\n\n"
             f"Búsqueda: {query}\n\n"
             "No borré nada."
         )
@@ -10961,7 +10961,7 @@ async def try_gcal_delete_natural(update, chat_id, text) -> bool:
 
     if len(matches) > 1:
         lines = [
-            "Encontré más de un evento parecido. No voy a borrar a ciegas, obviamente. 😌",
+            "Encontré más de un evento parecido. Para evitar errores, no voy a borrar ninguno todavía. 😌",
             "",
         ]
         for i, m in enumerate(matches[:5], 1):
@@ -11202,7 +11202,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
 
     msg = (
         "📅 Puedo crear esta cita en tu Google Calendar, Insanity.\n\n"
-        "Revisa antes de que yo meta mano en la agenda como duende con clipboard:\n\n"
+        "Revísala antes de confirmarla:\n\n"
         f"• {pretty_date}\n"
         f"• {pretty_time}\n"
         f"• {title}\n"
