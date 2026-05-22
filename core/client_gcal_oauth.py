@@ -29,7 +29,7 @@ APP_CLIENT_SECRET_PATH = Path(
 
 DEFAULT_REDIRECT_URI = os.getenv(
     "VAL0_GCAL_OAUTH_REDIRECT_URI",
-    "http://omfgeeks.com:8080/oauth2callback",
+    "https://auth.holaval.com/oauth2callback",
 )
 
 
