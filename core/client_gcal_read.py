@@ -22,8 +22,11 @@ from zoneinfo import ZoneInfo
 
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from google.auth.exceptions import RefreshError
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+READ_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+WRITE_COMPAT_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+SCOPES = READ_SCOPES
 
 APP_CLIENT_SECRET_PATH = Path(
     os.getenv("VAL0_GCAL_OAUTH_CLIENT_SECRET", "/etc/val0/gcal/client_secret.json")
@@ -85,7 +88,7 @@ def client_gcal_status(client_id: str) -> Dict[str, Any]:
     }
 
 
-def _load_client_creds(client_id: str) -> Credentials:
+def _load_client_creds(client_id: str, scopes: list[str] | None = None) -> Credentials:
     paths = get_client_gcal_paths(client_id)
 
     if not paths["client_secret"].exists():
@@ -103,8 +106,22 @@ def _load_client_creds(client_id: str) -> Credentials:
         token_uri=web.get("token_uri") or "https://oauth2.googleapis.com/token",
         client_id=web.get("client_id"),
         client_secret=web.get("client_secret"),
-        scopes=SCOPES,
+        scopes=scopes or SCOPES,
     )
+
+
+def _scope_candidates(client_id: str) -> list[list[str]]:
+    paths = get_client_gcal_paths(client_id)
+    scope_file = paths["base"] / "scope"
+
+    if scope_file.exists():
+        raw = scope_file.read_text(encoding="utf-8").strip()
+        if raw == "https://www.googleapis.com/auth/calendar":
+            return [WRITE_COMPAT_SCOPES, READ_SCOPES]
+        if "calendar.readonly" in raw:
+            return [READ_SCOPES, WRITE_COMPAT_SCOPES]
+
+    return [READ_SCOPES, WRITE_COMPAT_SCOPES]
 
 
 def _calendar_id(client_id: str) -> str:
@@ -141,17 +158,33 @@ def get_client_events_between(
         end_dt = end_dt.replace(tzinfo=ZoneInfo(tz))
 
     cal_id = _calendar_id(cid)
-    creds = _load_client_creds(cid)
-    svc = build("calendar", "v3", credentials=creds)
 
-    resp = svc.events().list(
-        calendarId=cal_id,
-        timeMin=start_dt.isoformat(),
-        timeMax=end_dt.isoformat(),
-        singleEvents=True,
-        orderBy="startTime",
-        maxResults=limit,
-    ).execute()
+    last_refresh_error = None
+    resp = None
+
+    for scopes in _scope_candidates(cid):
+        try:
+            creds = _load_client_creds(cid, scopes=scopes)
+            svc = build("calendar", "v3", credentials=creds, cache_discovery=False)
+            resp = svc.events().list(
+                calendarId=cal_id,
+                timeMin=start_dt.isoformat(),
+                timeMax=end_dt.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=limit,
+            ).execute()
+            break
+        except RefreshError as e:
+            last_refresh_error = e
+            if "invalid_scope" in str(e):
+                continue
+            raise
+
+    if resp is None:
+        if last_refresh_error:
+            raise last_refresh_error
+        resp = {"items": []}
 
     events: List[Dict[str, Any]] = []
     for e in resp.get("items", []) or []:
