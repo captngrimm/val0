@@ -223,3 +223,23 @@ No live callback/token storage until callback safety rules are implemented:
 - no token logging
 - disconnect/revoke path
 - no auto-write
+
+---
+
+## Callback architecture update
+
+Use:
+
+docs/lab/gcal/CLIENT_GCAL_OAUTH_CALLBACK_ARCHITECTURE_V0.md
+
+Decision:
+OAuth callback should live in a small sidecar service, not inside the Telegram bot.
+
+Next safe build:
+Phase A preview-only sidecar:
+- /health
+- /oauth2callback
+- validate state/code presence
+- no token exchange
+- no token storage
+- no secret logs
