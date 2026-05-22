@@ -5452,6 +5452,24 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 await reminders_cmd(update, context)
                 return
 
+            # Client calendar connection status shield.
+            calendar_status_markers = (
+                "mi calendario esta conectado",
+                "mi calendario está conectado",
+                "puedes ver mi calendario",
+                "puedes revisar mi calendario",
+                "tienes acceso a mi calendario",
+                "mi google calendar esta conectado",
+                "mi google calendar está conectado",
+                "google calendar esta conectado",
+                "google calendar está conectado",
+            )
+
+            if any(m in karen_upper_norm for m in calendar_status_markers):
+                from core.client_calendar_config import render_client_calendar_status
+                await update.message.reply_text(render_client_calendar_status("karen"))
+                return
+
             # Agenda query shield.
             agenda_direct_markers = (
                 "que tengo hoy",
