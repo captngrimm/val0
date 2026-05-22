@@ -5396,7 +5396,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         early_norm = "".join(ch for ch in early_norm if not unicodedata.combining(ch))
         early_norm = re.sub(r"[¿?¡!.,:;]+", " ", early_norm)
         early_norm = re.sub(r"\s+", " ", early_norm).strip()
-        early_norm = re.sub(r"^(val|valeria)\s+", "", early_norm).strip()
+        early_norm = re.sub(r"^(val|valeria|vale)\s+", "", early_norm).strip()
 
         # EARLY KAREN AGENDA HARD OVERRIDE
         # Must beat document/case routes. "Qué tengo hoy" was being hijacked
@@ -5404,19 +5404,23 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         early_agenda_direct_markers = {
             "que tengo hoy": "today",
             "que tengo para hoy": "today",
+            "tengo para hoy": "today",
             "que hay hoy": "today",
             "que hay para hoy": "today",
             "que debo hacer hoy": "today",
             "que tengo manana": "tomorrow",
             "que tengo para manana": "tomorrow",
+            "tengo para manana": "tomorrow",
             "que tengo mañana": "tomorrow",
             "que tengo para mañana": "tomorrow",
+            "tengo para mañana": "tomorrow",
             "que hay manana": "tomorrow",
             "que hay para manana": "tomorrow",
             "que hay mañana": "tomorrow",
             "que hay para mañana": "tomorrow",
             "que tengo esta semana": "week",
             "que tengo para esta semana": "week",
+            "tengo para esta semana": "week",
             "que hay para esta semana": "week",
         }
 
@@ -5747,19 +5751,23 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             agenda_direct_markers = (
                 "que tengo hoy",
                 "que tengo para hoy",
+                "tengo para hoy",
                 "que hay hoy",
                 "que hay para hoy",
                 "que debo hacer hoy",
                 "que tengo manana",
                 "que tengo para manana",
+                "tengo para manana",
                 "que tengo mañana",
                 "que tengo para mañana",
+                "tengo para mañana",
                 "que hay manana",
                 "que hay para manana",
                 "que hay mañana",
                 "que hay para mañana",
                 "que tengo esta semana",
                 "que tengo para esta semana",
+                "tengo para esta semana",
                 "que hay para esta semana",
             )
 
@@ -12307,7 +12315,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Example: "Val, ¿qué tengo hoy?" must become "que tengo hoy".
         kr_norm = re.sub(r"[¿?¡!.,:;]+", " ", kr_norm)
         kr_norm = re.sub(r"\s+", " ", kr_norm).strip()
-        kr_norm = re.sub(r"^(val|valeria)\s+", "", kr_norm).strip()
+        kr_norm = re.sub(r"^(val|valeria|vale)\s+", "", kr_norm).strip()
 
         # 1) Multi-intent beta shield:
         # Karen may paste several numbered instructions in one message.
@@ -12399,13 +12407,25 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # must hit agenda/due gates before document inventory can hijack it.
         agenda_direct_markers = (
             "que tengo hoy",
+            "que tengo para hoy",
+            "tengo para hoy",
             "que hay hoy",
+            "que hay para hoy",
             "que debo hacer hoy",
             "que tengo manana",
+            "que tengo para manana",
+            "tengo para manana",
             "que tengo mañana",
+            "que tengo para mañana",
+            "tengo para mañana",
             "que hay manana",
+            "que hay para manana",
             "que hay mañana",
+            "que hay para mañana",
             "que tengo esta semana",
+            "que tengo para esta semana",
+            "tengo para esta semana",
+            "que hay para esta semana",
         )
 
         if any(m == kr_norm for m in agenda_direct_markers):
