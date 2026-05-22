@@ -10716,6 +10716,43 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
 
     start_dt = datetime.fromisoformat(pending["start_iso"])
 
+    # Duplicate guard: avoid creating the same event twice for same title/time.
+    try:
+        from datetime import timedelta
+        from core.client_gcal_read import get_client_events_between
+
+        window_start = start_dt - timedelta(minutes=2)
+        window_end = start_dt + timedelta(minutes=2)
+        existing = get_client_events_between(
+            "karen",
+            window_start,
+            window_end,
+            tz="America/Panama",
+            limit=10,
+        )
+
+        pending_title_norm = (pending["title"] or "").strip().lower()
+        duplicate = None
+        for ev in existing.events:
+            ev_title = (ev.get("summary") or "").strip().lower()
+            ev_start = (ev.get("start") or "").strip()
+            if ev_title == pending_title_norm and ev_start.startswith(start_dt.strftime("%Y-%m-%dT%H:%M")):
+                duplicate = ev
+                break
+
+        if duplicate:
+            _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
+            await update.message.reply_text(
+                "📅 Esa cita ya existe en Google Calendar, Insanity. No la dupliqué.\n\n"
+                f"• {pending['pretty_date']}\n"
+                f"• {pending['pretty_time']}\n"
+                f"• {pending['title']}\n\n"
+                "Cero clones raros en la agenda. 😌"
+            )
+            return True
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_CREATE_DUPLICATE_CHECK] failed: {e}")
+
     result = create_client_event(
         "karen",
         pending["title"],
