@@ -402,3 +402,64 @@ Tell Karen she can now try:
 - “Val, recuérdame una hora antes de la cita con Nora”
 - “Val, qué tengo en agenda?”
 
+
+---
+
+## Entry 2026-05-21 — Client Google Calendar Status PASS
+
+Date:
+2026-05-21
+
+Source:
+Telegram live test / Karen
+
+Tester:
+Karen
+
+Tested flows:
+- calendar_status_boundary: PASS
+- client_scoped_calendar_status: PASS
+- read_only_first_messaging: PASS
+- no_global_credentials_boundary: PASS
+
+Overall result:
+PASS
+
+What worked:
+- Karen asked: “Val, puedes ver mi calendario?”
+- Val answered that Google Calendar is not connected yet.
+- Val stated it can still review internal Val reminders.
+- Val explained that to see Karen’s real calendar, her calendar must be connected first.
+- Val included the new safe-mode boundary: client-specific connection, read-only first, no global credentials.
+
+What confused the tester:
+- None observed in this test.
+
+What failed:
+- Nothing in the final live test.
+
+What did the tester expect:
+- A clear answer about whether Val can see her calendar.
+
+Top friction:
+1. Google Calendar OAuth is still not implemented for Karen.
+2. Client token path is still missing: /etc/val0/clients/karen/gcal/refresh_token.
+3. Future OAuth flow must avoid legacy/global /etc/val0/gcal credentials.
+
+Decision:
+- record evidence
+- keep Google Calendar integration in Lab until read-only OAuth is safely implemented
+- do not use global legacy calendar credentials for Karen
+
+Next patch recommended:
+- OAuth Phase 1 auth-link skeleton
+- or consent copy / connection UX
+- or read-only event merge only after Karen has a client-specific token
+
+Client-facing follow-up:
+Tell Karen:
+- Val can manage internal agenda/reminders now.
+- Google Calendar is not connected yet.
+- When connected, it will start read-only and client-specific.
+- Val will not create/change/delete events without explicit confirmation later.
+
