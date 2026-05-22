@@ -34,39 +34,55 @@ def get_client_calendar_config(client_id: str) -> ClientCalendarConfig:
     - Secrets are stored outside repo under /etc/val0/clients/<client_id>/gcal/.
     """
     cid = (client_id or "").strip().lower() or "unknown"
-    gcal_dir = _client_gcal_dir(cid)
 
-    refresh_token = gcal_dir / "refresh_token"
-    calendar_id_file = gcal_dir / "calendar_id"
+    try:
+        from core.client_gcal_read import client_gcal_status
 
-    if not refresh_token.exists():
+        status = client_gcal_status(cid)
+        token_ref = str(Path(status.get("base_path", "")) / "refresh_token")
+
+        if status.get("status") != "connected":
+            missing = ", ".join(status.get("missing") or [])
+            return ClientCalendarConfig(
+                client_id=cid,
+                provider="google_calendar",
+                connection_status="not_connected",
+                calendar_id=None,
+                token_ref=token_ref,
+                read_enabled=False,
+                write_enabled=False,
+                notes=(
+                    "Client-specific Google Calendar is not connected. "
+                    f"Missing: {missing or 'unknown'}. "
+                    f"uses_legacy_global={status.get('uses_legacy_global')}"
+                ),
+            )
+
         return ClientCalendarConfig(
             client_id=cid,
             provider="google_calendar",
-            connection_status="not_connected",
+            connection_status="connected",
+            calendar_id=status.get("calendar_id") or "primary",
+            token_ref=token_ref,
+            read_enabled=True,
+            write_enabled=False,
+            notes=(
+                "Client-specific Google Calendar read-only connection found. "
+                f"uses_legacy_global={status.get('uses_legacy_global')}"
+            ),
+        )
+    except Exception as e:
+        gcal_dir = _client_gcal_dir(cid)
+        return ClientCalendarConfig(
+            client_id=cid,
+            provider="google_calendar",
+            connection_status="error",
             calendar_id=None,
-            token_ref=str(refresh_token),
+            token_ref=str(gcal_dir / "refresh_token"),
             read_enabled=False,
             write_enabled=False,
-            notes="Client-specific Google Calendar token not found.",
+            notes=f"Client calendar status check failed: {e}",
         )
-
-    calendar_id = "primary"
-    if calendar_id_file.exists():
-        raw = calendar_id_file.read_text(encoding="utf-8").strip()
-        if raw:
-            calendar_id = raw
-
-    return ClientCalendarConfig(
-        client_id=cid,
-        provider="google_calendar",
-        connection_status="connected",
-        calendar_id=calendar_id,
-        token_ref=str(refresh_token),
-        read_enabled=True,
-        write_enabled=False,
-        notes="Client-specific Google Calendar token found. Write disabled by default in v0.",
-    )
 
 
 def render_client_calendar_status(client_id: str) -> str:
@@ -77,7 +93,9 @@ def render_client_calendar_status(client_id: str) -> str:
             "📅 Calendario\n\n"
             "Todavía no tengo conectado tu Google Calendar.\n\n"
             "Puedo revisar recordatorios internos de Val, pero para ver tu agenda real "
-            "necesito conectar tu calendario primero."
+            "necesito conectar tu calendario primero.\n\n"
+            "Modo seguro preparado: conexión por cliente, solo lectura primero, "
+            "sin usar credenciales globales."
         )
 
     write_label = "activada" if cfg.write_enabled else "desactivada por seguridad"
