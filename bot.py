@@ -10812,9 +10812,19 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     title = re.sub(r"\s*,\s*", ", ", title).strip(" ,.;:-")
     title = re.sub(r"\s+", " ", title).strip()
 
+    # Clean common speech-to-text leftovers before final title normalization.
+    title = re.sub(r"^(para\s+el\s+)+", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(para\s+la\s+)+", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(para\s+)", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(tengo\s+cita\s+con\s+)", "cita con ", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(tengo\s+reunion\s+con\s+|tengo\s+reunión\s+con\s+)", "cita con ", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(cita\s+para\s+el\s+)", "cita ", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(cita\s+para\s+la\s+)", "cita ", title, flags=re.IGNORECASE).strip()
+
     # Normalize leading appointment phrasing.
     title = re.sub(r"^cita\s+para\s+", "Cita para ", title, flags=re.IGNORECASE)
     title = re.sub(r"^cita\s+con\s+", "Cita con ", title, flags=re.IGNORECASE)
+    title = re.sub(r"^cita\s+", "Cita ", title, flags=re.IGNORECASE)
     if title and not title.lower().startswith("cita"):
         title = "Cita: " + title
 
