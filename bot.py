@@ -4137,6 +4137,57 @@ def _is_pm_drift_candidate(text: str) -> bool:
     )
     return any(m in low for m in markers)
 
+
+def _is_karen_client_ops_intent(text: str) -> bool:
+    """
+    Guardrail: Frank Operator / PM drift redirects must never leak into Karen/client flows.
+
+    Karen may say things like:
+    - "Registra cita para mañana con Mabel, tema libro Finca 10082"
+    - "Val que tengo mañana"
+    - "recuérdame una hora antes..."
+    - grocery/list/supermarket commands
+
+    Words like "tema" can look like PM/product drift, but in Karen context they are normal
+    client/case/agenda language.
+    """
+    low = (text or "").lower()
+
+    client_markers = (
+        "cita",
+        "reunion",
+        "reunión",
+        "recordatorio",
+        "recuerdame",
+        "recuérdame",
+        "recordarme",
+        "agenda",
+        "que tengo hoy",
+        "qué tengo hoy",
+        "que tengo mañana",
+        "qué tengo mañana",
+        "que tengo esta semana",
+        "qué tengo esta semana",
+        "finca",
+        "nora",
+        "mabel",
+        "abogado",
+        "abogada",
+        "juzgado",
+        "oficio",
+        "documento",
+        "supermercado",
+        "super",
+        "súper",
+        "lista",
+        "comprar",
+        "google calendar",
+        "calendario",
+    )
+
+    return any(marker in low for marker in client_markers)
+
+
 def _build_pm_redirect_reply(pm_state: dict) -> str:
     return (
         f"No ahora. Eso es drift.\n\n"
@@ -6754,7 +6805,12 @@ Classifier confidence: {confidence}
             "next_action": "Continue current focus.",
         }
     # Hard redirect when drift is obvious
-    if pm_state["decision"] in ("DEFER", "DISCARD") and _is_pm_drift_candidate(text) and not _looks_like_doc_request(text):
+    if (
+        pm_state["decision"] in ("DEFER", "DISCARD")
+        and _is_pm_drift_candidate(text)
+        and not _looks_like_doc_request(text)
+        and not _is_karen_client_ops_intent(text)
+    ):
 
         surfaced = _build_pm_redirect_reply(pm_state)
         try:
@@ -10584,6 +10640,14 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         "tengo cita",
         "tengo una cita",
         "cita con",
+        "registra cita",
+        "registrar cita",
+        "guarda cita",
+        "guardar cita",
+        "agenda cita",
+        "agendar cita",
+        "programa cita",
+        "programar cita",
         "reunion con",
         "reunión con",
         "tengo reunion",
@@ -12270,6 +12334,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "tengo cita",
             "tengo una cita",
             "cita con",
+            "registra cita",
+            "registrar cita",
+            "guarda cita",
+            "guardar cita",
+            "agenda cita",
+            "agendar cita",
+            "programa cita",
+            "programar cita",
             "reunion con",
             "reunión con",
             "tengo reunion",
