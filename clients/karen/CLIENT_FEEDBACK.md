@@ -274,3 +274,70 @@ Improve agenda/date lookup and/or create a safer appointment memory flow after c
 
 Client-facing follow-up:
 Tell Karen the corrections were made and ask her to keep testing naturally, especially supermarket, “qué puedes hacer hoy”, and later agenda/citas.
+
+---
+
+## Entry 2026-05-21 — Agenda mini-loop PASS
+
+Date:
+2026-05-21
+
+Source:
+Telegram live test / Karen
+
+Tester:
+Karen
+
+Tested flows:
+- appointment_save: PASS
+- agenda_date_lookup: PASS
+- anchored_relative_reminder: PASS
+- google_calendar_status_boundary: PASS
+
+Overall result:
+PASS
+
+What worked:
+- Karen said: “Val, tengo cita con Nora el 29 a las 3pm”.
+- Val saved the appointment in internal agenda as Reminder/Appointment ID #85.
+- Karen asked: “Val, qué cita tengo para el 29?”
+- Val returned the Friday May 29 agenda and found the 3:00 PM Nora appointment.
+- Karen said: “Val, recuérdame una hora antes de la cita con Nora”.
+- Val created Reminder ID #86 at 2:00 PM, anchored to Appointment ID #85.
+- Val clearly stated that Google Calendar is not connected yet and used internal Val memory/reminders only.
+
+What confused the tester:
+- None observed in this mini-loop.
+
+What failed:
+- Earlier same-day attempts were hijacked by legacy case appointment routing, saving the appointment as a case note instead of an internal agenda item.
+- This was corrected by inserting the active appointment save route before the legacy Karen appointment/case-note handler.
+
+What did the tester expect:
+- Natural language appointment capture.
+- Later date-based lookup.
+- Reminder before the appointment without learning commands.
+
+Top friction:
+1. Duplicate/legacy routing zones in bot.py made the first patch appear connected while the live route still used the old handler.
+2. Google Calendar is still not connected per-client, so appointments remain internal for now.
+3. Need future dedup/cleanup for duplicate test appointments/notes.
+
+Decision:
+- patch memory/storage
+- patch routing
+- record evidence
+
+Next patch recommended:
+Choose one:
+- appointment dedup/cleanup
+- richer agenda list / agenda summary
+- client-specific Google Calendar OAuth connection flow
+
+Client-facing follow-up:
+Tell Karen that the agenda mini-loop now works:
+- she can save a cita naturally
+- ask what she has on a date
+- ask Val to remind her before the cita
+- Google Calendar is still pending, so for now it lives in Val’s internal agenda.
+
