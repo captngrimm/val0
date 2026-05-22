@@ -10637,6 +10637,114 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
 
 
 
+# --------------------------------------------------
+# Karen Google Calendar appointment confirmation v0
+# Natural flow:
+# user: "Val, tengo cita con Mabel mañana a las 5pm"
+# Val: draft + confirmation
+# user: "sí" / "dale" / "confirmo"
+# Val: creates Google Calendar event
+# --------------------------------------------------
+_PENDING_GCAL_APPOINTMENT_DRAFTS = {}
+
+
+def _norm_gcal_confirm_text(text: str) -> str:
+    import re
+    import unicodedata
+
+    t = (text or "").strip().lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    t = re.sub(r"[¿?¡!.,:;]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"^(val|valeria|vale)\s+", "", t).strip()
+    return t
+
+
+async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text) -> bool:
+    from datetime import datetime
+    from core.client_gcal_write import create_client_event
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    key = int(chat_id)
+    pending = _PENDING_GCAL_APPOINTMENT_DRAFTS.get(key)
+    if not pending:
+        return False
+
+    norm = _norm_gcal_confirm_text(text)
+
+    confirm_words = {
+        "si",
+        "sí",
+        "ok",
+        "okay",
+        "dale",
+        "confirmo",
+        "confirmar",
+        "confirmalo",
+        "confírmalo",
+        "crealo",
+        "créalo",
+        "crear",
+        "hazlo",
+        "yes",
+    }
+
+    cancel_words = {
+        "no",
+        "cancelar",
+        "cancela",
+        "cancelalo",
+        "cancélalo",
+        "mejor no",
+        "olvidalo",
+        "olvídalo",
+        "stop",
+    }
+
+    if norm in cancel_words:
+        _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
+        await update.message.reply_text(
+            "Listo, Insanity. No creé nada en Google Calendar. 🛑📅"
+        )
+        return True
+
+    if norm not in confirm_words:
+        return False
+
+    start_dt = datetime.fromisoformat(pending["start_iso"])
+
+    result = create_client_event(
+        "karen",
+        pending["title"],
+        start_dt,
+        duration_minutes=int(pending.get("duration_minutes", 60)),
+        description=pending.get("description") or "Evento creado por Val0 después de confirmación explícita.",
+        dry_run=False,
+    )
+
+    if result.status == "created":
+        _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
+        await update.message.reply_text(
+            "📅 Listo, Insanity. Creé la cita en tu Google Calendar.\n\n"
+            f"• {pending['pretty_date']}\n"
+            f"• {pending['pretty_time']}\n"
+            f"• {result.title}\n\n"
+            "Quedó en Google Calendar. No borré ni edité nada más."
+        )
+        return True
+
+    await update.message.reply_text(
+        "No pude crear la cita en Google Calendar todavía. 😬\n\n"
+        f"Estado: {result.status}\n"
+        f"Razón: {result.reason}\n\n"
+        "No se creó ningún evento."
+    )
+    return True
+
+
 async def try_appointment_save_natural(update, chat_id, text) -> bool:
     """
     Natural Appointment Save v0.
@@ -10833,33 +10941,30 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
 
     reminder_text = f"{title}."
 
-    try:
-        from memory_store import insert_reminder
-        rid = insert_reminder(
-            int(chat_id),
-            due_utc,
-            reminder_text,
-            status="pending",
-            entity_type="appointment",
-            parent_ref="CLIENT:karen:agenda",
-        )
-    except Exception as e:
-        await update.message.reply_text(f"No pude guardar la cita ahora mismo. Error: {e}")
-        return True
-
     weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][due_local.weekday()]
     month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][due_local.month]
     pretty_date = f"{weekday} {due_local.day} de {month_name}"
     pretty_time = due_local.strftime("%I:%M %p").lstrip("0")
 
+    # Google Calendar write is now available for Karen, but must stay behind confirmation.
+    _PENDING_GCAL_APPOINTMENT_DRAFTS[int(chat_id)] = {
+        "title": title,
+        "start_iso": due_local.isoformat(),
+        "duration_minutes": 60,
+        "description": "Evento creado por Val0 desde flujo natural de cita con confirmación explícita.",
+        "pretty_date": pretty_date,
+        "pretty_time": pretty_time,
+    }
+
     msg = (
-        "📅 Listo, Insanity. Guardé la cita en agenda interna de Val.\n\n"
+        "📅 Puedo crear esta cita en tu Google Calendar, Insanity.\n\n"
+        "Revisa antes de que yo meta mano en la agenda como duende con clipboard:\n\n"
         f"• {pretty_date}\n"
         f"• {pretty_time}\n"
-        f"• {reminder_text}\n"
-        f"• ID: #{rid}\n\n"
-        "Google Calendar todavía no está conectado para Karen, así que por ahora queda en Val. "
-        "Cuando conectemos su calendario, esto ya tiene camino para sincronizarse sin mezclar cuentas."
+        f"• {title}\n"
+        "• Duración: 1 hora\n\n"
+        "¿Confirmas que la cree en Google Calendar?\n"
+        "Respóndeme: “sí”, “dale” o “cancelar”."
     )
     await update.message.reply_text(msg)
     return True
@@ -12347,6 +12452,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kr_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", kr_norm).strip()
         kr_norm = re.sub(r"^(val|valeria|vale)\s+", "", kr_norm).strip()
         kr_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", kr_norm).strip()
+
+        # 0) Pending Google Calendar appointment confirmation.
+        # Must run before appointment parsing so "sí"/"dale" confirms the draft.
+        if await maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text):
+            return
 
         # 1) Multi-intent beta shield:
         # Karen may paste several numbered instructions in one message.
