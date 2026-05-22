@@ -5347,6 +5347,29 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         early_norm = re.sub(r"\s+", " ", early_norm).strip()
         early_norm = re.sub(r"^(val|valeria)\s+", "", early_norm).strip()
 
+        # EARLY KAREN AGENDA HARD OVERRIDE
+        # Must beat document/case routes. "Qué tengo hoy" was being hijacked
+        # by document inventory for CASE:KAREN-LAND-001.
+        early_agenda_direct_markers = {
+            "que tengo hoy": "today",
+            "que hay hoy": "today",
+            "que debo hacer hoy": "today",
+            "que tengo manana": "tomorrow",
+            "que tengo mañana": "tomorrow",
+            "que hay manana": "tomorrow",
+            "que hay mañana": "tomorrow",
+            "que tengo esta semana": "week",
+        }
+
+        if early_norm in early_agenda_direct_markers:
+            reply = build_client_agenda_dashboard(
+                "karen",
+                chat_id,
+                early_agenda_direct_markers[early_norm],
+            )
+            await update.message.reply_text(reply, disable_web_page_preview=True)
+            return
+
         early_capability_markers = (
             "que puedes hacer hoy",
             "que puedes hacer",
@@ -12280,7 +12303,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
 
             await update.message.reply_text(
-                "No veo nada claro en agenda para esa ventana, Insanity 😌📅"
+                "No encontré eventos ni recordatorios para esa ventana."
             )
             return
 
