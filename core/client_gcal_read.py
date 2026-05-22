@@ -5,13 +5,15 @@ Client-scoped Google Calendar read-only client.
 
 V0 safety rules:
 - Read-only only.
-- Never uses legacy/global /etc/val0/gcal credentials.
-- Only reads from /etc/val0/clients/<client_id>/gcal/.
+- Never uses legacy/global user refresh tokens.
+- Reads user refresh tokens only from /etc/val0/clients/<client_id>/gcal/.
+- Uses app-level OAuth client secret for token refresh.
 - If client token/config is missing, returns not_connected.
 - No write methods in this module.
 """
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +24,10 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+
+APP_CLIENT_SECRET_PATH = Path(
+    os.getenv("VAL0_GCAL_OAUTH_CLIENT_SECRET", "/etc/val0/gcal/client_secret.json")
+)
 
 
 @dataclass(frozen=True)
@@ -49,7 +55,8 @@ def get_client_gcal_paths(client_id: str) -> Dict[str, Path]:
     base = _client_gcal_dir(client_id)
     return {
         "base": base,
-        "client_secret": base / "client_secret.json",
+        # App-level OAuth client secret. User refresh tokens remain per-client.
+        "client_secret": APP_CLIENT_SECRET_PATH,
         "refresh_token": base / "refresh_token",
         "calendar_id": base / "calendar_id",
     }
