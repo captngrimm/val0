@@ -22,7 +22,11 @@ from typing import Optional
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-READ_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+READ_READ_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+WRITE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+# Default remains read-only unless explicitly requested.
+SCOPES = READ_SCOPES
 WRITE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 # Default remains read-only unless explicitly requested.
@@ -393,7 +397,7 @@ def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
 
     flow = Flow.from_client_secrets_file(
         str(APP_CLIENT_SECRET_PATH),
-        scopes=SCOPES,
+        scopes=scopes,
         redirect_uri=DEFAULT_REDIRECT_URI,
     )
 
