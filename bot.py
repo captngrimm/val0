@@ -5403,13 +5403,21 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         # by document inventory for CASE:KAREN-LAND-001.
         early_agenda_direct_markers = {
             "que tengo hoy": "today",
+            "que tengo para hoy": "today",
             "que hay hoy": "today",
+            "que hay para hoy": "today",
             "que debo hacer hoy": "today",
             "que tengo manana": "tomorrow",
+            "que tengo para manana": "tomorrow",
             "que tengo mañana": "tomorrow",
+            "que tengo para mañana": "tomorrow",
             "que hay manana": "tomorrow",
+            "que hay para manana": "tomorrow",
             "que hay mañana": "tomorrow",
+            "que hay para mañana": "tomorrow",
             "que tengo esta semana": "week",
+            "que tengo para esta semana": "week",
+            "que hay para esta semana": "week",
         }
 
         if early_norm in early_agenda_direct_markers:
@@ -5738,13 +5746,21 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             # Agenda query shield.
             agenda_direct_markers = (
                 "que tengo hoy",
+                "que tengo para hoy",
                 "que hay hoy",
+                "que hay para hoy",
                 "que debo hacer hoy",
                 "que tengo manana",
+                "que tengo para manana",
                 "que tengo mañana",
+                "que tengo para mañana",
                 "que hay manana",
+                "que hay para manana",
                 "que hay mañana",
+                "que hay para mañana",
                 "que tengo esta semana",
+                "que tengo para esta semana",
+                "que hay para esta semana",
             )
 
             if any(m == karen_upper_norm for m in agenda_direct_markers):
