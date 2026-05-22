@@ -10544,6 +10544,133 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
 
 
 
+
+async def try_agenda_summary_natural(update, chat_id, text) -> bool:
+    """
+    Richer Agenda List v0.
+
+    Examples:
+    - Val, qué tengo en agenda?
+    - Val, muéstrame mi agenda
+    - Val, próximas citas
+    """
+    import re
+    import unicodedata
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    raw = (text or "").strip()
+    t = raw.lower()
+    t = unicodedata.normalize("NFKD", t)
+    t = "".join(ch for ch in t if not unicodedata.combining(ch))
+    t = re.sub(r"[¿?¡!.,;]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria)\s+", "", t).strip()
+
+    markers = (
+        "que tengo en agenda",
+        "mi agenda",
+        "muestrame mi agenda",
+        "mostrar mi agenda",
+        "proximas citas",
+        "proximos recordatorios",
+        "agenda interna",
+        "que citas tengo",
+    )
+
+    if not any(m in t for m in markers):
+        return False
+
+    tz = ZoneInfo("America/Panama")
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    rows = []
+    try:
+        import memory_store
+        conn = memory_store._get_conn()
+        cur = conn.cursor()
+        rows = cur.execute(
+            """
+            SELECT id, due_at_utc, text, status, entity_type, parent_ref
+            FROM reminders
+            WHERE chat_id = ?
+              AND status = 'pending'
+              AND due_at_utc >= ?
+            ORDER BY due_at_utc ASC, id ASC
+            LIMIT 20
+            """,
+            (int(chat_id), now_utc),
+        ).fetchall()
+        conn.close()
+    except Exception:
+        rows = []
+
+    appointments = []
+    reminders = []
+
+    for r in rows:
+        rd = dict(r) if hasattr(r, "keys") else {
+            "id": r[0], "due_at_utc": r[1], "text": r[2], "status": r[3],
+            "entity_type": r[4], "parent_ref": r[5],
+        }
+        if rd.get("entity_type") == "appointment":
+            appointments.append(rd)
+        else:
+            reminders.append(rd)
+
+    def fmt_item(rd):
+        due = rd.get("due_at_utc") or ""
+        txt = (rd.get("text") or "").replace("\n", " ").strip()
+        rid = rd.get("id")
+        try:
+            dt_utc = datetime.strptime(due, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            dt = dt_utc.astimezone(tz)
+            weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][dt.weekday()]
+            month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][dt.month]
+            label = f"{weekday} {dt.day} de {month_name}, {dt.strftime('%I:%M %p').lstrip('0')}"
+        except Exception:
+            label = "sin fecha clara"
+        return f"• {label} — {txt}  #{rid}"
+
+    lines = ["📅 Agenda interna de Val", ""]
+
+    if appointments:
+        lines.append("Próximas citas:")
+        for rd in appointments[:8]:
+            lines.append(fmt_item(rd))
+        lines.append("")
+
+    if reminders:
+        lines.append("Recordatorios:")
+        for rd in reminders[:8]:
+            lines.append(fmt_item(rd))
+        lines.append("")
+
+    if not appointments and not reminders:
+        lines.append("No veo citas ni recordatorios pendientes en la agenda interna.")
+        lines.append("Si quieres, guarda una así: “Val, tengo cita con Nora el 29 a las 3pm”.")
+        lines.append("")
+    else:
+        lines.append("Puedes preguntarme por una fecha específica, por ejemplo:")
+        lines.append("“Val, qué cita tengo para el 29?”")
+        lines.append("")
+
+    try:
+        from core.client_calendar_config import get_client_calendar_config
+        cfg = get_client_calendar_config("karen")
+        if cfg.connection_status != "connected":
+            lines.append("Google Calendar todavía no está conectado para Karen; esto es solo agenda interna de Val.")
+    except Exception:
+        pass
+
+    await update.message.reply_text("\n".join(lines).strip())
+    return True
+
+
+
 async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
     """
     Agenda Bridge v0: specific date lookup for Karen-style phrases.
@@ -11923,6 +12050,23 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text(reply)
             return
+
+        # 1A-1) Richer Agenda List v0:
+        # "qué tengo en agenda" / "mi agenda" / "próximas citas"
+        agenda_summary_markers = (
+            "que tengo en agenda",
+            "qué tengo en agenda",
+            "mi agenda",
+            "muestrame mi agenda",
+            "muéstrame mi agenda",
+            "proximas citas",
+            "próximas citas",
+            "agenda interna",
+        )
+
+        if any(m in kr_norm for m in agenda_summary_markers):
+            if await try_agenda_summary_natural(update, chat_id, text):
+                return
 
         # 1A0) Anchored Reminder Before Appointment v0:
         # "recuérdame una hora antes de la cita con Nora"
