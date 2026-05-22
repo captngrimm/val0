@@ -12291,20 +12291,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if any(m == kr_norm for m in agenda_direct_markers):
-            agenda_text = kr_norm
-            if "esta semana" in agenda_text:
-                if await try_week_horizon(update, chat_id, agenda_text):
-                    return
-            elif "manana" in agenda_text or "mañana" in agenda_text:
-                if await try_agenda_tomorrow_natural(update, chat_id, agenda_text):
-                    return
+            if "esta semana" in kr_norm:
+                reply = build_client_agenda_dashboard("karen", chat_id, "week")
+            elif "manana" in kr_norm or "mañana" in kr_norm:
+                reply = build_client_agenda_dashboard("karen", chat_id, "tomorrow")
             else:
-                if await try_due_today_natural(update, chat_id, agenda_text):
-                    return
+                reply = build_client_agenda_dashboard("karen", chat_id, "today")
 
-            await update.message.reply_text(
-                "No encontré eventos ni recordatorios para esa ventana."
-            )
+            await update.message.reply_text(reply, disable_web_page_preview=True)
             return
 
         # 2) Reminder list / agenda query shield.
