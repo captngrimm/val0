@@ -5452,6 +5452,41 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 await reminders_cmd(update, context)
                 return
 
+            # Client Google Calendar connect preview shield.
+            calendar_connect_markers = (
+                "conecta mi google calendar",
+                "conectar mi google calendar",
+                "conecta google calendar",
+                "conectar google calendar",
+                "quiero conectar mi calendario",
+                "conectar mi calendario",
+                "conecta mi calendario",
+            )
+
+            if any(m in karen_upper_norm for m in calendar_connect_markers):
+                await update.message.reply_text(
+                    "📅 Conectar Google Calendar\n\n"
+                    "Ya estoy preparando la conexión de Google Calendar para Karen, "
+                    "pero todavía no voy a pedirte autorización real.\n\n"
+                    "Modo planeado:\n"
+                    "• conexión por cliente\n"
+                    "• solo lectura primero\n"
+                    "• sin usar credenciales globales\n"
+                    "• sin crear, cambiar ni borrar eventos\n\n"
+                    "Qué ya puedo hacer ahora:\n"
+                    "• manejar tu agenda interna de Val\n"
+                    "• guardar citas\n"
+                    "• recordarte antes de una cita\n"
+                    "• decirte qué tienes en agenda dentro de Val\n\n"
+                    "Qué falta antes de conectar Google Calendar real:\n"
+                    "• activar callback seguro público con HTTPS\n"
+                    "• guardar token solo en tu carpeta de cliente\n"
+                    "• confirmar que no se registren códigos ni tokens en logs\n\n"
+                    "Cuando esté listo, te voy a dar un enlace de autorización seguro. "
+                    "Por ahora no tienes que tocar nada."
+                )
+                return
+
             # Client calendar connection status shield.
             calendar_status_markers = (
                 "mi calendario esta conectado",
