@@ -243,3 +243,30 @@ Phase A preview-only sidecar:
 - no token exchange
 - no token storage
 - no secret logs
+
+---
+
+## Preview sidecar systemd update — 2026-05-21
+
+Service installed:
+val0-gcal-oauth.service
+
+Mode:
+Preview-only / Phase A
+
+Bind:
+127.0.0.1:8080
+
+Endpoints:
+- /health
+- /oauth2callback
+
+Verification:
+- service active/running
+- /health OK
+- bad state rejected
+- no secret/code echo
+- local-only listener confirmed
+
+Rule:
+Do not expose publicly and do not send auth links to clients until callback/token exchange safety is complete.
