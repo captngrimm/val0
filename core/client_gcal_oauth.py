@@ -377,7 +377,7 @@ def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
     refresh_token_path.chmod(0o600)
 
     if not calendar_id_path.exists():
-        calendar_id_path.write_text("primary\\n", encoding="utf-8")
+        calendar_id_path.write_text("primary\n", encoding="utf-8")
         calendar_id_path.chmod(0o600)
 
     return {
@@ -404,17 +404,17 @@ def render_client_oauth_callback_exchange_result(state: str, code: str) -> str:
 
     if not result.get("ok"):
         return (
-            "📅 Google Calendar OAuth callback\\n\\n"
-            "Estado: no conectado\\n"
-            f"Razón: {result.get('reason')}\\n\\n"
+            "📅 Google Calendar OAuth callback\n\n"
+            "Estado: no conectado\n"
+            f"Razón: {result.get('reason')}\n\n"
             "No se guardó ningún token."
         )
 
     return (
-        "📅 Google Calendar conectado\\n\\n"
-        "Estado: conectado en modo solo lectura.\\n"
-        f"Cliente: {result.get('client_id')}\\n\\n"
-        "Val ya puede usar este calendario como fuente de lectura cuando activemos la consulta de agenda.\\n"
+        "📅 Google Calendar conectado\n\n"
+        "Estado: conectado en modo solo lectura.\n"
+        f"Cliente: {result.get('client_id')}\n\n"
+        "Val ya puede usar este calendario como fuente de lectura cuando activemos la consulta de agenda.\n"
         "No voy a crear, cambiar ni borrar eventos."
     )
 
