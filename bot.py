@@ -10637,6 +10637,35 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
 
 
 
+
+def _audit_karen_gcal_event(action: str, chat_id: int, payload: dict) -> None:
+    """
+    Append-only local audit log for Karen Google Calendar writes/deletes.
+    No tokens. No secrets. Event IDs and titles are okay for ops traceability.
+    """
+    import json
+    from datetime import datetime
+    from pathlib import Path
+
+    try:
+        path = Path("/opt/val0/logs/karen_gcal_events_audit.jsonl")
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        row = {
+            "ts_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "client_id": "karen",
+            "chat_id": int(chat_id),
+            "action": action,
+            **(payload or {}),
+        }
+
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_AUDIT] failed: {e}")
+
+
+
 # --------------------------------------------------
 # Karen Google Calendar appointment confirmation v0
 # Natural flow:
@@ -10763,6 +10792,14 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     )
 
     if result.status == "created":
+        _audit_karen_gcal_event("create", chat_id, {
+            "status": result.status,
+            "event_id": result.event_id,
+            "title": result.title,
+            "start": result.start,
+            "end": result.end,
+            "source": "natural_appointment_confirmation",
+        })
         _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
         await update.message.reply_text(
             "📅 Listo, Insanity. Creé la cita en tu Google Calendar.\n\n"
@@ -10831,6 +10868,15 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
     )
 
     if result.status == "deleted":
+        _audit_karen_gcal_event("delete", chat_id, {
+            "status": result.status,
+            "event_id": result.event_id,
+            "deleted_event_id": result.deleted_event_id,
+            "title": pending.get("summary") or "",
+            "start": pending.get("start") or "",
+            "end": pending.get("end") or "",
+            "source": "natural_delete_confirmation",
+        })
         _PENDING_GCAL_DELETE_DRAFTS.pop(key, None)
         await update.message.reply_text(
             "🗑️ Listo, Insanity. Borré ese evento de Google Calendar.\n\n"
