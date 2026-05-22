@@ -24,8 +24,21 @@ CAL_ID_PATH = Path("/etc/val0/gcal/calendar_id")
 
 VAL0_TZ = os.getenv("VAL0_TZ", "America/Panama")
 
-# Safety switch
-WRITE_ENABLED = os.getenv("VAL0_CALENDAR_WRITE_ENABLED", "false").lower() == "true"
+# Safety switches
+#
+# VAL0_CALENDAR_WRITE_ENABLED:
+#   Legacy/global write switch.
+#
+# VAL0_ALLOW_LEGACY_GCAL_WRITE:
+#   Extra kill-switch required because this module uses global legacy
+#   /etc/val0/gcal credentials. Client flows must not use this writer.
+#
+# Runtime rule:
+#   Global calendar write is disabled unless BOTH are true.
+WRITE_ENABLED = (
+    os.getenv("VAL0_CALENDAR_WRITE_ENABLED", "false").lower() == "true"
+    and os.getenv("VAL0_ALLOW_LEGACY_GCAL_WRITE", "false").lower() == "true"
+)
 
 
 # -------------------------
@@ -67,6 +80,7 @@ def create_event(
     if not WRITE_ENABLED:
         return {
             "status": "dry_run",
+            "reason": "global_legacy_gcal_write_disabled",
             "title": title,
             "start": start_dt.isoformat(),
         }
