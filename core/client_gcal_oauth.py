@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
@@ -289,6 +290,52 @@ def exchange_client_oauth_code_preview_safe(state: str, code: str) -> dict:
     }
 
 
+
+def diagnose_fresh_oauth_access_token(credentials) -> dict:
+    """
+    Diagnose the freshly exchanged OAuth credentials without logging secrets.
+
+    Safety:
+    - does not print access token
+    - does not print refresh token
+    - only attempts a tiny calendarList request
+    """
+    try:
+        has_access_token = bool(getattr(credentials, "token", None))
+        has_refresh_token = bool(getattr(credentials, "refresh_token", None))
+        expiry_present = bool(getattr(credentials, "expiry", None))
+
+        if not has_access_token:
+            return {
+                "ok": False,
+                "reason": "missing_access_token_after_exchange",
+                "has_access_token": False,
+                "has_refresh_token": has_refresh_token,
+                "expiry_present": expiry_present,
+            }
+
+        svc = build("calendar", "v3", credentials=credentials, cache_discovery=False)
+        resp = svc.calendarList().list(maxResults=1).execute()
+        items = resp.get("items", []) or []
+
+        return {
+            "ok": True,
+            "reason": "fresh_access_token_calendar_list_ok",
+            "has_access_token": has_access_token,
+            "has_refresh_token": has_refresh_token,
+            "expiry_present": expiry_present,
+            "calendar_list_count_sample": len(items),
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "reason": type(e).__name__,
+            "message": str(e)[:300],
+            "has_access_token": bool(getattr(credentials, "token", None)),
+            "has_refresh_token": bool(getattr(credentials, "refresh_token", None)),
+            "expiry_present": bool(getattr(credentials, "expiry", None)),
+        }
+
 def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
     """
     Phase B controlled token exchange.
@@ -358,6 +405,7 @@ def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
         }
 
     creds = flow.credentials
+    fresh_diag = diagnose_fresh_oauth_access_token(creds)
     refresh_token = getattr(creds, "refresh_token", None)
 
     if not refresh_token:
@@ -391,6 +439,7 @@ def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
         "calendar_id_path": str(calendar_id_path),
         "scope": " ".join(SCOPES),
         "redirect_uri": DEFAULT_REDIRECT_URI,
+        "fresh_access_token_diag": fresh_diag,
     }
 
 
@@ -413,7 +462,8 @@ def render_client_oauth_callback_exchange_result(state: str, code: str) -> str:
     return (
         "📅 Google Calendar conectado\n\n"
         "Estado: conectado en modo solo lectura.\n"
-        f"Cliente: {result.get('client_id')}\n\n"
+        f"Cliente: {result.get('client_id')}\n"
+        f"Diagnóstico access token: {result.get('fresh_access_token_diag', {}).get('reason')}\n\n"
         "Val ya puede usar este calendario como fuente de lectura cuando activemos la consulta de agenda.\n"
         "No voy a crear, cambiar ni borrar eventos."
     )
