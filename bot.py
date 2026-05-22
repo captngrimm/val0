@@ -5288,7 +5288,7 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
             internal = f"No pude leer agenda interna de hoy: {e}"
 
         if not internal:
-            internal = "No veo recordatorios ni términos internos para hoy."
+            internal = "No encontré recordatorios ni términos internos para hoy."
 
     gcal = _format_client_gcal_events_section(
         client_id=client_id,
