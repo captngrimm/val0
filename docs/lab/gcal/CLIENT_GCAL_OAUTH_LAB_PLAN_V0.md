@@ -288,3 +288,29 @@ A fake callback code was not found in new journal logs after restart.
 
 Rule:
 Live token exchange must not proceed if OAuth authorization codes can appear in service logs.
+
+---
+
+## Public HTTPS callback update — 2026-05-21
+
+Public callback domain:
+https://auth.holaval.com/oauth2callback
+
+Status:
+HTTPS enabled and verified.
+
+Infrastructure:
+- DNS auth.holaval.com -> 167.172.239.59
+- Nginx reverse proxy public 80/443
+- Sidecar local-only on 127.0.0.1:8080
+- Snap Certbot used because APT Certbot was broken by Python/OpenSSL package conflict
+
+Verification:
+- HTTPS /health OK
+- HTTPS /oauth2callback safe rejection OK
+- no fake OAuth code echoed
+- no fake OAuth code found in Nginx logs
+- no fake OAuth code found in sidecar journal
+
+Rule:
+Before token exchange, update VAL0_GCAL_OAUTH_REDIRECT_URI and Google Cloud OAuth redirect settings to the exact HTTPS callback URL.
