@@ -22,7 +22,11 @@ from typing import Optional
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+READ_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+WRITE_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+
+# Default remains read-only unless explicitly requested.
+SCOPES = READ_SCOPES
 
 APP_CLIENT_SECRET_PATH = Path(
     os.getenv("VAL0_GCAL_OAUTH_CLIENT_SECRET", "/etc/val0/gcal/client_secret.json")
@@ -57,14 +61,15 @@ def _client_gcal_dir(client_id: str) -> Path:
     return Path("/etc/val0/clients") / _safe_client_id(client_id) / "gcal"
 
 
-def build_client_gcal_auth_url(client_id: str) -> ClientGCalOAuthLink:
+def build_client_gcal_auth_url(client_id: str, mode: str = "read") -> ClientGCalOAuthLink:
     """
-    Build a Google Calendar read-only OAuth URL for a specific client.
+    Build a Google Calendar OAuth URL for a specific client.
 
-    This function intentionally does NOT persist tokens.
-    Token exchange/callback handling belongs in a later reviewed phase.
+    Default mode is read-only. Write mode must be requested explicitly.
     """
     cid = _safe_client_id(client_id)
+    requested_mode = (mode or "read").strip().lower()
+    scopes = WRITE_SCOPES if requested_mode in ("write", "read_write", "calendar") else READ_SCOPES
 
     if not APP_CLIENT_SECRET_PATH.exists():
         return ClientGCalOAuthLink(
@@ -72,7 +77,7 @@ def build_client_gcal_auth_url(client_id: str) -> ClientGCalOAuthLink:
             client_id=cid,
             auth_url=None,
             state=None,
-            scope=" ".join(SCOPES),
+            scope=" ".join(scopes),
             redirect_uri=DEFAULT_REDIRECT_URI,
             reason=f"missing_oauth_client_secret:{APP_CLIENT_SECRET_PATH}",
         )
@@ -81,7 +86,7 @@ def build_client_gcal_auth_url(client_id: str) -> ClientGCalOAuthLink:
 
     flow = Flow.from_client_secrets_file(
         str(APP_CLIENT_SECRET_PATH),
-        scopes=SCOPES,
+        scopes=scopes,
         redirect_uri=DEFAULT_REDIRECT_URI,
     )
 
@@ -97,7 +102,7 @@ def build_client_gcal_auth_url(client_id: str) -> ClientGCalOAuthLink:
         client_id=cid,
         auth_url=auth_url,
         state=returned_state,
-        scope=" ".join(SCOPES),
+        scope=" ".join(scopes),
         redirect_uri=DEFAULT_REDIRECT_URI,
         reason="read_only_auth_url_generated_no_token_exchange",
     )
@@ -469,7 +474,7 @@ def render_client_oauth_callback_exchange_result(state: str, code: str) -> str:
     )
 
 def render_client_gcal_connect_message(client_id: str) -> str:
-    link = build_client_gcal_auth_url(client_id)
+    link = build_client_gcal_auth_url(client_id, mode="read")
 
     if link.status != "ok":
         return (
@@ -488,4 +493,25 @@ def render_client_gcal_connect_message(client_id: str) -> str:
         f"Enlace de autorización:\n{link.auth_url}\n\n"
         "Después de autorizar, todavía falta activar el callback seguro para guardar el token "
         "en tu carpeta de cliente."
+    )
+
+
+def render_client_gcal_write_connect_message(client_id: str) -> str:
+    link = build_client_gcal_auth_url(client_id, mode="write")
+
+    if link.status != "ok":
+        return (
+            "📅 Activar escritura de Google Calendar\n\n"
+            "Todavía no puedo generar el enlace de autorización.\n\n"
+            f"Razón técnica: {link.reason}\n\n"
+            "No se tocó ningún token ni calendario."
+        )
+
+    return (
+        "📅 Activar escritura de Google Calendar\n\n"
+        "Este enlace permite que Val pueda crear eventos en tu Google Calendar, "
+        "pero Val solo debe hacerlo después de confirmación explícita.\n\n"
+        "Enlace de autorización:\n"
+        f"{link.auth_url}\n\n"
+        "Si no quieres activar escritura, no autorices este enlace."
     )
