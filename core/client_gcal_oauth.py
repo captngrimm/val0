@@ -285,6 +285,10 @@ def exchange_client_oauth_code_preview_safe(state: str, code: str) -> dict:
     client_id = parsed.get("client_id")
     gcal_dir = _client_gcal_dir(client_id)
 
+    nonce = (state or "").split(":", 2)[2] if len((state or "").split(":", 2)) == 3 else ""
+    oauth_mode = "write" if nonce.startswith("write_") else "read"
+    scopes = WRITE_SCOPES if oauth_mode == "write" else READ_SCOPES
+
     return {
         "ok": True,
         "status": "ready_for_token_exchange",
@@ -395,6 +399,10 @@ def exchange_and_store_client_oauth_code(state: str, code: str) -> dict:
     gcal_dir = _client_gcal_dir(client_id)
     refresh_token_path = gcal_dir / "refresh_token"
     calendar_id_path = gcal_dir / "calendar_id"
+
+    nonce = (state or "").split(":", 2)[2] if len((state or "").split(":", 2)) == 3 else ""
+    oauth_mode = "write" if nonce.startswith("write_") else "read"
+    scopes = WRITE_SCOPES if oauth_mode == "write" else READ_SCOPES
 
     flow = Flow.from_client_secrets_file(
         str(APP_CLIENT_SECRET_PATH),
