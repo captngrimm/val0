@@ -19,11 +19,11 @@ Best for:
 - family/admin continuity
 - personal documents, reminders, tasks, and next steps
 - Karen-style workflows
-- Telegram-first daily use
+- Telegram-first daily use while Val grows into a broader personal operating layer
 
 Includes:
 
-- Telegram assistant access
+- Val access through the current Telegram cockpit
 - available Val0 Personal modules
 - notes, reminders, tasks, and idea capture where enabled
 - document inventory/status where enabled
@@ -33,6 +33,8 @@ Includes:
 - founder-beta guidance and feedback loop
 
 This price is for a personal operator relationship, not a custom software retainer.
+
+Telegram is the first practical interface. The product direction is bigger: a conversational personal operating layer for memory, documents, reminders, workflows, decisions, and next actions.
 
 ---
 
@@ -50,6 +52,8 @@ This is acceptable because founder users give:
 - proof that the product solves painful workflows
 
 Reusable module development can be treated as product R&D, not billed custom, when it can later help other users or clients.
+
+Founder pricing should not rise simply because reusable platform capabilities improve. Early supporters helped prove the product, so general product evolution is part of the founder relationship.
 
 Examples of acceptable product R&D under a founder personal plan:
 
@@ -81,6 +85,7 @@ The Val0 Personal founder plan does not include:
 - bulk document cleanup
 - guaranteed OCR/photo reading
 - guaranteed DOCX automation
+- infinite memory claims
 - enterprise/team workflows
 - multi-user permissions
 - dashboards/client portals
@@ -130,7 +135,7 @@ Provide a founder-operated AI workflow implementation lane.
 Includes:
 
 - guided setup
-- Telegram assistant access
+- Val access through the current Telegram cockpit
 - 1-3 active workflows
 - process mapping
 - client-specific roadmap
@@ -183,9 +188,10 @@ Val0 Personal:
 
 - one person/family
 - personal/admin continuity
-- Telegram-first
+- Telegram as first cockpit
 - lower price
 - reusable improvements included when they strengthen the product
+- founder price protected as the reusable platform improves
 
 Val1 Business:
 
@@ -204,6 +210,7 @@ Protect founder users:
 
 - honor favorable pricing for early supporters where possible
 - keep improving reusable modules based on their real usage
+- do not raise founder personal pricing just because platform-level reusable capabilities improve
 - do not nickel-and-dime every product-learning improvement
 
 Protect the business:
@@ -238,7 +245,7 @@ Boundary:
 
 Short version:
 
-“You keep the founder personal price. Reusable product improvements are included. Big custom edge cases get scoped separately.”
+“You keep the founder personal price. Reusable product improvements are included as Val grows beyond the first Telegram cockpit. Big custom edge cases get scoped separately.”
 
 ---
 

@@ -3,7 +3,11 @@
 Purpose:
 Separate the founder-beta offer into two clear sales routes without pretending there are two separate platforms.
 
-Val0 and Val1 are offer routes on top of the same trust-first operating layer. The product is still founder-operated beta, Telegram-first, and workflow-specific.
+Val0 and Val1 are offer routes on top of the same trust-first operating layer. The product is still founder-operated beta and workflow-specific.
+
+Telegram is the first practical interface/cockpit. It is not the whole product.
+
+Long-term, Val is a conversational operating layer that helps organize memory, documents, reminders, workflows, decisions, and next actions.
 
 ---
 
@@ -33,7 +37,8 @@ The split is commercial and operational, not architectural. Do not fork the plat
 
 Both routes use the same core:
 
-- Val0 Telegram assistant
+- Val operating layer
+- Telegram as first cockpit/interface
 - memory and source-of-truth rules
 - client profile and workflow guards
 - unknown-client protected workflow denial
@@ -50,7 +55,7 @@ Val0 helps organize operational chaos with client-scoped memory, careful workflo
 
 Shared boundary:
 
-No route should promise autonomous action, perfect OCR, full integrations, or self-serve SaaS.
+No route should promise autonomous action, perfect OCR, DOCX automation, full integrations, infinite memory, or self-serve SaaS.
 
 ---
 
@@ -73,7 +78,7 @@ Karen is the first concrete pattern for this route.
 
 Val0 Personal can be demoed around:
 
-- Telegram assistant
+- Val through the first Telegram cockpit
 - notes, reminders, tasks, and ideas
 - document inventory
 - document/photo upload status
@@ -102,6 +107,7 @@ Possible founder-beta posture:
 
 - first guided setup may be free, symbolic, or discounted for close testers
 - small monthly beta fee once the workflow is actually useful
+- favorable founder pricing should not rise just because reusable platform capabilities improve
 - pricing should reflect setup/support effort, not pretend this is self-serve software
 
 Do not force the $300/month business package onto a personal user unless the support/workflow load justifies it.
@@ -129,6 +135,7 @@ Val0 Personal is not:
 - perfect memory
 - autonomous representative
 - guaranteed OCR/photo reader
+- guaranteed DOCX reader
 - public self-serve product
 
 Sensitive documents require explicit comfort with beta storage.
@@ -185,7 +192,7 @@ Give a business a founder-operated AI implementation lane without selling unlimi
 Includes:
 
 - guided setup
-- Telegram assistant access
+- Val access through the current Telegram cockpit
 - 1-3 active workflows
 - workflow/process mapping
 - client-specific roadmap
@@ -245,7 +252,9 @@ Val1 Business is not:
 - Do not promise SaaS or self-serve onboarding.
 - Do not promise autonomous actions.
 - Do not promise OCR, DOCX extraction, or full document automation.
+- Do not promise infinite memory.
 - Do not promise full integrations with WhatsApp, Gmail, CRMs, ERPs, calendars, or accounting tools.
+- Do not present Telegram as the complete product; it is the first interface.
 - Do not imply that business clients get stronger privacy guarantees than the system actually has.
 - Do not let business pricing create unlimited support expectations.
 - Do not sell dashboards before evaluating prototype tools and data contracts.
@@ -262,6 +271,7 @@ Use one brand with two routes:
 Both routes share:
 
 - same trust-first operating layer
+- same long-term personal/operator OS direction
 - same safety discipline
 - same client isolation rules
 - same beta honesty
@@ -269,7 +279,7 @@ Both routes share:
 
 Client-facing framing:
 
-“Val has a personal route and a business route. The personal route helps with life/admin continuity. The business route starts with workflow assessment and implementation support. Same operating layer, different use case and scope.”
+“Val has a personal route and a business route. The personal route helps with life/admin continuity. The business route starts with workflow assessment and implementation support. Same operating layer, different use case and scope. Today the first cockpit is Telegram; longer-term, Val is the operating layer.”
 
 When someone asks “which one am I?”:
 

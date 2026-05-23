@@ -12,9 +12,9 @@ Spanish-first, warm, direct, honest, and not overhyped.
 
 Hola, te cuento en corto.
 
-Val0 Personal es una asistente por Telegram para ayudarte a organizar pendientes, recordatorios, documentos, ideas y próximos pasos. No es una app pública todavía; está en founder-beta y se configura alrededor de tu vida/flujo.
+Val0 Personal es una capa operativa personal en founder-beta. Hoy la usas por Telegram porque es el cockpit más práctico para empezar, pero la idea no es “un bot”: es una Val que organiza memoria, documentos, recordatorios, decisiones y próximos pasos alrededor de tu vida/flujo.
 
-El plan personal fundador es $30/mes. Incluye el uso de Val por Telegram, módulos disponibles como recordatorios, documentos, cronología/Daily Operator cuando apliquen, y mejoras generales que vayamos haciendo al sistema.
+El plan personal fundador es $30/mes. Incluye el uso de Val, módulos disponibles como recordatorios, documentos, cronología/Daily Operator cuando apliquen, y mejoras generales reutilizables que vayamos haciendo al sistema.
 
 Importante: no es soporte humano ilimitado ni desarrollo custom urgente. Es una Val personal para ayudarte a no perder el hilo y para ir mejorando el producto con uso real.
 
@@ -24,7 +24,7 @@ Importante: no es soporte humano ilimitado ni desarrollo custom urgente. Es una 
 
 Gracias por estar entre las primeras personas ayudándome a probar Val.
 
-Para friends & family quiero mantenerlo simple: si te sirve, te dejo en plan fundador personal de $30/mes. Eso incluye el uso de Val y mejoras reutilizables que salgan de tu caso, como documentos, cronología, recordatorios, Daily Operator, listas o mejoras de organización.
+Para friends & family quiero mantenerlo simple: si te sirve, te dejo en plan fundador personal de $30/mes. Ese precio no sube solo porque Val mejore con módulos reutilizables. Incluye el uso de Val y mejoras que salgan de tu caso y ayuden al producto, como documentos, cronología, recordatorios, Daily Operator, listas o mejoras de organización.
 
 Lo único que separo es esto: si algo se vuelve un custom grande, integración, urgencia, flujo de negocio/equipo, o trabajo muy específico que no sirve como mejora reusable, te lo diría antes de meterlo como incluido.
 
@@ -67,7 +67,9 @@ La promesa es: empezamos con un proceso concreto, lo volvemos útil, y lo mejora
 
 ## 5. One-Minute Verbal Pitch
 
-Val es una asistente operativa por Telegram. La diferencia con un chatbot normal es que no empieza desde cero cada vez: la configuramos alrededor de una persona, familia o negocio, con memoria de trabajo, recordatorios, documentos, próximos pasos y límites claros.
+Val es una capa operativa personal/de negocio en founder-beta. Hoy vive primero en Telegram porque es el lugar más simple para capturar y responder rápido, pero Telegram no es el producto completo: es el primer cockpit.
+
+La visión es un sistema operativo conversacional para tu vida o tu trabajo: memoria, documentos, recordatorios, decisiones, workflows y próximos pasos en un solo hilo operativo. La diferencia con un chatbot normal es que Val no empieza desde cero cada vez: se configura alrededor de una persona, familia o negocio, con memoria de trabajo, permisos, confirmaciones y límites claros.
 
 Ahora mismo está en founder-beta. Eso significa que ya sirve para flujos concretos, pero no es SaaS público ni promete hacerlo todo. Para una persona, Val0 Personal ayuda con continuidad: documentos, pendientes, cronología, citas, qué hacer hoy. Para negocio, Val1 empieza con una evaluación y después un paquete operador mensual si hay un proceso claro que mejorar.
 
@@ -81,9 +83,9 @@ Respuesta corta:
 
 ChatGPT es buenísimo para conversar y generar ideas. Val está pensada como una operadora configurada alrededor de tu flujo: recuerda contexto operativo, organiza documentos/pendientes, mantiene límites por cliente, y convierte cosas en workflows concretos dentro de Telegram.
 
-La diferencia no es “más inteligencia”. La diferencia es continuidad, configuración, seguimiento y seguridad de flujo.
+La diferencia no es “más inteligencia”. La diferencia es continuidad, configuración, seguimiento, memoria operativa y seguridad de flujo.
 
-También: Val no intenta reemplazar ChatGPT. Usa la idea de IA, pero la pone dentro de un sistema con memoria, permisos, confirmaciones y reglas.
+También: Val no intenta reemplazar ChatGPT. Usa la idea de IA, pero la pone dentro de un sistema operativo personal con memoria, permisos, confirmaciones y reglas.
 
 ---
 
@@ -117,13 +119,15 @@ Prefiero decirte “esto está guardado pero no leído” antes que inventar que
 
 Por $30/mes tienes el plan personal fundador:
 
-- acceso a Val por Telegram
+- acceso a Val; Telegram es el primer cockpit
 - módulos personales disponibles
 - recordatorios/tareas/notas/ideas donde apliquen
 - documentos y organización personal donde esté habilitado
 - cronología/Daily Operator si tu caso lo usa
 - mejoras reutilizables del producto cuando salgan de uso real
 - configuración ligera y feedback founder-beta
+
+El precio fundador personal se mantiene favorable aunque Val mejore con capacidades reutilizables. Si la mejora fortalece la plataforma, entra como evolución del producto.
 
 No incluye desarrollo custom ilimitado, urgencias, integraciones grandes, equipos, dashboards, migraciones, ni asesoría profesional.
 
@@ -163,6 +167,7 @@ Do not say:
 - “DOCX extraction is automatic.”
 - “This is a finished SaaS product.”
 - “You can self-serve onboarding today.”
+- “Telegram is the whole product.”
 - “Val replaces your lawyer/accountant/doctor.”
 - “Val is fully private like an enterprise product.”
 - “Integrations are included.”
