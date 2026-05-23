@@ -48,9 +48,14 @@ from core.operator_reminders import (
     handle_reminder_gate,
     _PENDING_REMINDER_CONFIRM,
 )
-from core.client_identity import resolve_client_id, client_vocative
+from core.client_identity import KAREN_CHAT_ID, resolve_client_id, client_vocative
 from core.client_contacts import get_email_contact
 from core.conversation_router import classify_deterministic_intent, normalize_message
+from core.case_timeline import (
+    build_timeline_events_from_case_notes,
+    safe_timeline_event_summary,
+    timeline_events_for_year,
+)
 from core.document_extraction_readiness import document_capability_summary
 from core.document_registry import document_record_from_vfms_metadata
 from core.pending_actions import (
@@ -165,6 +170,7 @@ from memory_store import (
     get_daily_logs,
     search_daily_logs,
     get_active_case_id,
+    fetch_case_notes,
     insert_case_note,
     log_action,
     has_processed_event,
@@ -12663,6 +12669,151 @@ def render_karen_missing_review_checklist() -> str:
     )
 
 
+def _karen_timeline_query_year(text: str) -> str:
+    norm = _norm_text(text or "")
+    m = re.search(r"\bque paso en (19\d{2}|20\d{2})\b", norm)
+    return m.group(1) if m else ""
+
+
+def _looks_like_karen_timeline_query(text: str) -> bool:
+    norm = _norm_text(text or "")
+    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+
+    broad_document_markers = (
+        "que dice este documento",
+        "que dice el documento",
+        "que documentos tengo",
+        "que archivos tengo",
+        "donde sale",
+        "donde aparece",
+    )
+    if any(marker in norm for marker in broad_document_markers):
+        return False
+
+    if "cronologia" in norm:
+        return True
+    if "linea de tiempo" in norm:
+        return True
+    if "resumen cronologico" in norm:
+        return True
+    if _karen_timeline_query_year(norm):
+        return True
+    return False
+
+
+def _karen_timeline_clip(text: str, limit: int = 260) -> str:
+    clean = re.sub(r"\s+", " ", str(text or "")).strip()
+    if len(clean) <= limit:
+        return clean
+    return clean[: max(0, limit - 1)].rstrip() + "…"
+
+
+def _karen_timeline_description(summary: dict) -> str:
+    source_type = str(summary.get("source_type") or "").strip()
+    description = str(summary.get("description") or "").strip()
+    title = str(summary.get("title") or "").strip()
+
+    if source_type == "telegram_attachment_vfms":
+        # Attachment case notes contain local paths and VFMS metadata; keep the user-facing line clean.
+        return _karen_timeline_clip(title or "Documento registrado para el caso.")
+
+    description = description.replace("Evento reciente del caso:", "").strip()
+    kept_lines = []
+    for line in description.splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        low = clean.lower()
+        if low.startswith("- ruta local:"):
+            continue
+        if low.startswith("- vfms ingest_id:"):
+            continue
+        kept_lines.append(clean)
+
+    if kept_lines:
+        return _karen_timeline_clip(" ".join(kept_lines))
+    return _karen_timeline_clip(title or "Evento registrado.")
+
+
+def _render_karen_case_timeline(events, *, case_id: str, year: str = "", limit: int = 12) -> str:
+    selected = timeline_events_for_year(events, year) if year else list(events)
+    if not selected:
+        target = f" en {year}" if year else ""
+        return (
+            f"No tengo eventos de cronología disponibles{target} para CASE:{case_id} todavía.\n\n"
+            "Puedes subir documentos, registrar eventos del caso o agregar notas con fechas para armarla.\n\n"
+            "Esto organiza información registrada; no sustituye revisión de abogada."
+        )
+
+    title = f"Cronología del caso — CASE:{case_id}"
+    if year:
+        title = f"Cronología del caso en {year} — CASE:{case_id}"
+
+    lines = [title, ""]
+    for event in selected[:limit]:
+        summary = safe_timeline_event_summary(event)
+        precision = str(summary.get("date_precision") or "")
+        date_text = str(summary.get("event_date") or "").strip()
+        if not date_text or precision == "unknown":
+            date_label = "fecha no determinada"
+        elif precision == "created_at_only":
+            date_label = f"{date_text} (fecha de registro)"
+        else:
+            date_label = date_text
+
+        lines.append(f"- {date_label}: {_karen_timeline_description(summary)}")
+        source = str(summary.get("source_type") or "nota").strip()
+        source_id = str(summary.get("source_id") or "").strip()
+        confidence = float(summary.get("confidence") or 0.0)
+        if confidence >= 0.75:
+            confidence_label = "alta"
+        elif confidence >= 0.55:
+            confidence_label = "media"
+        else:
+            confidence_label = "baja"
+
+        provenance = f"  Fuente: {source}"
+        if source_id:
+            provenance += f" #{source_id}"
+        if summary.get("ingest_id"):
+            provenance += f" · VFMS {summary['ingest_id']}"
+        provenance += f" · confianza {confidence_label}"
+        lines.append(provenance)
+
+    if len(selected) > limit:
+        lines.append(f"- Hay {len(selected) - limit} evento(s) más no mostrado(s) en esta vista corta.")
+
+    lines.append("")
+    lines.append("Esto organiza información registrada; no sustituye revisión de abogada.")
+    return "\n".join(lines)
+
+
+async def maybe_handle_karen_case_timeline_query(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+    if str(chat_id) != str(KAREN_CHAT_ID):
+        return False
+    if not _looks_like_karen_timeline_query(text):
+        return False
+
+    case_id = get_active_case_id(int(chat_id))
+    if not case_id:
+        await update.message.reply_text(
+            "No tengo eventos de cronología disponibles todavía porque no hay un caso activo para este chat.\n\n"
+            "Puedes activar/registrar el caso, subir documentos o agregar notas con fechas para armarla.\n\n"
+            "Esto organiza información registrada; no sustituye revisión de abogada."
+        )
+        return True
+
+    notes = fetch_case_notes(int(chat_id), str(case_id), limit=160)
+    events = build_timeline_events_from_case_notes(notes, client_id=client_id, case_id=str(case_id))
+    year = _karen_timeline_query_year(text)
+    await update.message.reply_text(_render_karen_case_timeline(events, case_id=str(case_id), year=year))
+    return True
+
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -13353,6 +13504,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen Case Timeline query gate
+    # Runs after document routes so broad document questions stay with
+    # document inventory/summary/semantic handlers.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_case_timeline_query(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_CASE_TIMELINE_QUERY_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Case Facts query gate
