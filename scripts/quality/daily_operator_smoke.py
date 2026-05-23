@@ -10,7 +10,14 @@ if str(REPO_ROOT) not in sys.path:
 from core.daily_operator import (
     DailyOperatorItem,
     build_daily_operator_snapshot,
+    build_daily_operator_snapshot_from_sources,
     choose_suggested_next_action,
+    collect_calendar_items,
+    collect_document_review_items,
+    collect_pending_action_items,
+    collect_reminder_items,
+    collect_task_items,
+    collect_timeline_items,
     filter_today_items,
     normalize_operator_priority,
     normalize_operator_status,
@@ -142,8 +149,8 @@ def main():
     )
     assert_equal(len(today_all), 2, "today mixed filter")
 
-    assert_equal(snapshot.suggested_next_action, "Preparar documentos", "conservative next action")
-    assert_equal(choose_suggested_next_action(snapshot), "Preparar documentos", "chosen next action")
+    assert_equal(snapshot.suggested_next_action, "Confirmar creación de cita", "pending first next action")
+    assert_equal(choose_suggested_next_action(snapshot), "Confirmar creación de cita", "chosen next action")
 
     safe = safe_daily_operator_summary(snapshot)
     assert_equal(safe["client_id"], "client-a", "safe client")
@@ -157,8 +164,94 @@ def main():
 
     empty = build_daily_operator_snapshot(client_id="client-b", case_id="", snapshot_date=None)
     assert_equal(empty.client_id, "client-b", "empty client preserved")
-    assert_equal(empty.suggested_next_action, "", "empty no suggested action")
+    assert_equal(empty.suggested_next_action, "revisar agenda y próximos pasos", "empty conservative fallback")
     assert_equal(safe_daily_operator_summary(empty)["warnings"], [], "empty warnings safe")
+
+    calendar_items = collect_calendar_items([
+        {"id": "cal-1", "summary": "Audiencia", "start": "2026-05-23T09:00:00-05:00"},
+    ])
+    assert_equal(len(calendar_items), 1, "collector calendar count")
+    assert_equal(calendar_items[0].item_type, "calendar", "collector calendar type")
+
+    reminder_items = collect_reminder_items([
+        {"id": "rem-2", "text": "Llevar documentos", "due_at_utc": "2026-05-23 13:00:00", "status": "pending"},
+    ])
+    task_items = collect_task_items([
+        {"id": "task-2", "raw_input": "Llamar a Nora", "due_date": "2026-05-23"},
+    ])
+    assert_equal(reminder_items[0].source_id, "rem-2", "collector reminder source")
+    assert_equal(task_items[0].title, "Llamar a Nora", "collector task title")
+
+    pending_items = collect_pending_action_items([
+        {"action_id": "pa-1", "display_summary": "Confirmar cita con Nora", "action_type": "gcal_create_event"},
+    ])
+    assert_equal(pending_items[0].priority, "high", "pending high priority")
+    assert_equal(pending_items[0].item_type, "pending_action", "pending type")
+
+    document_review = collect_document_review_items([
+        {
+            "document_id": "doc-ocr",
+            "filename": "foto_escritura.jpg",
+            "status": "ocr_needed",
+            "caption": "Foto necesita revisión manual",
+            "stored_path": "/opt/val0/vfms_data/raw/foto.jpg",
+            "hash": "secret-hash",
+            "source": "telegram_attachment_vfms",
+        },
+        {
+            "document_id": "doc-ready",
+            "filename": "registro.pdf",
+            "status": "ready",
+            "source": "telegram_attachment_vfms",
+        },
+        {
+            "document_id": "doc-docx",
+            "filename": "resumen.docx",
+            "status": "unsupported",
+            "source": "telegram_attachment_vfms",
+        },
+    ])
+    assert_equal(len(document_review), 2, "document review filters ready")
+    assert_equal(document_review[0].status, "ocr_needed", "document ocr status")
+    assert_equal(document_review[1].status, "unsupported", "document unsupported status")
+    assert_false("/opt/val0" in str(safe_daily_operator_summary(build_daily_operator_snapshot(document_items=document_review))), "collector safe no path")
+
+    timeline_items = collect_timeline_items([
+        {
+            "event_id": "event-1",
+            "title": "Juzgado canceló expediente por falta de respuesta",
+            "event_date": "2024",
+            "source_type": "manual_note",
+            "source_id": "note-1",
+        }
+    ])
+    assert_equal(timeline_items[0].item_type, "timeline", "timeline item type")
+    assert_equal(timeline_items[0].source_id, "note-1", "timeline provenance")
+
+    composed = build_daily_operator_snapshot_from_sources(
+        client_id="client-a",
+        case_id="CASE-1",
+        snapshot_date="2026-05-23",
+        calendar_events=calendar_items,
+        reminders=reminder_items,
+        tasks=task_items,
+        pending_actions=pending_items,
+        case_priority_sources=[
+            {"id": "case-pri-1", "title": "Revisar faltantes para Nora", "source": "karen_plan"}
+        ],
+        document_records=document_review,
+        timeline_events=timeline_items,
+    )
+    assert_equal(composed.client_id, "client-a", "composed client")
+    assert_equal(composed.case_id, "CASE-1", "composed case")
+    assert_equal(len(composed.calendar_items), 1, "composed calendar")
+    assert_equal(len(composed.case_priorities), 1, "composed case priority")
+    assert_equal(composed.calendar_items[0].item_type, "calendar", "composed agenda separate")
+    assert_equal(composed.case_priorities[0].item_type, "case_priority", "composed case separate")
+    assert_equal(composed.suggested_next_action, "Confirmar cita con Nora", "composed pending first")
+    composed_safe = safe_daily_operator_summary(composed)
+    assert_false("/opt/val0" in str(composed_safe), "composed safe no raw path")
+    assert_false("secret" in str(composed_safe), "composed safe no hash")
 
     print("PASS: daily operator smoke cases passed.")
 

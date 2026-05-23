@@ -12,6 +12,8 @@ STATUSES = {
     "done",
     "blocked",
     "needs_review",
+    "ocr_needed",
+    "unsupported",
     "ready",
     "unknown",
 }
@@ -90,8 +92,21 @@ def normalize_operator_status(value: str | None) -> str:
         "review": "needs_review",
         "revision": "needs_review",
         "revisión": "needs_review",
+        "manual_review": "needs_review",
+        "human_review": "needs_review",
+        "needs_human_review": "needs_review",
+        "ocr": "ocr_needed",
+        "ocr_needed": "ocr_needed",
+        "ocr_failed": "needs_review",
+        "unsupported": "unsupported",
+        "no_soportado": "unsupported",
+        "no_soportada": "unsupported",
         "listo": "ready",
         "lista": "ready",
+        "stored": "pending",
+        "guardado": "pending",
+        "registered": "pending",
+        "registrado": "pending",
         "unknown": "unknown",
     }
     normalized = aliases.get(raw, raw)
@@ -227,8 +242,8 @@ def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
         today_candidates.extend(filter_today_items(getattr(snapshot, field), snapshot.snapshot_date))
 
     ranked_groups = (
-        today_candidates,
         list(snapshot.pending_actions),
+        today_candidates,
         list(snapshot.case_priorities),
         list(snapshot.document_items),
         list(snapshot.timeline_items),
@@ -252,7 +267,7 @@ def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
             )
         )
         return candidates[0].title
-    return ""
+    return "revisar agenda y próximos pasos"
 
 
 def _safe_item(item: DailyOperatorItem) -> dict[str, Any]:
@@ -285,3 +300,242 @@ def safe_daily_operator_summary(snapshot: DailyOperatorSnapshot) -> dict[str, An
         "warnings": list(snapshot.warnings),
         "created_at": snapshot.created_at,
     }
+
+
+def _get_value(row: Any, *keys: str, default: Any = "") -> Any:
+    for key in keys:
+        if isinstance(row, dict) and key in row:
+            return row.get(key)
+        if hasattr(row, key):
+            return getattr(row, key)
+    return default
+
+
+def _clean_string(value: Any) -> str:
+    return " ".join(str(value or "").replace("\n", " ").split()).strip()
+
+
+def _safe_metadata(row: Any, allowed_keys: Iterable[str]) -> dict[str, Any]:
+    out = {}
+    for key in allowed_keys:
+        value = _get_value(row, key, default=None)
+        if value is None:
+            continue
+        out[key] = value
+    return out
+
+
+def collect_calendar_items(events: Iterable[Any] | None, *, source_type: str = "google_calendar") -> tuple[DailyOperatorItem, ...]:
+    items = []
+    for event in events or ():
+        title = _clean_string(_get_value(event, "title", "summary", "text", default=""))
+        if not title:
+            title = "(sin título)"
+        event_id = _clean_string(_get_value(event, "item_id", "id", "event_id", "source_id", default=title))
+        due_at = _clean_string(_get_value(event, "due_at", "start", "start_iso", "dateTime", default="")) or None
+        items.append(
+            DailyOperatorItem(
+                item_id=event_id,
+                item_type="calendar",
+                title=title,
+                description=_clean_string(_get_value(event, "description", default="")),
+                due_at=due_at,
+                source_type=_clean_string(_get_value(event, "source_type", "source", default=source_type)) or source_type,
+                source_id=_clean_string(_get_value(event, "source_id", "id", "event_id", default=event_id)),
+                priority=normalize_operator_priority(_get_value(event, "priority", default="normal")),
+                status=normalize_operator_status(_get_value(event, "status", default="pending")),
+                metadata=_safe_metadata(event, ("calendar_id", "html_link")),
+            )
+        )
+    return _items(items, "calendar")
+
+
+def collect_reminder_items(reminders: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
+    items = []
+    for reminder in reminders or ():
+        title = _clean_string(_get_value(reminder, "title", "text", "summary", default=""))
+        if not title:
+            continue
+        reminder_id = _clean_string(_get_value(reminder, "item_id", "id", "source_id", default=title))
+        items.append(
+            DailyOperatorItem(
+                item_id=reminder_id,
+                item_type="reminder",
+                title=title,
+                description=_clean_string(_get_value(reminder, "description", default="")),
+                due_at=_clean_string(_get_value(reminder, "due_at", "due_at_utc", "due_date", default="")) or None,
+                source_type=_clean_string(_get_value(reminder, "source_type", "source", default="reminder")) or "reminder",
+                source_id=_clean_string(_get_value(reminder, "source_id", "id", default=reminder_id)),
+                priority=normalize_operator_priority(_get_value(reminder, "priority", default="normal")),
+                status=normalize_operator_status(_get_value(reminder, "status", default="pending")),
+                metadata=_safe_metadata(reminder, ("entity_type", "parent_ref", "channel")),
+            )
+        )
+    return _items(items, "reminder")
+
+
+def collect_task_items(tasks: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
+    items = []
+    for task in tasks or ():
+        title = _clean_string(_get_value(task, "title", "raw_input", "task_text", "text", "summary", default=""))
+        if not title:
+            action = _clean_string(_get_value(task, "action", default=""))
+            target = _clean_string(_get_value(task, "target", default=""))
+            title = " ".join(x for x in (action, target) if x).strip()
+        if not title:
+            continue
+        task_id = _clean_string(_get_value(task, "item_id", "id", "source_id", default=title))
+        items.append(
+            DailyOperatorItem(
+                item_id=task_id,
+                item_type="task",
+                title=title,
+                description=_clean_string(_get_value(task, "description", default="")),
+                due_at=_clean_string(_get_value(task, "due_at", "due_date", default="")) or None,
+                source_type=_clean_string(_get_value(task, "source_type", "source", default="commitment")) or "commitment",
+                source_id=_clean_string(_get_value(task, "source_id", "id", default=task_id)),
+                priority=normalize_operator_priority(_get_value(task, "priority", default="normal")),
+                status=normalize_operator_status(_get_value(task, "status", default="pending")),
+                metadata=_safe_metadata(task, ("confidence",)),
+            )
+        )
+    return _items(items, "task")
+
+
+def collect_pending_action_items(actions: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
+    items = []
+    for action in actions or ():
+        title = _clean_string(_get_value(action, "title", "display_summary", "summary", "action_type", default=""))
+        if not title:
+            continue
+        action_id = _clean_string(_get_value(action, "item_id", "action_id", "id", "source_id", default=title))
+        items.append(
+            DailyOperatorItem(
+                item_id=action_id,
+                item_type="pending_action",
+                title=title,
+                description=_clean_string(_get_value(action, "description", "action_type", default="")),
+                due_at=_clean_string(_get_value(action, "expires_at", "due_at", default="")) or None,
+                source_type=_clean_string(_get_value(action, "source_type", "source", default="pending_action")) or "pending_action",
+                source_id=_clean_string(_get_value(action, "source_id", "action_id", "id", default=action_id)),
+                priority="high",
+                status=normalize_operator_status(_get_value(action, "status", default="pending")),
+                metadata=_safe_metadata(action, ("action_type", "created_by")),
+            )
+        )
+    return _items(items, "pending_action")
+
+
+def collect_case_priority_items(items: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
+    out = []
+    for item in items or ():
+        title = _clean_string(_get_value(item, "title", "summary", "note_text", "text", default=""))
+        if not title:
+            continue
+        item_id = _clean_string(_get_value(item, "item_id", "id", "source_id", default=title))
+        out.append(
+            DailyOperatorItem(
+                item_id=item_id,
+                item_type="case_priority",
+                title=title,
+                description=_clean_string(_get_value(item, "description", default="")),
+                due_at=_clean_string(_get_value(item, "due_at", "event_date", "created_at", default="")) or None,
+                source_type=_clean_string(_get_value(item, "source_type", "source", default="case_priority")) or "case_priority",
+                source_id=_clean_string(_get_value(item, "source_id", "id", default=item_id)),
+                priority=normalize_operator_priority(_get_value(item, "priority", default="high")),
+                status=normalize_operator_status(_get_value(item, "status", default="pending")),
+                metadata=_safe_metadata(item, ("case_id", "tag")),
+            )
+        )
+    return _items(out, "case_priority")
+
+
+def _document_status_from_record(record: Any) -> str:
+    raw = _clean_string(_get_value(record, "status", "state", default="")).lower()
+    if "unsupported" in raw or "no soport" in raw:
+        return "unsupported"
+    if "ocr" in raw or "manual" in raw or "revisión" in raw or "revision" in raw:
+        return "ocr_needed"
+    return normalize_operator_status(raw)
+
+
+def collect_document_review_items(records: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
+    review_statuses = {"pending", "needs_review", "ocr_needed", "unsupported", "unknown"}
+    items = []
+    for record in records or ():
+        status = _document_status_from_record(record)
+        if status not in review_statuses:
+            continue
+        filename = _clean_string(_get_value(record, "filename", "title", "name", default="documento"))
+        caption = _clean_string(_get_value(record, "caption", "description", default=""))
+        document_id = _clean_string(_get_value(record, "document_id", "item_id", "id", "source_id", default=filename))
+        items.append(
+            DailyOperatorItem(
+                item_id=document_id,
+                item_type="document",
+                title=filename,
+                description=caption,
+                due_at=_clean_string(_get_value(record, "created_at", default="")) or None,
+                source_type=_clean_string(_get_value(record, "source_type", "source", default="document")) or "document",
+                source_id=_clean_string(_get_value(record, "source_id", "document_id", "ingest_id", "id", default=document_id)),
+                priority="normal" if status == "pending" else "high",
+                status=status,
+                metadata=_safe_metadata(record, ("mime_type", "ingest_id", "source_message_id")),
+            )
+        )
+    return _items(items, "document")
+
+
+def collect_timeline_items(events: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
+    items = []
+    for event in events or ():
+        title = _clean_string(_get_value(event, "title", "summary", "description", default=""))
+        if not title:
+            continue
+        event_id = _clean_string(_get_value(event, "event_id", "item_id", "id", "source_id", default=title))
+        items.append(
+            DailyOperatorItem(
+                item_id=event_id,
+                item_type="timeline",
+                title=title,
+                description=_clean_string(_get_value(event, "description", default="")),
+                due_at=_clean_string(_get_value(event, "event_date", "due_at", "created_at", default="")) or None,
+                source_type=_clean_string(_get_value(event, "source_type", "source", default="case_timeline")) or "case_timeline",
+                source_id=_clean_string(_get_value(event, "source_id", "id", default=event_id)),
+                priority=normalize_operator_priority(_get_value(event, "priority", default="normal")),
+                status=normalize_operator_status(_get_value(event, "status", default="ready")),
+                metadata=_safe_metadata(event, ("confidence", "document_id", "ingest_id")),
+            )
+        )
+    return _items(items, "timeline")
+
+
+def build_daily_operator_snapshot_from_sources(
+    *,
+    client_id: str = "",
+    case_id: str = "",
+    snapshot_date: str | date | datetime | None = None,
+    calendar_events: Iterable[Any] | None = None,
+    reminders: Iterable[Any] | None = None,
+    tasks: Iterable[Any] | None = None,
+    pending_actions: Iterable[Any] | None = None,
+    case_priority_sources: Iterable[Any] | None = None,
+    document_records: Iterable[Any] | None = None,
+    timeline_events: Iterable[Any] | None = None,
+    warnings: Iterable[Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> DailyOperatorSnapshot:
+    return build_daily_operator_snapshot(
+        client_id=client_id,
+        case_id=case_id,
+        snapshot_date=snapshot_date,
+        calendar_items=collect_calendar_items(calendar_events),
+        reminders=collect_reminder_items(reminders),
+        tasks=collect_task_items(tasks),
+        pending_actions=collect_pending_action_items(pending_actions),
+        case_priorities=collect_case_priority_items(case_priority_sources),
+        document_items=collect_document_review_items(document_records),
+        timeline_items=collect_timeline_items(timeline_events),
+        warnings=warnings,
+        metadata=metadata,
+    )
