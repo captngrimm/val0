@@ -49,6 +49,7 @@ from core.operator_reminders import (
     _PENDING_REMINDER_CONFIRM,
 )
 from core.client_identity import resolve_client_id, client_vocative
+from core.client_contacts import get_email_contact
 from core.bug_report import (
     bug_cmd,
     feedback_cmd,
@@ -406,13 +407,6 @@ if not RESEND_API_KEY:
     raise RuntimeError("Missing RESEND_API_KEY")
 VAL_EMAIL_FROM = "Val <val@holaval.com>"
 
-EMAIL_CONTACTS = {
-    "miguel": "franklin.miranda.c@gmail.com",
-    "frank": "franklin.miranda.c@gmail.com",
-    "boss": "franklin.miranda.c@gmail.com",
-    "karen": "karenmm20@gmail.com",
-}
-
 # --------------------------------------------------
 # PER-USER EMAIL ROUTING
 # --------------------------------------------------
@@ -427,7 +421,7 @@ def get_user_email(chat_id: int, fallback_name: str = "miguel"):
     if chat_id in EMAIL_BY_CHAT_ID:
         return EMAIL_BY_CHAT_ID[chat_id]
 
-    return EMAIL_CONTACTS.get(fallback_name)
+    return get_email_contact(fallback_name)
 
 
 def get_last_assistant_message(chat_id: int) -> str:
@@ -7448,7 +7442,7 @@ Classifier confidence: {confidence}
         who = _extract_redirect_sent_message_target(text)
 
         if who:
-            to_email = EMAIL_CONTACTS.get(who)
+            to_email = get_email_contact(who)
             if not to_email:
                 await update.message.reply_text(f"No tengo correo configurado para {who}.")
                 return
@@ -7499,7 +7493,7 @@ Classifier confidence: {confidence}
         who = _extract_copy_target(text)
 
         if who:
-            to_email = EMAIL_CONTACTS.get(who)
+            to_email = get_email_contact(who)
             if not to_email:
                 await update.message.reply_text(f"No tengo correo configurado para {who}.")
                 return
@@ -7552,7 +7546,7 @@ Classifier confidence: {confidence}
         who = _extract_redirect_target(text)
 
         if who:
-            to_email = EMAIL_CONTACTS.get(who)
+            to_email = get_email_contact(who)
             if not to_email:
                 await update.message.reply_text(f"No tengo correo configurado para {who}.")
                 return
@@ -7668,7 +7662,7 @@ Classifier confidence: {confidence}
         who, body_text = _extract_send_email_payload(text)
 
         if who and body_text:
-            to_email = EMAIL_CONTACTS.get(who)
+            to_email = get_email_contact(who)
             if not to_email:
                 await update.message.reply_text(f"No tengo correo configurado para {who}.")
                 return

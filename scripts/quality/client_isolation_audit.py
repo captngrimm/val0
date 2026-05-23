@@ -7,9 +7,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# These files are intentionally Karen-specific and are allowed to mention Karen/Insanity.
+# These files are intentionally Karen-specific or explicit client registries,
+# and are allowed to mention Karen/Insanity/client contact literals.
 ALLOWED_KAREN_SPECIFIC_PATTERNS = (
     "core/client_identity.py",
+    "core/client_contacts.py",
     "scripts/quality/client_isolation_audit.py",
     "docs/architecture/CLIENT_ISOLATION_CONTRACT_V0.md",
     "core/karen_",
