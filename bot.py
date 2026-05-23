@@ -5430,7 +5430,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         if early_norm in early_agenda_direct_markers:
             reply = build_client_agenda_dashboard(
-                "karen",
+                client_id,
                 chat_id,
                 early_agenda_direct_markers[early_norm],
             )
@@ -5718,7 +5718,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
             if any(m in karen_upper_norm for m in calendar_status_markers):
                 from core.client_calendar_config import render_client_calendar_status
-                await update.message.reply_text(render_client_calendar_status("karen"))
+                await update.message.reply_text(render_client_calendar_status(client_id))
                 return
 
             # Natural Appointment Save v0.
@@ -11258,6 +11258,8 @@ async def try_agenda_summary_natural(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
         return False
 
+    client_id = resolve_client_id(chat_id)
+
     raw = (text or "").strip()
     t = raw.lower()
     t = unicodedata.normalize("NFKD", t)
@@ -11356,7 +11358,7 @@ async def try_agenda_summary_natural(update, chat_id, text) -> bool:
 
     try:
         from core.client_calendar_config import get_client_calendar_config
-        cfg = get_client_calendar_config("karen")
+        cfg = get_client_calendar_config(client_id)
         if cfg.connection_status != "connected":
             lines.append("Google Calendar todavía no está conectado para Karen; esto es solo agenda interna de Val.")
     except Exception:
@@ -11571,7 +11573,7 @@ async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
 
     try:
         from core.client_calendar_config import get_client_calendar_config
-        cfg = get_client_calendar_config("karen")
+        cfg = get_client_calendar_config(client_id)
         if cfg.connection_status != "connected":
             lines.append("")
             lines.append("Google Calendar todavía no está conectado para Karen, así que revisé solo memoria/recordatorios internos.")
