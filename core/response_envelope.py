@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
+import re
 from typing import Any, Iterable
 
 
@@ -223,3 +224,210 @@ def envelope_summary(envelope: ResponseEnvelope) -> dict[str, Any]:
         "created_at": envelope.created_at,
         "polish_allowed": should_allow_polish(envelope),
     }
+
+
+def _line_set(text: str) -> set[str]:
+    return {line.strip() for line in str(text or "").splitlines() if line.strip()}
+
+
+def _protected_lines(text: str) -> tuple[str, ...]:
+    protected = []
+    markers = (
+        "vfms",
+        "fuente",
+        "source",
+        "case:",
+        "id:",
+        "fecha",
+        "date",
+        "creé",
+        "cree",
+        "borré",
+        "borre",
+        "guardé",
+        "guarde",
+        "confirm",
+        "cancel",
+        "no sustituye",
+        "lectura solamente",
+    )
+    for line in str(text or "").splitlines():
+        clean = line.strip()
+        low = clean.lower()
+        if clean and any(marker in low for marker in markers):
+            protected.append(clean)
+    return tuple(protected)
+
+
+def _fact_strings(payload: dict[str, Any]) -> tuple[str, ...]:
+    facts = []
+
+    def walk(value: Any) -> None:
+        if isinstance(value, dict):
+            for child in value.values():
+                walk(child)
+            return
+        if isinstance(value, (list, tuple, set)):
+            for child in value:
+                walk(child)
+            return
+        if value is None or isinstance(value, bool):
+            return
+        text = str(value).strip()
+        if len(text) >= 4:
+            facts.append(text)
+
+    walk(payload or {})
+    seen = set()
+    out = []
+    for fact in facts:
+        if fact in seen:
+            continue
+        seen.add(fact)
+        out.append(fact)
+    return tuple(out)
+
+
+def _has_new_action_claim(original: str, polished: str) -> bool:
+    original_low = str(original or "").lower()
+    polished_low = str(polished or "").lower()
+    action_claims = (
+        "creé",
+        "cree",
+        "he creado",
+        "borré",
+        "borre",
+        "he borrado",
+        "eliminé",
+        "elimine",
+        "guardé",
+        "guarde",
+        "envié",
+        "envie",
+        "mandé",
+        "mande",
+        "actualicé",
+        "actualice",
+        "cancelé",
+        "cancele",
+    )
+    return any(claim in polished_low and claim not in original_low for claim in action_claims)
+
+
+def _has_new_source_claim(original: str, polished: str) -> bool:
+    original_low = str(original or "").lower()
+    polished_low = str(polished or "").lower()
+    source_claims = (
+        "según",
+        "segun",
+        "fuente:",
+        "source:",
+        "vfms",
+        "documento",
+        "expediente",
+        "registro público",
+        "registro publico",
+    )
+    return any(claim in polished_low and claim not in original_low for claim in source_claims)
+
+
+def compare_factual_payload_preserved(original: ResponseEnvelope | str, polished: str) -> bool:
+    if isinstance(original, ResponseEnvelope):
+        original_text = render_envelope_text(original)
+        facts = _fact_strings(original.factual_payload)
+    else:
+        original_text = str(original or "")
+        facts = ()
+
+    polished_text = str(polished or "")
+    if not original_text.strip():
+        return True
+
+    for fact in facts:
+        if fact not in original_text:
+            continue
+        if fact not in polished_text:
+            return False
+
+    for line in _protected_lines(original_text):
+        if line not in _line_set(polished_text):
+            return False
+
+    return True
+
+
+def apply_safe_warmth(envelope: ResponseEnvelope, text: str) -> str:
+    deterministic = str(text or "")
+    if not should_allow_polish(envelope):
+        return deterministic
+
+    intro, closing = _warmth_lines(envelope)
+    parts = []
+    if intro and intro not in deterministic:
+        parts.append(intro)
+        parts.append("")
+    parts.append(deterministic.strip())
+    if closing and closing not in deterministic:
+        parts.append("")
+        parts.append(closing)
+    return "\n".join(parts).strip()
+
+
+def _warmth_lines(envelope: ResponseEnvelope) -> tuple[str, str]:
+    style = safe_style_mode(envelope.allowed_style_mode)
+    response_type = safe_response_type(envelope.response_type)
+
+    intro = ""
+    closing = ""
+    if response_type == ResponseType.DAILY_OPERATOR.value:
+        intro = "Te lo ordeno en corto."
+        closing = "Siguiente paso: toma primero lo que aparece como sugerido."
+    elif response_type == ResponseType.INFO.value:
+        if style in {StyleMode.LIGHT.value, StyleMode.WARM.value, StyleMode.PLAYFUL.value}:
+            intro = "Claro. Esto es lo que tengo."
+            closing = "Lo mantengo simple para no mezclar cosas."
+    return intro, closing
+
+
+def validate_polished_text(envelope: ResponseEnvelope, text: str) -> bool:
+    deterministic = render_envelope_text(envelope)
+    polished = str(text or "")
+
+    if not should_allow_polish(envelope):
+        return polished == deterministic
+    if not deterministic.strip():
+        return polished == deterministic
+    if deterministic.strip() not in polished:
+        return False
+    if not compare_factual_payload_preserved(envelope, polished):
+        return False
+    if envelope.legal_boundary and envelope.legal_boundary not in polished:
+        return False
+    allowed_added = {line for line in _warmth_lines(envelope) if line}
+    original_lines = _line_set(deterministic)
+    for line in _line_set(polished):
+        if line not in original_lines and line not in allowed_added:
+            return False
+    if _has_new_action_claim(deterministic, polished):
+        return False
+    if SafetyFlag.LEGAL_SENSITIVE.value in envelope.safety_flags or envelope.response_type == ResponseType.DOCUMENT_SUMMARY.value:
+        if _has_new_source_claim(deterministic, polished):
+            return False
+
+    date_tokens = re.findall(r"\b(?:19|20)\d{2}(?:-\d{2}(?:-\d{2})?)?\b", deterministic)
+    for token in date_tokens:
+        if token not in polished:
+            return False
+
+    return True
+
+
+def render_polished_fixture_response(envelope: ResponseEnvelope) -> str:
+    deterministic = render_envelope_text(envelope)
+    if not should_allow_polish(envelope):
+        return deterministic
+
+    polished = apply_safe_warmth(envelope, deterministic)
+    if validate_polished_text(envelope, polished):
+        return polished
+    return deterministic
