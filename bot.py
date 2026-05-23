@@ -50,6 +50,7 @@ from core.operator_reminders import (
 )
 from core.client_identity import resolve_client_id, client_vocative
 from core.client_contacts import get_email_contact
+from core.conversation_router import classify_deterministic_intent, normalize_message
 from core.bug_report import (
     bug_cmd,
     feedback_cmd,
@@ -1350,6 +1351,31 @@ def looks_like_technical_paste(text: str) -> bool:
             return True
 
     return False
+
+
+def _conversation_router_shadow_enabled() -> bool:
+    return os.getenv("VAL0_CONVERSATION_ROUTER_SHADOW", "").strip().lower() == "true"
+
+
+def _log_conversation_router_shadow(text: str, chat_id: int | None, client_id: str | None) -> None:
+    if not _conversation_router_shadow_enabled():
+        return
+
+    try:
+        message = normalize_message(text, chat_id=chat_id, client_id=client_id)
+        intent = classify_deterministic_intent(message)
+        logger.info(
+            "[CONVERSATION_ROUTER_SHADOW] chat_id=%s client_id=%s predicted_intent=%s confidence=%s reason=%s line_count=%s is_group=%s",
+            chat_id,
+            client_id or "",
+            intent.value,
+            "1.0",
+            "deterministic_v1",
+            message.line_count,
+            message.is_group_chat,
+        )
+    except Exception as e:
+        logger.exception("[CONVERSATION_ROUTER_SHADOW] failed: %s", e)
 
 
 def _extract_area_hint(text: str) -> str:
@@ -12528,6 +12554,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if looks_like_technical_paste(text):
         await update.message.reply_text(TECHNICAL_PASTE_REPLY)
         return
+
+    _log_conversation_router_shadow(text, chat_id, client_id)
 
     # 🚨 SPAM GUARD — collapse rapid repeated intent
     try:
