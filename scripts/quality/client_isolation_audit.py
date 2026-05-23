@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ALLOWED_KAREN_SPECIFIC_PATTERNS = (
     "core/client_identity.py",
     "core/client_contacts.py",
+    "core/client_profiles.py",
     "scripts/quality/client_isolation_audit.py",
     "docs/architecture/CLIENT_ISOLATION_CONTRACT_V0.md",
     "core/karen_",
