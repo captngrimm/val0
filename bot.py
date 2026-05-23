@@ -48,6 +48,7 @@ from core.operator_reminders import (
     handle_reminder_gate,
     _PENDING_REMINDER_CONFIRM,
 )
+from core.client_identity import resolve_client_id, client_vocative
 from core.bug_report import (
     bug_cmd,
     feedback_cmd,
@@ -10638,9 +10639,9 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
 
 
 
-def _audit_karen_gcal_event(action: str, chat_id: int, payload: dict) -> None:
+def _audit_client_gcal_event(action: str, chat_id: int, client_id: str, payload: dict) -> None:
     """
-    Append-only local audit log for Karen Google Calendar writes/deletes.
+    Append-only local audit log for client Google Calendar writes/deletes.
     No tokens. No secrets. Event IDs and titles are okay for ops traceability.
     """
     import json
@@ -10653,7 +10654,7 @@ def _audit_karen_gcal_event(action: str, chat_id: int, payload: dict) -> None:
 
         row = {
             "ts_utc": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "client_id": "karen",
+            "client_id": client_id,
             "chat_id": int(chat_id),
             "action": action,
             **(payload or {}),
@@ -10702,6 +10703,10 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     if not pending:
         return False
 
+    client_id = resolve_client_id(chat_id)
+    if not client_id:
+        return False
+    vocative = client_vocative(client_id)
     norm = _norm_gcal_confirm_text(text)
 
     confirm_words = {
@@ -10736,7 +10741,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     if norm in cancel_words:
         _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
         await update.message.reply_text(
-            "Listo, Insanity. No creé nada en Google Calendar. 🛑📅"
+            f"Listo{vocative}. No creé nada en Google Calendar. 🛑📅"
         )
         return True
 
@@ -10753,7 +10758,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         window_start = start_dt - timedelta(minutes=2)
         window_end = start_dt + timedelta(minutes=2)
         existing = get_client_events_between(
-            "karen",
+            client_id,
             window_start,
             window_end,
             tz="America/Panama",
@@ -10772,7 +10777,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         if duplicate:
             _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
             await update.message.reply_text(
-                "📅 Esa cita ya existe en Google Calendar, Insanity. No la dupliqué.\n\n"
+                f"📅 Esa cita ya existe en Google Calendar{vocative}. No la dupliqué.\n\n"
                 f"• {pending['pretty_date']}\n"
                 f"• {pending['pretty_time']}\n"
                 f"• {pending['title']}\n\n"
@@ -10783,7 +10788,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         logger.exception(f"[KAREN_GCAL_CREATE_DUPLICATE_CHECK] failed: {e}")
 
     result = create_client_event(
-        "karen",
+        client_id,
         pending["title"],
         start_dt,
         duration_minutes=int(pending.get("duration_minutes", 60)),
@@ -10792,7 +10797,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     )
 
     if result.status == "created":
-        _audit_karen_gcal_event("create", chat_id, {
+        _audit_client_gcal_event("create", chat_id, client_id, {
             "status": result.status,
             "event_id": result.event_id,
             "title": result.title,
@@ -10802,7 +10807,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         })
         _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
         await update.message.reply_text(
-            "📅 Listo, Insanity. Creé la cita en tu Google Calendar.\n\n"
+            f"📅 Listo{vocative}. Creé la cita en tu Google Calendar.\n\n"
             f"• {pending['pretty_date']}\n"
             f"• {pending['pretty_time']}\n"
             f"• {result.title}\n\n"
@@ -10841,6 +10846,10 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
     if not pending:
         return False
 
+    client_id = resolve_client_id(chat_id)
+    if not client_id:
+        return False
+    vocative = client_vocative(client_id)
     norm = _norm_gcal_confirm_text(text)
 
     confirm_words = {
@@ -10854,7 +10863,7 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
     if norm in cancel_words:
         _PENDING_GCAL_DELETE_DRAFTS.pop(key, None)
         await update.message.reply_text(
-            "Listo, Insanity. No borré nada de Google Calendar. 🛑📅"
+            f"Listo{vocative}. No borré nada de Google Calendar. 🛑📅"
         )
         return True
 
@@ -10862,13 +10871,13 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
         return False
 
     result = delete_client_event(
-        "karen",
+        client_id,
         pending["event_id"],
         dry_run=False,
     )
 
     if result.status == "deleted":
-        _audit_karen_gcal_event("delete", chat_id, {
+        _audit_client_gcal_event("delete", chat_id, client_id, {
             "status": result.status,
             "event_id": result.event_id,
             "deleted_event_id": result.deleted_event_id,
@@ -10879,7 +10888,7 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
         })
         _PENDING_GCAL_DELETE_DRAFTS.pop(key, None)
         await update.message.reply_text(
-            "🗑️ Listo, Insanity. Borré ese evento de Google Calendar.\n\n"
+            f"🗑️ Listo{vocative}. Borré ese evento de Google Calendar.\n\n"
             f"• {pending['summary']}\n"
             f"• {pending['start']}\n\n"
             "Solo borré ese evento específico. No toqué nada más."
@@ -10904,6 +10913,10 @@ async def try_gcal_delete_natural(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
         return False
 
+    client_id = resolve_client_id(chat_id)
+    if not client_id:
+        return False
+    vocative = client_vocative(client_id)
     raw = (text or "").strip()
     norm = _norm_gcal_confirm_text(raw)
 
@@ -10944,7 +10957,7 @@ async def try_gcal_delete_natural(update, chat_id, text) -> bool:
 
     tz = ZoneInfo("America/Panama")
     matches = find_client_events_by_title(
-        "karen",
+        client_id,
         query,
         datetime.now(tz),
         days_ahead=30,
@@ -10953,7 +10966,7 @@ async def try_gcal_delete_natural(update, chat_id, text) -> bool:
 
     if not matches:
         await update.message.reply_text(
-            "No encontré un evento futuro con ese nombre en Google Calendar, Insanity. 😬\n\n"
+            f"No encontré un evento futuro con ese nombre en Google Calendar{vocative}. 😬\n\n"
             f"Búsqueda: {query}\n\n"
             "No borré nada."
         )
@@ -11006,6 +11019,10 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
         return False
 
+    client_id = resolve_client_id(chat_id)
+    if not client_id:
+        return False
+    vocative = client_vocative(client_id)
     raw = (text or "").strip()
     t = raw.lower()
     t = unicodedata.normalize("NFKD", t)
@@ -11092,7 +11109,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
 
     if not day or not month:
         await update.message.reply_text(
-            "Sí puedo guardar la cita, Insanity 📅\n\n"
+            f"Sí puedo guardar la cita{vocative} 📅\n\n"
             "Pero necesito la fecha. Dímelo así:\n"
             "“Val, tengo cita con Nora el 28 a las 3pm”."
         )
@@ -11103,14 +11120,14 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     if not tm:
         if relative_date_label:
             await update.message.reply_text(
-                "Sí puedo guardar la cita, Insanity 📅\n\n"
+                f"Sí puedo guardar la cita{vocative} 📅\n\n"
                 f"Tengo la fecha: {relative_date_label}.\n"
                 "Pero necesito la hora. Dímelo así:\n"
                 "“Val, tengo cita con Mabel mañana a las 3pm”."
             )
         else:
             await update.message.reply_text(
-                "Tengo la fecha, pero me falta la hora, Insanity ⏰\n\n"
+                f"Tengo la fecha, pero me falta la hora{vocative} ⏰\n\n"
                 "Mándamelo así:\n"
                 "“Val, tengo cita con Nora el 28 a las 3pm”."
             )
@@ -11201,7 +11218,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     }
 
     msg = (
-        "📅 Puedo crear esta cita en tu Google Calendar, Insanity.\n\n"
+        f"📅 Puedo crear esta cita en tu Google Calendar{vocative}.\n\n"
         "Revísala antes de confirmarla:\n\n"
         f"• {pretty_date}\n"
         f"• {pretty_time}\n"
