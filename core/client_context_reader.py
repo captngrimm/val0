@@ -5,6 +5,7 @@ from datetime import datetime
 import re
 import unicodedata
 
+from core.client_identity import KAREN_CHAT_ID, client_vocative, resolve_client_id
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 CLIENTS_DIR = BASE_DIR / "clients"
@@ -35,6 +36,10 @@ def load_client_context(client_id: str) -> dict:
         "status": _read_client_file(client_id, "CLIENT_STATUS.md"),
         "grocery": _read_client_file(client_id, "CLIENT_GROCERY.md"),
     }
+
+
+def _vocative(client_id: str | None, prefix: str = ", ") -> str:
+    return client_vocative(client_id, prefix=prefix)
 
 
 def classify_client_context_query(text: str) -> str:
@@ -159,13 +164,14 @@ def classify_client_context_query(text: str) -> str:
     return "unknown"
 
 
-def render_client_capabilities_today(client_id: str = "karen") -> str:
+def render_client_capabilities_today(client_id: str | None = None) -> str:
     ctx = load_client_context(client_id)
     status = ctx.get("status", "")
     roadmap = ctx.get("roadmap", "")
+    voc = _vocative(client_id)
 
     return (
-        "🧭✨ Hoy puedo ayudarte con esto, Insanity:\n\n"
+        f"🧭✨ Hoy puedo ayudarte con esto{voc}:\n\n"
         "1. Caso/finca/legal\n"
         "- Preparar el paquete para Nora.\n"
         "- Revisar qué falta antes de hablar con la abogada.\n"
@@ -181,7 +187,7 @@ def render_client_capabilities_today(client_id: str = "karen") -> str:
     )
 
 
-def render_client_roadmap(client_id: str = "karen") -> str:
+def render_client_roadmap(client_id: str | None = None) -> str:
     return (
         "🗺️ Roadmap Val Personal / Karen\n\n"
         "Antes del 25 de mayo:\n"
@@ -201,7 +207,7 @@ def render_client_roadmap(client_id: str = "karen") -> str:
     )
 
 
-def render_client_status(client_id: str = "karen") -> str:
+def render_client_status(client_id: str | None = None) -> str:
     return (
         "📍 Estado actual Val Personal / Karen\n\n"
         "Estamos en founder-beta / client-zero personal.\n\n"
@@ -271,12 +277,13 @@ def append_client_idea(client_id: str, text: str, source: str = "telegram") -> b
     return True
 
 
-def render_client_ideas_list(client_id: str = "karen") -> str:
+def render_client_ideas_list(client_id: str | None = None) -> str:
     ctx = load_client_context(client_id)
     ideas = ctx.get("ideas", "").strip()
+    voc = _vocative(client_id)
 
     if not ideas:
-        return "💡 No encontré ideas guardadas todavía, Insanity."
+        return f"💡 No encontré ideas guardadas todavía{voc}."
 
     # Keep v0 simple/readable: return the ideas file with a short intro.
     return (
@@ -286,8 +293,9 @@ def render_client_ideas_list(client_id: str = "karen") -> str:
     )
 
 
-def render_client_idea_intake(text: str, client_id: str = "karen", persist: bool = False) -> str:
+def render_client_idea_intake(text: str, client_id: str | None = None, persist: bool = False) -> str:
     idea = _extract_idea_text(text)
+    voc = _vocative(client_id)
     saved = False
     if persist:
         saved = append_client_idea(client_id, text, source="telegram")
@@ -299,7 +307,7 @@ def render_client_idea_intake(text: str, client_id: str = "karen", persist: bool
     )
 
     return (
-        "💡 Idea capturada para el roadmap, Insanity.\n\n"
+        f"💡 Idea capturada para el roadmap{voc}.\n\n"
         f"Idea:\n{idea}\n\n"
         "La pondría tentativamente en el backlog de Val Personal. "
         "Si es sobre supermercado, escuela, trabajo, agenda, recordatorios o documentos, entra perfecto en la visión de Mes 1–3.\n\n"
@@ -338,7 +346,7 @@ def _extract_grocery_items(text: str) -> list[str]:
     return [x for x in parts if len(x) >= 2]
 
 
-def _ensure_grocery_file(client_id: str = "karen") -> Path | None:
+def _ensure_grocery_file(client_id: str | None = None) -> Path | None:
     safe_client = re.sub(r"[^a-zA-Z0-9_-]", "", client_id or "")
     if not safe_client:
         return None
@@ -387,11 +395,12 @@ def append_client_grocery_items(client_id: str, text: str, source: str = "telegr
     return True, added
 
 
-def render_client_grocery_add(text: str, client_id: str = "karen", persist: bool = True) -> str:
+def render_client_grocery_add(text: str, client_id: str | None = None, persist: bool = True) -> str:
     items = _extract_grocery_items(text)
+    voc = _vocative(client_id)
     if not items:
         return (
-            "🛒 Te entendí que quieres anotar algo para el súper, Insanity, "
+            f"🛒 Te entendí que quieres anotar algo para el súper{voc}, "
             "pero no vi productos claros. Prueba: “Val, anota arroz, leche y jabón para el súper.”"
         )
 
@@ -405,7 +414,7 @@ def render_client_grocery_add(text: str, client_id: str = "karen", persist: bool
 
     if saved:
         return (
-            "🛒 Listo, Insanity. Lo anoté para el súper:\n\n"
+            f"🛒 Listo{voc}. Lo anoté para el súper:\n\n"
             f"{bullets}\n\n"
             "Cuando quieras revisar, dime: “Val, ¿qué tengo en la lista del súper?”"
         )
@@ -497,11 +506,12 @@ def delete_client_grocery_items(client_id: str, text: str) -> tuple[bool, list[s
     return bool(removed), removed, missing
 
 
-def render_client_grocery_delete(text: str, client_id: str = "karen", persist: bool = True) -> str:
+def render_client_grocery_delete(text: str, client_id: str | None = None, persist: bool = True) -> str:
     targets = _extract_grocery_delete_items(text)
+    voc = _vocative(client_id)
     if not targets:
         return (
-            "🛒 Te entendí que quieres borrar algo de la lista, Insanity, "
+            f"🛒 Te entendí que quieres borrar algo de la lista{voc}, "
             "pero no vi qué producto. Prueba: “Val, borra leche de la lista del súper.”"
         )
 
@@ -517,20 +527,21 @@ def render_client_grocery_delete(text: str, client_id: str = "karen", persist: b
 
     if removed:
         bullets = "\n".join(f"- {x}" for x in removed)
-        msg = "🛒 Listo, Insanity. Quité de la lista:\n\n" + bullets
+        msg = f"🛒 Listo{voc}. Quité de la lista:\n\n" + bullets
         if missing:
             msg += "\n\nNo encontré esto para borrar:\n" + "\n".join(f"- {x}" for x in missing)
         return msg
 
     return (
-        "🛒 Revisé la lista, Insanity, pero no encontré eso para borrar:\n\n"
+        f"🛒 Revisé la lista{voc}, pero no encontré eso para borrar:\n\n"
         + "\n".join(f"- {x}" for x in targets)
     )
 
 
 
-def render_client_grocery_list(client_id: str = "karen") -> str:
+def render_client_grocery_list(client_id: str | None = None) -> str:
     path = _ensure_grocery_file(client_id)
+    voc = _vocative(client_id)
     if path is None:
         return "🛒 No encontré archivo de lista de súper para este cliente todavía."
 
@@ -541,17 +552,17 @@ def render_client_grocery_list(client_id: str = "karen") -> str:
     ]
 
     if not lines:
-        return "🛒 Tu lista de súper está vacía por ahora, Insanity."
+        return f"🛒 Tu lista de súper está vacía por ahora{voc}."
 
     return (
-        "🛒 Lista de súper guardada, Insanity:\n\n"
+        f"🛒 Lista de súper guardada{voc}:\n\n"
         + "\n".join(lines)
         + "\n\nPor ahora puedo guardar y mostrar la lista. Borrar/editar viene después, sin ponerse intensa todavía. 😌"
     )
 
 
 
-def render_client_context_answer(text: str, client_id: str = "karen", persist_ideas: bool = True) -> str | None:
+def render_client_context_answer(text: str, client_id: str | None = None, persist_ideas: bool = True) -> str | None:
     qtype = classify_client_context_query(text)
 
     if qtype == "capabilities_today":
@@ -589,7 +600,7 @@ if __name__ == "__main__":
 
     for t in tests:
         q = classify_client_context_query(t)
-        ans = render_client_context_answer(t, "karen", persist_ideas=False)
+        ans = render_client_context_answer(t, resolve_client_id(KAREN_CHAT_ID), persist_ideas=False)
         print(f"{t!r} -> {q} -> {'ANSWER' if ans else 'NO_ANSWER'}")
 
     print("extract_idea:", _extract_idea_text("Val, tengo una idea: que me ayudes con supermercado."))

@@ -5370,6 +5370,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     chat = update.effective_chat
     chat_id = chat.id
+    client_id = resolve_client_id(chat_id)
 
     # Preferred name (defaults)
     try:
@@ -5446,7 +5447,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         if any(m in early_norm for m in early_capability_markers):
             from core.client_context_reader import render_client_context_answer
-            reply = render_client_context_answer(text or "", client_id="karen")
+            reply = render_client_context_answer(text or "", client_id=client_id)
             if reply:
                 await update.message.reply_text(reply)
                 return
@@ -5855,7 +5856,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
             if any(m in kr_priority_norm for m in capability_priority_markers):
                 from core.client_context_reader import render_client_context_answer
-                reply = render_client_context_answer(text or "", client_id="karen")
+                reply = render_client_context_answer(text or "", client_id=client_id)
                 if reply:
                     await update.message.reply_text(reply)
                     return
@@ -5882,7 +5883,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
             if any(m in kr_priority_norm for m in grocery_priority_markers) or kr_priority_norm.startswith(grocery_verbs):
                 from core.client_context_reader import render_client_context_answer
-                reply = render_client_context_answer(text or "", client_id="karen")
+                reply = render_client_context_answer(text or "", client_id=client_id)
                 if reply:
                     await update.message.reply_text(reply)
                     return
@@ -5920,7 +5921,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         # --------------------------------------------------
         try:
             from core.client_context_reader import render_client_context_answer
-            client_context_reply = render_client_context_answer(text or "", client_id="karen")
+            client_context_reply = render_client_context_answer(text or "", client_id=client_id)
             if client_context_reply:
                 await update.message.reply_text(client_context_reply)
                 return
@@ -12464,6 +12465,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
     chat_id = update.effective_chat.id
+    client_id = resolve_client_id(chat_id)
     tg_msg_id = getattr(update.message, "message_id", None)
 
     event_key = f"tg_text:{chat_id}:{tg_msg_id}:{text}"
@@ -12688,14 +12690,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         grocery_reply = None
 
         if grocery_qtype in ("grocery_add", "grocery_list", "grocery_delete"):
-            grocery_reply = render_client_context_answer(grocery_text, client_id="karen")
+            grocery_reply = render_client_context_answer(grocery_text, client_id=client_id)
 
         else:
             # Human shortcut support: "quitar leche", "borra pan".
             # Only treat as grocery delete if the target already exists in Karen's grocery file.
             delete_targets = _extract_grocery_delete_items(grocery_text)
             if delete_targets:
-                grocery_path = _ensure_grocery_file("karen")
+                grocery_path = _ensure_grocery_file(client_id)
                 if grocery_path and grocery_path.exists():
                     grocery_lines = [
                         line.strip()[2:].strip()
@@ -12704,7 +12706,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ]
                     grocery_items_norm = {_norm(item) for item in grocery_lines}
                     if any(_norm(target) in grocery_items_norm for target in delete_targets):
-                        grocery_reply = render_client_grocery_delete(grocery_text, client_id="karen", persist=True)
+                        grocery_reply = render_client_grocery_delete(grocery_text, client_id=client_id, persist=True)
 
         if grocery_reply:
             await update.message.reply_text(grocery_reply)
@@ -13344,7 +13346,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if any(m in ht_norm for m in ht_capability_markers):
             from core.client_context_reader import render_client_context_answer
-            reply = render_client_context_answer(text or "", client_id="karen")
+            reply = render_client_context_answer(text or "", client_id=client_id)
             if reply:
                 await update.message.reply_text(reply)
                 return
