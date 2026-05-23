@@ -51,6 +51,8 @@ from core.operator_reminders import (
 from core.client_identity import resolve_client_id, client_vocative
 from core.client_contacts import get_email_contact
 from core.conversation_router import classify_deterministic_intent, normalize_message
+from core.document_extraction_readiness import document_capability_summary
+from core.document_registry import document_record_from_vfms_metadata
 from core.pending_actions import (
     PendingAction,
     ConfirmationDecision,
@@ -2993,6 +2995,21 @@ async def place_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --------------------------------------------------
 # Attachment handler — Karen/VFMS bridge v0
 # --------------------------------------------------
+def _render_attachment_readiness_status(extract_status: str, capability: dict) -> str:
+    status = str(capability.get("status") or "")
+    file_type = str(capability.get("file_type") or "")
+
+    if status == "ready":
+        return "texto extraído e indexado; listo para resumen"
+    if file_type == "image" or status in {"ocr_needed", "ocr_failed"}:
+        return "archivo guardado; necesita OCR o revisión manual antes de resumirlo"
+    if file_type == "docx":
+        return "archivo guardado; Word/docx todavía no está soportado para extracción automática"
+    if status == "unsupported" or file_type == "unsupported":
+        return "archivo guardado; tipo no soportado para extracción automática todavía"
+    return extract_status
+
+
 async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     v0 bridge:
@@ -3016,17 +3033,20 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     file_id = None
     original_name = None
     kind = None
+    mime_type = ""
 
     if update.message.document:
         doc = update.message.document
         file_id = doc.file_id
         original_name = doc.file_name or f"document_{msg_id}"
         kind = "document"
+        mime_type = getattr(doc, "mime_type", "") or ""
     elif update.message.photo:
         photo = update.message.photo[-1]
         file_id = photo.file_id
         original_name = f"photo_{chat_id}_{msg_id}.jpg"
         kind = "photo"
+        mime_type = "image/jpeg"
     else:
         return
 
@@ -3129,6 +3149,36 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         vfms_status = "guardado localmente, pero VFMS falló"
         extract_status = str(e)[:180]
 
+    display_extract_status = extract_status
+    if ingest_id:
+        record = document_record_from_vfms_metadata(
+            client_id=resolve_client_id(chat_id),
+            case_id=str(active_case_id or ""),
+            chat_id=int(chat_id),
+            metadata={
+                "ingest_id": ingest_id,
+                "filename": safe_name,
+                "caption": caption_text,
+                "status": extract_status,
+                "hash": "",
+                "mime_type": mime_type,
+                "stored_path": local_path,
+                "kind": kind,
+                "vfms_status": vfms_status,
+                "original_name": original_name,
+            },
+            caption=caption_text,
+            status=extract_status,
+            source="telegram_attachment_vfms",
+            source_message_id=int(msg_id),
+        )
+        display_extract_status = _render_attachment_readiness_status(
+            extract_status,
+            document_capability_summary(record),
+        )
+        if not case_note_status:
+            case_note_status = "guardado en VFMS; no quedó asociado a un caso activo."
+
     reply = (
         "📎 Documento recibido.\n"
         f"Tipo: {kind}\n"
@@ -3137,7 +3187,7 @@ async def handle_attachment(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     if ingest_id:
         reply += f"ID VFMS: {ingest_id}\n"
-    reply += f"Estado: {extract_status}"
+    reply += f"Estado: {display_extract_status}"
     if caption_text:
         reply += "\n📝 Nota asociada al documento."
     if case_note_status:
