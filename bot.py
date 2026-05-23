@@ -87,7 +87,7 @@ from core.karen_next_action import maybe_handle_pending_next_action, karen_next_
 from core.document_inventory_queries import maybe_handle_document_query
 from core.document_semantic_queries import maybe_handle_document_semantic_query
 from core.document_summary_queries import maybe_handle_document_summary_query
-from core.karen_case_facts import maybe_handle_karen_case_facts, maybe_capture_karen_case_facts
+from core.karen_case_facts import CASE_KEY, maybe_handle_karen_case_facts, maybe_capture_karen_case_facts
 from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
 from core.karen_appointments import maybe_handle_karen_appointment
 from core.karen_transcript_guard import maybe_guard_pasted_transcript, maybe_handle_pending_transcript_choice
@@ -12675,11 +12675,15 @@ def _karen_timeline_query_year(text: str) -> str:
     return m.group(1) if m else ""
 
 
-def _looks_like_karen_timeline_query(text: str) -> bool:
+def _normalize_karen_timeline_query(text: str) -> str:
     norm = _norm_text(text or "")
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
-    norm = re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+    return re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+
+
+def _looks_like_karen_timeline_query(text: str) -> bool:
+    norm = _normalize_karen_timeline_query(text)
 
     broad_document_markers = (
         "que dice este documento",
@@ -12690,6 +12694,17 @@ def _looks_like_karen_timeline_query(text: str) -> bool:
         "donde aparece",
     )
     if any(marker in norm for marker in broad_document_markers):
+        return False
+
+    document_summary_markers = (
+        "vfms",
+        "documento",
+        "documentos",
+        "ficha legal",
+        "datos registrales",
+        "registro publico",
+    )
+    if any(marker in norm for marker in document_summary_markers) and "caso" not in norm:
         return False
 
     if "cronologia" in norm:
@@ -12793,12 +12808,18 @@ def _render_karen_case_timeline(events, *, case_id: str, year: str = "", limit: 
 async def maybe_handle_karen_case_timeline_query(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
     if not update.message:
         return False
-    if str(chat_id) != str(KAREN_CHAT_ID):
+
+    case_id = get_active_case_id(int(chat_id))
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
+    if not is_karen_flow:
+        return False
+
+    year = _karen_timeline_query_year(text)
+    if year and not case_id:
         return False
     if not _looks_like_karen_timeline_query(text):
         return False
 
-    case_id = get_active_case_id(int(chat_id))
     if not case_id:
         await update.message.reply_text(
             "No tengo eventos de cronología disponibles todavía porque no hay un caso activo para este chat.\n\n"
@@ -12809,7 +12830,6 @@ async def maybe_handle_karen_case_timeline_query(update: Update, context: Contex
 
     notes = fetch_case_notes(int(chat_id), str(case_id), limit=160)
     events = build_timeline_events_from_case_notes(notes, client_id=client_id, case_id=str(case_id))
-    year = _karen_timeline_query_year(text)
     await update.message.reply_text(_render_karen_case_timeline(events, case_id=str(case_id), year=year))
     return True
 
@@ -13497,6 +13517,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if await maybe_handle_document_query(update, context, chat_id, text):
             return
 
+        if await maybe_handle_karen_case_timeline_query(update, context, chat_id, client_id, text):
+            return
+
         if await maybe_handle_document_summary_query(update, context, chat_id, text):
             return
 
@@ -13504,17 +13527,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_DOCUMENT_INVENTORY_GATE] failed: {e}")
-
-    # --------------------------------------------------
-    # Karen Case Timeline query gate
-    # Runs after document routes so broad document questions stay with
-    # document inventory/summary/semantic handlers.
-    # --------------------------------------------------
-    try:
-        if await maybe_handle_karen_case_timeline_query(update, context, chat_id, client_id, text):
-            return
-    except Exception as e:
-        logger.exception(f"[KAREN_CASE_TIMELINE_QUERY_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Case Facts query gate
