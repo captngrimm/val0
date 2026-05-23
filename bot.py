@@ -5777,11 +5777,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
             if any(m == karen_upper_norm for m in agenda_direct_markers):
                 if "esta semana" in karen_upper_norm:
-                    reply = build_client_agenda_dashboard("karen", chat_id, "week")
+                    reply = build_client_agenda_dashboard(client_id, chat_id, "week")
                 elif "manana" in karen_upper_norm or "mañana" in karen_upper_norm:
-                    reply = build_client_agenda_dashboard("karen", chat_id, "tomorrow")
+                    reply = build_client_agenda_dashboard(client_id, chat_id, "tomorrow")
                 else:
-                    reply = build_client_agenda_dashboard("karen", chat_id, "today")
+                    reply = build_client_agenda_dashboard(client_id, chat_id, "today")
 
                 await update.message.reply_text(reply, disable_web_page_preview=True)
                 return
@@ -5793,8 +5793,9 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
 
             if any(m in karen_upper_norm for m in agenda_query_markers):
+                voc = client_vocative(client_id)
                 reply = (
-                    "Claro, Insanity 😌📅\n\n"
+                    f"Claro{voc} 😌📅\n\n"
                     "Para agenda puedo revisar por ventana de tiempo. Dime una de estas:\n\n"
                     "• “Val, ¿qué tengo hoy?”\n"
                     "• “Val, ¿qué tengo mañana?”\n"
@@ -5823,8 +5824,9 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 and any(m in karen_upper_norm for m in relative_before_markers)
                 and not has_explicit_clock
             ):
+                voc = client_vocative(client_id)
                 reply = (
-                    "Sí, puedo hacerlo, Insanity ⏰📁\n\n"
+                    f"Sí, puedo hacerlo{voc} ⏰📁\n\n"
                     "Pero necesito la hora exacta de la cita para calcular “una hora antes”. "
                     "Todavía no voy a adivinar horarios como bruja de feria, gracias. 😌\n\n"
                     "Mándamelo así:\n"
@@ -5904,8 +5906,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                     await reminders_cmd(update, context)
                     return
                 except Exception:
+                    voc = client_vocative(client_id, prefix="")
+                    lead = f"{voc}, " if voc else ""
                     await update.message.reply_text(
-                        "Insanity, eso suena a consulta de agenda/cita 📅\n\n"
+                        f"{lead}eso suena a consulta de agenda/cita 📅\n\n"
                         "Todavía estoy afinando búsqueda por fecha exacta, pero no lo voy a mezclar con el caso del terreno. "
                         "Prueba también: “Val, ¿qué tengo hoy?”, “Val, ¿qué tengo mañana?” o “Val, dime mis recordatorios”."
                     )
@@ -10490,6 +10494,9 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
     if not update or not getattr(update, "message", None):
         return False
 
+    client_id = resolve_client_id(chat_id)
+    voc = client_vocative(client_id)
+
     raw = (text or "").strip()
     t = raw.lower()
     t = unicodedata.normalize("NFKD", t)
@@ -10518,7 +10525,7 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
 
     if not offset_minutes:
         await update.message.reply_text(
-            "Puedo hacerlo, Insanity ⏰📅\n\n"
+            f"Puedo hacerlo{voc} ⏰📅\n\n"
             "Dime cuánto antes. Por ahora entiendo cosas como:\n"
             "• “Val, recuérdame una hora antes de la cita con Nora”\n"
             "• “Val, recuérdame 30 minutos antes de la cita con Nora”"
@@ -10599,7 +10606,7 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
 
     if reminder_dt_utc <= datetime.now(timezone.utc):
         await update.message.reply_text(
-            "Ese recordatorio caería en el pasado, Insanity. Dame otra ventana o revisamos la cita."
+            f"Ese recordatorio caería en el pasado{voc}. Dame otra ventana o revisamos la cita."
         )
         return True
 
@@ -10627,7 +10634,7 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
     month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][rem_local.month]
 
     msg = (
-        "⏰ Listo, Insanity. Guardé el recordatorio antes de la cita.\n\n"
+        f"⏰ Listo{voc}. Guardé el recordatorio antes de la cita.\n\n"
         f"• Recordatorio: {weekday} {rem_local.day} de {month_name}, {rem_local.strftime('%I:%M %p').lstrip('0')}\n"
         f"• Acción: {reminder_text}\n"
         f"• Cita anclada: {appt_local.strftime('%I:%M %p').lstrip('0')} — {appt_text}\n"
@@ -11378,6 +11385,9 @@ async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
     if not update or not getattr(update, "message", None):
         return False
 
+    client_id = resolve_client_id(chat_id)
+    voc = client_vocative(client_id)
+
     raw = (text or "").strip()
     t = raw.lower()
     t = unicodedata.normalize("NFKD", t)
@@ -11443,7 +11453,7 @@ async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
     try:
         target_start = datetime(year, month, day, 0, 0, 0, tzinfo=tz)
     except ValueError:
-        await update.message.reply_text("Esa fecha no me cuadra, Insanity. Dame día y mes para no inventar calendario. 😌")
+        await update.message.reply_text(f"Esa fecha no me cuadra{voc}. Dame día y mes para no inventar calendario. 😌")
         return True
 
     # If user only gave day number and that day already passed this month, assume next month.
@@ -12847,11 +12857,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if any(m == kr_norm for m in agenda_direct_markers):
             if "esta semana" in kr_norm:
-                reply = build_client_agenda_dashboard("karen", chat_id, "week")
+                reply = build_client_agenda_dashboard(client_id, chat_id, "week")
             elif "manana" in kr_norm or "mañana" in kr_norm:
-                reply = build_client_agenda_dashboard("karen", chat_id, "tomorrow")
+                reply = build_client_agenda_dashboard(client_id, chat_id, "tomorrow")
             else:
-                reply = build_client_agenda_dashboard("karen", chat_id, "today")
+                reply = build_client_agenda_dashboard(client_id, chat_id, "today")
 
             await update.message.reply_text(reply, disable_web_page_preview=True)
             return
@@ -12882,8 +12892,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
         if any(m in kr_norm for m in agenda_query_markers):
+            voc = client_vocative(client_id)
             reply = (
-                "Claro, Insanity 😌📅\n\n"
+                f"Claro{voc} 😌📅\n\n"
                 "Para agenda puedo revisar por ventana de tiempo. Dime una de estas:\n\n"
                 "• “Val, ¿qué tengo hoy?”\n"
                 "• “Val, ¿qué tengo mañana?”\n"
@@ -12915,8 +12926,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             and any(m in kr_norm for m in relative_before_markers)
             and not has_explicit_clock
         ):
+            voc = client_vocative(client_id)
             reply = (
-                "Sí, puedo hacerlo, Insanity ⏰📁\n\n"
+                f"Sí, puedo hacerlo{voc} ⏰📁\n\n"
                 "Pero necesito la hora exacta de la cita para calcular “una hora antes”. "
                 "Todavía no voy a adivinar horarios como bruja de feria, gracias. 😌\n\n"
                 "Mándamelo así:\n"
