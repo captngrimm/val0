@@ -12122,6 +12122,9 @@ async def _handle_group_deterministic(update: Update, context: ContextTypes.DEFA
     chat = update.effective_chat
     chat_id = chat.id if chat else None
     t = (text or "").strip()
+    if looks_like_technical_paste(t):
+        return await _send_reply(update, context, TECHNICAL_PASTE_REPLY)
+
     # Capture note deterministically (same path as DMs)
     try:
         await _maybe_capture_case_note(update, chat_id, t, source="group")
@@ -12518,6 +12521,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text.strip()
     raw_input = text
+    chat_id = update.effective_chat.id
+    client_id = resolve_client_id(chat_id)
+    tg_msg_id = getattr(update.message, "message_id", None)
+
+    if looks_like_technical_paste(text):
+        await update.message.reply_text(TECHNICAL_PASTE_REPLY)
+        return
+
     # 🚨 SPAM GUARD — collapse rapid repeated intent
     try:
         norm = re.sub(r"\s+", " ", text.lower()).strip()
@@ -12533,9 +12544,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception:
         pass
-    chat_id = update.effective_chat.id
-    client_id = resolve_client_id(chat_id)
-    tg_msg_id = getattr(update.message, "message_id", None)
 
     event_key = f"tg_text:{chat_id}:{tg_msg_id}:{text}"
     try:
@@ -12545,10 +12553,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[IDEMPOTENCY] text guard failed: {e}")
-
-    if looks_like_technical_paste(text):
-        await update.message.reply_text(TECHNICAL_PASTE_REPLY)
-        return
 
     raw = (text or "").strip()
     normalized = re.sub(r"\s+", " ", raw).strip()
