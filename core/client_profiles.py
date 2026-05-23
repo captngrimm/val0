@@ -27,6 +27,17 @@ KNOWN_WORKFLOWS = {
     WORKFLOW_RESPONSE_ENVELOPE,
 }
 
+WORKFLOW_LABELS = {
+    WORKFLOW_CALENDAR: "calendario",
+    WORKFLOW_REMINDERS: "recordatorios",
+    WORKFLOW_DOCUMENTS: "documentos",
+    WORKFLOW_TIMELINE: "cronología",
+    WORKFLOW_DAILY_OPERATOR: "operador personal",
+    WORKFLOW_LEGAL_CASE: "caso",
+    WORKFLOW_GROCERIES: "lista de compras",
+    WORKFLOW_RESPONSE_ENVELOPE: "respuesta asistida",
+}
+
 
 @dataclass(frozen=True)
 class ClientProfile:
@@ -162,6 +173,52 @@ def require_workflow_access(client_id: Any, workflow: Any) -> WorkflowAccessDeci
         reason="workflow_enabled",
         safety_level="allow_profile_scoped",
         metadata={"registry_version": str(profile.metadata.get("registry_version") or "v0")},
+    )
+
+
+def _workflow_label(workflow: Any, fallback: str = "esta función") -> str:
+    normalized = normalize_workflow(workflow)
+    return WORKFLOW_LABELS.get(normalized, fallback)
+
+
+def render_unknown_client_onboarding_message(*, workflow: Any = None) -> str:
+    label = _workflow_label(workflow, "este flujo")
+    return (
+        f"Este flujo de {label} todavía no está habilitado para este chat.\n\n"
+        "Puedo ayudarte con información general, pero documentos, caso y operador personal "
+        "requieren configuración previa.\n\n"
+        "Para activarlo, pide al operador/admin que registre este chat con un perfil de cliente "
+        "y los permisos correctos."
+    )
+
+
+def render_workflow_not_enabled_message(
+    decision: WorkflowAccessDecision | None,
+    *,
+    workflow_label: str | None = None,
+) -> str:
+    workflow = decision.workflow if decision else ""
+    label = (workflow_label or _workflow_label(workflow, "esta función")).strip()
+    reason = decision.reason if decision else "unknown_client"
+
+    if decision and decision.allowed:
+        return ""
+
+    if reason == "unknown_client":
+        return render_unknown_client_onboarding_message(workflow=workflow or label)
+
+    if reason == "workflow_disabled":
+        return (
+            f"Este flujo de {label} todavía no está habilitado para este chat.\n\n"
+            "Puedo seguir con ayuda general, pero esta función requiere permisos específicos "
+            "antes de abrir memoria o herramientas de cliente.\n\n"
+            "Pide al operador/admin que active este flujo para tu perfil."
+        )
+
+    return (
+        "Esta función todavía no está disponible para este chat.\n\n"
+        "Puedo seguir con ayuda general, pero no voy a abrir memoria, documentos ni herramientas "
+        "de cliente sin configuración previa."
     )
 
 

@@ -23,6 +23,8 @@ from core.client_profiles import (
     is_known_client,
     normalize_client_id,
     normalize_workflow,
+    render_unknown_client_onboarding_message,
+    render_workflow_not_enabled_message,
     require_workflow_access,
     safe_client_profile_summary,
     workflow_enabled,
@@ -43,6 +45,11 @@ def assert_true(value, label: str) -> None:
 def assert_false(value, label: str) -> None:
     if value:
         raise AssertionError(f"{label}: expected falsey value")
+
+
+def assert_not_contains(text: str, needle: str, label: str) -> None:
+    if needle.lower() in text.lower():
+        raise AssertionError(f"{label}: unexpected {needle!r} in {text!r}")
 
 
 def main() -> int:
@@ -84,6 +91,24 @@ def main() -> int:
         unknown_decision = require_workflow_access("unknown-client", workflow)
         assert_false(unknown_decision.allowed, f"unknown client denied for {workflow}")
         assert_equal(unknown_decision.reason, "unknown_client", f"unknown denial reason for {workflow}")
+
+        rendered = render_workflow_not_enabled_message(unknown_decision)
+        assert_true("todavía no está habilitado para este chat" in rendered, f"not-enabled copy for {workflow}")
+        assert_true("información general" in rendered, f"generic fallback preserved in copy for {workflow}")
+        for forbidden in (
+            "Karen",
+            karen_vocative,
+            "CASE:KAREN",
+            "KAREN-LAND",
+            "VFMS",
+            "finca 10082",
+            str(KAREN_CHAT_ID),
+        ):
+            assert_not_contains(rendered, forbidden, f"safe denial copy for {workflow}")
+
+    unknown_onboarding = render_unknown_client_onboarding_message()
+    assert_true("operador/admin" in unknown_onboarding, "unknown onboarding invites operator activation")
+    assert_true("información general" in unknown_onboarding, "unknown onboarding keeps generic help available")
 
     denied_workflow = require_workflow_access(karen_id, "future workflow")
     assert_false(denied_workflow.allowed, "unknown workflow denied")

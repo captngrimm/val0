@@ -57,6 +57,7 @@ from core.client_profiles import (
     WORKFLOW_LEGAL_CASE,
     WORKFLOW_TIMELINE,
     get_client_profile_for_chat,
+    render_workflow_not_enabled_message,
     require_workflow_access,
 )
 from core.conversation_router import classify_deterministic_intent, normalize_message
@@ -13177,13 +13178,6 @@ async def maybe_handle_karen_daily_operator_query(update: Update, context: Conte
     return True
 
 
-PROTECTED_WORKFLOW_NOT_ENABLED_REPLY = (
-    "Esa función todavía no está habilitada para este chat.\n\n"
-    "No voy a abrir memoria, documentos ni flujos de otro cliente. "
-    "Si quieres activar este chat como cliente de Val0, primero hay que registrarlo."
-)
-
-
 def _workflow_allowed_for_chat(chat_id: int, client_id: str, workflow: str) -> bool:
     profile = get_client_profile_for_chat(chat_id)
     if not profile:
@@ -13285,7 +13279,9 @@ async def maybe_guard_unknown_client_protected_workflow(update: Update, chat_id:
     )
     for workflow, requested in workflow_checks:
         if requested and not _workflow_allowed_for_chat(chat_id, client_id, workflow):
-            await update.message.reply_text(PROTECTED_WORKFLOW_NOT_ENABLED_REPLY)
+            profile = get_client_profile_for_chat(chat_id)
+            decision = require_workflow_access(profile.client_id if profile else client_id, workflow)
+            await update.message.reply_text(render_workflow_not_enabled_message(decision))
             return True
     return False
 
