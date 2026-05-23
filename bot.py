@@ -63,6 +63,12 @@ from core.daily_operator import (
     filter_today_items,
     safe_daily_operator_summary,
 )
+from core.response_envelope import (
+    ResponseType,
+    StyleMode,
+    create_response_envelope,
+    render_polished_fixture_response,
+)
 from core.pending_actions import (
     PendingAction,
     ConfirmationDecision,
@@ -13110,7 +13116,28 @@ def _build_karen_daily_operator_reply(chat_id: int, client_id: str) -> str:
         "Modo: lectura solamente. No creé, cambié ni borré nada.",
         "Esto es una organización operativa; no sustituye revisión legal.",
     ])
-    return "\n".join(lines)
+    deterministic_text = "\n".join(lines)
+    provenance = []
+    for field in ("pending_actions", "case_priorities", "document_items", "timeline_items"):
+        for item in safe.get(field, ()):
+            source_type = str(item.get("source_type") or "").strip()
+            source_id = str(item.get("source_id") or "").strip()
+            if source_type or source_id:
+                provenance.append({"source_type": source_type, "source_id": source_id})
+
+    envelope = create_response_envelope(
+        response_id=f"karen_daily_operator:{chat_id}:{today}",
+        client_id=client_id,
+        source_route="karen_daily_operator",
+        response_type=ResponseType.DAILY_OPERATOR.value,
+        factual_payload=safe,
+        rendered_text=deterministic_text,
+        allowed_style_mode=StyleMode.WARM.value,
+        legal_boundary="Esto es una organización operativa; no sustituye revisión legal.",
+        provenance=provenance,
+        metadata={"route": "karen_daily_operator_v0", "read_only": True},
+    )
+    return render_polished_fixture_response(envelope)
 
 
 async def maybe_handle_karen_daily_operator_query(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
