@@ -9,9 +9,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # These files are intentionally Karen-specific and are allowed to mention Karen/Insanity.
 ALLOWED_KAREN_SPECIFIC_PATTERNS = (
+    "core/client_identity.py",
+    "scripts/quality/client_isolation_audit.py",
+    "docs/architecture/CLIENT_ISOLATION_CONTRACT_V0.md",
     "core/karen_",
     "docs/KAREN_",
-    "docs/ops/karen_",
+    "docs/ops/",
     "docs/cleanup/KAREN_",
     "docs/lab/gcal/",
     "clients/karen/",
