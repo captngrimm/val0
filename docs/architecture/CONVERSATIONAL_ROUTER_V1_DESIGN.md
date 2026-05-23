@@ -198,7 +198,7 @@ Commit 3: enable low-risk fallback routing
 - Grocery: add, list, delete, delete shortcut.
 - Legal/finca: package for Nora, missing review, finca facts, document inventory.
 - Memory safety: command paste is not stored; ambiguous text is not forced into a task.
-- Unknown client: no `Insanity`, no Karen calendar/config/path leakage.
+- Unknown client: no Karen vocative, no Karen calendar/config/path leakage.
 - Voice parity audit: verify voice path still reaches Karen appointment/legal basics before any voice router work.
 - Regression: `py_compile`, client isolation audit, and deterministic handler smoke tests.
 
