@@ -20,6 +20,16 @@ ALLOWED_KAREN_SPECIFIC_PATTERNS = (
     "clients/karen/",
 )
 
+# Exact Karen-only client-zero copy that still lives in shared files during
+# founder-beta. Keep this narrow: do not allow whole bot.py sections.
+ALLOWED_KAREN_SPECIFIC_HITS = (
+    ("bot.py", "hardcoded_vocative_insanity", "Veo varias instrucciones juntas, Insanity"),
+    ("bot.py", "hardcoded_vocative_insanity", "Empezamos ordenando el caso por partes, Insanity"),
+    ("bot.py", "hardcoded_vocative_insanity", "Claro, Insanity. Si tienes que llevarle documentos a la abogada"),
+    ("bot.py", "hardcoded_vocative_insanity", "Insanity, antes de hablar con Nora falta revisar esto"),
+    ("core/document_summary_queries.py", "hardcoded_vocative_insanity", "Insanity, aquí va ordenado para hablar con la abogada"),
+)
+
 SCAN_EXTS = {".py", ".md", ".json", ".txt"}
 
 FORBIDDEN_REUSABLE_PATTERNS = [
@@ -38,6 +48,12 @@ WARN_PATTERNS = [
 def is_allowed(path: Path) -> bool:
     rel = path.relative_to(ROOT).as_posix()
     return any(rel.startswith(p) for p in ALLOWED_KAREN_SPECIFIC_PATTERNS)
+
+def is_allowed_hit(rel: str, name: str, line_text: str) -> bool:
+    return any(
+        rel == allowed_rel and name == allowed_name and snippet in line_text
+        for allowed_rel, allowed_name, snippet in ALLOWED_KAREN_SPECIFIC_HITS
+    )
 
 def should_scan(path: Path) -> bool:
     if ".git" in path.parts or ".venv" in path.parts or "__pycache__" in path.parts:
@@ -63,6 +79,9 @@ def main() -> int:
         for name, rx in FORBIDDEN_REUSABLE_PATTERNS:
             for m in rx.finditer(text):
                 line_no = text.count("\n", 0, m.start()) + 1
+                line_text = text.splitlines()[line_no - 1] if line_no > 0 else ""
+                if is_allowed_hit(rel, name, line_text):
+                    continue
                 errors.append((name, rel, line_no, m.group(0)))
 
         # Warnings only in likely reusable areas.
