@@ -1293,6 +1293,65 @@ def _norm_text(s: str) -> str:
     return s
 
 
+TECHNICAL_PASTE_REPLY = (
+    "Parece que pegaste un comando o salida técnica. No lo voy a procesar como caso, agenda ni memoria. "
+    "Si quieres que lo revise, mándamelo como output o dime ‘Val, analiza este log’."
+)
+
+
+def looks_like_technical_paste(text: str) -> bool:
+    raw = (text or "").strip()
+    if not raw:
+        return False
+
+    low = raw.lower()
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    first = lines[0] if lines else raw
+    first_low = first.lower()
+
+    if first.startswith("==="):
+        return True
+
+    if first_low.startswith(("```bash", "```sh", "```shell", "```python", "```console")):
+        return True
+
+    if re.match(r"^(cd\s+/opt/|sudo\s+|systemctl\s+|journalctl\s+|git\s+(log|status)\b)", first_low):
+        return True
+
+    strong_markers = (
+        "git log",
+        "git status",
+        "systemctl",
+        "tee /root/launchpad",
+        "<<'py'",
+        '<<"py"',
+        "./scripts/val0py",
+    )
+    if any(marker in low for marker in strong_markers):
+        return True
+
+    if len(lines) >= 4:
+        shell_markers = (
+            "echo ",
+            "python3",
+            "./scripts/val0py",
+            "git ",
+            "systemctl",
+            "journalctl",
+            "tee ",
+            "cat <<",
+            "&&",
+            "||",
+            "{",
+            "}",
+        )
+        hits = sum(1 for marker in shell_markers if marker in low)
+        if hits >= 3:
+            return True
+
+    return False
+
+
 def _extract_area_hint(text: str) -> str:
     """Extract a short area/neighborhood hint from user text for Places UX.
 
@@ -5365,6 +5424,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     chat = update.effective_chat
     chat_id = chat.id
     client_id = resolve_client_id(chat_id)
+
+    if looks_like_technical_paste(text):
+        await update.message.reply_text(TECHNICAL_PASTE_REPLY)
+        return
 
     # Preferred name (defaults)
     try:
@@ -12482,6 +12545,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[IDEMPOTENCY] text guard failed: {e}")
+
+    if looks_like_technical_paste(text):
+        await update.message.reply_text(TECHNICAL_PASTE_REPLY)
+        return
 
     raw = (text or "").strip()
     normalized = re.sub(r"\s+", " ", raw).strip()
