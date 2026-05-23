@@ -50,6 +50,15 @@ from core.operator_reminders import (
 )
 from core.client_identity import KAREN_CHAT_ID, resolve_client_id, client_vocative
 from core.client_contacts import get_email_contact
+from core.client_profiles import (
+    WORKFLOW_DAILY_OPERATOR,
+    WORKFLOW_DOCUMENTS,
+    WORKFLOW_GROCERIES,
+    WORKFLOW_LEGAL_CASE,
+    WORKFLOW_TIMELINE,
+    get_client_profile_for_chat,
+    require_workflow_access,
+)
 from core.conversation_router import classify_deterministic_intent, normalize_message
 from core.case_timeline import (
     build_timeline_events_from_case_notes,
@@ -5529,6 +5538,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     if looks_like_technical_paste(text):
         await update.message.reply_text(TECHNICAL_PASTE_REPLY)
         return
+
+    try:
+        if await maybe_guard_unknown_client_protected_workflow(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[CLIENT_WORKFLOW_GUARD_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_daily_operator_query(update, context, chat_id, client_id, text):
@@ -13162,6 +13177,119 @@ async def maybe_handle_karen_daily_operator_query(update: Update, context: Conte
     return True
 
 
+PROTECTED_WORKFLOW_NOT_ENABLED_REPLY = (
+    "Esa función todavía no está habilitada para este chat.\n\n"
+    "No voy a abrir memoria, documentos ni flujos de otro cliente. "
+    "Si quieres activar este chat como cliente de Val0, primero hay que registrarlo."
+)
+
+
+def _workflow_allowed_for_chat(chat_id: int, client_id: str, workflow: str) -> bool:
+    profile = get_client_profile_for_chat(chat_id)
+    if not profile:
+        return False
+    if client_id and profile.client_id != client_id:
+        return False
+    return require_workflow_access(profile.client_id, workflow).allowed
+
+
+def _looks_like_karen_document_workflow_request(text: str) -> bool:
+    norm = _norm_text(text or "")
+    return any(marker in norm for marker in (
+        "inventario de documentos",
+        "empezar inventario de documentos",
+        "iniciar inventario de documentos",
+        "hagamos inventario de documentos",
+        "hacer inventario de documentos",
+        "que documentos tengo",
+        "que archivos tengo",
+        "que dice este documento",
+        "que dice el documento",
+        "resumen vfms",
+        "vfms",
+        "resumen del documento",
+        "resumen de documento",
+        "resumen de documentos",
+        "tabla cronologica",
+        "ficha legal",
+        "datos registrales",
+        "registro publico",
+        "donde sale finca",
+        "donde aparece finca",
+    ))
+
+
+def _looks_like_karen_legal_case_workflow_request(text: str) -> bool:
+    norm = _norm_text(text or "")
+    direct_markers = (
+        "finca",
+        "terreno",
+        "heredero",
+        "herederos",
+        "nora",
+        "abogada",
+        "abogado",
+        "paquete para nora",
+        "paquete para la abogada",
+        "caso del terreno",
+        "caso legal",
+        "datos basicos del caso",
+    )
+    if any(marker in norm for marker in direct_markers):
+        return True
+
+    review_markers = (
+        "que falta revisar",
+        "que me falta revisar",
+        "que falta conseguir",
+        "que me falta conseguir",
+        "antes de hablar",
+    )
+    legal_context = ("abogada" in norm or "abogado" in norm or "nora" in norm)
+    return legal_context and any(marker in norm for marker in review_markers)
+
+
+def _looks_like_karen_grocery_workflow_request(text: str) -> bool:
+    norm = _norm_text(text or "")
+    grocery_markers = (
+        "supermercado",
+        "lista del super",
+        "lista de super",
+        "lista para el super",
+        "lista del supermercado",
+        "lista de supermercado",
+        "lista de compras",
+    )
+    if any(marker in norm for marker in grocery_markers):
+        return True
+    return norm.startswith((
+        "agrega a la lista",
+        "agregar a la lista",
+        "anade a la lista",
+        "añade a la lista",
+        "quita de la lista",
+        "quitar de la lista",
+    ))
+
+
+async def maybe_guard_unknown_client_protected_workflow(update: Update, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+
+    workflow_checks = (
+        (WORKFLOW_DAILY_OPERATOR, _looks_like_karen_daily_operator_query(text)),
+        (WORKFLOW_TIMELINE, _looks_like_karen_timeline_query(text)),
+        (WORKFLOW_DOCUMENTS, _looks_like_karen_document_workflow_request(text)),
+        (WORKFLOW_LEGAL_CASE, _looks_like_karen_legal_case_workflow_request(text)),
+        (WORKFLOW_GROCERIES, _looks_like_karen_grocery_workflow_request(text)),
+    )
+    for workflow, requested in workflow_checks:
+        if requested and not _workflow_allowed_for_chat(chat_id, client_id, workflow):
+            await update.message.reply_text(PROTECTED_WORKFLOW_NOT_ENABLED_REPLY)
+            return True
+    return False
+
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -13229,6 +13357,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[REMINDER_ACTION] failed: {e}")
+
+    try:
+        if await maybe_guard_unknown_client_protected_workflow(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[CLIENT_WORKFLOW_GUARD] failed: {e}")
 
     try:
         if await maybe_handle_karen_daily_operator_query(update, context, chat_id, client_id, text):

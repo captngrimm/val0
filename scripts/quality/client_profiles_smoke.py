@@ -13,7 +13,10 @@ from core.client_profiles import (
     WORKFLOW_CALENDAR,
     WORKFLOW_DAILY_OPERATOR,
     WORKFLOW_DOCUMENTS,
+    WORKFLOW_GROCERIES,
+    WORKFLOW_LEGAL_CASE,
     WORKFLOW_REMINDERS,
+    WORKFLOW_TIMELINE,
     ClientProfile,
     get_client_profile,
     get_client_profile_for_chat,
@@ -66,6 +69,21 @@ def main() -> int:
     assert_true(allowed.allowed, "enabled workflow allowed")
     assert_equal(allowed.reason, "workflow_enabled", "enabled workflow reason")
     assert_true(workflow_enabled(karen_id, WORKFLOW_DOCUMENTS), "workflow_enabled helper")
+
+    protected_workflows = (
+        WORKFLOW_DOCUMENTS,
+        WORKFLOW_TIMELINE,
+        WORKFLOW_DAILY_OPERATOR,
+        WORKFLOW_LEGAL_CASE,
+        WORKFLOW_GROCERIES,
+    )
+    for workflow in protected_workflows:
+        known_decision = require_workflow_access(karen_id, workflow)
+        assert_true(known_decision.allowed, f"Karen allowed for {workflow}")
+
+        unknown_decision = require_workflow_access("unknown-client", workflow)
+        assert_false(unknown_decision.allowed, f"unknown client denied for {workflow}")
+        assert_equal(unknown_decision.reason, "unknown_client", f"unknown denial reason for {workflow}")
 
     denied_workflow = require_workflow_access(karen_id, "future workflow")
     assert_false(denied_workflow.allowed, "unknown workflow denied")
