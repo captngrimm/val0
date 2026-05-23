@@ -51,6 +51,14 @@ from core.operator_reminders import (
 from core.client_identity import resolve_client_id, client_vocative
 from core.client_contacts import get_email_contact
 from core.conversation_router import classify_deterministic_intent, normalize_message
+from core.pending_actions import (
+    PendingAction,
+    ConfirmationDecision,
+    classify_confirmation_reply,
+    create_pending_action,
+    get_pending_action,
+    clear_pending_action,
+)
 from core.bug_report import (
     bug_cmd,
     feedback_cmd,
@@ -10766,7 +10774,78 @@ def _audit_client_gcal_event(action: str, chat_id: int, client_id: str, payload:
 # user: "sí" / "dale" / "confirmo"
 # Val: creates Google Calendar event
 # --------------------------------------------------
-_PENDING_GCAL_APPOINTMENT_DRAFTS = {}
+GCAL_CREATE_ACTION_TYPE = "gcal_create_event"
+GCAL_DELETE_ACTION_TYPE = "gcal_delete_event"
+GCAL_PENDING_TTL = timedelta(days=365)
+
+GCAL_CREATE_CONFIRM_WORDS = (
+    "si",
+    "sí",
+    "ok",
+    "okay",
+    "dale",
+    "confirmo",
+    "confirmar",
+    "confirmalo",
+    "confírmalo",
+    "crealo",
+    "créalo",
+    "crear",
+    "hazlo",
+    "yes",
+)
+
+GCAL_CREATE_CANCEL_WORDS = (
+    "no",
+    "cancelar",
+    "cancela",
+    "cancelalo",
+    "cancélalo",
+    "mejor no",
+    "olvidalo",
+    "olvídalo",
+    "stop",
+)
+
+GCAL_DELETE_CONFIRM_WORDS = (
+    "si",
+    "sí",
+    "ok",
+    "okay",
+    "dale",
+    "confirmo",
+    "confirmar",
+    "borralo",
+    "bórralo",
+    "eliminalo",
+    "elimínalo",
+    "hazlo",
+    "yes",
+)
+
+GCAL_DELETE_CANCEL_WORDS = (
+    "no",
+    "cancelar",
+    "cancela",
+    "mejor no",
+    "olvidalo",
+    "olvídalo",
+    "stop",
+)
+
+
+def _gcal_pending_expires_at():
+    return datetime.datetime.now(timezone.utc) + GCAL_PENDING_TTL
+
+
+def _gcal_action_id(action_type: str, chat_id: int) -> str:
+    return f"{action_type}:{int(chat_id)}:{time.time_ns()}"
+
+
+def _clear_existing_gcal_pending(chat_id: int, client_id: str, action_type: str) -> None:
+    existing = get_pending_action(chat_id, action_type=action_type, client_id=client_id)
+    if existing:
+        clear_pending_action(existing.action_id)
 
 
 def _norm_gcal_confirm_text(text: str) -> str:
@@ -10789,54 +10868,32 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     if not update or not getattr(update, "message", None):
         return False
 
-    key = int(chat_id)
-    pending = _PENDING_GCAL_APPOINTMENT_DRAFTS.get(key)
-    if not pending:
-        return False
-
     client_id = resolve_client_id(chat_id)
     if not client_id:
         return False
+    action = get_pending_action(
+        chat_id,
+        action_type=GCAL_CREATE_ACTION_TYPE,
+        client_id=client_id,
+    )
+    if not action:
+        return False
+    pending = action.payload
     vocative = client_vocative(client_id)
-    norm = _norm_gcal_confirm_text(text)
+    decision = classify_confirmation_reply(text, action)
 
-    confirm_words = {
-        "si",
-        "sí",
-        "ok",
-        "okay",
-        "dale",
-        "confirmo",
-        "confirmar",
-        "confirmalo",
-        "confírmalo",
-        "crealo",
-        "créalo",
-        "crear",
-        "hazlo",
-        "yes",
-    }
-
-    cancel_words = {
-        "no",
-        "cancelar",
-        "cancela",
-        "cancelalo",
-        "cancélalo",
-        "mejor no",
-        "olvidalo",
-        "olvídalo",
-        "stop",
-    }
-
-    if norm in cancel_words:
-        _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
+    if decision == ConfirmationDecision.CANCEL:
+        clear_pending_action(action.action_id)
         await update.message.reply_text(
             f"Listo{vocative}. No creé nada en Google Calendar. 🛑📅"
         )
         return True
 
-    if norm not in confirm_words:
+    if decision == ConfirmationDecision.EXPIRED:
+        clear_pending_action(action.action_id)
+        return False
+
+    if decision != ConfirmationDecision.CONFIRM:
         return False
 
     start_dt = datetime.fromisoformat(pending["start_iso"])
@@ -10866,7 +10923,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
                 break
 
         if duplicate:
-            _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
+            clear_pending_action(action.action_id)
             await update.message.reply_text(
                 f"📅 Esa cita ya existe en Google Calendar{vocative}. No la dupliqué.\n\n"
                 f"• {pending['pretty_date']}\n"
@@ -10896,7 +10953,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
             "end": result.end,
             "source": "natural_appointment_confirmation",
         })
-        _PENDING_GCAL_APPOINTMENT_DRAFTS.pop(key, None)
+        clear_pending_action(action.action_id)
         await update.message.reply_text(
             f"📅 Listo{vocative}. Creé la cita en tu Google Calendar.\n\n"
             f"• {pending['pretty_date']}\n"
@@ -10915,50 +10972,38 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     return True
 
 
-# --------------------------------------------------
-# Karen Google Calendar delete confirmation v0
-# Natural flow:
-# user: "Val, borra Cabalgata Intensa"
-# Val: finds matching upcoming event + asks confirmation
-# user: "sí" / "dale" / "confirmo"
-# Val: deletes that specific event_id only
-# --------------------------------------------------
-_PENDING_GCAL_DELETE_DRAFTS = {}
-
-
 async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -> bool:
     from core.client_gcal_write import delete_client_event
 
     if not update or not getattr(update, "message", None):
         return False
 
-    key = int(chat_id)
-    pending = _PENDING_GCAL_DELETE_DRAFTS.get(key)
-    if not pending:
-        return False
-
     client_id = resolve_client_id(chat_id)
     if not client_id:
         return False
+    action = get_pending_action(
+        chat_id,
+        action_type=GCAL_DELETE_ACTION_TYPE,
+        client_id=client_id,
+    )
+    if not action:
+        return False
+    pending = action.payload
     vocative = client_vocative(client_id)
-    norm = _norm_gcal_confirm_text(text)
+    decision = classify_confirmation_reply(text, action)
 
-    confirm_words = {
-        "si", "sí", "ok", "okay", "dale", "confirmo", "confirmar",
-        "borralo", "bórralo", "eliminalo", "elimínalo", "hazlo", "yes",
-    }
-    cancel_words = {
-        "no", "cancelar", "cancela", "mejor no", "olvidalo", "olvídalo", "stop",
-    }
-
-    if norm in cancel_words:
-        _PENDING_GCAL_DELETE_DRAFTS.pop(key, None)
+    if decision == ConfirmationDecision.CANCEL:
+        clear_pending_action(action.action_id)
         await update.message.reply_text(
             f"Listo{vocative}. No borré nada de Google Calendar. 🛑📅"
         )
         return True
 
-    if norm not in confirm_words:
+    if decision == ConfirmationDecision.EXPIRED:
+        clear_pending_action(action.action_id)
+        return False
+
+    if decision != ConfirmationDecision.CONFIRM:
         return False
 
     result = delete_client_event(
@@ -10977,7 +11022,7 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
             "end": pending.get("end") or "",
             "source": "natural_delete_confirmation",
         })
-        _PENDING_GCAL_DELETE_DRAFTS.pop(key, None)
+        clear_pending_action(action.action_id)
         await update.message.reply_text(
             f"🗑️ Listo{vocative}. Borré ese evento de Google Calendar.\n\n"
             f"• {pending['summary']}\n"
@@ -11076,12 +11121,27 @@ async def try_gcal_delete_natural(update, chat_id, text) -> bool:
         return True
 
     m = matches[0]
-    _PENDING_GCAL_DELETE_DRAFTS[int(chat_id)] = {
+    delete_payload = {
         "event_id": m.get("id") or "",
         "summary": m.get("summary") or "",
         "start": m.get("start") or "",
         "end": m.get("end") or "",
     }
+    _clear_existing_gcal_pending(chat_id, client_id, GCAL_DELETE_ACTION_TYPE)
+    create_pending_action(
+        PendingAction(
+            action_id=_gcal_action_id(GCAL_DELETE_ACTION_TYPE, chat_id),
+            chat_id=int(chat_id),
+            client_id=client_id,
+            action_type=GCAL_DELETE_ACTION_TYPE,
+            display_summary=f"{delete_payload['start']} · {delete_payload['summary']}",
+            confirm_words=GCAL_DELETE_CONFIRM_WORDS,
+            cancel_words=GCAL_DELETE_CANCEL_WORDS,
+            expires_at=_gcal_pending_expires_at(),
+            payload=delete_payload,
+            audit_metadata={"source": "natural_delete_confirmation"},
+        )
+    )
 
     await update.message.reply_text(
         "🗑️ Encontré este evento en Google Calendar:\n\n"
@@ -11299,7 +11359,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     pretty_time = due_local.strftime("%I:%M %p").lstrip("0")
 
     # Google Calendar write is now available for Karen, but must stay behind confirmation.
-    _PENDING_GCAL_APPOINTMENT_DRAFTS[int(chat_id)] = {
+    appointment_payload = {
         "title": title,
         "start_iso": due_local.isoformat(),
         "duration_minutes": 60,
@@ -11307,6 +11367,21 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         "pretty_date": pretty_date,
         "pretty_time": pretty_time,
     }
+    _clear_existing_gcal_pending(chat_id, client_id, GCAL_CREATE_ACTION_TYPE)
+    create_pending_action(
+        PendingAction(
+            action_id=_gcal_action_id(GCAL_CREATE_ACTION_TYPE, chat_id),
+            chat_id=int(chat_id),
+            client_id=client_id,
+            action_type=GCAL_CREATE_ACTION_TYPE,
+            display_summary=f"{pretty_date} · {pretty_time} · {title}",
+            confirm_words=GCAL_CREATE_CONFIRM_WORDS,
+            cancel_words=GCAL_CREATE_CANCEL_WORDS,
+            expires_at=_gcal_pending_expires_at(),
+            payload=appointment_payload,
+            audit_metadata={"source": "natural_appointment_confirmation"},
+        )
+    )
 
     msg = (
         f"📅 Puedo crear esta cita en tu Google Calendar{vocative}.\n\n"
