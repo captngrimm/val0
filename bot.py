@@ -58,6 +58,11 @@ from core.case_timeline import (
 )
 from core.document_extraction_readiness import document_capability_summary
 from core.document_registry import document_record_from_vfms_metadata
+from core.daily_operator import (
+    build_daily_operator_snapshot_from_sources,
+    filter_today_items,
+    safe_daily_operator_summary,
+)
 from core.pending_actions import (
     PendingAction,
     ConfirmationDecision,
@@ -5518,6 +5523,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     if looks_like_technical_paste(text):
         await update.message.reply_text(TECHNICAL_PASTE_REPLY)
         return
+
+    try:
+        if await maybe_handle_karen_daily_operator_query(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DAILY_OPERATOR_PIPELINE_ROUTE] failed: {e}")
 
     # Preferred name (defaults)
     try:
@@ -12834,6 +12845,296 @@ async def maybe_handle_karen_case_timeline_query(update: Update, context: Contex
     return True
 
 
+def _normalize_daily_operator_query(text: str) -> str:
+    norm = _norm_text(text or "")
+    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
+    norm = re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+    norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
+    return norm
+
+
+def _looks_like_karen_daily_operator_query(text: str) -> bool:
+    norm = _normalize_daily_operator_query(text)
+    if not norm:
+        return False
+
+    negative_markers = (
+        "agenda",
+        "cita",
+        "calendario",
+        "google calendar",
+        "manana",
+        "mañana",
+        "esta semana",
+        "recuerdame",
+        "recuérdame",
+        "recordatorio",
+        "documento",
+        "documentos",
+        "archivo",
+        "archivos",
+        "vfms",
+        "cronologia",
+        "cronología",
+        "linea de tiempo",
+        "línea de tiempo",
+        "que paso en",
+        "qué pasó en",
+        "super",
+        "súper",
+        "supermercado",
+        "lista",
+        "finca",
+        "terreno",
+        "heredero",
+        "herederos",
+        "abogada",
+        "abogado",
+        "nora",
+        "paquete",
+    )
+    if any(marker in norm for marker in negative_markers):
+        return False
+
+    exact_markers = {
+        "que hago hoy",
+        "qué hago hoy",
+        "que sigue",
+        "qué sigue",
+        "dame mi resumen del dia",
+        "dame mi resumen del día",
+        "resumen del dia",
+        "resumen del día",
+        "estoy perdida organizame",
+        "estoy perdida organízame",
+        "estoy perdido organizame",
+        "estoy perdido organízame",
+        "que tengo pendiente",
+        "qué tengo pendiente",
+        "que tengo pendientes",
+        "qué tengo pendientes",
+        "mis pendientes",
+    }
+    if norm in exact_markers:
+        return True
+
+    return (
+        "estoy perdida" in norm
+        and ("organizame" in norm or "organízame" in norm)
+    )
+
+
+def _daily_operator_document_records_from_notes(notes) -> list[dict]:
+    records = []
+    for note in notes or ():
+        source = str(note.get("source") or "").strip()
+        if source != "telegram_attachment_vfms":
+            continue
+        note_text = str(note.get("note_text") or "")
+
+        def first(pattern: str) -> str:
+            m = re.search(pattern, note_text, flags=re.IGNORECASE)
+            return m.group(1).strip() if m else ""
+
+        filename = first(r"- Archivo:\s*(.+)") or "documento"
+        status = first(r"- Estado:\s*(.+)") or "stored"
+        caption = first(r"- Nota usuario:\s*(.+)")
+        ingest_id = first(r"- VFMS ingest_id:\s*(.+)")
+        records.append({
+            "document_id": f"case_note:{note.get('id')}",
+            "filename": filename,
+            "status": status,
+            "caption": caption,
+            "ingest_id": ingest_id,
+            "source": source,
+            "source_id": str(note.get("id") or ""),
+            "created_at": str(note.get("created_at") or ""),
+        })
+    return records
+
+
+def _format_daily_operator_items(items, *, empty: str, limit: int = 5) -> list[str]:
+    out = []
+    for item in list(items or ())[:limit]:
+        title = str(item.get("title") or "").strip()
+        due = str(item.get("due_at") or "").strip()
+        status = str(item.get("status") or "").strip()
+        label = title or "(sin título)"
+        if due:
+            label = f"{due[:16]} · {label}"
+        if status and status not in ("pending", "today"):
+            label = f"{label} [{status}]"
+        out.append(f"- {label}")
+    return out or [f"- {empty}"]
+
+
+def _build_karen_daily_operator_reply(chat_id: int, client_id: str) -> str:
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import fetch_open_commitments, list_reminders_for_chat
+
+    tz = ZoneInfo("America/Panama")
+    today = datetime.now(tz).date().isoformat()
+    warnings = ["Google Calendar no se consultó en este modo v0; agenda externa queda separada."]
+    reminders = []
+    tasks = []
+    pending_actions = []
+    notes = []
+    case_id = ""
+
+    try:
+        reminder_rows = list_reminders_for_chat(int(chat_id), statuses=["pending", "sending"], limit=10) or []
+        for row in reminder_rows:
+            due = str(row.get("due_at_utc") or "")
+            reminders.append({
+                "id": row.get("id"),
+                "text": row.get("text") or "",
+                "due_at": due,
+                "status": row.get("status") or "pending",
+                "source": "reminder",
+            })
+    except Exception as e:
+        warnings.append(f"No pude leer recordatorios internos: {e}")
+
+    try:
+        task_rows = fetch_open_commitments(int(chat_id), limit=10) or []
+        for row in task_rows:
+            task = dict(row) if hasattr(row, "keys") else {
+                "id": row[0],
+                "raw_input": row[1],
+                "action": row[2],
+                "target": row[3],
+                "due_date": row[4],
+                "confidence": row[5],
+                "status": row[6],
+            }
+            tasks.append(task)
+    except Exception as e:
+        warnings.append(f"No pude leer tareas abiertas: {e}")
+
+    try:
+        for action_type in (GCAL_CREATE_ACTION_TYPE, GCAL_DELETE_ACTION_TYPE):
+            action = get_pending_action(int(chat_id), action_type=action_type, client_id=client_id)
+            if action:
+                pending_actions.append(action)
+    except Exception as e:
+        warnings.append(f"No pude revisar confirmaciones pendientes: {e}")
+
+    try:
+        case_id = get_active_case_id(int(chat_id)) or ""
+        if case_id:
+            notes = fetch_case_notes(int(chat_id), str(case_id), limit=160)
+    except Exception as e:
+        warnings.append(f"No pude leer notas del caso activo: {e}")
+        case_id = ""
+
+    timeline_events = []
+    document_records = []
+    case_priorities = []
+    if case_id:
+        try:
+            timeline_events = build_timeline_events_from_case_notes(notes, client_id=client_id, case_id=str(case_id))[:8]
+        except Exception as e:
+            warnings.append(f"No pude armar cronología del caso: {e}")
+        try:
+            document_records = _daily_operator_document_records_from_notes(notes)
+        except Exception as e:
+            warnings.append(f"No pude revisar documentos pendientes: {e}")
+        case_priorities.append({
+            "id": f"case:{case_id}:review",
+            "title": "Revisar próximos pasos del caso activo",
+            "description": f"CASE:{case_id}",
+            "source": "case_active",
+            "priority": "high",
+            "status": "pending",
+        })
+
+    snapshot = build_daily_operator_snapshot_from_sources(
+        client_id=client_id,
+        case_id=str(case_id or ""),
+        snapshot_date=today,
+        calendar_events=(),
+        reminders=reminders,
+        tasks=tasks,
+        pending_actions=pending_actions,
+        case_priority_sources=case_priorities,
+        document_records=document_records,
+        timeline_events=timeline_events,
+        warnings=warnings,
+        metadata={"route": "karen_daily_operator_v0", "read_only": True},
+    )
+    safe = safe_daily_operator_summary(snapshot)
+
+    today_agenda = (
+        filter_today_items(snapshot.reminders, snapshot.snapshot_date)
+        + filter_today_items(snapshot.tasks, snapshot.snapshot_date)
+    )
+
+    lines = [
+        "🧭 Modo operador diario",
+        "",
+        "Hoy / Agenda",
+    ]
+    lines.extend(_format_daily_operator_items([safe_item for safe_item in safe["calendar_items"]], empty="No consulté calendario externo en este modo."))
+    if today_agenda:
+        lines.extend(f"- {item.title}" for item in today_agenda[:5])
+
+    lines.extend(["", "Pendientes / recordatorios"])
+    combined_pending = list(safe["pending_actions"]) + list(safe["reminders"]) + list(safe["tasks"])
+    lines.extend(_format_daily_operator_items(combined_pending, empty="No encontré pendientes internos abiertos."))
+
+    lines.extend(["", "Caso legal / finca"])
+    if case_id:
+        case_items = list(safe["case_priorities"]) + list(safe["timeline_items"])
+        lines.extend(_format_daily_operator_items(case_items, empty="No encontré eventos de caso listos para mostrar."))
+    else:
+        lines.append("- No hay caso activo para este chat.")
+
+    lines.extend(["", "Documentos a revisar"])
+    lines.extend(_format_daily_operator_items(safe["document_items"], empty="No encontré documentos pendientes de revisión."))
+
+    lines.extend([
+        "",
+        "Siguiente acción sugerida",
+        f"- {safe['suggested_next_action'] or 'revisar agenda y próximos pasos'}",
+    ])
+
+    if safe["warnings"]:
+        lines.extend(["", "Notas"])
+        lines.extend(f"- {w}" for w in safe["warnings"][:3])
+
+    lines.extend([
+        "",
+        "Modo: lectura solamente. No creé, cambié ni borré nada.",
+        "Esto es una organización operativa; no sustituye revisión legal.",
+    ])
+    return "\n".join(lines)
+
+
+async def maybe_handle_karen_daily_operator_query(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+    if looks_like_technical_paste(text):
+        return False
+
+    case_id = ""
+    try:
+        case_id = get_active_case_id(int(chat_id)) or ""
+    except Exception:
+        case_id = ""
+
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
+    if not is_karen_flow:
+        return False
+    if not _looks_like_karen_daily_operator_query(text):
+        return False
+
+    await update.message.reply_text(_build_karen_daily_operator_reply(int(chat_id), client_id), disable_web_page_preview=True)
+    return True
+
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -12902,6 +13203,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception(f"[REMINDER_ACTION] failed: {e}")
 
+    try:
+        if await maybe_handle_karen_daily_operator_query(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DAILY_OPERATOR_ROUTE] failed: {e}")
 
     _audit(
         chat_id,
