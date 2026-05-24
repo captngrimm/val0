@@ -127,6 +127,8 @@ def normalize_founder_intro_intent(text: Any) -> str:
             "eres un bot",
             "que es val",
             "quien eres",
+            "solo telegram",
+            "es solo telegram",
         )
     ):
         return INTENT_WHAT_ARE_YOU

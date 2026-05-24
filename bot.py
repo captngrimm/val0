@@ -60,6 +60,11 @@ from core.client_profiles import (
     render_workflow_not_enabled_message,
     require_workflow_access,
 )
+from core.founder_intro import (
+    INTENT_UNKNOWN as FOUNDER_INTRO_UNKNOWN,
+    normalize_founder_intro_intent,
+    render_founder_intro_response,
+)
 from core.conversation_router import classify_deterministic_intent, normalize_message
 from core.case_timeline import (
     build_timeline_events_from_case_notes,
@@ -13286,6 +13291,84 @@ async def maybe_guard_unknown_client_protected_workflow(update: Update, chat_id:
     return False
 
 
+def _looks_like_founder_intro_excluded_route(text: str) -> bool:
+    norm = _norm_text(text or "")
+    if not norm:
+        return True
+
+    if looks_like_technical_paste(text):
+        return True
+
+    protected_checks = (
+        _looks_like_karen_daily_operator_query(text),
+        _looks_like_karen_timeline_query(text),
+        _looks_like_karen_document_workflow_request(text),
+        _looks_like_karen_legal_case_workflow_request(text),
+        _looks_like_karen_grocery_workflow_request(text),
+    )
+    if any(protected_checks):
+        return True
+
+    route_markers = (
+        "agenda",
+        "calendario",
+        "google calendar",
+        "cita",
+        "reunion con",
+        "reunión con",
+        "tengo reunion",
+        "tengo reunión",
+        "que tengo hoy",
+        "qué tengo hoy",
+        "que tengo manana",
+        "que tengo mañana",
+        "qué tengo mañana",
+        "recuerdame",
+        "recuérdame",
+        "recordatorio",
+        "crea recordatorio",
+        "borra recordatorio",
+        "documento",
+        "documentos",
+        "archivo",
+        "archivos",
+        "vfms",
+        "cronologia",
+        "cronología",
+        "linea de tiempo",
+        "línea de tiempo",
+        "que paso en",
+        "qué pasó en",
+        "super",
+        "súper",
+        "supermercado",
+        "lista de compras",
+        "lista del super",
+        "lista del súper",
+        "finca",
+        "terreno",
+        "nora",
+        "abogada",
+        "abogado",
+        "lawyer",
+    )
+    return any(marker in norm for marker in route_markers)
+
+
+async def maybe_handle_founder_intro_query(update: Update, text: str) -> bool:
+    if not update.message:
+        return False
+    if _looks_like_founder_intro_excluded_route(text):
+        return False
+
+    intent = normalize_founder_intro_intent(text)
+    if intent == FOUNDER_INTRO_UNKNOWN:
+        return False
+
+    await update.message.reply_text(render_founder_intro_response(intent), disable_web_page_preview=True)
+    return True
+
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -13365,6 +13448,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_DAILY_OPERATOR_ROUTE] failed: {e}")
+
+    try:
+        if await maybe_handle_founder_intro_query(update, text):
+            return
+    except Exception as e:
+        logger.exception(f"[FOUNDER_INTRO_ROUTE] failed: {e}")
 
     _audit(
         chat_id,

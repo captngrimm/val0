@@ -100,6 +100,7 @@ def main() -> int:
         "Val, qué viene después": INTENT_ROADMAP,
         "Val, cómo empiezo una prueba": INTENT_TRIAL_GUIDANCE,
         "esto es un bot?": INTENT_WHAT_ARE_YOU,
+        "esto es solo Telegram?": INTENT_WHAT_ARE_YOU,
         "para qué sirves": INTENT_WHAT_CAN_YOU_DO,
         "qué incluye $30": INTENT_FOUNDER_PLAN,
     }
