@@ -243,7 +243,14 @@ def _has_due_date(item: DailyOperatorItem) -> bool:
 
 def _due_date_text(item: DailyOperatorItem) -> str:
     raw = str(item.due_at or "").strip()
-    return raw[:10] if len(raw) >= 10 else ""
+    if len(raw) >= 10:
+        candidate = raw[:10]
+        try:
+            date.fromisoformat(candidate)
+            return candidate
+        except ValueError:
+            return ""
+    return ""
 
 
 def _is_overdue(item: DailyOperatorItem, snapshot_date: str | date | datetime | None) -> bool:
@@ -256,6 +263,18 @@ def _is_upcoming_or_today(item: DailyOperatorItem, snapshot_date: str | date | d
     due = _due_date_text(item)
     today = _today_text(snapshot_date)
     return bool(due and due >= today)
+
+
+def _is_today_or_explicit_today(item: DailyOperatorItem, snapshot_date: str | date | datetime | None) -> bool:
+    due = _due_date_text(item)
+    today = _today_text(snapshot_date)
+    return bool((due and due == today) or (not due and normalize_operator_status(item.status) == "today"))
+
+
+def _is_future(item: DailyOperatorItem, snapshot_date: str | date | datetime | None) -> bool:
+    due = _due_date_text(item)
+    today = _today_text(snapshot_date)
+    return bool(due and due > today)
 
 
 def _is_done(item: DailyOperatorItem) -> bool:
@@ -288,14 +307,28 @@ def _ranked_candidates(items: Iterable[DailyOperatorItem]) -> list[DailyOperator
     return candidates
 
 
+def _ranked_recent_documents(items: Iterable[DailyOperatorItem]) -> list[DailyOperatorItem]:
+    priority_rank = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
+    candidates = [item for item in items or () if not _is_done(item)]
+    candidates.sort(key=lambda item: item.title)
+    candidates.sort(key=lambda item: str(item.due_at or ""), reverse=True)
+    candidates.sort(key=lambda item: priority_rank.get(normalize_operator_priority(item.priority), 2))
+    return candidates
+
+
 def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
-    upcoming_action_candidates = []
+    today_action_candidates = []
+    future_action_candidates = []
     overdue_action_candidates = []
     for field in ("calendar_items", "reminders", "tasks"):
         field_items = list(getattr(snapshot, field))
-        upcoming_action_candidates.extend(
-            item for item in getattr(snapshot, field)
-            if _is_upcoming_or_today(item, snapshot.snapshot_date)
+        today_action_candidates.extend(
+            item for item in field_items
+            if _is_today_or_explicit_today(item, snapshot.snapshot_date)
+        )
+        future_action_candidates.extend(
+            item for item in field_items
+            if _is_future(item, snapshot.snapshot_date)
         )
         overdue_action_candidates.extend(
             item for item in field_items
@@ -311,24 +344,25 @@ def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
         if _is_generic_case_review(item)
     ]
     ranked_groups = (
-        list(snapshot.pending_actions),
-        upcoming_action_candidates,
-        concrete_case_priorities,
-        list(snapshot.document_items),
-        list(snapshot.timeline_items),
-        overdue_action_candidates,
-        generic_case_priorities,
+        (today_action_candidates, _ranked_candidates),
+        (future_action_candidates, _ranked_candidates),
+        (list(snapshot.pending_actions), _ranked_candidates),
+        (concrete_case_priorities, _ranked_candidates),
+        (list(snapshot.document_items), _ranked_recent_documents),
+        (list(snapshot.timeline_items), _ranked_candidates),
+        (overdue_action_candidates, _ranked_candidates),
+        (generic_case_priorities, _ranked_candidates),
     )
 
-    for group in ranked_groups:
-        candidates = _ranked_candidates(group)
+    for group, ranker in ranked_groups:
+        candidates = ranker(group)
         if not candidates:
             continue
         return _next_action_label(candidates[0], snapshot_date=snapshot.snapshot_date)
     return "Elegir una prioridad concreta para hoy"
 
 
-def _safe_item(item: DailyOperatorItem) -> dict[str, Any]:
+def _safe_item(item: DailyOperatorItem, *, snapshot_date: str | date | datetime | None = None) -> dict[str, Any]:
     return {
         "item_id": item.item_id,
         "item_type": item.item_type,
@@ -338,7 +372,7 @@ def _safe_item(item: DailyOperatorItem) -> dict[str, Any]:
         "source_type": item.source_type,
         "source_id": item.source_id,
         "priority": normalize_operator_priority(item.priority),
-        "status": _status_display_label(item),
+        "status": _status_display_label(item, snapshot_date=snapshot_date),
         "raw_status": normalize_operator_status(item.status),
     }
 
@@ -348,13 +382,13 @@ def safe_daily_operator_summary(snapshot: DailyOperatorSnapshot) -> dict[str, An
         "client_id": snapshot.client_id,
         "case_id": snapshot.case_id,
         "snapshot_date": snapshot.snapshot_date,
-        "calendar_items": [_safe_item(item) for item in snapshot.calendar_items],
-        "reminders": [_safe_item(item) for item in snapshot.reminders],
-        "tasks": [_safe_item(item) for item in snapshot.tasks],
-        "pending_actions": [_safe_item(item) for item in snapshot.pending_actions],
-        "case_priorities": [_safe_item(item) for item in snapshot.case_priorities],
-        "document_items": [_safe_item(item) for item in snapshot.document_items],
-        "timeline_items": [_safe_item(item) for item in snapshot.timeline_items],
+        "calendar_items": [_safe_item(item, snapshot_date=snapshot.snapshot_date) for item in snapshot.calendar_items],
+        "reminders": [_safe_item(item, snapshot_date=snapshot.snapshot_date) for item in snapshot.reminders],
+        "tasks": [_safe_item(item, snapshot_date=snapshot.snapshot_date) for item in snapshot.tasks],
+        "pending_actions": [_safe_item(item, snapshot_date=snapshot.snapshot_date) for item in snapshot.pending_actions],
+        "case_priorities": [_safe_item(item, snapshot_date=snapshot.snapshot_date) for item in snapshot.case_priorities],
+        "document_items": [_safe_item(item, snapshot_date=snapshot.snapshot_date) for item in snapshot.document_items],
+        "timeline_items": [_safe_item(item, snapshot_date=snapshot.snapshot_date) for item in snapshot.timeline_items],
         "suggested_next_action": snapshot.suggested_next_action,
         "warnings": list(snapshot.warnings),
         "created_at": snapshot.created_at,
@@ -400,8 +434,10 @@ def _clean_display_title(value: Any, *, fallback: str = "", limit: int = MAX_DIS
     return _truncate_text(text or fallback, limit)
 
 
-def _status_display_label(item: DailyOperatorItem) -> str:
+def _status_display_label(item: DailyOperatorItem, *, snapshot_date: str | date | datetime | None = None) -> str:
     status = normalize_operator_status(item.status)
+    if snapshot_date is not None and item.item_type in {"calendar", "reminder", "task"} and _is_overdue(item, snapshot_date):
+        return "vencido por revisar"
     if status in {"pending", "today", "ready"}:
         return ""
     if status == "unknown":

@@ -149,8 +149,8 @@ def main():
     )
     assert_equal(len(today_all), 2, "today mixed filter")
 
-    assert_equal(snapshot.suggested_next_action, "Responder la confirmación pendiente: Confirmar creación de cita", "pending first next action")
-    assert_equal(choose_suggested_next_action(snapshot), "Responder la confirmación pendiente: Confirmar creación de cita", "chosen next action")
+    assert_equal(snapshot.suggested_next_action, "Atender hoy: Preparar documentos", "today concrete next action")
+    assert_equal(choose_suggested_next_action(snapshot), "Atender hoy: Preparar documentos", "chosen next action")
 
     safe = safe_daily_operator_summary(snapshot)
     assert_equal(safe["client_id"], "client-a", "safe client")
@@ -275,7 +275,7 @@ def main():
     assert_equal(len(composed.case_priorities), 1, "composed case priority")
     assert_equal(composed.calendar_items[0].item_type, "calendar", "composed agenda separate")
     assert_equal(composed.case_priorities[0].item_type, "case_priority", "composed case separate")
-    assert_equal(composed.suggested_next_action, "Responder la confirmación pendiente: Confirmar cita con Nora", "composed pending first")
+    assert_equal(composed.suggested_next_action, "Atender hoy: Llamar a Nora", "composed dated item first")
     composed_safe = safe_daily_operator_summary(composed)
     assert_false("/opt/val0" in str(composed_safe), "composed safe no raw path")
     assert_false("secret" in str(composed_safe), "composed safe no hash")
@@ -367,6 +367,8 @@ def main():
     )
     assert_equal(future_beats_overdue.suggested_next_action, "Próximo pendiente: Preparar la cita con Nora", "future beats overdue reminder")
     assert_false(future_beats_overdue.suggested_next_action.startswith("Atender hoy: Val, recuérdame"), "overdue does not render as today")
+    future_beats_overdue_safe = safe_daily_operator_summary(future_beats_overdue)
+    assert_equal(future_beats_overdue_safe["reminders"][0]["status"], "vencido por revisar", "overdue reminder status honest")
 
     overdue_with_document = build_daily_operator_snapshot(
         client_id="client-a",
@@ -404,6 +406,34 @@ def main():
         ],
     )
     assert_equal(overdue_only.suggested_next_action, "Pendiente vencido por revisar: Val, recuérdame llamar al Juzgado Primero de La Chorrera", "overdue-only uses overdue language")
+    assert_false(overdue_only.suggested_next_action.startswith("Atender hoy:"), "overdue-only never uses today label")
+
+    recent_document_beats_generic = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        document_items=[
+            {
+                "id": "doc-old-review",
+                "title": "foto_anterior.jpg",
+                "status": "ocr_needed",
+                "due_at": "2026-05-20T10:00:00-05:00",
+            },
+            {
+                "id": "doc-new-review",
+                "title": "foto_reciente.jpg",
+                "status": "needs_review",
+                "due_at": "2026-05-23T08:00:00-05:00",
+            },
+        ],
+        case_priorities=[
+            {
+                "id": "case-vague-doc",
+                "title": "Revisar próximos pasos del caso activo",
+                "priority": "high",
+            }
+        ],
+    )
+    assert_equal(recent_document_beats_generic.suggested_next_action, "Revisar documento pendiente: foto_reciente.jpg", "recent review document beats generic fallback")
 
     generic_case_fallback = build_daily_operator_snapshot(
         client_id="client-a",
