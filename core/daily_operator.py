@@ -26,6 +26,7 @@ ITEM_LIST_FIELDS = (
     "document_items",
     "timeline_items",
 )
+MAX_DISPLAY_TITLE_CHARS = 96
 
 
 @dataclass(frozen=True)
@@ -266,21 +267,22 @@ def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
                 item.title,
             )
         )
-        return candidates[0].title
-    return "revisar agenda y próximos pasos"
+        return _next_action_label(candidates[0])
+    return "Elegir una prioridad concreta para hoy"
 
 
 def _safe_item(item: DailyOperatorItem) -> dict[str, Any]:
     return {
         "item_id": item.item_id,
         "item_type": item.item_type,
-        "title": item.title,
-        "description": item.description,
+        "title": _clean_display_title(item.title, fallback="(sin título)"),
+        "description": _truncate_text(item.description, 140),
         "due_at": item.due_at,
         "source_type": item.source_type,
         "source_id": item.source_id,
         "priority": normalize_operator_priority(item.priority),
-        "status": normalize_operator_status(item.status),
+        "status": _status_display_label(item),
+        "raw_status": normalize_operator_status(item.status),
     }
 
 
@@ -315,6 +317,68 @@ def _clean_string(value: Any) -> str:
     return " ".join(str(value or "").replace("\n", " ").split()).strip()
 
 
+def _truncate_text(value: Any, limit: int = MAX_DISPLAY_TITLE_CHARS) -> str:
+    text = _clean_string(value)
+    if len(text) <= limit:
+        return text
+    trimmed = text[: max(0, limit - 1)].rstrip(" .,;:-")
+    return f"{trimmed}…"
+
+
+def _clean_display_title(value: Any, *, fallback: str = "", limit: int = MAX_DISPLAY_TITLE_CHARS) -> str:
+    text = _clean_string(value)
+    for prefix in (
+        "recordatorio:",
+        "recordatorio",
+        "tarea:",
+        "tarea",
+        "nota:",
+        "nota",
+        "case note:",
+        "case_note:",
+    ):
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):].strip(" :-")
+            break
+    return _truncate_text(text or fallback, limit)
+
+
+def _status_display_label(item: DailyOperatorItem) -> str:
+    status = normalize_operator_status(item.status)
+    if status in {"pending", "today", "ready"}:
+        return ""
+    if status == "unknown":
+        return "estado por revisar" if item.item_type == "document" else ""
+    labels = {
+        "done": "hecho",
+        "blocked": "bloqueado",
+        "needs_review": "requiere revisión",
+        "ocr_needed": "requiere OCR/revisión",
+        "unsupported": "no extraíble automático",
+    }
+    return labels.get(status, "")
+
+
+def _next_action_label(item: DailyOperatorItem) -> str:
+    title = _clean_display_title(item.title)
+    if item.item_type == "pending_action":
+        return f"Responder la confirmación pendiente: {title}"
+    if item.item_type in {"calendar", "reminder", "task"}:
+        return f"Atender hoy: {title}"
+    if item.item_type == "case_priority":
+        return title if title.lower().startswith("revisar") else f"Revisar: {title}"
+    if item.item_type == "document":
+        status = normalize_operator_status(item.status)
+        if status in {"ocr_needed", "needs_review", "unknown"}:
+            return f"Revisar documento pendiente: {title}"
+        if status == "unsupported":
+            return f"Decidir revisión manual para: {title}"
+        return f"Revisar documento: {title}"
+    if item.item_type == "timeline":
+        return f"Revisar cronología: {title}"
+    return title or "Elegir una prioridad concreta para hoy"
+
+
 def _safe_metadata(row: Any, allowed_keys: Iterable[str]) -> dict[str, Any]:
     out = {}
     for key in allowed_keys:
@@ -328,7 +392,7 @@ def _safe_metadata(row: Any, allowed_keys: Iterable[str]) -> dict[str, Any]:
 def collect_calendar_items(events: Iterable[Any] | None, *, source_type: str = "google_calendar") -> tuple[DailyOperatorItem, ...]:
     items = []
     for event in events or ():
-        title = _clean_string(_get_value(event, "title", "summary", "text", default=""))
+        title = _clean_display_title(_get_value(event, "title", "summary", "text", default=""))
         if not title:
             title = "(sin título)"
         event_id = _clean_string(_get_value(event, "item_id", "id", "event_id", "source_id", default=title))
@@ -353,7 +417,7 @@ def collect_calendar_items(events: Iterable[Any] | None, *, source_type: str = "
 def collect_reminder_items(reminders: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
     items = []
     for reminder in reminders or ():
-        title = _clean_string(_get_value(reminder, "title", "text", "summary", default=""))
+        title = _clean_display_title(_get_value(reminder, "title", "text", "summary", default=""))
         if not title:
             continue
         reminder_id = _clean_string(_get_value(reminder, "item_id", "id", "source_id", default=title))
@@ -377,11 +441,11 @@ def collect_reminder_items(reminders: Iterable[Any] | None) -> tuple[DailyOperat
 def collect_task_items(tasks: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
     items = []
     for task in tasks or ():
-        title = _clean_string(_get_value(task, "title", "raw_input", "task_text", "text", "summary", default=""))
+        title = _clean_display_title(_get_value(task, "title", "action", "task_text", "text", "summary", "raw_input", default=""))
         if not title:
             action = _clean_string(_get_value(task, "action", default=""))
             target = _clean_string(_get_value(task, "target", default=""))
-            title = " ".join(x for x in (action, target) if x).strip()
+            title = _clean_display_title(" ".join(x for x in (action, target) if x).strip())
         if not title:
             continue
         task_id = _clean_string(_get_value(task, "item_id", "id", "source_id", default=title))
@@ -405,7 +469,7 @@ def collect_task_items(tasks: Iterable[Any] | None) -> tuple[DailyOperatorItem, 
 def collect_pending_action_items(actions: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
     items = []
     for action in actions or ():
-        title = _clean_string(_get_value(action, "title", "display_summary", "summary", "action_type", default=""))
+        title = _clean_display_title(_get_value(action, "title", "display_summary", "summary", "action_type", default=""))
         if not title:
             continue
         action_id = _clean_string(_get_value(action, "item_id", "action_id", "id", "source_id", default=title))
@@ -429,7 +493,7 @@ def collect_pending_action_items(actions: Iterable[Any] | None) -> tuple[DailyOp
 def collect_case_priority_items(items: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
     out = []
     for item in items or ():
-        title = _clean_string(_get_value(item, "title", "summary", "note_text", "text", default=""))
+        title = _clean_display_title(_get_value(item, "title", "summary", "note_text", "text", default=""))
         if not title:
             continue
         item_id = _clean_string(_get_value(item, "item_id", "id", "source_id", default=title))
@@ -466,8 +530,8 @@ def collect_document_review_items(records: Iterable[Any] | None) -> tuple[DailyO
         status = _document_status_from_record(record)
         if status not in review_statuses:
             continue
-        filename = _clean_string(_get_value(record, "filename", "title", "name", default="documento"))
-        caption = _clean_string(_get_value(record, "caption", "description", default=""))
+        filename = _clean_display_title(_get_value(record, "filename", "title", "name", default="documento"), fallback="documento")
+        caption = _truncate_text(_get_value(record, "caption", "description", default=""), 140)
         document_id = _clean_string(_get_value(record, "document_id", "item_id", "id", "source_id", default=filename))
         items.append(
             DailyOperatorItem(
@@ -489,7 +553,7 @@ def collect_document_review_items(records: Iterable[Any] | None) -> tuple[DailyO
 def collect_timeline_items(events: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:
     items = []
     for event in events or ():
-        title = _clean_string(_get_value(event, "title", "summary", "description", default=""))
+        title = _clean_display_title(_get_value(event, "title", "summary", "description", default=""))
         if not title:
             continue
         event_id = _clean_string(_get_value(event, "event_id", "item_id", "id", "source_id", default=title))

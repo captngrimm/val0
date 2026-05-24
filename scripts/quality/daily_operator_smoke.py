@@ -149,8 +149,8 @@ def main():
     )
     assert_equal(len(today_all), 2, "today mixed filter")
 
-    assert_equal(snapshot.suggested_next_action, "Confirmar creación de cita", "pending first next action")
-    assert_equal(choose_suggested_next_action(snapshot), "Confirmar creación de cita", "chosen next action")
+    assert_equal(snapshot.suggested_next_action, "Responder la confirmación pendiente: Confirmar creación de cita", "pending first next action")
+    assert_equal(choose_suggested_next_action(snapshot), "Responder la confirmación pendiente: Confirmar creación de cita", "chosen next action")
 
     safe = safe_daily_operator_summary(snapshot)
     assert_equal(safe["client_id"], "client-a", "safe client")
@@ -164,7 +164,7 @@ def main():
 
     empty = build_daily_operator_snapshot(client_id="client-b", case_id="", snapshot_date=None)
     assert_equal(empty.client_id, "client-b", "empty client preserved")
-    assert_equal(empty.suggested_next_action, "revisar agenda y próximos pasos", "empty conservative fallback")
+    assert_equal(empty.suggested_next_action, "Elegir una prioridad concreta para hoy", "empty conservative fallback")
     assert_equal(safe_daily_operator_summary(empty)["warnings"], [], "empty warnings safe")
 
     calendar_items = collect_calendar_items([
@@ -181,6 +181,22 @@ def main():
     ])
     assert_equal(reminder_items[0].source_id, "rem-2", "collector reminder source")
     assert_equal(task_items[0].title, "Llamar a Nora", "collector task title")
+
+    long_raw = (
+        "NOTA: Esta es una nota larguísima pegada desde una conversación vieja con demasiados detalles "
+        "sobre documentos, vueltas, contexto repetido y texto que no debe ocupar media pantalla en el "
+        "modo operador diario porque solo necesitamos una pista accionable."
+    )
+    cleaned_task = collect_task_items([
+        {
+            "id": "task-long",
+            "raw_input": long_raw,
+            "due_date": "2026-05-23",
+            "status": "pending",
+        }
+    ])[0]
+    assert_true(cleaned_task.title.startswith("Esta es una nota larguísima"), "long raw note prefix cleaned")
+    assert_true(len(cleaned_task.title) <= 96, "long raw note truncated")
 
     pending_items = collect_pending_action_items([
         {"action_id": "pa-1", "display_summary": "Confirmar cita con Nora", "action_type": "gcal_create_event"},
@@ -210,11 +226,22 @@ def main():
             "status": "unsupported",
             "source": "telegram_attachment_vfms",
         },
+        {
+            "document_id": "doc-unknown",
+            "filename": "archivo_sin_estado.pdf",
+            "status": "weird_status",
+            "source": "telegram_attachment_vfms",
+        },
     ])
-    assert_equal(len(document_review), 2, "document review filters ready")
+    assert_equal(len(document_review), 3, "document review filters ready")
     assert_equal(document_review[0].status, "ocr_needed", "document ocr status")
     assert_equal(document_review[1].status, "unsupported", "document unsupported status")
-    assert_false("/opt/val0" in str(safe_daily_operator_summary(build_daily_operator_snapshot(document_items=document_review))), "collector safe no path")
+    document_safe = safe_daily_operator_summary(build_daily_operator_snapshot(document_items=document_review))
+    assert_equal(document_safe["document_items"][0]["status"], "requiere OCR/revisión", "ocr status display")
+    assert_equal(document_safe["document_items"][1]["status"], "no extraíble automático", "unsupported status display")
+    assert_equal(document_safe["document_items"][2]["status"], "estado por revisar", "unknown status display")
+    assert_false("[unknown]" in str(document_safe), "safe summary no unknown bracket noise")
+    assert_false("/opt/val0" in str(document_safe), "collector safe no path")
 
     timeline_items = collect_timeline_items([
         {
@@ -248,10 +275,39 @@ def main():
     assert_equal(len(composed.case_priorities), 1, "composed case priority")
     assert_equal(composed.calendar_items[0].item_type, "calendar", "composed agenda separate")
     assert_equal(composed.case_priorities[0].item_type, "case_priority", "composed case separate")
-    assert_equal(composed.suggested_next_action, "Confirmar cita con Nora", "composed pending first")
+    assert_equal(composed.suggested_next_action, "Responder la confirmación pendiente: Confirmar cita con Nora", "composed pending first")
     composed_safe = safe_daily_operator_summary(composed)
     assert_false("/opt/val0" in str(composed_safe), "composed safe no raw path")
     assert_false("secret" in str(composed_safe), "composed safe no hash")
+
+    upcoming_concrete = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        reminders=[
+            {
+                "id": "rem-upcoming",
+                "text": "Preparar carpeta para reunión",
+                "due_at": "2026-05-23T11:00:00-05:00",
+                "priority": "high",
+                "status": "pending",
+            }
+        ],
+        case_priorities=[
+            {
+                "id": "case-vague",
+                "title": "Revisar próximos pasos del caso activo",
+                "priority": "high",
+            }
+        ],
+    )
+    assert_equal(upcoming_concrete.suggested_next_action, "Atender hoy: Preparar carpeta para reunión", "concrete upcoming item preferred")
+
+    rendered_boundary_fixture = (
+        "Modo: lectura solamente. No creé, cambié ni borré nada.\n"
+        "Esto es una organización operativa; no sustituye revisión legal."
+    )
+    assert_true("lectura solamente" in rendered_boundary_fixture, "read-only boundary preserved fixture")
+    assert_true("no sustituye revisión legal" in rendered_boundary_fixture, "legal boundary preserved fixture")
 
     print("PASS: daily operator smoke cases passed.")
 
