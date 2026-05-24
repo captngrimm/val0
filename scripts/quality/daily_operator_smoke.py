@@ -302,6 +302,80 @@ def main():
     )
     assert_equal(upcoming_concrete.suggested_next_action, "Atender hoy: Preparar carpeta para reunión", "concrete upcoming item preferred")
 
+    future_concrete = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        tasks=[
+            {
+                "id": "task-future",
+                "title": "Cita con Mabel, tema Libro Finca 10082",
+                "due_at": "2026-05-24T18:00:00-05:00",
+                "priority": "normal",
+                "status": "pending",
+            }
+        ],
+        case_priorities=[
+            {
+                "id": "case-vague-2",
+                "title": "Revisar próximos pasos del caso activo",
+                "priority": "high",
+            }
+        ],
+    )
+    assert_equal(future_concrete.suggested_next_action, "Atender hoy: Cita con Mabel, tema Libro Finca 10082", "concrete dated item beats generic case review")
+
+    document_next = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        document_items=[
+            {
+                "id": "doc-review",
+                "title": "foto_escritura_reciente.jpg",
+                "status": "ocr_needed",
+                "source": "telegram_attachment_vfms",
+            }
+        ],
+        case_priorities=[
+            {
+                "id": "case-vague-3",
+                "title": "Revisar próximos pasos del caso activo",
+                "priority": "high",
+            }
+        ],
+    )
+    assert_equal(document_next.suggested_next_action, "Revisar documento pendiente: foto_escritura_reciente.jpg", "document review beats generic case review")
+
+    generic_case_fallback = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        case_priorities=[
+            {
+                "id": "case-vague-4",
+                "title": "Revisar próximos pasos del caso activo",
+                "priority": "high",
+            }
+        ],
+    )
+    assert_equal(generic_case_fallback.suggested_next_action, "Revisar próximos pasos del caso activo", "generic case review fallback")
+
+    long_suggested = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        reminders=[
+            {
+                "id": "rem-long",
+                "text": (
+                    "Preparar la cita con Nora revisando carpeta completa, documentos nuevos, fotos, "
+                    "notas, preguntas y todo lo que falte para no llegar perdida"
+                ),
+                "due_at": "2026-05-23T09:00:00-05:00",
+                "priority": "high",
+            }
+        ],
+    )
+    assert_true(len(long_suggested.suggested_next_action) <= 112, "suggested action text truncated cleanly")
+    assert_true(long_suggested.suggested_next_action.startswith("Atender hoy: Preparar la cita con Nora"), "suggested action keeps useful meaning")
+
     rendered_boundary_fixture = (
         "Modo: lectura solamente. No creé, cambié ni borré nada.\n"
         "Esto es una organización operativa; no sustituye revisión legal."

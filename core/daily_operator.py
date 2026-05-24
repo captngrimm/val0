@@ -237,36 +237,69 @@ def filter_today_items(items: Iterable[DailyOperatorItem], snapshot_date: str | 
     return out
 
 
-def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
-    today_candidates = []
-    for field in ("calendar_items", "reminders", "tasks"):
-        today_candidates.extend(filter_today_items(getattr(snapshot, field), snapshot.snapshot_date))
+def _has_due_date(item: DailyOperatorItem) -> bool:
+    return bool(str(item.due_at or "").strip())
 
-    ranked_groups = (
-        list(snapshot.pending_actions),
-        today_candidates,
-        list(snapshot.case_priorities),
-        list(snapshot.document_items),
-        list(snapshot.timeline_items),
-    )
+
+def _is_done(item: DailyOperatorItem) -> bool:
+    return normalize_operator_status(item.status) == "done"
+
+
+def _is_generic_case_review(item: DailyOperatorItem) -> bool:
+    title = _clean_string(item.title).lower()
+    generic_titles = {
+        "revisar próximos pasos del caso activo",
+        "revisar proximos pasos del caso activo",
+        "revisar próximos pasos",
+        "revisar proximos pasos",
+    }
+    return item.item_type == "case_priority" and title in generic_titles
+
+
+def _ranked_candidates(items: Iterable[DailyOperatorItem]) -> list[DailyOperatorItem]:
     priority_rank = {"urgent": 0, "high": 1, "normal": 2, "low": 3}
     status_penalty = {"blocked": 1, "done": 9}
+    candidates = [item for item in items or () if not _is_done(item)]
+    candidates.sort(
+        key=lambda item: (
+            priority_rank.get(normalize_operator_priority(item.priority), 2),
+            status_penalty.get(normalize_operator_status(item.status), 0),
+            str(item.due_at or "9999-99-99"),
+            item.title,
+        )
+    )
+    return candidates
+
+
+def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
+    dated_action_candidates = []
+    for field in ("calendar_items", "reminders", "tasks"):
+        dated_action_candidates.extend(
+            item for item in getattr(snapshot, field)
+            if _has_due_date(item)
+        )
+
+    concrete_case_priorities = [
+        item for item in snapshot.case_priorities
+        if not _is_generic_case_review(item)
+    ]
+    generic_case_priorities = [
+        item for item in snapshot.case_priorities
+        if _is_generic_case_review(item)
+    ]
+    ranked_groups = (
+        list(snapshot.pending_actions),
+        dated_action_candidates,
+        concrete_case_priorities,
+        list(snapshot.document_items),
+        list(snapshot.timeline_items),
+        generic_case_priorities,
+    )
 
     for group in ranked_groups:
-        candidates = [
-            item for item in group
-            if normalize_operator_status(item.status) != "done"
-        ]
+        candidates = _ranked_candidates(group)
         if not candidates:
             continue
-        candidates.sort(
-            key=lambda item: (
-                priority_rank.get(normalize_operator_priority(item.priority), 2),
-                status_penalty.get(normalize_operator_status(item.status), 0),
-                str(item.due_at or "9999-99-99"),
-                item.title,
-            )
-        )
         return _next_action_label(candidates[0])
     return "Elegir una prioridad concreta para hoy"
 
