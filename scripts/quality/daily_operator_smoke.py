@@ -322,7 +322,7 @@ def main():
             }
         ],
     )
-    assert_equal(future_concrete.suggested_next_action, "Atender hoy: Cita con Mabel, tema Libro Finca 10082", "concrete dated item beats generic case review")
+    assert_equal(future_concrete.suggested_next_action, "Próximo pendiente: Cita con Mabel, tema Libro Finca 10082", "concrete dated item beats generic case review")
 
     document_next = build_daily_operator_snapshot(
         client_id="client-a",
@@ -344,6 +344,66 @@ def main():
         ],
     )
     assert_equal(document_next.suggested_next_action, "Revisar documento pendiente: foto_escritura_reciente.jpg", "document review beats generic case review")
+
+    future_beats_overdue = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        reminders=[
+            {
+                "id": "rem-old",
+                "text": "Val, recuérdame llamar al Juzgado Primero de La Chorrera",
+                "due_at": "2026-05-10T09:00:00-05:00",
+                "priority": "urgent",
+                "status": "pending",
+            },
+            {
+                "id": "rem-future",
+                "text": "Preparar la cita con Nora",
+                "due_at": "2026-05-24T09:00:00-05:00",
+                "priority": "normal",
+                "status": "pending",
+            },
+        ],
+    )
+    assert_equal(future_beats_overdue.suggested_next_action, "Próximo pendiente: Preparar la cita con Nora", "future beats overdue reminder")
+    assert_false(future_beats_overdue.suggested_next_action.startswith("Atender hoy: Val, recuérdame"), "overdue does not render as today")
+
+    overdue_with_document = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        reminders=[
+            {
+                "id": "rem-old-2",
+                "text": "Val, recuérdame llamar al Juzgado Primero de La Chorrera",
+                "due_at": "2026-05-10T09:00:00-05:00",
+                "priority": "urgent",
+                "status": "pending",
+            }
+        ],
+        document_items=[
+            {
+                "id": "doc-review-2",
+                "title": "foto_nueva_para_revisar.jpg",
+                "status": "ocr_needed",
+            }
+        ],
+    )
+    assert_equal(overdue_with_document.suggested_next_action, "Revisar documento pendiente: foto_nueva_para_revisar.jpg", "review document beats overdue reminder")
+
+    overdue_only = build_daily_operator_snapshot(
+        client_id="client-a",
+        snapshot_date="2026-05-23",
+        reminders=[
+            {
+                "id": "rem-old-3",
+                "text": "Val, recuérdame llamar al Juzgado Primero de La Chorrera",
+                "due_at": "2026-05-10T09:00:00-05:00",
+                "priority": "urgent",
+                "status": "pending",
+            }
+        ],
+    )
+    assert_equal(overdue_only.suggested_next_action, "Pendiente vencido por revisar: Val, recuérdame llamar al Juzgado Primero de La Chorrera", "overdue-only uses overdue language")
 
     generic_case_fallback = build_daily_operator_snapshot(
         client_id="client-a",

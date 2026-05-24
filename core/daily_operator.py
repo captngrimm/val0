@@ -241,6 +241,23 @@ def _has_due_date(item: DailyOperatorItem) -> bool:
     return bool(str(item.due_at or "").strip())
 
 
+def _due_date_text(item: DailyOperatorItem) -> str:
+    raw = str(item.due_at or "").strip()
+    return raw[:10] if len(raw) >= 10 else ""
+
+
+def _is_overdue(item: DailyOperatorItem, snapshot_date: str | date | datetime | None) -> bool:
+    due = _due_date_text(item)
+    today = _today_text(snapshot_date)
+    return bool(due and due < today)
+
+
+def _is_upcoming_or_today(item: DailyOperatorItem, snapshot_date: str | date | datetime | None) -> bool:
+    due = _due_date_text(item)
+    today = _today_text(snapshot_date)
+    return bool(due and due >= today)
+
+
 def _is_done(item: DailyOperatorItem) -> bool:
     return normalize_operator_status(item.status) == "done"
 
@@ -272,11 +289,17 @@ def _ranked_candidates(items: Iterable[DailyOperatorItem]) -> list[DailyOperator
 
 
 def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
-    dated_action_candidates = []
+    upcoming_action_candidates = []
+    overdue_action_candidates = []
     for field in ("calendar_items", "reminders", "tasks"):
-        dated_action_candidates.extend(
+        field_items = list(getattr(snapshot, field))
+        upcoming_action_candidates.extend(
             item for item in getattr(snapshot, field)
-            if _has_due_date(item)
+            if _is_upcoming_or_today(item, snapshot.snapshot_date)
+        )
+        overdue_action_candidates.extend(
+            item for item in field_items
+            if _is_overdue(item, snapshot.snapshot_date)
         )
 
     concrete_case_priorities = [
@@ -289,10 +312,11 @@ def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
     ]
     ranked_groups = (
         list(snapshot.pending_actions),
-        dated_action_candidates,
+        upcoming_action_candidates,
         concrete_case_priorities,
         list(snapshot.document_items),
         list(snapshot.timeline_items),
+        overdue_action_candidates,
         generic_case_priorities,
     )
 
@@ -300,7 +324,7 @@ def choose_suggested_next_action(snapshot: DailyOperatorSnapshot) -> str:
         candidates = _ranked_candidates(group)
         if not candidates:
             continue
-        return _next_action_label(candidates[0])
+        return _next_action_label(candidates[0], snapshot_date=snapshot.snapshot_date)
     return "Elegir una prioridad concreta para hoy"
 
 
@@ -392,11 +416,17 @@ def _status_display_label(item: DailyOperatorItem) -> str:
     return labels.get(status, "")
 
 
-def _next_action_label(item: DailyOperatorItem) -> str:
+def _next_action_label(item: DailyOperatorItem, *, snapshot_date: str | date | datetime | None = None) -> str:
     title = _clean_display_title(item.title)
     if item.item_type == "pending_action":
         return f"Responder la confirmación pendiente: {title}"
     if item.item_type in {"calendar", "reminder", "task"}:
+        if snapshot_date is not None and _is_overdue(item, snapshot_date):
+            return f"Pendiente vencido por revisar: {title}"
+        if snapshot_date is not None and _is_upcoming_or_today(item, snapshot_date):
+            due = _due_date_text(item)
+            if due and due > _today_text(snapshot_date):
+                return f"Próximo pendiente: {title}"
         return f"Atender hoy: {title}"
     if item.item_type == "case_priority":
         return title if title.lower().startswith("revisar") else f"Revisar: {title}"
