@@ -9,6 +9,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from core.daily_operator import (
     DailyOperatorItem,
+    build_daily_operator_compact_items,
     build_daily_operator_snapshot,
     build_daily_operator_snapshot_from_sources,
     choose_suggested_next_action,
@@ -21,6 +22,7 @@ from core.daily_operator import (
     filter_today_items,
     normalize_operator_priority,
     normalize_operator_status,
+    render_daily_operator_compact,
     safe_daily_operator_summary,
 )
 
@@ -472,6 +474,92 @@ def main():
     )
     assert_true("lectura solamente" in rendered_boundary_fixture, "read-only boundary preserved fixture")
     assert_true("no sustituye revisión legal" in rendered_boundary_fixture, "legal boundary preserved fixture")
+
+    compact_heavy = build_daily_operator_snapshot(
+        client_id="client-a",
+        case_id="CASE-1",
+        snapshot_date="2026-05-23",
+        calendar_items=[
+            {
+                "id": "cal-today",
+                "title": "Reunión de seguimiento",
+                "due_at": "2026-05-23T10:00:00-05:00",
+                "source": "fixture_calendar",
+            }
+        ],
+        reminders=[
+            {
+                "id": "rem-old-compact",
+                "text": "Val, recuérdame llamar al juzgado viejo",
+                "due_at": "2026-05-10T09:00:00-05:00",
+                "status": "pending",
+                "priority": "urgent",
+            },
+            {
+                "id": "rem-future-compact",
+                "text": "Preparar cita con Nora",
+                "due_at": "2026-05-29T19:00:00-05:00",
+                "status": "pending",
+                "priority": "normal",
+            },
+        ],
+        document_items=[
+            {
+                "id": "doc-compact-1",
+                "title": "foto_reciente.jpg",
+                "status": "ocr_needed",
+                "due_at": "2026-05-23T08:00:00-05:00",
+            },
+            {
+                "id": "doc-compact-2",
+                "title": "documento_viejo.pdf",
+                "status": "needs_review",
+                "due_at": "2026-05-20T08:00:00-05:00",
+            },
+            {
+                "id": "doc-compact-3",
+                "title": "resumen.docx",
+                "status": "unsupported",
+                "due_at": "2026-05-19T08:00:00-05:00",
+            },
+        ],
+        timeline_items=[
+            {
+                "id": "timeline-old-compact",
+                "title": (
+                    "Historia larga vieja con demasiados detalles privados de años anteriores que no "
+                    "debe aparecer en el resumen compacto por defecto"
+                ),
+                "event_date": "1986",
+                "status": "ready",
+            }
+        ],
+    )
+    compact_items = build_daily_operator_compact_items(compact_heavy)
+    compact_text = render_daily_operator_compact(compact_heavy)
+    numbered_lines = [
+        line for line in compact_text.splitlines()
+        if line[:2] in {"1.", "2.", "3.", "4.", "5."}
+    ]
+    assert_true(3 <= len(compact_items) <= 5, "compact item count bounded")
+    assert_true(len(numbered_lines) <= 5, "compact output max five numbered lines")
+    assert_true(compact_text.startswith("🧭 Hoy"), "compact heading")
+    assert_true("Puedes decir: \"dame detalles del 1\"." in compact_text, "compact detail hint")
+    assert_true("lectura solamente" in compact_text, "compact read-only boundary")
+    assert_true("no sustituye revisión legal" in compact_text, "compact legal boundary")
+    assert_true("Pendiente próximo: Preparar cita con Nora" in compact_text, "compact prefers future concrete pending item")
+    assert_true("Documentos: hay 3 documentos que requieren revisión" in compact_text, "compact summarizes documents")
+    assert_false("documento_viejo.pdf" in compact_text, "compact does not dump full document list")
+    assert_false("resumen.docx" in compact_text, "compact does not dump unsupported document list")
+    assert_false("Historia larga vieja" in compact_text, "compact does not include old timeline notes by default")
+
+    compact_empty = render_daily_operator_compact(
+        build_daily_operator_snapshot(client_id="client-empty", snapshot_date="2026-05-23")
+    )
+    assert_true("Agenda: no tienes citas registradas hoy." in compact_empty, "empty compact agenda safe")
+    assert_true("Pendientes: no encontré pendientes internos abiertos." in compact_empty, "empty compact pending safe")
+    assert_true("Siguiente acción: Elegir una prioridad concreta para hoy" in compact_empty, "empty compact next action safe")
+    assert_true("lectura solamente" in compact_empty, "empty compact read-only boundary")
 
     print("PASS: daily operator smoke cases passed.")
 

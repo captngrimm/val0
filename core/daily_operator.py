@@ -61,6 +61,18 @@ class DailyOperatorSnapshot:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class DailyOperatorCompactItem:
+    item_id: str
+    item_type: str
+    label: str
+    title: str
+    detail: str = ""
+    source_type: str = ""
+    source_id: str = ""
+    status: str = ""
+
+
 def normalize_operator_priority(value: str | None) -> str:
     raw = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     aliases = {
@@ -395,6 +407,71 @@ def safe_daily_operator_summary(snapshot: DailyOperatorSnapshot) -> dict[str, An
     }
 
 
+def build_daily_operator_compact_items(
+    snapshot: DailyOperatorSnapshot,
+    *,
+    max_items: int = 5,
+) -> tuple[DailyOperatorCompactItem, ...]:
+    limit = max(3, min(int(max_items or 5), 5))
+    items: list[DailyOperatorCompactItem] = []
+
+    def add(item: DailyOperatorCompactItem) -> None:
+        if len(items) < limit:
+            items.append(item)
+
+    today_calendar = filter_today_items(snapshot.calendar_items, snapshot.snapshot_date)
+    add(_compact_agenda_item(today_calendar))
+
+    pending_item = _choose_compact_pending_item(snapshot)
+    if pending_item:
+        add(_compact_from_operator_item(pending_item, label=_compact_pending_label(pending_item, snapshot.snapshot_date), snapshot_date=snapshot.snapshot_date))
+    elif len(items) < limit:
+        add(DailyOperatorCompactItem(
+            item_id="pending:none",
+            item_type="pending_summary",
+            label="Pendientes",
+            title="no encontré pendientes internos abiertos.",
+            detail="No hay recordatorios, tareas ni confirmaciones pendientes en esta lectura.",
+        ))
+
+    document_item = _compact_document_summary_item(snapshot.document_items)
+    if document_item:
+        add(document_item)
+
+    next_action = _truncate_text(snapshot.suggested_next_action or "Elegir una prioridad concreta para hoy", 112)
+    add(DailyOperatorCompactItem(
+        item_id="suggested_next_action",
+        item_type="suggested_next_action",
+        label="Siguiente acción",
+        title=next_action,
+        detail="Sugerencia calculada en modo lectura solamente; no ejecuta acciones.",
+    ))
+
+    return tuple(items[:limit])
+
+
+def render_daily_operator_compact(
+    snapshot: DailyOperatorSnapshot,
+    *,
+    max_items: int = 5,
+    include_legal_boundary: bool = True,
+) -> str:
+    compact_items = build_daily_operator_compact_items(snapshot, max_items=max_items)
+    lines = ["🧭 Hoy", ""]
+    for index, item in enumerate(compact_items, start=1):
+        lines.append(f"{index}. {item.label}: {item.title}")
+
+    lines.extend([
+        "",
+        "Puedes decir: \"dame detalles del 1\".",
+        "",
+        "Modo: lectura solamente. No creé, cambié ni borré nada.",
+    ])
+    if include_legal_boundary or _has_case_context(snapshot):
+        lines.append("Esto es una organización operativa; no sustituye revisión legal.")
+    return "\n".join(lines)
+
+
 def _get_value(row: Any, *keys: str, default: Any = "") -> Any:
     for key in keys:
         if isinstance(row, dict) and key in row:
@@ -476,6 +553,235 @@ def _next_action_label(item: DailyOperatorItem, *, snapshot_date: str | date | d
     if item.item_type == "timeline":
         return f"Revisar cronología: {title}"
     return title or "Elegir una prioridad concreta para hoy"
+
+
+def _has_case_context(snapshot: DailyOperatorSnapshot) -> bool:
+    return bool(snapshot.case_id or snapshot.case_priorities or snapshot.timeline_items)
+
+
+def _compact_agenda_item(today_calendar: Iterable[DailyOperatorItem]) -> DailyOperatorCompactItem:
+    events = _ranked_candidates(today_calendar)
+    if not events:
+        return DailyOperatorCompactItem(
+            item_id="agenda:none",
+            item_type="agenda_summary",
+            label="Agenda",
+            title="no tienes citas registradas hoy.",
+            detail="No hay citas de calendario en la lectura compacta.",
+        )
+    first = events[0]
+    title = _compact_title_with_due(first)
+    if len(events) == 1:
+        summary = title
+    else:
+        summary = f"{title} y {len(events) - 1} más hoy"
+    return DailyOperatorCompactItem(
+        item_id=first.item_id,
+        item_type="agenda_summary",
+        label="Agenda",
+        title=summary,
+        detail=_compact_detail(first),
+        source_type=first.source_type,
+        source_id=first.source_id,
+        status=_status_display_label(first),
+    )
+
+
+def _choose_compact_pending_item(snapshot: DailyOperatorSnapshot) -> DailyOperatorItem | None:
+    today_action_candidates = []
+    future_action_candidates = []
+    overdue_action_candidates = []
+    for field in ("reminders", "tasks"):
+        field_items = list(getattr(snapshot, field))
+        today_action_candidates.extend(
+            item for item in field_items
+            if _is_today_or_explicit_today(item, snapshot.snapshot_date)
+        )
+        future_action_candidates.extend(
+            item for item in field_items
+            if _is_future(item, snapshot.snapshot_date)
+        )
+        overdue_action_candidates.extend(
+            item for item in field_items
+            if _is_overdue(item, snapshot.snapshot_date)
+        )
+
+    concrete_case_priorities = [
+        item for item in snapshot.case_priorities
+        if not _is_generic_case_review(item)
+    ]
+    generic_case_priorities = [
+        item for item in snapshot.case_priorities
+        if _is_generic_case_review(item)
+    ]
+    ranked_groups = (
+        (today_action_candidates, _ranked_candidates),
+        (future_action_candidates, _ranked_candidates),
+        (list(snapshot.pending_actions), _ranked_candidates),
+        (concrete_case_priorities, _ranked_candidates),
+        (overdue_action_candidates, _ranked_candidates),
+        (generic_case_priorities, _ranked_candidates),
+    )
+    for group, ranker in ranked_groups:
+        candidates = ranker(group)
+        if candidates:
+            return candidates[0]
+    return None
+
+
+def _compact_pending_label(item: DailyOperatorItem, snapshot_date: str | date | datetime | None) -> str:
+    if item.item_type == "pending_action":
+        return "Confirmación pendiente"
+    if item.item_type == "case_priority":
+        return "Caso"
+    if item.item_type in {"reminder", "task"}:
+        if _is_overdue(item, snapshot_date):
+            return "Pendiente vencido"
+        if _is_future(item, snapshot_date):
+            return "Pendiente próximo"
+        return "Pendiente de hoy"
+    return "Pendiente"
+
+
+def _compact_from_operator_item(
+    item: DailyOperatorItem,
+    *,
+    label: str,
+    snapshot_date: str | date | datetime | None,
+) -> DailyOperatorCompactItem:
+    title = _compact_title_with_due(item, snapshot_date=snapshot_date)
+    status = _status_display_label(item, snapshot_date=snapshot_date)
+    if status:
+        title = f"{title} [{status}]"
+    return DailyOperatorCompactItem(
+        item_id=item.item_id,
+        item_type=item.item_type,
+        label=label,
+        title=title,
+        detail=_compact_detail(item, snapshot_date=snapshot_date),
+        source_type=item.source_type,
+        source_id=item.source_id,
+        status=status,
+    )
+
+
+def _compact_document_summary_item(items: Iterable[DailyOperatorItem]) -> DailyOperatorCompactItem | None:
+    review_items = _ranked_recent_documents([
+        item for item in items or ()
+        if normalize_operator_status(item.status) in {"pending", "needs_review", "ocr_needed", "unsupported", "unknown"}
+    ])
+    if not review_items:
+        return None
+    first = review_items[0]
+    count = len(review_items)
+    noun = "documento"
+    if _looks_like_photo_document(first.title):
+        noun = "foto"
+    if count == 1:
+        title = f"hay 1 {noun} reciente que requiere revisión."
+    else:
+        title = f"hay {count} documentos que requieren revisión; empieza por el más reciente."
+    return DailyOperatorCompactItem(
+        item_id=first.item_id,
+        item_type="document_summary",
+        label="Documentos",
+        title=title,
+        detail="; ".join(_clean_display_title(item.title, limit=72) for item in review_items[:3]),
+        source_type=first.source_type,
+        source_id=first.source_id,
+        status=_status_display_label(first),
+    )
+
+
+def _looks_like_photo_document(title: str) -> bool:
+    lower = _clean_string(title).lower()
+    return lower.endswith((".jpg", ".jpeg", ".png", ".heic", ".webp")) or lower.startswith("foto")
+
+
+def _compact_title_with_due(
+    item: DailyOperatorItem,
+    *,
+    snapshot_date: str | date | datetime | None = None,
+) -> str:
+    title = _clean_display_title(item.title, limit=72)
+    due = _compact_due_text(item, snapshot_date=snapshot_date)
+    return f"{title} — {due}" if due else title
+
+
+def _compact_detail(
+    item: DailyOperatorItem,
+    *,
+    snapshot_date: str | date | datetime | None = None,
+) -> str:
+    parts = [_compact_title_with_due(item, snapshot_date=snapshot_date)]
+    status = _status_display_label(item, snapshot_date=snapshot_date)
+    if status:
+        parts.append(status)
+    description = _truncate_text(item.description, 140)
+    if description:
+        parts.append(description)
+    return " · ".join(parts)
+
+
+def _compact_due_text(
+    item: DailyOperatorItem,
+    *,
+    snapshot_date: str | date | datetime | None = None,
+) -> str:
+    due = _due_date_text(item)
+    if not due:
+        return ""
+    today = _today_text(snapshot_date)
+    label = "hoy" if due == today else _spanish_date_text(due)
+    time_label = _time_text(item.due_at)
+    return f"{label}, {time_label}" if time_label else label
+
+
+def _spanish_date_text(value: str) -> str:
+    try:
+        parsed = date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return str(value)[:10]
+    months = (
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
+    )
+    return f"{parsed.day} {months[parsed.month - 1]}"
+
+
+def _time_text(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    normalized = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        if len(raw) >= 16 and raw[10] in {"T", " "}:
+            time_part = raw[11:16]
+        else:
+            return ""
+    else:
+        time_part = parsed.strftime("%H:%M")
+    try:
+        hour_text, minute_text = time_part.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text[:2])
+    except ValueError:
+        return ""
+    suffix = "AM" if hour < 12 else "PM"
+    hour_12 = hour % 12 or 12
+    return f"{hour_12}:{minute:02d} {suffix}"
 
 
 def _safe_metadata(row: Any, allowed_keys: Iterable[str]) -> dict[str, Any]:
