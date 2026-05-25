@@ -79,6 +79,14 @@ from core.daily_operator import (
     render_daily_operator_compact,
     safe_daily_operator_summary,
 )
+from core.karen_day0_routes import (
+    ROUTE_AGENDA_TOMORROW,
+    ROUTE_CAPABILITY_WEEK,
+    ROUTE_DOCUMENT_INVENTORY,
+    ROUTE_FINCA_FACTS,
+    ROUTE_NEXT_ACTION,
+    classify_karen_day0_route,
+)
 from core.response_envelope import (
     ResponseType,
     StyleMode,
@@ -115,7 +123,13 @@ from core.karen_next_action import maybe_handle_pending_next_action, karen_next_
 from core.document_inventory_queries import maybe_handle_document_query
 from core.document_semantic_queries import maybe_handle_document_semantic_query
 from core.document_summary_queries import maybe_handle_document_summary_query
-from core.karen_case_facts import CASE_KEY, maybe_handle_karen_case_facts, maybe_capture_karen_case_facts
+from core.karen_case_facts import (
+    CASE_KEY,
+    load_karen_case_facts,
+    maybe_capture_karen_case_facts,
+    maybe_handle_karen_case_facts,
+    render_case_facts,
+)
 from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
 from core.karen_appointments import maybe_handle_karen_appointment
 from core.karen_transcript_guard import maybe_guard_pasted_transcript, maybe_handle_pending_transcript_choice
@@ -5552,6 +5566,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[CLIENT_WORKFLOW_GUARD_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DAY0_ROUTE_RELIABILITY_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_daily_operator_query(update, context, chat_id, client_id, text):
@@ -13416,6 +13436,56 @@ async def maybe_handle_founder_intro_query(update: Update, text: str) -> bool:
     return True
 
 
+async def maybe_handle_karen_day0_route(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID)
+    if not is_karen_flow:
+        return False
+
+    route = classify_karen_day0_route(text or "")
+    if not route.name:
+        return False
+
+    if route.name == ROUTE_AGENDA_TOMORROW:
+        await update.message.reply_text(
+            build_client_agenda_dashboard(client_id, chat_id, "tomorrow"),
+            disable_web_page_preview=True,
+        )
+        return True
+
+    if route.name == ROUTE_CAPABILITY_WEEK:
+        from core.founder_intro import render_founder_trial_guidance
+
+        await update.message.reply_text(render_founder_trial_guidance(), disable_web_page_preview=True)
+        return True
+
+    if route.name == ROUTE_FINCA_FACTS:
+        facts = load_karen_case_facts(int(chat_id))
+        await update.message.reply_text(render_case_facts(facts, mode="all", chat_id=int(chat_id)))
+        return True
+
+    if route.name == ROUTE_DOCUMENT_INVENTORY:
+        if await maybe_handle_document_query(update, context, chat_id, "Val, qué documentos tengo"):
+            return True
+        await update.message.reply_text(
+            "📎 Documentos del caso\n\n"
+            "No encontré un inventario estructurado disponible para este chat todavía.\n\n"
+            "Límite: esto organiza información registrada; no sustituye revisión legal o profesional."
+        )
+        return True
+
+    if route.name == ROUTE_NEXT_ACTION:
+        await update.message.reply_text(
+            _build_karen_daily_operator_reply(int(chat_id), client_id, compact=True),
+            disable_web_page_preview=True,
+        )
+        return True
+
+    return False
+
+
 # --------------------------------------------------
 # Text handler
 # --------------------------------------------------
@@ -13489,6 +13559,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[CLIENT_WORKFLOW_GUARD] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DAY0_ROUTE_RELIABILITY] failed: {e}")
 
     try:
         if await maybe_handle_karen_daily_operator_query(update, context, chat_id, client_id, text):
