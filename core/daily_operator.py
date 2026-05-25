@@ -439,13 +439,14 @@ def build_daily_operator_compact_items(
         add(document_item)
 
     next_action = _truncate_text(snapshot.suggested_next_action or "Elegir una prioridad concreta para hoy", 112)
-    add(DailyOperatorCompactItem(
-        item_id="suggested_next_action",
-        item_type="suggested_next_action",
-        label="Siguiente acción",
-        title=next_action,
-        detail="Sugerencia calculada en modo lectura solamente; no ejecuta acciones.",
-    ))
+    if not _compact_suggested_action_duplicates(next_action, pending_item):
+        add(DailyOperatorCompactItem(
+            item_id="suggested_next_action",
+            item_type="suggested_next_action",
+            label="Siguiente acción",
+            title=next_action,
+            detail="Sugerencia calculada en modo lectura solamente; no ejecuta acciones.",
+        ))
 
     return tuple(items[:limit])
 
@@ -463,7 +464,7 @@ def render_daily_operator_compact(
 
     lines.extend([
         "",
-        "Puedes decir: \"dame detalles del 1\".",
+        "Si quieres más detalle, pide: \"Val, dame el resumen completo de hoy\".",
         "",
         "Modo: lectura solamente. No creé, cambié ni borré nada.",
     ])
@@ -641,6 +642,38 @@ def _compact_pending_label(item: DailyOperatorItem, snapshot_date: str | date | 
             return "Pendiente próximo"
         return "Pendiente de hoy"
     return "Pendiente"
+
+
+def _compact_suggested_action_duplicates(action: str, pending_item: DailyOperatorItem | None) -> bool:
+    if not pending_item:
+        return False
+    action_key = _compact_action_key(action)
+    pending_key = _compact_action_key(pending_item.title)
+    if not action_key or not pending_key:
+        return False
+    return action_key == pending_key or pending_key in action_key
+
+
+def _compact_action_key(value: Any) -> str:
+    text = _clean_string(value).lower()
+    for prefix in (
+        "atender hoy:",
+        "próximo pendiente:",
+        "proximo pendiente:",
+        "pendiente vencido por revisar:",
+        "responder la confirmación pendiente:",
+        "responder la confirmacion pendiente:",
+        "siguiente acción:",
+        "siguiente accion:",
+    ):
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+            break
+    if " — " in text:
+        text = text.split(" — ", 1)[0].strip()
+    if "[" in text:
+        text = text.split("[", 1)[0].strip()
+    return " ".join(text.strip(" .,:;¡!¿?\"'").split())
 
 
 def _compact_from_operator_item(
