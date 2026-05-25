@@ -170,12 +170,12 @@ def render_founder_pricing_explanation(*, audience: str = "founder_user", langua
 
 def render_founder_trial_guidance(*, audience: str = "founder_user", language: str = "es") -> str:
     return (
-        "Sí 😌 De hecho, lucky day: estás justo en el grupito founder que nos va a ayudar "
+        "Sí 😌 De hecho, lucky day: estás justo en el grupito fundador que nos va a ayudar "
         "a probar Val en la vida real.\n\n"
         "Esta semana puedes usarla para agenda, recordatorios, documentos, finca/caso, "
-        "próximos pasos y feedback. Es un piloto guiado: la forma segura de probar Val "
-        "no es usarla para todo sin guía, ni que Val finja que ya lo hace todo, sino ver "
-        "qué te sirve de verdad, qué confunde y qué debemos mejorar.\n\n"
+        "próximos pasos y feedback. Sigue siendo un piloto guiado: la idea no es usarla "
+        "para todo sin guía, ni que Val finja que ya lo hace todo, sino ver qué te sirve "
+        "de verdad, qué confunde y qué hay que mejorar.\n\n"
         "Y si algo todavía está en roadmap, te lo voy a decir claro. Sin humo, sin magia barata."
     )
 
