@@ -110,6 +110,7 @@ from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle_karen_lawyer_questions
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
+from core.karen_meeting_prep import looks_like_karen_meeting_prep_request, render_karen_meeting_prep_checklist
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
 from core.document_inventory_queries import maybe_handle_document_query
 from core.document_semantic_queries import maybe_handle_document_semantic_query
@@ -6326,6 +6327,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 return
         except Exception as e:
             logger.exception(f"[KAREN_LAWYER_PACKAGE_EARLY_PIPELINE_GATE] failed: {e}")
+
+        try:
+            if looks_like_karen_meeting_prep_request(text):
+                await update.message.reply_text(render_karen_meeting_prep_checklist(text))
+                return
+        except Exception as e:
+            logger.exception(f"[KAREN_MEETING_PREP_EARLY_GATE] failed: {e}")
 
         # Karen / Nora attorney-prep EARLY gate
         # Must beat document_summary_query so "resumen claro para Nora" and
@@ -13926,6 +13934,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Karen / Nora attorney-prep priority gate
     # Must beat generic document summary.
     # --------------------------------------------------
+    try:
+        if looks_like_karen_meeting_prep_request(text):
+            await update.message.reply_text(render_karen_meeting_prep_checklist(text))
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_MEETING_PREP_PRIORITY_GATE] failed: {e}")
+
     try:
         nora_norm = _norm_text(text or "")
         nora_context = (
