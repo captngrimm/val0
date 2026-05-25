@@ -381,7 +381,10 @@ def _warmth_lines(envelope: ResponseEnvelope) -> tuple[str, str]:
     closing = ""
     if response_type == ResponseType.DAILY_OPERATOR.value:
         intro = "Te lo ordeno en corto."
-        closing = "Siguiente paso: toma primero lo que aparece como sugerido."
+        if str(envelope.metadata.get("mode") or "").strip().lower() == "compact":
+            closing = "Siguiente paso: empieza por el pendiente próximo o pide el resumen completo si quieres más contexto."
+        else:
+            closing = "Siguiente paso: toma primero lo que aparece como sugerido."
     elif response_type == ResponseType.INFO.value:
         if style in {StyleMode.LIGHT.value, StyleMode.WARM.value, StyleMode.PLAYFUL.value}:
             intro = "Claro. Esto es lo que tengo."

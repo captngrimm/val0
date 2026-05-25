@@ -65,6 +65,38 @@ def main():
     assert_true(compare_factual_payload_preserved(daily, daily_polished), "daily payload preserved")
     assert_true(validate_polished_text(daily, daily_polished), "daily polished validates")
 
+    compact_daily = create_response_envelope(
+        response_id="daily-compact-1",
+        client_id="client-a",
+        source_route="karen_daily_operator_v0",
+        response_type="daily_operator",
+        rendered_text=(
+            "🧭 Hoy\n\n"
+            "1. Agenda: no tienes citas registradas hoy.\n"
+            "2. Pendiente próximo: Preparar cita con Nora — 29 mayo, 7:00 PM\n\n"
+            "Si quieres más detalle, pide: \"Val, dame el resumen completo de hoy\".\n\n"
+            "Modo: lectura solamente. No creé, cambié ni borré nada.\n"
+            "Esto es una organización operativa; no sustituye revisión legal."
+        ),
+        allowed_style_mode="warm",
+        factual_payload={"next_action": "Preparar cita con Nora", "date": "2026-05-29"},
+        metadata={"mode": "compact"},
+    )
+    compact_daily_polished = render_polished_fixture_response(compact_daily)
+    assert_false(
+        "Siguiente paso: toma primero lo que aparece como sugerido." in compact_daily_polished,
+        "compact daily does not use stale suggested-copy outro",
+    )
+    assert_true(
+        "Siguiente paso: empieza por el pendiente próximo o pide el resumen completo si quieres más contexto."
+        in compact_daily_polished,
+        "compact daily clearer next-step outro",
+    )
+    assert_true("Val, dame el resumen completo de hoy" in compact_daily_polished, "compact daily keeps full-summary hint")
+    assert_true("lectura solamente" in compact_daily_polished, "compact daily keeps read-only boundary")
+    assert_true("no sustituye revisión legal" in compact_daily_polished, "compact daily keeps legal boundary")
+    assert_true(validate_polished_text(compact_daily, compact_daily_polished), "compact daily polished validates")
+
     technical = create_response_envelope(
         response_id="tech-1",
         response_type="technical",
