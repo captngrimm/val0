@@ -76,6 +76,7 @@ from core.document_registry import document_record_from_vfms_metadata
 from core.daily_operator import (
     build_daily_operator_snapshot_from_sources,
     filter_today_items,
+    render_daily_operator_compact,
     safe_daily_operator_summary,
 )
 from core.response_envelope import (
@@ -12930,6 +12931,10 @@ def _looks_like_karen_daily_operator_query(text: str) -> bool:
         "qué hago hoy",
         "que sigue",
         "qué sigue",
+        "dame el resumen completo de hoy",
+        "resumen completo de hoy",
+        "detalles completos de hoy",
+        "operador diario completo",
         "dame mi resumen del dia",
         "dame mi resumen del día",
         "resumen del dia",
@@ -12951,6 +12956,19 @@ def _looks_like_karen_daily_operator_query(text: str) -> bool:
         "estoy perdida" in norm
         and ("organizame" in norm or "organízame" in norm)
     )
+
+
+def _looks_like_karen_daily_operator_full_query(text: str) -> bool:
+    norm = _normalize_daily_operator_query(text)
+    full_markers = {
+        "dame el resumen completo de hoy",
+        "resumen completo de hoy",
+        "detalles completos de hoy",
+        "operador diario completo",
+        "dame mi resumen completo del dia",
+        "dame mi resumen completo del día",
+    }
+    return norm in full_markers
 
 
 def _daily_operator_document_records_from_notes(notes) -> list[dict]:
@@ -12997,7 +13015,7 @@ def _format_daily_operator_items(items, *, empty: str, limit: int = 5) -> list[s
     return out or [f"- {empty}"]
 
 
-def _build_karen_daily_operator_reply(chat_id: int, client_id: str) -> str:
+def _build_karen_daily_operator_reply(chat_id: int, client_id: str, *, compact: bool = True) -> str:
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
     from memory_store import fetch_open_commitments, list_reminders_for_chat
@@ -13094,6 +13112,30 @@ def _build_karen_daily_operator_reply(chat_id: int, client_id: str) -> str:
     )
     safe = safe_daily_operator_summary(snapshot)
 
+    provenance = []
+    for field in ("pending_actions", "case_priorities", "document_items", "timeline_items"):
+        for item in safe.get(field, ()):
+            source_type = str(item.get("source_type") or "").strip()
+            source_id = str(item.get("source_id") or "").strip()
+            if source_type or source_id:
+                provenance.append({"source_type": source_type, "source_id": source_id})
+
+    if compact:
+        deterministic_text = render_daily_operator_compact(snapshot)
+        envelope = create_response_envelope(
+            response_id=f"karen_daily_operator_compact:{chat_id}:{today}",
+            client_id=client_id,
+            source_route="karen_daily_operator",
+            response_type=ResponseType.DAILY_OPERATOR.value,
+            factual_payload=safe,
+            rendered_text=deterministic_text,
+            allowed_style_mode=StyleMode.WARM.value,
+            legal_boundary="Esto es una organización operativa; no sustituye revisión legal.",
+            provenance=provenance,
+            metadata={"route": "karen_daily_operator_v0", "read_only": True, "mode": "compact"},
+        )
+        return render_polished_fixture_response(envelope)
+
     today_agenda = (
         filter_today_items(snapshot.reminders, snapshot.snapshot_date)
         + filter_today_items(snapshot.tasks, snapshot.snapshot_date)
@@ -13138,13 +13180,6 @@ def _build_karen_daily_operator_reply(chat_id: int, client_id: str) -> str:
         "Esto es una organización operativa; no sustituye revisión legal.",
     ])
     deterministic_text = "\n".join(lines)
-    provenance = []
-    for field in ("pending_actions", "case_priorities", "document_items", "timeline_items"):
-        for item in safe.get(field, ()):
-            source_type = str(item.get("source_type") or "").strip()
-            source_id = str(item.get("source_id") or "").strip()
-            if source_type or source_id:
-                provenance.append({"source_type": source_type, "source_id": source_id})
 
     envelope = create_response_envelope(
         response_id=f"karen_daily_operator:{chat_id}:{today}",
@@ -13156,7 +13191,7 @@ def _build_karen_daily_operator_reply(chat_id: int, client_id: str) -> str:
         allowed_style_mode=StyleMode.WARM.value,
         legal_boundary="Esto es una organización operativa; no sustituye revisión legal.",
         provenance=provenance,
-        metadata={"route": "karen_daily_operator_v0", "read_only": True},
+        metadata={"route": "karen_daily_operator_v0", "read_only": True, "mode": "full"},
     )
     return render_polished_fixture_response(envelope)
 
@@ -13179,7 +13214,11 @@ async def maybe_handle_karen_daily_operator_query(update: Update, context: Conte
     if not _looks_like_karen_daily_operator_query(text):
         return False
 
-    await update.message.reply_text(_build_karen_daily_operator_reply(int(chat_id), client_id), disable_web_page_preview=True)
+    full = _looks_like_karen_daily_operator_full_query(text)
+    await update.message.reply_text(
+        _build_karen_daily_operator_reply(int(chat_id), client_id, compact=not full),
+        disable_web_page_preview=True,
+    )
     return True
 
 
