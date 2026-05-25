@@ -77,6 +77,7 @@ def normalize_founder_intro_intent(text: Any) -> str:
             "como empiezo",
             "como comienzo",
             "como probar",
+            "puedo probar",
             "por donde empiezo",
         )
     ):
@@ -169,11 +170,11 @@ def render_founder_pricing_explanation(*, audience: str = "founder_user", langua
 
 def render_founder_trial_guidance(*, audience: str = "founder_user", language: str = "es") -> str:
     return (
-        "La forma segura de probar Val no es usarla para todo sin guía. Es escoger un workflow "
-        "pequeño y real, definir qué sería útil, y hacer un piloto guiado.\n\n"
-        "Buenos pilotos: recordatorios, documentos, Daily Operator, cronología, preparación de "
-        "reunión o una lista concreta. Primero probamos una cosa, vemos si ayuda, y después "
-        "decidimos qué mejorar."
+        "Sí. Esta semana es justamente el piloto guiado founder-beta: puedes usar Val para "
+        "probar agenda, recordatorios, documentos, finca/caso y próximos pasos.\n\n"
+        "La forma segura de probar Val no es usarla para todo sin guía, sino ver qué te sirve "
+        "de verdad, qué confunde y qué debemos mejorar. Si algo todavía está en roadmap, "
+        "te lo voy a decir claro."
     )
 
 
