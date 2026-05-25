@@ -170,8 +170,8 @@ def render_founder_pricing_explanation(*, audience: str = "founder_user", langua
 
 def render_founder_trial_guidance(*, audience: str = "founder_user", language: str = "es") -> str:
     return (
-        "Sí. Esta semana es justamente el piloto guiado founder-beta: puedes usar Val para "
-        "probar agenda, recordatorios, documentos, finca/caso y próximos pasos.\n\n"
+        "Sí. De hecho, esta semana es justamente tu piloto guiado fundador: puedes usar Val para "
+        "probar agenda, recordatorios, documentos, finca/caso, próximos pasos y feedback.\n\n"
         "La forma segura de probar Val no es usarla para todo sin guía, sino ver qué te sirve "
         "de verdad, qué confunde y qué debemos mejorar. Si algo todavía está en roadmap, "
         "te lo voy a decir claro."
