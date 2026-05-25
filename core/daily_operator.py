@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 
 PRIORITIES = {"urgent", "high", "normal", "low"}
@@ -435,7 +436,7 @@ def build_daily_operator_compact_items(
         ))
 
     document_item = _compact_document_summary_item(snapshot.document_items)
-    if document_item:
+    if document_item and not pending_item:
         add(document_item)
 
     next_action = _truncate_text(snapshot.suggested_next_action or "Elegir una prioridad concreta para hoy", 112)
@@ -859,13 +860,19 @@ def collect_reminder_items(reminders: Iterable[Any] | None) -> tuple[DailyOperat
         if not title:
             continue
         reminder_id = _clean_string(_get_value(reminder, "item_id", "id", "source_id", default=title))
+        due_at = _clean_string(_get_value(reminder, "due_at", default=""))
+        if not due_at:
+            due_utc = _clean_string(_get_value(reminder, "due_at_utc", default=""))
+            due_at = _local_iso_from_utc_text(due_utc) or due_utc
+        if not due_at:
+            due_at = _clean_string(_get_value(reminder, "due_date", default=""))
         items.append(
             DailyOperatorItem(
                 item_id=reminder_id,
                 item_type="reminder",
                 title=title,
                 description=_clean_string(_get_value(reminder, "description", default="")),
-                due_at=_clean_string(_get_value(reminder, "due_at", "due_at_utc", "due_date", default="")) or None,
+                due_at=due_at or None,
                 source_type=_clean_string(_get_value(reminder, "source_type", "source", default="reminder")) or "reminder",
                 source_id=_clean_string(_get_value(reminder, "source_id", "id", default=reminder_id)),
                 priority=normalize_operator_priority(_get_value(reminder, "priority", default="normal")),
@@ -874,6 +881,22 @@ def collect_reminder_items(reminders: Iterable[Any] | None) -> tuple[DailyOperat
             )
         )
     return _items(items, "reminder")
+
+
+def _local_iso_from_utc_text(value: Any, *, tz_name: str = "America/Panama") -> str:
+    raw = _clean_string(value)
+    if not raw:
+        return ""
+    try:
+        parsed = datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            return ""
+    return parsed.astimezone(ZoneInfo(tz_name)).isoformat(timespec="seconds")
 
 
 def collect_task_items(tasks: Iterable[Any] | None) -> tuple[DailyOperatorItem, ...]:

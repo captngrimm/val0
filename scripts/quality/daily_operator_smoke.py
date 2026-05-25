@@ -550,10 +550,23 @@ def main():
     assert_true("no sustituye revisión legal" in compact_text, "compact legal boundary")
     assert_true("Pendiente próximo: Preparar cita con Nora" in compact_text, "compact prefers future concrete pending item")
     assert_false("Siguiente acción: Próximo pendiente: Preparar cita con Nora" in compact_text, "compact avoids duplicate suggested action")
-    assert_true("Documentos: hay 3 documentos que requieren revisión" in compact_text, "compact summarizes documents")
+    assert_false("Documentos: hay 3 documentos que requieren revisión" in compact_text, "compact keeps documents secondary when pending item exists")
     assert_false("documento_viejo.pdf" in compact_text, "compact does not dump full document list")
     assert_false("resumen.docx" in compact_text, "compact does not dump unsupported document list")
     assert_false("Historia larga vieja" in compact_text, "compact does not include old timeline notes by default")
+
+    compact_docs_only = render_daily_operator_compact(
+        build_daily_operator_snapshot(
+            client_id="client-a",
+            case_id="CASE-1",
+            snapshot_date="2026-05-23",
+            document_items=[
+                {"id": "doc-only-1", "title": "foto_reciente.jpg", "status": "ocr_needed"},
+                {"id": "doc-only-2", "title": "documento_viejo.pdf", "status": "needs_review"},
+            ],
+        )
+    )
+    assert_true("Documentos: hay 2 documentos que requieren revisión" in compact_docs_only, "compact summarizes documents when no pending item exists")
 
     compact_empty = render_daily_operator_compact(
         build_daily_operator_snapshot(client_id="client-empty", snapshot_date="2026-05-23")

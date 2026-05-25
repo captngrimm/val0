@@ -5538,9 +5538,83 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
     return "\n\n".join([
         title,
         gcal,
-        "📌 Agenda interna de Val\n" + internal,
+        "📌 Agenda interna de Val\n"
+        "Recordatorios = alertas con fecha/hora. Tareas = pendientes por hacer.\n"
+        + internal,
         "Modo: lectura solamente. No creé, cambié ni borré eventos.",
     ])
+
+
+async def maybe_handle_karen_explicit_case_note(update, chat_id: int, client_id: str, text: str) -> bool:
+    """
+    Karen MVP note capture for explicit "guarda nota de finca/caso" phrasing.
+    Keeps saved context separate from agenda/cita/reminder language.
+    """
+    if client_id != "karen" or not update or not getattr(update, "message", None):
+        return False
+
+    raw = (text or "").strip()
+    if not raw:
+        return False
+
+    norm = unicodedata.normalize("NFKD", raw.lower())
+    norm = "".join(ch for ch in norm if not unicodedata.combining(ch))
+    norm = re.sub(r"[¿?¡!]+", "", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(?:oye\s+)?(?:val|valeria|vale)[,:\s]+", "", norm).strip()
+
+    match = re.match(
+        r"^(?:guarda|guardar|anota|toma)\s+(?:esta\s+)?nota\s+de\s+(?:finca|caso)\s*:?\s*(.+)$",
+        norm,
+    )
+    if not match:
+        return False
+
+    raw_payload = raw
+    if ":" in raw_payload:
+        note_text = raw_payload.split(":", 1)[1].strip()
+    else:
+        note_text = re.sub(
+            r"(?is)^\s*(?:oye\s+)?(?:val|valeria|vale)[,:\s]+",
+            "",
+            raw_payload,
+        ).strip()
+        note_text = re.sub(
+            r"(?is)^(?:guarda|guardar|anota|toma)\s+(?:esta\s+)?nota\s+de\s+(?:finca|caso)\s*",
+            "",
+            note_text,
+        ).strip(" :-")
+
+    if not note_text:
+        await update.message.reply_text("Dime qué nota de finca/caso quieres guardar.")
+        return True
+
+    try:
+        from memory_store import set_active_case_id
+
+        case_id = get_active_case_id(int(chat_id)) or CASE_KEY
+        set_active_case_id(int(chat_id), str(case_id))
+        note_id = insert_case_note(
+            chat_id=int(chat_id),
+            case_id=str(case_id),
+            note_text=note_text,
+            source="karen_explicit_case_note",
+        )
+        _LAST_ACTION[int(chat_id)] = {
+            "type": "note_insert",
+            "id": note_id,
+            "case_id": str(case_id),
+        }
+        await update.message.reply_text(
+            "📝 Guardé esta nota de finca/caso.\n\n"
+            f"{note_text}\n\n"
+            "Si quieres que te avise, dime: “Val, recuérdame esto mañana a las 9”."
+        )
+        return True
+    except Exception as e:
+        logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE] failed: {e}")
+        await update.message.reply_text("Intenté guardar la nota de finca/caso, pero algo falló.")
+        return True
 
 # --------------------------------------------------
 # Core Message Pipeline
@@ -5566,6 +5640,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[CLIENT_WORKFLOW_GUARD_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_explicit_case_note(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
