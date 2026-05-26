@@ -130,6 +130,12 @@ from core.karen_case_facts import (
     maybe_handle_karen_case_facts,
     render_case_facts,
 )
+from core.karen_notes_tasks_visibility import (
+    looks_like_karen_notes_query,
+    looks_like_karen_tasks_query,
+    render_karen_case_notes_view,
+    render_karen_tasks_view,
+)
 from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
 from core.karen_appointments import maybe_handle_karen_appointment
 from core.karen_transcript_guard import maybe_guard_pasted_transcript, maybe_handle_pending_transcript_choice
@@ -5646,6 +5652,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_notes_tasks_visibility(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
@@ -13330,6 +13342,44 @@ async def maybe_handle_karen_daily_operator_query(update: Update, context: Conte
     return True
 
 
+async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+
+    case_id = ""
+    try:
+        case_id = get_active_case_id(int(chat_id)) or ""
+    except Exception:
+        case_id = ""
+
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
+    if not is_karen_flow:
+        return False
+
+    if looks_like_karen_notes_query(text):
+        case_id = case_id or CASE_KEY
+        try:
+            notes = fetch_case_notes(int(chat_id), str(case_id), limit=40)
+        except Exception as e:
+            logger.exception(f"[KAREN_NOTES_VISIBILITY] failed: {e}")
+            notes = []
+        await update.message.reply_text(render_karen_case_notes_view(notes, case_id=str(case_id)))
+        return True
+
+    if looks_like_karen_tasks_query(text):
+        try:
+            from memory_store import fetch_open_commitments
+
+            tasks = fetch_open_commitments(int(chat_id), limit=10) or []
+        except Exception as e:
+            logger.exception(f"[KAREN_TASKS_VISIBILITY] failed: {e}")
+            tasks = []
+        await update.message.reply_text(render_karen_tasks_view(tasks))
+        return True
+
+    return False
+
+
 def _workflow_allowed_for_chat(chat_id: int, client_id: str, workflow: str) -> bool:
     profile = get_client_profile_for_chat(chat_id)
     if not profile:
@@ -13645,6 +13695,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_notes_tasks_visibility(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
