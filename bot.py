@@ -131,9 +131,12 @@ from core.karen_case_facts import (
     render_case_facts,
 )
 from core.karen_notes_tasks_visibility import (
+    is_auxiliary_task_row,
+    load_karen_auxiliary_task_items,
     looks_like_karen_case_pendientes_query,
     looks_like_karen_notes_query,
     looks_like_karen_tasks_query,
+    merge_karen_task_items,
     render_karen_case_pendientes_view,
     render_karen_case_notes_view,
     render_karen_tasks_view,
@@ -13383,7 +13386,8 @@ async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: Con
         except Exception as e:
             logger.exception(f"[KAREN_PENDIENTES_TASKS] failed: {e}")
             tasks = []
-        await update.message.reply_text(render_karen_case_pendientes_view(tasks=tasks, notes=notes))
+        auxiliary_tasks = load_karen_auxiliary_task_items(client_id)
+        await update.message.reply_text(render_karen_case_pendientes_view(tasks=tasks, notes=notes, auxiliary_tasks=auxiliary_tasks))
         return True
 
     if looks_like_karen_notes_query(text):
@@ -13404,7 +13408,8 @@ async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: Con
         except Exception as e:
             logger.exception(f"[KAREN_TASKS_VISIBILITY] failed: {e}")
             tasks = []
-        await update.message.reply_text(render_karen_tasks_view(tasks))
+        auxiliary_tasks = load_karen_auxiliary_task_items(client_id)
+        await update.message.reply_text(render_karen_tasks_view(tasks, auxiliary_tasks=auxiliary_tasks))
         return True
 
     return False
@@ -13464,7 +13469,10 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
     try:
         from memory_store import fetch_open_commitments
 
-        rows = fetch_open_commitments(int(chat_id), limit=20) or []
+        rows = merge_karen_task_items(
+            fetch_open_commitments(int(chat_id), limit=20) or [],
+            load_karen_auxiliary_task_items(client_id),
+        )
     except Exception as e:
         logger.exception(f"[KAREN_TASK_COMPLETION_FETCH] failed: {e}")
         await update.message.reply_text("No pude leer tus tareas abiertas ahora mismo.")
@@ -13519,8 +13527,17 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
         "target": selected[3],
         "due_date": selected[4],
     }
+    task_text = str(selected_row.get("raw_input") or selected_row.get("action") or "tarea auxiliar").strip()
+
+    if is_auxiliary_task_row(selected_row):
+        await update.message.reply_text(
+            "Esta tarea está registrada como pendiente auxiliar; puedo mostrarla, "
+            "pero todavía no puedo marcarla hecha desde aquí."
+        )
+        return True
+
     task_id = int(selected_row.get("id"))
-    task_text = str(selected_row.get("raw_input") or selected_row.get("action") or f"tarea {task_id}").strip()
+    task_text = task_text or f"tarea {task_id}"
 
     try:
         conn = _get_conn()

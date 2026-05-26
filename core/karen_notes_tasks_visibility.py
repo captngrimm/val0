@@ -80,6 +80,96 @@ def _clean_line(value: Any, *, limit: int = 160) -> str:
     return text[: limit - 1].rstrip(" .,;:-") + "…"
 
 
+def _task_text(row: Any) -> str:
+    raw = _clean_line(_row_value(row, "raw_input", 1, ""), limit=120)
+    if raw:
+        return raw
+    action = _clean_line(_row_value(row, "action", 2, ""), limit=60)
+    target = _clean_line(_row_value(row, "target", 3, ""), limit=80)
+    return " ".join(part for part in (action, target) if part).strip()
+
+
+def _task_due(row: Any) -> str:
+    return str(_row_value(row, "due_date", 4, "") or "").strip()
+
+
+def _task_source(row: Any) -> str:
+    return str(_row_value(row, "source_type", 8, "") or _row_value(row, "source", 8, "") or "").strip()
+
+
+def is_auxiliary_task_row(row: Any) -> bool:
+    return _task_source(row) == "auxiliary_task"
+
+
+def _looks_like_auxiliary_task_item(text: str) -> bool:
+    norm = _note_key(text)
+    if not norm:
+        return False
+    return norm.startswith((
+        "pedir ",
+        "llamar ",
+        "escribir ",
+        "revisar ",
+        "llevar ",
+        "conseguir ",
+        "solicitar ",
+        "mandar ",
+        "enviar ",
+    ))
+
+
+def auxiliary_task_items_from_lines(lines: Iterable[str]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for line in lines or ():
+        item = str(line or "").strip()
+        if item.startswith("- "):
+            item = item[2:].strip()
+        item = item.strip(" -\t")
+        if not item or item.startswith("#") or item.startswith("_"):
+            continue
+        if not _looks_like_auxiliary_task_item(item):
+            continue
+        out.append({
+            "id": f"aux:{_note_key(item)}",
+            "raw_input": _clean_line(item, limit=120),
+            "action": "",
+            "target": "",
+            "due_date": "",
+            "status": "open",
+            "source_type": "auxiliary_task",
+        })
+    return out
+
+
+def load_karen_auxiliary_task_items(client_id: str | None) -> list[dict[str, Any]]:
+    try:
+        from core.client_context_reader import load_client_context
+    except Exception:
+        return []
+
+    try:
+        context = load_client_context(client_id or "")
+    except Exception:
+        return []
+
+    grocery = str(context.get("grocery") or "")
+    lines = [line for line in grocery.splitlines() if line.strip().startswith("- ")]
+    return auxiliary_task_items_from_lines(lines)
+
+
+def merge_karen_task_items(tasks: Iterable[Any], auxiliary_tasks: Iterable[Any] | None = None) -> list[Any]:
+    merged: list[Any] = []
+    seen: set[str] = set()
+    for row in list(tasks or ()) + list(auxiliary_tasks or ()):
+        text = _task_text(row)
+        key = _note_key(text)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(row)
+    return merged
+
+
 def _clean_note_text(value: Any) -> tuple[str, bool]:
     text = _clean_line(value, limit=240)
     legacy = False
@@ -266,9 +356,10 @@ def render_karen_case_pendientes_view(
     *,
     tasks: Iterable[Any],
     notes: Iterable[Any],
+    auxiliary_tasks: Iterable[Any] | None = None,
     limit: int = 5,
 ) -> str:
-    task_rows = list(tasks or [])[: max(1, int(limit or 5))]
+    task_rows = merge_karen_task_items(tasks, auxiliary_tasks)[: max(1, int(limit or 5))]
     clean_notes = _clean_visible_notes(notes)
     clean_actionable = [
         item for item in clean_notes
@@ -286,18 +377,11 @@ def render_karen_case_pendientes_view(
     lines.append("Tareas")
     if task_rows:
         for idx, row in enumerate(task_rows, start=1):
-            raw = _clean_line(_row_value(row, "raw_input", 1, ""), limit=96)
-            if not raw:
-                raw = _clean_line(" ".join(
-                    part for part in (
-                        _row_value(row, "action", 2, ""),
-                        _row_value(row, "target", 3, ""),
-                    )
-                    if str(part or "").strip()
-                )) or "tarea sin título"
-            due = str(_row_value(row, "due_date", 4, "") or "").strip()
+            raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
+            due = _task_due(row)
             due_label = due[:16].replace("T", " ") if due else "sin fecha"
-            lines.append(f"{idx}. {raw} — {due_label}")
+            source_label = " · pendiente auxiliar" if is_auxiliary_task_row(row) else ""
+            lines.append(f"{idx}. {raw} — {due_label}{source_label}")
     else:
         lines.append("- No encontré tareas abiertas.")
 
@@ -317,15 +401,15 @@ def render_karen_case_pendientes_view(
         lines.append("- No encontré documentos recientes de revisión para destacar.")
 
     next_action = ""
-    dated_tasks = [row for row in task_rows if str(_row_value(row, "due_date", 4, "") or "").strip()]
+    dated_tasks = [row for row in task_rows if _task_due(row)]
     if clean_actionable:
         next_action = clean_actionable[0]["text"]
     elif dated_tasks:
-        next_action = _clean_line(_row_value(dated_tasks[0], "raw_input", 1, ""), limit=96) or "revisar la primera tarea con fecha"
+        next_action = _clean_line(_task_text(dated_tasks[0]), limit=96) or "revisar la primera tarea con fecha"
     elif actionable_notes:
         next_action = actionable_notes[0]["text"]
     elif task_rows:
-        next_action = _clean_line(_row_value(task_rows[0], "raw_input", 1, ""), limit=96) or "revisar la primera tarea pendiente"
+        next_action = _clean_line(_task_text(task_rows[0]), limit=96) or "revisar la primera tarea pendiente"
     elif documents:
         next_action = "revisar el primer documento marcado arriba"
     else:
@@ -340,8 +424,8 @@ def render_karen_case_pendientes_view(
     return "\n".join(lines)
 
 
-def render_karen_tasks_view(tasks: Iterable[Any], *, limit: int = 10) -> str:
-    rows = list(tasks or ())
+def render_karen_tasks_view(tasks: Iterable[Any], *, auxiliary_tasks: Iterable[Any] | None = None, limit: int = 10) -> str:
+    rows = merge_karen_task_items(tasks, auxiliary_tasks)
     lines = ["📌 Tareas pendientes", ""]
     if not rows:
         lines.extend([
@@ -353,18 +437,16 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, limit: int = 10) -> str:
         return "\n".join(lines)
 
     for idx, row in enumerate(rows[: max(1, int(limit or 10))], start=1):
-        raw = _clean_line(_row_value(row, "raw_input", 1, ""), limit=96)
-        if not raw:
-            action = _clean_line(_row_value(row, "action", 2, ""))
-            target = _clean_line(_row_value(row, "target", 3, ""))
-            raw = " ".join(part for part in (action, target) if part).strip() or "tarea sin título"
-        due = str(_row_value(row, "due_date", 4, "") or "").strip()
+        raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
+        due = _task_due(row)
         due_label = due[:16].replace("T", " ") if due else "sin fecha"
-        lines.append(f"{idx}. {raw} — {due_label}")
+        source_label = " · pendiente auxiliar" if is_auxiliary_task_row(row) else ""
+        lines.append(f"{idx}. {raw} — {due_label}{source_label}")
 
     lines.extend([
         "",
         "Puedes decir: “marca como hecha la tarea 1” o “pon esta tarea para mañana”.",
+        "Las tareas auxiliares se muestran en lectura solamente; todavía no puedo marcarlas hechas desde aquí.",
         "Modo: lectura solamente. No creé, cambié ni borré nada.",
     ])
     return "\n".join(lines)
