@@ -104,8 +104,8 @@ def _function_body(source: str, name: str) -> str:
 
 def test_internal_agenda_wording() -> None:
     body = _function_body(_bot_source(), "build_client_agenda_dashboard")
-    assert_contains(body, "Recordatorios = alertas", "internal agenda explains reminders")
-    assert_contains(body, "Tareas = pendientes", "internal agenda explains tasks")
+    assert_contains(body, "📌 Recordatorios y tareas", "agenda uses clear reminder/task label")
+    assert_not_contains(body, "📌 Agenda interna de Val", "agenda avoids confusing internal label")
 
 
 def test_note_save_copy() -> None:

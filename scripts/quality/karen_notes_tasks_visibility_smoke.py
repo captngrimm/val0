@@ -115,7 +115,7 @@ def test_tasks_route_and_render() -> None:
     assert_contains(rendered, "sin fecha", "task without date is labelled")
     assert_not_contains(rendered, "convencer a Guillermo", "tasks view does not invent strategy")
     assert_not_contains(rendered, "Siguiente acción sugerida", "tasks view is not Daily Operator")
-    assert_contains(rendered, "márcala como hecha", "tasks view offers simple command")
+    assert_contains(rendered, "marca como hecha la tarea 1", "tasks view offers simple command")
 
 
 def test_agenda_route_unchanged_and_gate_order() -> None:

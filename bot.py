@@ -5417,7 +5417,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
     if tasks:
         lines.extend(tasks)
     else:
-        lines.append("- No tienes tareas abiertas para mañana.")
+        lines.append("- No tienes tareas con fecha para mañana.")
 
     lines.append("")
     lines.append("Siguiente paso: si quieres, puedo ayudarte a ordenar esto por prioridad.")
@@ -5542,13 +5542,18 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
         tz_name=tz_name,
         limit=10,
     )
+    if window == "tomorrow":
+        internal_lines = str(internal or "").splitlines()
+        if internal_lines and internal_lines[0].startswith("📅 Mañana"):
+            internal_lines = internal_lines[2:] if len(internal_lines) > 1 and not internal_lines[1].strip() else internal_lines[1:]
+        internal_block = "\n".join(internal_lines).strip()
+    else:
+        internal_block = str(internal or "").strip()
 
     return "\n\n".join([
         title,
         gcal,
-        "📌 Agenda interna de Val\n"
-        "Recordatorios = alertas con fecha/hora. Tareas = pendientes por hacer.\n"
-        + internal,
+        "📌 Recordatorios y tareas\n" + internal_block,
         "Modo: lectura solamente. No creé, cambié ni borré eventos.",
     ])
 
@@ -5660,6 +5665,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_COMPLETION_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
@@ -13399,6 +13410,151 @@ async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: Con
     return False
 
 
+def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
+    norm = _norm_text(text or "")
+    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+
+    number_match = re.search(r"\btarea\s+(?P<num>\d{1,2})\b", norm)
+    number = int(number_match.group("num")) if number_match else None
+
+    target = ""
+    patterns = (
+        r"marca\s+como\s+hecha\s+la\s+tarea\s+de\s+(.+)$",
+        r"marcar\s+como\s+hecha\s+la\s+tarea\s+de\s+(.+)$",
+        r"ya\s+hice\s+la\s+tarea\s+de\s+(.+)$",
+        r"ya\s+hice\s+(.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, norm)
+        if match:
+            target = (match.group(1) or "").strip()
+            break
+
+    return number, target
+
+
+async def maybe_handle_karen_task_completion(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+
+    case_id = ""
+    try:
+        case_id = get_active_case_id(int(chat_id)) or ""
+    except Exception:
+        case_id = ""
+
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
+    if not is_karen_flow:
+        return False
+
+    norm = _normalize_daily_operator_query(text)
+    completion_markers = (
+        "marca como hecha la tarea",
+        "marcar como hecha la tarea",
+        "ya hice la tarea",
+        "ya hice",
+    )
+    if not any(marker in norm for marker in completion_markers):
+        return False
+
+    number, target = _normalize_task_completion_request(text)
+
+    try:
+        from memory_store import fetch_open_commitments
+
+        rows = fetch_open_commitments(int(chat_id), limit=20) or []
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_COMPLETION_FETCH] failed: {e}")
+        await update.message.reply_text("No pude leer tus tareas abiertas ahora mismo.")
+        return True
+
+    if not rows:
+        await update.message.reply_text("No encontré tareas abiertas para marcar como hechas.")
+        return True
+
+    selected = None
+    if number is not None:
+        if number < 1 or number > len(rows):
+            await update.message.reply_text(
+                f"No veo una tarea {number}. Pide “Val, qué tareas tengo” para ver la lista actual."
+            )
+            return True
+        selected = rows[number - 1]
+    elif target:
+        target_key = _norm_text(target)
+        matches = []
+        for row in rows:
+            rd = dict(row) if hasattr(row, "keys") else {
+                "id": row[0],
+                "raw_input": row[1],
+                "action": row[2],
+                "target": row[3],
+                "due_date": row[4],
+            }
+            raw_key = _norm_text(str(rd.get("raw_input") or ""))
+            combo_key = _norm_text(" ".join(str(rd.get(k) or "") for k in ("action", "target")))
+            if target_key and (target_key in raw_key or target_key in combo_key):
+                matches.append(row)
+        if len(matches) == 1:
+            selected = matches[0]
+        elif len(matches) > 1:
+            await update.message.reply_text(
+                "Encontré más de una tarea parecida. Pide “Val, qué tareas tengo” y dime el número: "
+                "“marca como hecha la tarea 1”."
+            )
+            return True
+
+    if selected is None:
+        await update.message.reply_text(
+            "No pude identificar una sola tarea para cerrar. Pide “Val, qué tareas tengo” y dime el número."
+        )
+        return True
+
+    selected_row = dict(selected) if hasattr(selected, "keys") else {
+        "id": selected[0],
+        "raw_input": selected[1],
+        "action": selected[2],
+        "target": selected[3],
+        "due_date": selected[4],
+    }
+    task_id = int(selected_row.get("id"))
+    task_text = str(selected_row.get("raw_input") or selected_row.get("action") or f"tarea {task_id}").strip()
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE commitments
+            SET status='done',
+                completed_at=CURRENT_TIMESTAMP
+            WHERE id=? AND chat_id=? AND status='open'
+            """,
+            (task_id, int(chat_id)),
+        )
+        changed = cur.rowcount
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_COMPLETION_UPDATE] failed: {e}")
+        await update.message.reply_text("No pude marcar esa tarea como hecha ahora mismo.")
+        return True
+
+    if not changed:
+        await update.message.reply_text("Esa tarea ya no aparece abierta. Pide “Val, qué tareas tengo” para verificar.")
+        return True
+
+    log_action(chat_id, "task_closed", task_text)
+    await update.message.reply_text(
+        "✅ Listo. Marqué esta tarea como hecha:\n"
+        f"- {task_text}\n\n"
+        "No borré el historial y no toqué Google Calendar ni recordatorios."
+    )
+    return True
+
+
 def _workflow_allowed_for_chat(chat_id: int, client_id: str, workflow: str) -> bool:
     profile = get_client_profile_for_chat(chat_id)
     if not profile:
@@ -13720,6 +13876,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_COMPLETION_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):

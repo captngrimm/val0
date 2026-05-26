@@ -353,7 +353,7 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, limit: int = 10) -> str:
         return "\n".join(lines)
 
     for idx, row in enumerate(rows[: max(1, int(limit or 10))], start=1):
-        raw = _clean_line(_row_value(row, "raw_input", 1, ""))
+        raw = _clean_line(_row_value(row, "raw_input", 1, ""), limit=96)
         if not raw:
             action = _clean_line(_row_value(row, "action", 2, ""))
             target = _clean_line(_row_value(row, "target", 3, ""))
@@ -364,7 +364,7 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, limit: int = 10) -> str:
 
     lines.extend([
         "",
-        "Puedes decir: “pon esta tarea para mañana” o “márcala como hecha”.",
+        "Puedes decir: “marca como hecha la tarea 1” o “pon esta tarea para mañana”.",
         "Modo: lectura solamente. No creé, cambié ni borré nada.",
     ])
     return "\n".join(lines)
