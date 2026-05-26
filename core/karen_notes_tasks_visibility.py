@@ -84,6 +84,20 @@ def _clean_note_text(value: Any) -> tuple[str, bool]:
     text = _clean_line(value, limit=240)
     legacy = False
     lowered = text.lower()
+    historical_prefixes = (
+        "inventario inicial:",
+        "historial inicial:",
+        "historia inicial:",
+        "contexto inicial:",
+        "resumen inicial:",
+    )
+    for prefix in historical_prefixes:
+        if lowered.startswith(prefix):
+            text = text[len(prefix):].strip(" :-")
+            legacy = True
+            break
+
+    lowered = text.lower()
     legacy_prefixes = (
         "cita / agenda del caso:",
         "cita/agenda del caso:",
@@ -124,6 +138,23 @@ def _note_is_user_visible(row: Any) -> bool:
     return True
 
 
+def _looks_like_legacy_noise(text: str, source: str) -> bool:
+    key = _note_key(text)
+    if source in {"case_appointment_v0", "case_appointment_reschedule_v0"}:
+        return True
+    return any(marker in key for marker in (
+        "test",
+        "prueba",
+        "inventario inicial",
+        "historial inicial",
+        "historia inicial",
+        "contexto inicial",
+        "resumen inicial",
+        "photo",
+        "foto prueba",
+    ))
+
+
 def _clean_visible_notes(notes: Iterable[Any]) -> list[dict[str, Any]]:
     by_key: dict[str, dict[str, Any]] = {}
     for row in notes or ():
@@ -140,7 +171,7 @@ def _clean_visible_notes(notes: Iterable[Any]) -> list[dict[str, Any]]:
             "text": text,
             "created_at": created_at,
             "date_label": created_at[:10] if created_at else "sin fecha",
-            "legacy": legacy or source in {"case_appointment_v0", "case_appointment_reschedule_v0"},
+            "legacy": legacy or _looks_like_legacy_noise(text, source),
         }
         previous = by_key.get(key)
         if not previous:
@@ -162,6 +193,7 @@ def _clean_visible_notes(notes: Iterable[Any]) -> list[dict[str, Any]]:
 
 def render_karen_case_notes_view(notes: Iterable[Any], *, case_id: str = CASE_KEY, limit: int = 8) -> str:
     visible = _clean_visible_notes(notes)
+    display_limit = max(1, min(int(limit or 5), 5))
     lines = ["📝 Notas de finca/caso", ""]
     if not visible:
         lines.extend([
@@ -172,13 +204,23 @@ def render_karen_case_notes_view(notes: Iterable[Any], *, case_id: str = CASE_KE
         ])
         return "\n".join(lines)
 
-    for idx, item in enumerate(visible[: max(1, int(limit or 8))], start=1):
+    clean_items = [item for item in visible if not item.get("legacy")]
+    legacy_items = [item for item in visible if item.get("legacy")]
+    display_items = clean_items[:display_limit]
+    if not display_items:
+        display_items = legacy_items[:display_limit]
+
+    for idx, item in enumerate(display_items, start=1):
         prefix = "Legado/test · " if item.get("legacy") else ""
         lines.append(f"{idx}. {prefix}{item['date_label']} · {item['text']}")
 
+    hidden_legacy_count = max(0, len(legacy_items) - sum(1 for item in display_items if item.get("legacy")))
+    if clean_items and hidden_legacy_count:
+        lines.extend(["", f"Oculté {hidden_legacy_count} nota(s) histórica(s)/test para mantener esto limpio."])
+
     lines.extend([
         "",
-        f"Mostré hasta {max(1, int(limit or 8))} notas recientes.",
+        f"Mostré hasta {display_limit} notas recientes.",
         "Modo: lectura solamente. No creé, cambié ni borré nada.",
     ])
     return "\n".join(lines)
@@ -201,7 +243,7 @@ def _note_is_actionable(text: str) -> bool:
 
 def _document_review_items(notes: Iterable[Any], *, limit: int = 3) -> list[str]:
     items: list[str] = []
-    noisy_markers = ("test", "prueba", "old", "viejo")
+    noisy_markers = ("test", "prueba", "old", "viejo", "foto vieja", "photo")
     for row in notes or ():
         source = str(_row_value(row, "source", 5, "") or "").strip()
         if source != "telegram_attachment_vfms":
@@ -228,7 +270,15 @@ def render_karen_case_pendientes_view(
 ) -> str:
     task_rows = list(tasks or [])[: max(1, int(limit or 5))]
     clean_notes = _clean_visible_notes(notes)
-    actionable_notes = [item for item in clean_notes if _note_is_actionable(str(item.get("text") or ""))][: max(1, int(limit or 5))]
+    clean_actionable = [
+        item for item in clean_notes
+        if not item.get("legacy") and _note_is_actionable(str(item.get("text") or ""))
+    ]
+    legacy_actionable = [
+        item for item in clean_notes
+        if item.get("legacy") and _note_is_actionable(str(item.get("text") or ""))
+    ]
+    actionable_notes = (clean_actionable + legacy_actionable)[: max(1, int(limit or 5))]
     documents = _document_review_items(notes, limit=3)
 
     lines = ["📌 Pendientes de finca/caso", ""]
@@ -236,7 +286,7 @@ def render_karen_case_pendientes_view(
     lines.append("Tareas")
     if task_rows:
         for idx, row in enumerate(task_rows, start=1):
-            raw = _clean_line(_row_value(row, "raw_input", 1, ""))
+            raw = _clean_line(_row_value(row, "raw_input", 1, ""), limit=96)
             if not raw:
                 raw = _clean_line(" ".join(
                     part for part in (
@@ -267,15 +317,20 @@ def render_karen_case_pendientes_view(
         lines.append("- No encontré documentos recientes de revisión para destacar.")
 
     next_action = ""
-    if task_rows:
-        first = task_rows[0]
-        next_action = _clean_line(_row_value(first, "raw_input", 1, "")) or "revisar la primera tarea pendiente"
+    dated_tasks = [row for row in task_rows if str(_row_value(row, "due_date", 4, "") or "").strip()]
+    if clean_actionable:
+        next_action = clean_actionable[0]["text"]
+    elif dated_tasks:
+        next_action = _clean_line(_row_value(dated_tasks[0], "raw_input", 1, ""), limit=96) or "revisar la primera tarea con fecha"
     elif actionable_notes:
         next_action = actionable_notes[0]["text"]
+    elif task_rows:
+        next_action = _clean_line(_row_value(task_rows[0], "raw_input", 1, ""), limit=96) or "revisar la primera tarea pendiente"
     elif documents:
         next_action = "revisar el primer documento marcado arriba"
     else:
         next_action = "guardar una tarea o nota concreta si aparece un pendiente nuevo"
+    next_action = _clean_line(next_action, limit=110)
 
     lines.extend([
         "",
