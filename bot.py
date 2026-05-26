@@ -13144,7 +13144,7 @@ def _build_karen_daily_operator_reply(chat_id: int, client_id: str, *, compact: 
             reminders.append({
                 "id": row.get("id"),
                 "text": row.get("text") or "",
-                "due_at": due,
+                "due_at_utc": due,
                 "status": row.get("status") or "pending",
                 "source": "reminder",
             })
@@ -13639,6 +13639,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[CLIENT_WORKFLOW_GUARD] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_explicit_case_note(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):

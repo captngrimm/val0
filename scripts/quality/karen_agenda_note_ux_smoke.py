@@ -64,6 +64,24 @@ def test_reminder_time_consistency() -> None:
     assert_not_contains(rendered, "2:00 PM", "compact does not show UTC 2pm")
     assert_not_contains(rendered, "Documentos:", "document noise is not main compact item when reminder exists")
 
+    topographer = build_daily_operator_snapshot_from_sources(
+        client_id=client_id,
+        case_id="KAREN-LAND-001",
+        snapshot_date="2026-05-25",
+        reminders=[
+            {
+                "id": "rem-8am",
+                "text": "escribirle al topógrafo",
+                "due_at_utc": "2026-05-26 13:00:00",
+                "status": "pending",
+                "source": "reminder",
+            }
+        ],
+    )
+    topographer_rendered = render_daily_operator_compact(topographer)
+    assert_contains(topographer_rendered, "8:00 AM", "compact shows Panama 8am")
+    assert_not_contains(topographer_rendered, "1:00 PM", "compact does not show UTC 1pm")
+
 
 def _bot_source() -> str:
     return (REPO_ROOT / "bot.py").read_text(encoding="utf-8")
@@ -91,20 +109,41 @@ def test_internal_agenda_wording() -> None:
 
 
 def test_note_save_copy() -> None:
-    body = _function_body(_bot_source(), "maybe_handle_karen_explicit_case_note")
+    source = _bot_source()
+    body = _function_body(source, "maybe_handle_karen_explicit_case_note")
     assert_contains(body, "nota de finca/caso", "note copy labels note")
     assert_contains(body, "recuérdame", "note copy can suggest reminder")
+    assert_contains(body, "guarda|guardar|anota|toma", "note handler matches save-note verbs")
+    assert_contains(body, "nota\\s+de\\s+(?:finca|caso)", "note handler matches finca/case note")
     reply_start = body.find("📝 Guardé esta nota de finca/caso")
     reply_end = body.find("return True", reply_start)
     reply_block = body[reply_start:reply_end]
     assert_not_contains(reply_block, "cita", "note copy does not say cita")
     assert_not_contains(reply_block, "agenda", "note copy does not say agenda")
 
+    handle_text_body = _function_body(source, "handle_text")
+    note_gate = handle_text_body.find("maybe_handle_karen_explicit_case_note")
+    day0_gate = handle_text_body.find("maybe_handle_karen_day0_route")
+    appointment_gate = handle_text_body.find("maybe_handle_karen_appointment")
+    assert_true(note_gate >= 0, "live handle_text has explicit note gate")
+    assert_true(day0_gate < 0 or note_gate < day0_gate, "explicit note gate beats Day0 route")
+    assert_true(appointment_gate < 0 or note_gate < appointment_gate, "explicit note gate beats appointment route")
+
+
+def test_live_daily_operator_uses_utc_key() -> None:
+    body = _function_body(_bot_source(), "_build_karen_daily_operator_reply")
+    append_start = body.find("reminders.append")
+    append_end = body.find("})", append_start)
+    append_block = body[append_start:append_end]
+    assert_contains(append_block, '"due_at_utc": due', "live Daily Operator passes UTC key for localization")
+    assert_not_contains(append_block, '"due_at": due', "live Daily Operator does not bypass localization")
+
 
 def main() -> int:
     test_reminder_time_consistency()
     test_internal_agenda_wording()
     test_note_save_copy()
+    test_live_daily_operator_uses_utc_key()
     print("PASS: Karen agenda/note UX smoke cases passed.")
     return 0
 

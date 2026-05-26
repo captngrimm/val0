@@ -18,6 +18,8 @@ def _norm(text: str) -> str:
 
 def _looks_like_appointment(text: str) -> bool:
     t = _norm(text)
+    if re.match(r"^(?:val\s+)?(?:guarda|guardar|anota|toma)\s+(?:esta\s+)?nota\b", t):
+        return False
     has_meeting = any(x in t for x in [
         "cita",
         "reunion",
@@ -40,6 +42,8 @@ def _looks_like_appointment(text: str) -> bool:
 
 def _looks_like_reschedule(text: str) -> bool:
     t = _norm(text)
+    if re.match(r"^(?:val\s+)?(?:guarda|guardar|anota|toma)\s+(?:esta\s+)?nota\b", t):
+        return False
     has_change = any(x in t for x in [
         "cambiaron",
         "cambio",
