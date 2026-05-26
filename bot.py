@@ -13428,6 +13428,9 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
     patterns = (
         r"marca\s+como\s+hecha\s+la\s+tarea\s+de\s+(.+)$",
         r"marcar\s+como\s+hecha\s+la\s+tarea\s+de\s+(.+)$",
+        r"marca\s+la\s+tarea\s+de\s+(.+?)\s+como\s+hecha$",
+        r"cierra\s+la\s+tarea\s+de\s+(.+)$",
+        r"completa\s+la\s+tarea\s+de\s+(.+)$",
         r"ya\s+hice\s+la\s+tarea\s+de\s+(.+)$",
         r"ya\s+hice\s+(.+)$",
     )
@@ -13458,7 +13461,10 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
     completion_markers = (
         "marca como hecha la tarea",
         "marcar como hecha la tarea",
+        "marca la tarea",
         "ya hice la tarea",
+        "cierra la tarea",
+        "completa la tarea",
         "ya hice",
     )
     if not any(marker in norm for marker in completion_markers):
@@ -13531,8 +13537,8 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
 
     if is_auxiliary_task_row(selected_row):
         await update.message.reply_text(
-            "Esta tarea está guardada como pendiente sin fecha. La puedo mostrar, "
-            "pero todavía no puedo marcarla como hecha desde aquí."
+            "Esa tarea está guardada como pendiente sin fecha. Puedo mostrarla, "
+            "pero todavía necesito convertirla a tarea formal para cerrarla."
         )
         return True
 

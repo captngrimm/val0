@@ -105,7 +105,7 @@ def test_auxiliary_completion_is_read_only() -> None:
     body = _function_body(_bot_source(), "maybe_handle_karen_task_completion")
     assert_contains(body, "is_auxiliary_task_row", "completion checks auxiliary rows")
     assert_contains(body, "pendiente sin fecha", "completion explains plain read-only task")
-    assert_contains(body, "todavía no puedo marcarla como hecha desde aquí", "completion is read-only for auxiliary")
+    assert_contains(body, "convertirla a tarea formal para cerrarla", "completion is read-only for auxiliary")
     assert_not_contains(body, "pendiente auxiliar", "completion avoids internal auxiliary label")
 
 

@@ -84,8 +84,8 @@ def test_task_views_use_plain_language() -> None:
 def test_completion_copy_uses_plain_language() -> None:
     completion = _function_body(_bot_source(), "maybe_handle_karen_task_completion")
     assert_contains(completion, "pendiente sin fecha", "completion says pending without date")
-    assert_contains(completion, "La puedo mostrar", "completion explains visibility")
-    assert_contains(completion, "todavía no puedo marcarla como hecha desde aquí", "completion explains limitation")
+    assert_contains(completion, "Puedo mostrarla", "completion explains visibility")
+    assert_contains(completion, "convertirla a tarea formal para cerrarla", "completion explains limitation")
     assert_not_contains(completion, "pendiente auxiliar", "completion hides internal label")
     assert_not_contains(completion, "fuente auxiliar", "completion hides internal source wording")
     assert_not_contains(completion, "CLIENT_GROCERY", "completion hides internal file")
