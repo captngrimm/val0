@@ -380,8 +380,7 @@ def render_karen_case_pendientes_view(
             raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
             due = _task_due(row)
             due_label = due[:16].replace("T", " ") if due else "sin fecha"
-            source_label = " · pendiente auxiliar" if is_auxiliary_task_row(row) else ""
-            lines.append(f"{idx}. {raw} — {due_label}{source_label}")
+            lines.append(f"{idx}. {raw} — {due_label}")
     else:
         lines.append("- No encontré tareas abiertas.")
 
@@ -440,13 +439,13 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, auxiliary_tasks: Iterable[A
         raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
         due = _task_due(row)
         due_label = due[:16].replace("T", " ") if due else "sin fecha"
-        source_label = " · pendiente auxiliar" if is_auxiliary_task_row(row) else ""
-        lines.append(f"{idx}. {raw} — {due_label}{source_label}")
+        lines.append(f"{idx}. {raw} — {due_label}")
 
     lines.extend([
         "",
         "Puedes decir: “marca como hecha la tarea 1” o “pon esta tarea para mañana”.",
-        "Las tareas auxiliares se muestran en lectura solamente; todavía no puedo marcarlas hechas desde aquí.",
-        "Modo: lectura solamente. No creé, cambié ni borré nada.",
     ])
+    if any(is_auxiliary_task_row(row) for row in rows):
+        lines.append("Algunas tareas sin fecha pueden necesitar que las convierta a tarea formal antes de cerrarlas.")
+    lines.append("Modo: lectura solamente. No creé, cambié ni borré nada.")
     return "\n".join(lines)

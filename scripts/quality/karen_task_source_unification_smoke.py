@@ -62,7 +62,9 @@ def test_auxiliary_task_rendering_and_dedupe() -> None:
 
     rendered = render_karen_tasks_view([], auxiliary_tasks=auxiliary)
     assert_contains(rendered, "pedir al topógrafo cotización", "auxiliary task shown")
-    assert_contains(rendered, "pendiente auxiliar", "auxiliary task labelled")
+    assert_contains(rendered, "sin fecha", "auxiliary task shown with plain undated label")
+    assert_not_contains(rendered, "pendiente auxiliar", "no internal auxiliary label shown")
+    assert_not_contains(rendered, "auxiliar", "no auxiliary wording shown")
     assert_not_contains(rendered, "CLIENT_GROCERY", "no internal filename exposed")
     assert_not_contains(rendered, "/clients/" + "karen", "no internal path exposed")
 
@@ -95,14 +97,16 @@ def test_pendientes_include_auxiliary_task() -> None:
     )
     assert_contains(rendered, "Tareas", "pending view has tasks section")
     assert_contains(rendered, "pedir al topógrafo cotización", "pending view includes auxiliary task")
+    assert_not_contains(rendered, "auxiliar", "pending view hides auxiliary wording")
     assert_not_contains(rendered, "CLIENT_GROCERY", "pending view hides internal filename")
 
 
 def test_auxiliary_completion_is_read_only() -> None:
     body = _function_body(_bot_source(), "maybe_handle_karen_task_completion")
     assert_contains(body, "is_auxiliary_task_row", "completion checks auxiliary rows")
-    assert_contains(body, "pendiente auxiliar", "completion explains auxiliary source")
-    assert_contains(body, "todavía no puedo marcarla hecha desde aquí", "completion is read-only for auxiliary")
+    assert_contains(body, "pendiente sin fecha", "completion explains plain read-only task")
+    assert_contains(body, "todavía no puedo marcarla como hecha desde aquí", "completion is read-only for auxiliary")
+    assert_not_contains(body, "pendiente auxiliar", "completion avoids internal auxiliary label")
 
 
 def main() -> int:

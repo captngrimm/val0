@@ -13527,12 +13527,12 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
         "target": selected[3],
         "due_date": selected[4],
     }
-    task_text = str(selected_row.get("raw_input") or selected_row.get("action") or "tarea auxiliar").strip()
+    task_text = str(selected_row.get("raw_input") or selected_row.get("action") or "tarea sin fecha").strip()
 
     if is_auxiliary_task_row(selected_row):
         await update.message.reply_text(
-            "Esta tarea está registrada como pendiente auxiliar; puedo mostrarla, "
-            "pero todavía no puedo marcarla hecha desde aquí."
+            "Esta tarea está guardada como pendiente sin fecha. La puedo mostrar, "
+            "pero todavía no puedo marcarla como hecha desde aquí."
         )
         return True
 
