@@ -45,6 +45,41 @@ def looks_like_karen_tasks_query(text: str) -> bool:
     }
 
 
+def parse_karen_task_schedule_for_tomorrow(text: str) -> dict[str, Any] | None:
+    norm = normalize_visibility_prompt(text)
+    if "para manana" not in norm:
+        return None
+    if not re.search(r"\b(pon|registra|agenda|programa)\b", norm):
+        return None
+
+    number_match = re.search(
+        r"\b(?:pon|registra|agenda|programa)\s+la\s+tarea\s+(?P<num>\d{1,2})\s+para\s+manana\b",
+        norm,
+    )
+    if number_match:
+        return {"number": int(number_match.group("num")), "target": "", "current": False}
+
+    if re.search(r"\b(?:pon|registra|agenda|programa)\s+esta\s+tarea\s+para\s+manana\b", norm):
+        return {"number": None, "target": "", "current": True}
+
+    target_patterns = (
+        r"\b(?:pon|registra|agenda|programa)\s+la\s+tarea\s+de\s+(?P<target>.+?)\s+para\s+manana\b",
+        r"\b(?:pon|registra|agenda|programa)\s+(?P<target>.+?)\s+para\s+manana\b",
+    )
+    for pattern in target_patterns:
+        match = re.search(pattern, norm)
+        if not match:
+            continue
+        target = _clean_line(match.group("target"), limit=120)
+        if target and target not in {"la tarea", "esta tarea"}:
+            return {"number": None, "target": target, "current": False}
+    return None
+
+
+def looks_like_karen_task_schedule_for_tomorrow(text: str) -> bool:
+    return parse_karen_task_schedule_for_tomorrow(text) is not None
+
+
 def looks_like_karen_case_pendientes_query(text: str) -> bool:
     norm = normalize_visibility_prompt(text)
     return norm in {
@@ -168,6 +203,40 @@ def merge_karen_task_items(tasks: Iterable[Any], auxiliary_tasks: Iterable[Any] 
         seen.add(key)
         merged.append(row)
     return merged
+
+
+def select_karen_task_for_schedule(rows: Iterable[Any], request: dict[str, Any]) -> tuple[Any | None, str]:
+    task_rows = list(rows or ())
+    number = request.get("number")
+    target = _note_key(str(request.get("target") or ""))
+    current = bool(request.get("current"))
+
+    if number is not None:
+        try:
+            idx = int(number)
+        except Exception:
+            return None, "invalid_number"
+        if idx < 1 or idx > len(task_rows):
+            return None, "not_found"
+        return task_rows[idx - 1], "ok"
+
+    if current:
+        if len(task_rows) == 1:
+            return task_rows[0], "ok"
+        return None, "ambiguous"
+
+    if target:
+        matches = []
+        target_terms = [term for term in target.split() if len(term) > 2]
+        for row in task_rows:
+            row_key = _note_key(_task_text(row))
+            if target in row_key or (target_terms and all(term in row_key for term in target_terms)):
+                matches.append(row)
+        if len(matches) == 1:
+            return matches[0], "ok"
+        if len(matches) > 1:
+            return None, "ambiguous"
+    return None, "not_found"
 
 
 def _clean_note_text(value: Any) -> tuple[str, bool]:

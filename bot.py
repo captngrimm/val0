@@ -133,6 +133,7 @@ from core.karen_case_facts import (
 from core.karen_notes_tasks_visibility import (
     is_auxiliary_task_row,
     load_karen_auxiliary_task_items,
+    parse_karen_task_schedule_for_tomorrow,
     looks_like_karen_case_pendientes_query,
     looks_like_karen_notes_query,
     looks_like_karen_tasks_query,
@@ -140,6 +141,7 @@ from core.karen_notes_tasks_visibility import (
     render_karen_case_pendientes_view,
     render_karen_case_notes_view,
     render_karen_tasks_view,
+    select_karen_task_for_schedule,
 )
 from core.karen_recent_activity import maybe_capture_karen_case_event, maybe_handle_karen_recent_events_summary
 from core.karen_appointments import maybe_handle_karen_appointment
@@ -5668,6 +5670,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_schedule_for_tomorrow(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_SCHEDULE_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
@@ -13443,6 +13451,156 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
     return number, target
 
 
+def _tomorrow_panama_date() -> str:
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo("America/Panama")
+    return (datetime.datetime.now(tz) + timedelta(days=1)).date().isoformat()
+
+
+def _karen_task_row_dict(row) -> dict:
+    if isinstance(row, dict):
+        return dict(row)
+    if hasattr(row, "keys"):
+        return dict(row)
+    return {
+        "id": row[0],
+        "raw_input": row[1],
+        "action": row[2],
+        "target": row[3],
+        "due_date": row[4],
+    }
+
+
+def _karen_schedule_text_key(text: str) -> str:
+    norm = _norm_text(text or "")
+    norm = re.sub(r"[^\w\s]", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    return norm
+
+
+def _karen_existing_open_task_with_due(chat_id: int, task_text: str, due_date: str) -> dict | None:
+    key = _karen_schedule_text_key(task_text)
+    if not key:
+        return None
+    try:
+        from memory_store import fetch_open_commitments
+
+        for row in fetch_open_commitments(int(chat_id), limit=30) or []:
+            rd = _karen_task_row_dict(row)
+            row_key = _karen_schedule_text_key(str(rd.get("raw_input") or rd.get("action") or ""))
+            row_due = str(rd.get("due_date") or "").strip()[:10]
+            if row_key == key and row_due == due_date:
+                return rd
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_SCHEDULE_DEDUPE] failed: {e}")
+    return None
+
+
+async def maybe_handle_karen_task_schedule_for_tomorrow(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+
+    request = parse_karen_task_schedule_for_tomorrow(text)
+    if not request:
+        return False
+
+    case_id = ""
+    try:
+        case_id = get_active_case_id(int(chat_id)) or ""
+    except Exception:
+        case_id = ""
+
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
+    if not is_karen_flow:
+        return False
+
+    try:
+        from memory_store import fetch_open_commitments
+
+        rows = merge_karen_task_items(
+            fetch_open_commitments(int(chat_id), limit=20) or [],
+            load_karen_auxiliary_task_items(client_id),
+        )
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_SCHEDULE_FETCH] failed: {e}")
+        await update.message.reply_text("No pude leer tus tareas abiertas ahora mismo.")
+        return True
+
+    if not rows:
+        await update.message.reply_text("No encontré tareas abiertas para poner para mañana.")
+        return True
+
+    selected, status = select_karen_task_for_schedule(rows, request)
+    if selected is None:
+        if status == "ambiguous":
+            await update.message.reply_text(
+                "Encontré más de una tarea posible. Pide “Val, qué tareas tengo” y dime el número: "
+                "“pon la tarea 1 para mañana”."
+            )
+        else:
+            await update.message.reply_text(
+                "No pude identificar una sola tarea para poner para mañana. "
+                "Pide “Val, qué tareas tengo” y dime el número."
+            )
+        return True
+
+    selected_row = _karen_task_row_dict(selected)
+    task_text = str(selected_row.get("raw_input") or selected_row.get("action") or "tarea sin fecha").strip()
+    tomorrow = _tomorrow_panama_date()
+
+    if _karen_existing_open_task_with_due(int(chat_id), task_text, tomorrow):
+        await update.message.reply_text(f"Ya tengo esa tarea para mañana: {task_text}.")
+        return True
+
+    if is_auxiliary_task_row(selected_row):
+        try:
+            from memory_store import upsert_commitment
+
+            upsert_commitment(
+                chat_id=int(chat_id),
+                raw_input=task_text,
+                action=task_text,
+                target="",
+                due_date=tomorrow,
+                confidence="derived_from_pending",
+            )
+            log_action(chat_id, "task_scheduled_from_pending", task_text)
+        except Exception as e:
+            logger.exception(f"[KAREN_TASK_SCHEDULE_CONVERT] failed: {e}")
+            await update.message.reply_text("No pude poner esa tarea para mañana ahora mismo.")
+            return True
+    else:
+        try:
+            task_id = int(selected_row.get("id"))
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE commitments
+                SET due_date=?
+                WHERE id=? AND chat_id=? AND status='open'
+                """,
+                (tomorrow, task_id, int(chat_id)),
+            )
+            changed = cur.rowcount
+            conn.commit()
+            conn.close()
+            if not changed:
+                await update.message.reply_text(
+                    "Esa tarea ya no aparece abierta. Pide “Val, qué tareas tengo” para verificar."
+                )
+                return True
+            log_action(chat_id, "task_scheduled_for_tomorrow", task_text)
+        except Exception as e:
+            logger.exception(f"[KAREN_TASK_SCHEDULE_UPDATE] failed: {e}")
+            await update.message.reply_text("No pude poner esa tarea para mañana ahora mismo.")
+            return True
+
+    await update.message.reply_text(f"Listo. Puse esta tarea para mañana: {task_text}.")
+    return True
+
+
 async def maybe_handle_karen_task_completion(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
     if not update.message:
         return False
@@ -13899,6 +14057,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_schedule_for_tomorrow(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_SCHEDULE_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
