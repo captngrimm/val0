@@ -13471,10 +13471,11 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
 
 
 def _tomorrow_panama_date() -> str:
+    from datetime import datetime
     from zoneinfo import ZoneInfo
 
     tz = ZoneInfo("America/Panama")
-    return (datetime.datetime.now(tz) + timedelta(days=1)).date().isoformat()
+    return (datetime.now(tz) + timedelta(days=1)).date().isoformat()
 
 
 def _karen_task_row_dict(row) -> dict:
