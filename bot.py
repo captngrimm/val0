@@ -5654,6 +5654,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     try:
+        if parse_karen_task_schedule_for_tomorrow(text):
+            if await maybe_handle_karen_task_schedule_for_tomorrow(update, context, chat_id, client_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_SCHEDULE_EARLY_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_guard_unknown_client_protected_workflow(update, chat_id, client_id, text):
             return
     except Exception as e:
@@ -9481,6 +9488,7 @@ Classifier confidence: {confidence}
             try_terms_due_this_week,
             try_due_range,
         ]
+        schedule_tomorrow_intent = parse_karen_task_schedule_for_tomorrow(text)
 
         # --------------------------------------------------
         # HARD AGENDA OVERRIDE (guaranteed deterministic)
@@ -9504,6 +9512,13 @@ Classifier confidence: {confidence}
             logger.exception(f"[HARD_AGENDA_OVERRIDE] failed: {e}")
 
         for handler in HANDLERS:
+            if schedule_tomorrow_intent and handler in (
+                try_due_tomorrow_natural,
+                try_due_tomorrow,
+                try_due_range,
+            ):
+                continue
+
             if is_advisory_case_prompt and handler in (
                 try_case_status,
                 try_case_cockpit,
@@ -12056,6 +12071,10 @@ async def try_due_tomorrow_natural(update, chat_id, text) -> bool:
         logger.info("[DUE_TOMORROW_GATE] skipped because task intent detected")
         return False
 
+    if parse_karen_task_schedule_for_tomorrow(text):
+        logger.info("[DUE_TOMORROW_GATE] skipped because Karen task scheduling intent detected")
+        return False
+
     patterns = [
         r"^\s*que\s+vence\s+manana\s*$",
         r"^\s*que\s+terminos\s+vencen\s+manana\s*$",
@@ -14031,6 +14050,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.exception(f"[PRIORITY_UPDATE] failed: {e}")
             await send_telegram_reply(update, "Priority update failed.", chat_id, "priority_reply")
         return
+
+    try:
+        if parse_karen_task_schedule_for_tomorrow(text):
+            if await maybe_handle_karen_task_schedule_for_tomorrow(update, context, chat_id, client_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_SCHEDULE_EARLY_HANDLE_TEXT] failed: {e}")
+
     # Reminder action intercept
     try:
         if await handle_reminder_action_intercept(
