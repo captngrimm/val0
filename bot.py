@@ -131,8 +131,10 @@ from core.karen_case_facts import (
     render_case_facts,
 )
 from core.karen_notes_tasks_visibility import (
+    looks_like_karen_case_pendientes_query,
     looks_like_karen_notes_query,
     looks_like_karen_tasks_query,
+    render_karen_case_pendientes_view,
     render_karen_case_notes_view,
     render_karen_tasks_view,
 )
@@ -13355,6 +13357,23 @@ async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: Con
     is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
     if not is_karen_flow:
         return False
+
+    if looks_like_karen_case_pendientes_query(text):
+        case_id = case_id or CASE_KEY
+        try:
+            notes = fetch_case_notes(int(chat_id), str(case_id), limit=80)
+        except Exception as e:
+            logger.exception(f"[KAREN_PENDIENTES_NOTES] failed: {e}")
+            notes = []
+        try:
+            from memory_store import fetch_open_commitments
+
+            tasks = fetch_open_commitments(int(chat_id), limit=10) or []
+        except Exception as e:
+            logger.exception(f"[KAREN_PENDIENTES_TASKS] failed: {e}")
+            tasks = []
+        await update.message.reply_text(render_karen_case_pendientes_view(tasks=tasks, notes=notes))
+        return True
 
     if looks_like_karen_notes_query(text):
         case_id = case_id or CASE_KEY
