@@ -13792,7 +13792,7 @@ async def maybe_handle_karen_day0_route(update: Update, context: ContextTypes.DE
         if await maybe_handle_document_query(update, context, chat_id, "Val, qué documentos tengo"):
             return True
         await update.message.reply_text(
-            "📎 Documentos del caso\n\n"
+            "📎 Documentos registrados\n\n"
             "No encontré un inventario estructurado disponible para este chat todavía.\n\n"
             "Límite: esto organiza información registrada; no sustituye revisión legal o profesional."
         )

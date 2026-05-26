@@ -97,7 +97,7 @@ def main() -> int:
         }
     ])
     assert_contains(documents, "Documentos", "document inventory marker")
-    assert_contains(documents, "requieren OCR/revisión", "document OCR marker")
+    assert_contains(documents, "necesitan OCR/revisión", "document OCR marker")
 
     next_action_marker = "Siguiente acción sugerida\n- Próximo pendiente"
     assert_contains(next_action_marker, "Siguiente", "next action marker")

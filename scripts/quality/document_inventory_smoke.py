@@ -57,13 +57,14 @@ def test_compact_inventory_hides_internal_ids():
 def test_compact_inventory_has_summary_boundary_and_cap():
     rendered = render_document_inventory_compact(_sample_items(), visible_limit=8)
 
-    assert "Documentos del caso" in rendered
-    assert "9 documento(s) registrado(s)." in rendered
-    assert "con texto leído/indexado" in rendered
-    assert "requieren OCR/revisión" in rendered
+    assert "Documentos registrados" in rendered
+    assert "8 de 9 documento(s) mostrado(s)." in rendered
+    assert "con texto leído" in rendered
+    assert "necesitan OCR/revisión manual" in rendered
     assert "Límite:" in rendered
     assert "no sustituye revisión legal o profesional" in rendered
     assert "Hay 1 documento(s) más no mostrados." in rendered
+    assert "Siguientes acciones útiles" in rendered
 
     visible_items = [
         line for line in rendered.splitlines()
@@ -75,10 +76,9 @@ def test_compact_inventory_has_summary_boundary_and_cap():
 def test_compact_inventory_keeps_honest_statuses():
     rendered = render_document_inventory_compact(_sample_items(), visible_limit=8)
 
-    assert "Foto reciente — requiere OCR/revisión." in rendered
-    assert "Nota de texto — texto leído/indexado." in rendered
-    assert "Documento Word — requiere OCR/revisión." in rendered
-    assert "documento extra — guardado." in rendered
+    assert "Foto reciente —" in rendered and "necesita OCR/revisión" in rendered
+    assert "Nota de texto —" in rendered and "texto leído" in rendered
+    assert "documento extra —" in rendered and "guardado sin extracción" in rendered
 
 
 def test_technical_inventory_requires_explicit_phrase():

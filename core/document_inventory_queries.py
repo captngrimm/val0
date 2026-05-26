@@ -16,6 +16,10 @@ INTENT_PATTERNS = {
         "detalles tecnicos de documentos",
         "documentos con ids",
         "documentos con id",
+        "documentos de finca",
+        "documentos de la finca",
+        "documentos del caso",
+        "documentos de caso",
     ],
     "pdf_only": [
         "qué pdf",
@@ -119,6 +123,29 @@ def _filename_kind(filename: str) -> str:
     return "document"
 
 
+def _type_label(filename: str) -> str:
+    kind = _filename_kind(filename)
+    return {
+        "image": "foto",
+        "pdf": "PDF",
+        "word": "Word",
+        "text": "texto",
+        "document": "desconocido",
+    }.get(kind, "desconocido")
+
+
+def _looks_generic_filename(filename: str) -> bool:
+    clean = _clean_filename(filename)
+    stem = clean.rsplit(".", 1)[0] if "." in clean else clean
+    normalized = stem.replace("_", " ").replace("-", " ").strip().lower()
+    return bool(
+        not normalized
+        or normalized in {"documento", "documento registrado", "scan", "scanned", "untitled", "sin titulo"}
+        or re.fullmatch(r"(img|image|scan|documento|doc)?\s*\d{3,}", normalized or "", flags=re.I)
+        or re.fullmatch(r"[0-9a-f\s_-]{8,}", normalized or "", flags=re.I)
+    )
+
+
 def _display_title(item: dict) -> str:
     filename = _clean_filename(item.get("filename") or "")
     caption = re.sub(r"\s+", " ", (item.get("caption") or "").strip())
@@ -174,16 +201,48 @@ def _document_status(item: dict) -> str:
         "manual review",
         "sin texto",
     )
+    summary_markers = (
+        "resumen disponible",
+        "summary available",
+        "summary_ready",
+        "resumen listo",
+    )
 
+    if any(marker in combined for marker in summary_markers):
+        return "resumen disponible"
     if any(marker in combined for marker in text_markers):
-        return "texto leído/indexado"
+        return "texto leído"
     if any(marker in combined for marker in review_markers):
-        return "requiere OCR/revisión"
+        if kind == "word":
+            return "guardado sin extracción"
+        return "necesita OCR/revisión"
     if kind == "image":
-        return "requiere OCR/revisión"
+        return "necesita OCR/revisión"
     if item.get("state"):
         return "estado por revisar"
-    return "guardado"
+    return "guardado sin extracción"
+
+
+def _is_legacy_noise(item: dict) -> bool:
+    searchable = f"{item.get('filename') or ''}\n{item.get('caption') or ''}\n{item.get('raw') or ''}".lower()
+    return any(marker in searchable for marker in ("test", "prueba", "dummy", "sample", "foto_prueba"))
+
+
+def _inventory_sort_key(pair) -> tuple:
+    item, status = pair
+    is_legacy = _is_legacy_noise(item)
+    if status == "resumen disponible":
+        status_rank = 0
+    elif status == "texto leído":
+        status_rank = 1
+    elif "OCR/revisión" in status or status == "estado por revisar":
+        status_rank = 2
+    else:
+        status_rank = 3
+    return (
+        1 if is_legacy else 0,
+        status_rank,
+    )
 
 
 def _render_document_inventory_technical(parsed: list[dict], case_id: str, *, limit: int = 15) -> str:
@@ -209,32 +268,51 @@ def _render_document_inventory_technical(parsed: list[dict], case_id: str, *, li
 
 def render_document_inventory_compact(parsed: list[dict], *, visible_limit: int = DEFAULT_VISIBLE_LIMIT) -> str:
     total = len(parsed)
-    visible_limit = max(1, min(int(visible_limit or DEFAULT_VISIBLE_LIMIT), 10))
+    visible_limit = max(1, min(int(visible_limit or DEFAULT_VISIBLE_LIMIT), 8))
 
     status_rows = [(item, _document_status(item)) for item in parsed]
-    text_read_count = sum(1 for _, status in status_rows if status == "texto leído/indexado")
-    review_count = sum(1 for _, status in status_rows if "OCR/revisión" in status)
+    text_read_count = sum(1 for _, status in status_rows if status in {"texto leído", "resumen disponible"})
+    summary_count = sum(1 for _, status in status_rows if status == "resumen disponible")
+    review_count = sum(1 for _, status in status_rows if "OCR/revisión" in status or status == "estado por revisar")
+    sorted_rows = sorted(status_rows, key=lambda pair: str(pair[0].get("created_at") or ""), reverse=True)
+    sorted_rows = sorted(sorted_rows, key=_inventory_sort_key)
 
     lines = [
-        "📎 Documentos del caso",
+        "📎 Documentos registrados",
         "",
         "Resumen:",
-        f"- {total} documento(s) registrado(s).",
-        f"- {text_read_count} con texto leído/indexado.",
-        f"- {review_count} requieren OCR/revisión.",
+        f"- {min(total, visible_limit)} de {total} documento(s) mostrado(s).",
+        f"- {text_read_count} con texto leído.",
+        f"- {summary_count} con resumen disponible.",
+        f"- {review_count} necesitan OCR/revisión manual.",
         "",
     ]
 
-    for idx, (item, status) in enumerate(status_rows[:visible_limit], start=1):
-        lines.append(f"{idx}. {_display_title(item)} — {status}.")
+    generic_hint_needed = False
+    for idx, (item, status) in enumerate(sorted_rows[:visible_limit], start=1):
+        filename = _clean_filename(item.get("filename") or "")
+        date = str(item.get("created_at") or "").strip()[:10] or "sin fecha"
+        type_label = _type_label(filename)
+        title = _display_title(item)
+        legacy = " · histórico/test" if _is_legacy_noise(item) else ""
+        if _looks_generic_filename(filename):
+            generic_hint_needed = True
+        lines.append(f"{idx}. {title} — {date} · {type_label} · {status}{legacy}.")
 
     hidden = max(0, total - visible_limit)
     if hidden:
         lines.extend(["", f"Hay {hidden} documento(s) más no mostrados."])
 
+    if generic_hint_needed:
+        lines.extend(["", "Veo al menos un nombre genérico; puedo ayudarte a ponerle un nombre más claro."])
+
     lines.extend([
         "",
-        "Puedes pedir el resumen completo o revisar documentos por estado.",
+        "Siguientes acciones útiles:",
+        "- pídeme el resumen de un documento",
+        "- renombra o clasifica este documento",
+        "- extrae fechas importantes",
+        "- prepara paquete para Nora",
         "",
         "Límite: esto organiza información registrada; no sustituye revisión legal o profesional.",
     ])
@@ -347,7 +425,7 @@ async def maybe_handle_document_query(update, context, chat_id: int, text: str) 
             reply = f"No encontré documentos que coincidan en CASE:{case_id}."
         else:
             reply = (
-                "📎 Documentos del caso\n\n"
+                "📎 Documentos registrados\n\n"
                 "No encontré documentos registrados que coincidan con esa consulta.\n\n"
                 "Límite: esto organiza información registrada; no sustituye revisión legal o profesional."
             )
