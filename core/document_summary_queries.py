@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 
-from memory_store import get_active_case_id, _get_conn
+from memory_store import get_active_case_id, _get_conn, insert_case_note
 
 
 async def _reply_text_chunked(update, text: str, limit: int = 3800):
@@ -1004,6 +1004,134 @@ def _find_specific_doc_in_inventory(case_id: str, chat_id: int, doc_name: str) -
     return None
 
 
+def _find_saved_specific_doc_summary(case_id: str, chat_id: int, ingest_id: str) -> str:
+    ingest_id = (ingest_id or "").strip()
+    if not ingest_id:
+        return ""
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT note_text
+        FROM case_notes
+        WHERE case_id=?
+          AND chat_id=?
+          AND source='generated_summary'
+          AND note_text LIKE ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (str(case_id), int(chat_id), f"%{ingest_id}%"),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return ""
+    return str(row[0] if not isinstance(row, dict) else row["note_text"]).strip()
+
+
+def _with_summary_available_state(note_text: str) -> str:
+    note_text = (note_text or "").strip()
+    if not note_text:
+        return note_text
+    if "resumen disponible" in note_text.lower() or "summary available" in note_text.lower():
+        return note_text
+
+    state_match = re.search(r"(?m)^- Estado:\s*(.+)$", note_text)
+    if state_match:
+        current = state_match.group(1).strip()
+        updated = f"- Estado: {current}; resumen disponible"
+        return note_text[: state_match.start()] + updated + note_text[state_match.end():]
+
+    return note_text + "\n- Estado: resumen disponible"
+
+
+def _mark_specific_doc_summary_available(case_id: str, chat_id: int, ingest_id: str) -> bool:
+    ingest_id = (ingest_id or "").strip()
+    if not ingest_id:
+        return False
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, note_text
+        FROM case_notes
+        WHERE case_id=?
+          AND chat_id=?
+          AND source='telegram_attachment_vfms'
+          AND note_text LIKE ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (str(case_id), int(chat_id), f"%{ingest_id}%"),
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return False
+
+    row_id = row[0] if not isinstance(row, dict) else row["id"]
+    note_text = row[1] if not isinstance(row, dict) else row["note_text"]
+    updated = _with_summary_available_state(str(note_text or ""))
+    if updated != note_text:
+        cur.execute(
+            "UPDATE case_notes SET note_text=? WHERE id=?",
+            (updated, int(row_id)),
+        )
+        conn.commit()
+    conn.close()
+    return True
+
+
+def _generate_specific_doc_summary_text(doc_meta: dict) -> str:
+    filename = _clean_filename(doc_meta.get("filename", ""))
+    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+    caption = str(doc_meta.get("caption") or "").strip()
+    state = str(doc_meta.get("state") or "").strip()
+    text = str(doc_meta.get("text") or "").strip()
+
+    summary = _doc_summary(filename, ingest_id, caption, state, text)
+    lines = [
+        summary,
+        "",
+        "Siguientes acciones útiles:",
+        "- extraer fechas importantes",
+        "- preparar preguntas para Nora",
+        "- revisar el documento original con una abogada si necesitas confirmar efectos legales",
+        "",
+        "Límite: resumo información registrada; no sustituye revisión legal o profesional.",
+    ]
+    return "\n".join(lines).strip()
+
+
+def _persist_specific_doc_summary(case_id: str, chat_id: int, doc_meta: dict, summary_text: str) -> bool:
+    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+    summary_text = (summary_text or "").strip()
+    if not ingest_id or not summary_text:
+        return False
+
+    existing = _find_saved_specific_doc_summary(str(case_id), int(chat_id), ingest_id)
+    if not existing:
+        note_text = "\n".join([
+            "Resumen generado de documento VFMS",
+            f"- VFMS ingest_id: {ingest_id}",
+            f"- Archivo: {_clean_filename(doc_meta.get('filename', 'documento'))}",
+            "",
+            summary_text,
+        ]).strip()
+        insert_case_note(
+            chat_id=int(chat_id),
+            case_id=str(case_id),
+            note_text=note_text,
+            source="generated_summary",
+        )
+
+    _mark_specific_doc_summary_available(str(case_id), int(chat_id), ingest_id)
+    return True
+
+
 def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
     """
     Build a reply for a specific document summary.
@@ -1018,6 +1146,7 @@ def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
     caption = doc_meta.get("caption", "")
     state = doc_meta.get("state", "").lower()
     text = doc_meta.get("text", "").strip()
+    saved_summary = str(doc_meta.get("saved_summary") or "").strip()
     
     lines = []
     lines.append(f"📄 {filename}")
@@ -1031,15 +1160,18 @@ def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
     # Check if text is extracted
     has_text = bool(text)
     
-    if has_text:
+    if saved_summary:
+        lines.append("Estado: texto leído; resumen disponible")
+        lines.append("")
+        lines.append("📋 Resumen")
+        lines.append(saved_summary)
+    elif has_text:
         if "resumen" in state or "summary" in state.lower():
-            # Already has summary
+            generated_summary = _generate_specific_doc_summary_text(doc_meta)
             lines.append(f"Estado: {state}")
             lines.append("")
-            lines.append("📋 Resumen disponible:")
-            # Return a concise summary - just the first facts
-            summary_lines = text.split("\n")[:10]
-            lines.extend([line.strip() for line in summary_lines if line.strip()])
+            lines.append("📋 Resumen")
+            lines.append(generated_summary)
         else:
             # Text is extracted but no summary yet
             lines.append(f"Estado: {state or 'texto extraído e indexado'}")
@@ -1139,6 +1271,17 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
         # User asked for summary of a specific document (e.g., "dame el resumen de six pdf")
         doc_meta = _find_specific_doc_in_inventory(case_id, int(chat_id), specific_doc_name)
         if doc_meta:
+            ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+            saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), ingest_id)
+            if saved_summary:
+                doc_meta["saved_summary"] = saved_summary
+            elif str(doc_meta.get("text") or "").strip():
+                generated_summary = _generate_specific_doc_summary_text(doc_meta)
+                _persist_specific_doc_summary(str(case_id), int(chat_id), doc_meta, generated_summary)
+                doc_meta["saved_summary"] = generated_summary
+                doc_meta["state"] = (
+                    str(doc_meta.get("state") or "texto leído").strip() + "; resumen disponible"
+                ).strip("; ")
             reply = _build_specific_doc_summary_reply(doc_meta)
             await _reply_text_chunked(update, reply)
             return True

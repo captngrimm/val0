@@ -23,7 +23,10 @@ from core.document_summary_queries import (  # noqa: E402
     _normalize_doc_name,
     _find_specific_doc_in_inventory,
     _build_specific_doc_summary_reply,
+    _generate_specific_doc_summary_text,
+    _with_summary_available_state,
 )
+from core.document_inventory_queries import render_document_inventory_compact  # noqa: E402
 
 
 def assert_true(value, label: str) -> None:
@@ -53,6 +56,10 @@ def assert_equals(a, b, label: str) -> None:
 
 def _bot_source() -> str:
     return (REPO_ROOT / "bot.py").read_text(encoding="utf-8")
+
+
+def _summary_source() -> str:
+    return (REPO_ROOT / "core" / "document_summary_queries.py").read_text(encoding="utf-8")
 
 
 def _function_body(source: str, name: str) -> str:
@@ -155,7 +162,7 @@ def test_build_summary_reply_no_text() -> None:
 
 
 def test_build_summary_reply_with_text() -> None:
-    """Test that build_specific_doc_summary_reply handles documents with extracted text."""
+    """Test that build_specific_doc_summary_reply handles extracted text honestly."""
     
     doc_meta = {
         "filename": "test_document.pdf",
@@ -177,6 +184,55 @@ def test_build_summary_reply_with_text() -> None:
     assert_contains(reply, "todavía no tengo un resumen guardado", "honest no saved summary copy")
     assert_contains(reply, "puedo generar uno ahora", "offers generation")
     assert_not_contains(reply.splitlines()[0], "📎 Documentos registrados", "does not start with inventory")
+
+
+def test_generate_and_saved_summary_reply_with_text() -> None:
+    """Test generated summary copy once the route has persisted a summary."""
+    doc_meta = {
+        "filename": "six_pdf.pdf",
+        "ingest_id": "20260528_000001",
+        "caption": "Val, transcribe este documento y hazme un resumen",
+        "state": "texto extraído e indexado",
+        "text": (
+            "Juzgado Primero de Circuito Civil. Finca No. 10082. "
+            "Se menciona el Oficio No. 792 dirigido al Registro Público. "
+            "Auto No. 629 fechado 29 de abril de 2024."
+        ),
+    }
+
+    generated = _generate_specific_doc_summary_text(doc_meta)
+    assert_contains(generated, "six_pdf.pdf", "generated summary names filename")
+    assert_contains(generated, "Resumen grounded", "generated summary is summary-style")
+    assert_contains(generated, "Siguientes acciones útiles", "generated summary includes next actions")
+    assert_not_contains(generated, "conclusión legal", "generated summary avoids legal conclusion")
+
+    reply = _build_specific_doc_summary_reply({**doc_meta, "saved_summary": generated})
+    assert_not_contains(reply, "📎 Documentos registrados", "generated reply is not inventory")
+    assert_contains(reply, "📋 Resumen", "generated reply has summary header")
+    assert_contains(reply, "resumen disponible", "generated reply marks summary available")
+    assert_contains(reply, "six_pdf.pdf", "generated reply names document")
+
+
+def test_summary_available_marker_updates_inventory_count() -> None:
+    note_text = (
+        "Documento recibido vía Telegram y registrado en VFMS.\n"
+        "- Archivo: six_pdf.pdf\n"
+        "- VFMS ingest_id: 20260528_000001\n"
+        "- Estado: texto extraído e indexado; listo para resumen\n"
+        "- Caso asociado: CASE:KAREN-LAND-001"
+    )
+    updated = _with_summary_available_state(note_text)
+    assert_contains(updated, "resumen disponible", "summary marker added to VFMS note")
+
+    inventory = render_document_inventory_compact([
+        {
+            "filename": "six_pdf.pdf",
+            "created_at": "2026-05-28 10:00:00",
+            "state": "texto extraído e indexado; listo para resumen; resumen disponible",
+            "raw": updated,
+        }
+    ])
+    assert_contains(inventory, "1 con resumen disponible", "inventory summary count reflects persisted marker")
 
 
 def test_build_summary_reply_with_summary_state() -> None:
@@ -237,6 +293,11 @@ def test_specific_summary_routes_before_inventory_in_bot() -> None:
     assert_contains(handle_text, "hazme resumen de", "hazme summary phrase wired")
     assert_contains(handle_text, "resume el documento", "resume document phrase wired")
 
+    summary_route = _function_body(_summary_source(), "maybe_handle_document_summary_query")
+    assert_contains(summary_route, "_generate_specific_doc_summary_text", "specific route generates summary")
+    assert_contains(summary_route, "_persist_specific_doc_summary", "specific route persists summary")
+    assert_contains(summary_route, "saved_summary", "specific route reuses saved summary")
+
 
 def test_summary_markers_still_include_general_patterns() -> None:
     """Verify we didn't break general summary patterns."""
@@ -261,6 +322,8 @@ if __name__ == "__main__":
         test_normalize_doc_name,
         test_build_summary_reply_no_text,
         test_build_summary_reply_with_text,
+        test_generate_and_saved_summary_reply_with_text,
+        test_summary_available_marker_updates_inventory_count,
         test_build_summary_reply_with_summary_state,
         test_specific_requests_dont_match_inventory_intents,
         test_specific_summary_routes_before_inventory_in_bot,
