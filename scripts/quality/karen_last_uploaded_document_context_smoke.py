@@ -73,15 +73,20 @@ def _latest_doc() -> dict:
 
 
 def test_latest_summary_phrases_resolve_to_latest_token() -> None:
-    phrases = (
+    latest_phrases = (
         "Val, resume el último documento",
         "Val, dame el resumen del último documento",
+    )
+    for phrase in latest_phrases:
+        assert_true(_looks_like_latest_document_reference(phrase), f"latest reference recognized: {phrase}")
+        assert_equals(_extract_specific_doc_name(phrase), "__latest__", f"summary latest token: {phrase}")
+    current_phrases = (
         "Val, resume este documento",
         "Val, transcribe/resume el documento que acabo de subir",
     )
-    for phrase in phrases:
-        assert_true(_looks_like_latest_document_reference(phrase), f"latest reference recognized: {phrase}")
-        assert_equals(_extract_specific_doc_name(phrase), "__latest__", f"summary latest token: {phrase}")
+    for phrase in current_phrases:
+        assert_true(_looks_like_latest_document_reference(phrase), f"current reference recognized: {phrase}")
+        assert_equals(_extract_specific_doc_name(phrase), "__current__", f"summary current token: {phrase}")
 
 
 def test_latest_naming_phrases_have_no_filename_target() -> None:
@@ -118,7 +123,7 @@ def test_latest_upload_status_response_shape() -> None:
 
 def test_latest_uses_persistent_vfms_source() -> None:
     source = _summary_source()
-    latest_body = _function_body(source, "_find_latest_document_meta")
+    latest_body = _function_body(source, "_find_ordered_document_inventory")
     assert_contains(latest_body, "source='telegram_attachment_vfms'", "latest doc uses VFMS notes")
     assert_contains(latest_body, "ORDER BY id DESC", "latest doc uses persisted newest record")
     assert_contains(source, "Primero te sugiero un nombre para el último documento", "save-without-pending guidance")

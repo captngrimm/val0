@@ -286,8 +286,11 @@ def render_document_inventory_compact(parsed: list[dict], *, visible_limit: int 
     text_read_count = sum(1 for _, status in status_rows if status in {"texto leído", "resumen disponible"})
     summary_count = sum(1 for _, status in status_rows if status == "resumen disponible")
     review_count = sum(1 for _, status in status_rows if "OCR/revisión" in status or status == "estado por revisar")
-    sorted_rows = sorted(status_rows, key=lambda pair: str(pair[0].get("created_at") or ""), reverse=True)
-    sorted_rows = sorted(sorted_rows, key=_inventory_sort_key)
+    sorted_rows = sorted(
+        status_rows,
+        key=lambda pair: (str(pair[0].get("created_at") or ""), int(pair[0].get("id") or 0)),
+        reverse=True,
+    )
 
     lines = [
         "📎 Documentos registrados",
