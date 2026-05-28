@@ -642,6 +642,99 @@ def _doc_summary(filename: str, ingest_id: str, caption: str, state: str, text: 
     return "\n".join(lines)
 
 
+SUMMARY_LIMIT_LINE = "Límite: resumo información registrada; no sustituye revisión legal o profesional."
+
+
+def _render_clean_specific_doc_summary_body(text: str) -> str:
+    bullets = _pick_grounded_bullets(text)
+    lines = ["📋 Resumen claro"]
+    if bullets:
+        for bullet in bullets:
+            lines.append(f"- {bullet}")
+    else:
+        lines.append("- No hay texto extraído suficiente para resumir este documento.")
+
+    lines.extend([
+        "",
+        "Siguientes acciones útiles:",
+        "- extraer fechas importantes",
+        "- preparar preguntas para Nora",
+        "- renombrar o clasificar este documento",
+        "",
+        SUMMARY_LIMIT_LINE,
+    ])
+    return "\n".join(lines).strip()
+
+
+def _clean_specific_doc_summary_body_for_reply(summary_text: str) -> str:
+    lines = []
+    seen_limit = False
+    saw_summary_header = False
+
+    for raw_line in (summary_text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            if lines and lines[-1] != "":
+                lines.append("")
+            continue
+
+        low = line.lower()
+        if (
+            line.startswith("📄")
+            or low.startswith("vfms:")
+            or low.startswith("id:")
+            or low.startswith("estado:")
+            or low.startswith("nota:")
+            or low.startswith("resumen generado de documento")
+            or low.startswith("- vfms ingest_id:")
+            or low.startswith("- archivo:")
+        ):
+            continue
+
+        if "resumen grounded" in low or low in {"📋 resumen", "resumen:"}:
+            line = "📋 Resumen claro"
+
+        if "límite:" in low or "limite:" in low or "no sustituye revisión legal" in low:
+            if seen_limit:
+                continue
+            line = SUMMARY_LIMIT_LINE
+            seen_limit = True
+
+        if line == "📋 Resumen claro":
+            if saw_summary_header:
+                continue
+            saw_summary_header = True
+
+        lines.append(line)
+
+    while lines and lines[0] == "":
+        lines.pop(0)
+    while lines and lines[-1] == "":
+        lines.pop()
+
+    if not any(line == "📋 Resumen claro" for line in lines):
+        lines.insert(0, "📋 Resumen claro")
+
+    if not any("Siguientes acciones útiles:" == line for line in lines):
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend([
+            "Siguientes acciones útiles:",
+            "- extraer fechas importantes",
+            "- preparar preguntas para Nora",
+            "- renombrar o clasificar este documento",
+        ])
+
+    if not any(line == SUMMARY_LIMIT_LINE for line in lines):
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.append(SUMMARY_LIMIT_LINE)
+
+    cleaned = "\n".join(lines).strip()
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned
+
+
 def _looks_like_format_preview_request(text: str) -> bool:
     t = (text or "").lower()
     markers = (
@@ -1086,24 +1179,8 @@ def _mark_specific_doc_summary_available(case_id: str, chat_id: int, ingest_id: 
 
 
 def _generate_specific_doc_summary_text(doc_meta: dict) -> str:
-    filename = _clean_filename(doc_meta.get("filename", ""))
-    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
-    caption = str(doc_meta.get("caption") or "").strip()
-    state = str(doc_meta.get("state") or "").strip()
     text = str(doc_meta.get("text") or "").strip()
-
-    summary = _doc_summary(filename, ingest_id, caption, state, text)
-    lines = [
-        summary,
-        "",
-        "Siguientes acciones útiles:",
-        "- extraer fechas importantes",
-        "- preparar preguntas para Nora",
-        "- revisar el documento original con una abogada si necesitas confirmar efectos legales",
-        "",
-        "Límite: resumo información registrada; no sustituye revisión legal o profesional.",
-    ]
-    return "\n".join(lines).strip()
+    return _render_clean_specific_doc_summary_body(text)
 
 
 def _persist_specific_doc_summary(case_id: str, chat_id: int, doc_meta: dict, summary_text: str) -> bool:
@@ -1159,19 +1236,20 @@ def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
     
     # Check if text is extracted
     has_text = bool(text)
+    body_includes_limit = False
     
     if saved_summary:
-        lines.append("Estado: texto leído; resumen disponible")
+        lines.append("Estado: resumen disponible")
         lines.append("")
-        lines.append("📋 Resumen")
-        lines.append(saved_summary)
+        lines.append(_clean_specific_doc_summary_body_for_reply(saved_summary))
+        body_includes_limit = True
     elif has_text:
         if "resumen" in state or "summary" in state.lower():
             generated_summary = _generate_specific_doc_summary_text(doc_meta)
-            lines.append(f"Estado: {state}")
+            lines.append("Estado: resumen disponible")
             lines.append("")
-            lines.append("📋 Resumen")
-            lines.append(generated_summary)
+            lines.append(_clean_specific_doc_summary_body_for_reply(generated_summary))
+            body_includes_limit = True
         else:
             # Text is extracted but no summary yet
             lines.append(f"Estado: {state or 'texto extraído e indexado'}")
@@ -1198,10 +1276,13 @@ def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
         lines.append("- Si es un PDF o imagen, puedo extraer el texto")
         lines.append("- Luego podré hacerte un resumen")
     
-    lines.append("")
-    lines.append("_Límite: resumo información registrada; no sustituye revisión legal o profesional._")
+    if not body_includes_limit:
+        lines.append("")
+        lines.append(SUMMARY_LIMIT_LINE)
     
-    return "\n".join(lines).strip()
+    reply = "\n".join(lines).strip()
+    reply = re.sub(r"\n{3,}", "\n\n", reply)
+    return reply
 
 async def maybe_handle_document_summary_query(update, context, chat_id: int, text: str) -> bool:
     """

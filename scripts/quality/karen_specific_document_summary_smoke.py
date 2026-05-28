@@ -201,16 +201,20 @@ def test_generate_and_saved_summary_reply_with_text() -> None:
     }
 
     generated = _generate_specific_doc_summary_text(doc_meta)
-    assert_contains(generated, "six_pdf.pdf", "generated summary names filename")
-    assert_contains(generated, "Resumen grounded", "generated summary is summary-style")
+    assert_not_contains(generated, "six_pdf.pdf", "generated summary body does not repeat filename")
+    assert_contains(generated, "📋 Resumen claro", "generated summary is client-ready")
+    assert_not_contains(generated, "Resumen grounded", "generated summary avoids internal wording")
     assert_contains(generated, "Siguientes acciones útiles", "generated summary includes next actions")
     assert_not_contains(generated, "conclusión legal", "generated summary avoids legal conclusion")
 
     reply = _build_specific_doc_summary_reply({**doc_meta, "saved_summary": generated})
     assert_not_contains(reply, "📎 Documentos registrados", "generated reply is not inventory")
-    assert_contains(reply, "📋 Resumen", "generated reply has summary header")
+    assert_contains(reply, "📋 Resumen claro", "generated reply has polished summary header")
     assert_contains(reply, "resumen disponible", "generated reply marks summary available")
     assert_contains(reply, "six_pdf.pdf", "generated reply names document")
+    assert_true(reply.count("six_pdf.pdf") == 1, "generated reply names document once")
+    assert_true(reply.count("20260528_000001") == 1, "generated reply shows ID once")
+    assert_true(reply.count("no sustituye revisión legal o profesional") == 1, "generated reply has one legal limit")
 
 
 def test_summary_available_marker_updates_inventory_count() -> None:
