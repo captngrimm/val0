@@ -123,12 +123,12 @@ def test_normalize_doc_name() -> None:
     """Test normalization of document names for matching."""
     
     cases = [
-        ("six pdf", "sixpdf"),
-        ("six_pdf", "sixpdf"),
-        ("six-pdf", "sixpdf"),
-        ("six pdf.pdf", "sixpdf"),
-        ("six_pdf.pdf", "sixpdf"),
-        ("SIX PDF", "sixpdf"),
+        ("six pdf", "six"),
+        ("six_pdf", "six"),
+        ("six-pdf", "six"),
+        ("six pdf.pdf", "six"),
+        ("six_pdf.pdf", "six"),
+        ("SIX PDF", "six"),
         ("document_1.docx", "document1"),
         ("DOCUMENT-1", "document1"),
     ]

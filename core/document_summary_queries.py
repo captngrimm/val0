@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from pathlib import Path
 
 
@@ -1078,20 +1079,64 @@ def looks_like_document_naming_metadata_request(text: str) -> bool:
     return any(marker in low for marker in NAMING_METADATA_MARKERS)
 
 
+_DOC_EXTENSION_WORDS = {"pdf", "doc", "docx", "txt", "jpg", "jpeg", "png", "heic", "webp"}
+
+
 def _normalize_doc_name(name: str) -> str:
     """
     Normalize a document name for matching.
     Handles variations like "six pdf" vs "six_pdf.pdf"
     """
     name = (name or "").strip().lower()
-    # Remove extensions and extra spaces
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(ch for ch in name if not unicodedata.combining(ch))
     name = re.sub(r"\.(pdf|doc|docx|txt|jpg|jpeg|png)$", "", name, flags=re.I)
-    # Replace underscores, hyphens, spaces with nothing for comparison
-    name = re.sub(r"[\s_-]+", "", name)
-    return name
+    tokens = [
+        token for token in re.split(r"[^a-z0-9]+", name)
+        if token and token not in _DOC_EXTENSION_WORDS and token not in {"documento", "doc"}
+    ]
+    return "".join(tokens)
 
 
-def _find_specific_doc_in_inventory(case_id: str, chat_id: int, doc_name: str) -> dict | None:
+def _compact_doc_name(name: str) -> str:
+    name = (name or "").strip().lower()
+    name = unicodedata.normalize("NFKD", name)
+    name = "".join(ch for ch in name if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", "", name)
+
+
+def _doc_match_keys(value: str) -> set[str]:
+    clean = (value or "").strip()
+    if not clean:
+        return set()
+    stem = clean.rsplit(".", 1)[0] if "." in clean else clean
+    keys = {
+        _normalize_doc_name(clean),
+        _normalize_doc_name(stem),
+        _normalize_doc_name(clean.replace("_", " ")),
+        _normalize_doc_name(clean.replace("-", " ")),
+        _compact_doc_name(stem),
+        _compact_doc_name(clean.replace(".", " ")),
+    }
+    return {key for key in keys if key}
+
+
+def _doc_match_score(query_keys: set[str], parsed: dict) -> int:
+    filename = parsed.get("filename", "")
+    ingest_id = parsed.get("ingest_id", "")
+    candidate_keys = _doc_match_keys(filename)
+    candidate_keys.update(_doc_match_keys(ingest_id))
+
+    if not query_keys or not candidate_keys:
+        return 0
+    if query_keys.intersection(candidate_keys):
+        return 100
+    if any(q and c and (q in c or c in q) for q in query_keys for c in candidate_keys):
+        return 70
+    return 0
+
+
+def _find_specific_doc_matches(case_id: str, chat_id: int, doc_name: str, *, limit: int = 5) -> list[dict]:
     """
     Find a document in VFMS inventory by name/ID.
     
@@ -1100,11 +1145,11 @@ def _find_specific_doc_in_inventory(case_id: str, chat_id: int, doc_name: str) -
     - None if not found
     """
     if not doc_name:
-        return None
-    
-    doc_name_norm = _normalize_doc_name(doc_name)
-    if not doc_name_norm:
-        return None
+        return []
+
+    query_keys = _doc_match_keys(doc_name)
+    if not query_keys:
+        return []
     
     conn = _get_conn()
     cur = conn.cursor()
@@ -1123,23 +1168,37 @@ def _find_specific_doc_in_inventory(case_id: str, chat_id: int, doc_name: str) -
     rows = cur.fetchall()
     conn.close()
     
+    matches = []
     for row in rows:
         note = row[0] if not isinstance(row, dict) else row["note_text"]
         parsed = _parse_note(note)
-        
-        filename = parsed.get("filename", "")
-        # Try matching both filename and ingest_id
-        filename_norm = _normalize_doc_name(filename)
-        ingest_id_norm = _normalize_doc_name(parsed.get("ingest_id", ""))
-        
-        if filename_norm == doc_name_norm or ingest_id_norm == doc_name_norm:
+
+        score = _doc_match_score(query_keys, parsed)
+        if score:
             text = _read_extracted_text(parsed.get("ingest_id", ""))
-            return {
+            matches.append({
                 **parsed,
                 "text": text,
-            }
-    
-    return None
+                "_match_score": score,
+            })
+
+    matches.sort(key=lambda item: (int(item.get("_match_score") or 0), str(item.get("ingest_id") or "")), reverse=True)
+    return matches[: max(1, int(limit or 5))]
+
+
+def _find_specific_doc_in_inventory(case_id: str, chat_id: int, doc_name: str) -> dict | None:
+    matches = _find_specific_doc_matches(case_id, chat_id, doc_name, limit=2)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _render_ambiguous_document_matches(matches: list[dict]) -> str:
+    lines = ["Encontré varios documentos parecidos. ¿Cuál quieres?", ""]
+    for idx, item in enumerate(matches[:5], start=1):
+        filename = _clean_filename(item.get("filename", "documento"))
+        ingest_id = str(item.get("ingest_id") or "").strip()
+        suffix = f" · ID: {ingest_id}" if ingest_id else ""
+        lines.append(f"{idx}. {filename}{suffix}")
+    return "\n".join(lines).strip()
 
 
 def _find_saved_specific_doc_summary(case_id: str, chat_id: int, ingest_id: str) -> str:
@@ -1240,12 +1299,47 @@ def _doc_status_label(doc_meta: dict) -> str:
     return state or "guardado"
 
 
+def _looks_like_land_case_doc(doc_meta: dict) -> bool:
+    combined = f"{doc_meta.get('filename') or ''}\n{doc_meta.get('text') or ''}".lower()
+    return any(marker in combined for marker in (
+        "finca",
+        "10082",
+        "registro público",
+        "registro publico",
+        "juzgado",
+        "oficio no",
+        "auto no",
+        "prescripción adquisitiva",
+        "prescripcion adquisitiva",
+    ))
+
+
+def _looks_like_ai_research_doc(doc_meta: dict) -> bool:
+    combined = f"{doc_meta.get('filename') or ''}\n{doc_meta.get('text') or ''}".lower()
+    return any(marker in combined for marker in (
+        "agi",
+        "artificial general intelligence",
+        "inteligencia artificial",
+        "ai",
+        "predictions",
+        "predicciones",
+        "timeline",
+        "2028",
+        "2030",
+    ))
+
+
 def _suggest_document_tags(doc_meta: dict) -> list[str]:
     filename = _clean_filename(doc_meta.get("filename", ""))
     text = str(doc_meta.get("text") or "")
     combined = f"{filename}\n{text}".lower()
     tags = []
-    if "finca" in combined or "10082" in combined:
+    if _looks_like_ai_research_doc(doc_meta):
+        tags.extend(["AGI", "inteligencia artificial", "predicciones"])
+        for year in ("2028", "2030"):
+            if year in combined:
+                tags.append(year)
+    if _looks_like_land_case_doc(doc_meta):
         tags.append("Finca 10082")
     if filename.lower().endswith(".pdf"):
         tags.append("PDF")
@@ -1274,7 +1368,12 @@ def _suggest_document_display_name(doc_meta: dict) -> str:
     header = _extract_legal_header(text)
     registry = _extract_registry_points(text)
     filename = _clean_filename(doc_meta.get("filename", "documento"))
+    combined = f"{filename}\n{text}".lower()
 
+    if _looks_like_ai_research_doc(doc_meta):
+        years = [year for year in ("2028", "2030") if year in combined]
+        suffix = "_" + "_".join(years) if years else ""
+        return f"AGI_Predicciones_y_Timeline{suffix}"
     if any("Finca No. 10082" in point for point in registry):
         if header.get("tipo_documento"):
             return f"Finca 10082 - {header['tipo_documento']}"
@@ -1288,6 +1387,8 @@ def _document_importance_note(doc_meta: dict) -> str:
     text = str(doc_meta.get("text") or "")
     registry = _extract_registry_points(text)
     chronology = _extract_chronology(text)
+    if _looks_like_ai_research_doc(doc_meta):
+        return "Parece útil como material de investigación o referencia sobre AGI, predicciones y posibles fechas."
     if registry:
         return "Ayuda a ubicar datos de la finca y actuaciones mencionadas para revisarlas con Nora."
     if chronology:
@@ -1297,13 +1398,33 @@ def _document_importance_note(doc_meta: dict) -> str:
     return "Sirve para tener identificado el documento y decidir qué revisar después."
 
 
+def _document_case_folder_suggestion(doc_meta: dict, case_id: str) -> str:
+    if _looks_like_land_case_doc(doc_meta):
+        return f"Finca / CASE:{case_id}"
+    if _looks_like_ai_research_doc(doc_meta):
+        return f"General / Investigación. Caso actual: CASE:{case_id}, pero este documento parece no ser de finca."
+    return f"Sin carpeta confirmada. Caso actual: CASE:{case_id}."
+
+
+def _document_timeline_items(doc_meta: dict) -> list[str]:
+    text = str(doc_meta.get("text") or "")
+    chronology = _extract_chronology(text)
+    if chronology:
+        return chronology[:5]
+    years = []
+    for year in re.findall(r"\b20\d{2}\b", text):
+        if year not in years:
+            years.append(year)
+    return [f"{year}: año mencionado en el texto." for year in years[:5]]
+
+
 def render_document_naming_metadata_suggestion(doc_meta: dict, *, case_id: str) -> str:
     filename = _clean_filename(doc_meta.get("filename", "documento"))
     ingest_id = str(doc_meta.get("ingest_id") or "").strip()
     status = _doc_status_label(doc_meta)
     suggested_name = _suggest_document_display_name(doc_meta)
     tags = _suggest_document_tags(doc_meta)
-    chronology = _extract_chronology(str(doc_meta.get("text") or ""))
+    chronology = _document_timeline_items(doc_meta)
 
     lines = [
         "📎 Documento",
@@ -1323,7 +1444,7 @@ def render_document_naming_metadata_suggestion(doc_meta: dict, *, case_id: str) 
     lines.extend([
         "",
         "🗂️ Carpeta / caso sugerido",
-        f"- Finca / CASE:{case_id}",
+        f"- {_document_case_folder_suggestion(doc_meta, case_id)}",
         "",
         "🧭 Por qué importa",
         f"- {_document_importance_note(doc_meta)}",
@@ -1514,7 +1635,11 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     
     if specific_doc_name:
         # User asked for summary of a specific document (e.g., "dame el resumen de six pdf")
-        doc_meta = _find_specific_doc_in_inventory(case_id, int(chat_id), specific_doc_name)
+        matches = _find_specific_doc_matches(case_id, int(chat_id), specific_doc_name, limit=5)
+        if len(matches) > 1:
+            await update.message.reply_text(_render_ambiguous_document_matches(matches))
+            return True
+        doc_meta = matches[0] if matches else None
         if doc_meta:
             ingest_id = str(doc_meta.get("ingest_id") or "").strip()
             saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), ingest_id)
@@ -1537,6 +1662,7 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
                 f"en el inventario del CASE:{case_id}.\n\n"
                 f"Puedo ayudarte a:\n"
                 f"- Ver qué documentos tienes: 'qué documentos tengo'\n"
+                f"- Probar con el nombre exacto o el ID VFMS\n"
                 f"- Buscar por tipo: 'qué pdf tengo' o 'documentos de finca'\n"
             )
             await update.message.reply_text(reply)
@@ -1723,7 +1849,11 @@ async def maybe_handle_document_naming_metadata_query(update, context, chat_id: 
             parsed["saved_summary"] = saved_summary
         doc_meta = parsed
     else:
-        doc_meta = _find_specific_doc_in_inventory(str(case_id), int(chat_id), target)
+        matches = _find_specific_doc_matches(str(case_id), int(chat_id), target, limit=5)
+        if len(matches) > 1:
+            await update.message.reply_text(_render_ambiguous_document_matches(matches))
+            return True
+        doc_meta = matches[0] if matches else None
 
     if not doc_meta:
         await update.message.reply_text(
