@@ -132,12 +132,20 @@ def _parse_note(note: str) -> dict:
     vfms_match = re.search(r"- VFMS ingest_id:\s*(.+)", note)
     caption_match = re.search(r"- Nota usuario:\s*(.+)", note)
     state_match = re.search(r"- Estado:\s*(.+)", note)
+    alias_match = re.search(r"- Alias:\s*(.+)", note)
+    tags_match = re.search(r"- Etiquetas:\s*(.+)", note)
+    folder_match = re.search(r"- Carpeta sugerida:\s*(.+)", note)
+    importance_match = re.search(r"- Por qué importa:\s*(.+)", note)
 
     return {
         "filename": _clean_filename(file_match.group(1).strip()) if file_match else "documento",
         "ingest_id": vfms_match.group(1).strip() if vfms_match else "",
         "caption": caption_match.group(1).strip() if caption_match else "",
         "state": state_match.group(1).strip() if state_match else "",
+        "alias": alias_match.group(1).strip() if alias_match else "",
+        "tags": tags_match.group(1).strip() if tags_match else "",
+        "folder_suggestion": folder_match.group(1).strip() if folder_match else "",
+        "why_it_matters": importance_match.group(1).strip() if importance_match else "",
     }
 
 
@@ -1124,8 +1132,10 @@ def _doc_match_keys(value: str) -> set[str]:
 def _doc_match_score(query_keys: set[str], parsed: dict) -> int:
     filename = parsed.get("filename", "")
     ingest_id = parsed.get("ingest_id", "")
+    alias = parsed.get("alias", "")
     candidate_keys = _doc_match_keys(filename)
     candidate_keys.update(_doc_match_keys(ingest_id))
+    candidate_keys.update(_doc_match_keys(alias))
 
     if not query_keys or not candidate_keys:
         return 0
@@ -1418,13 +1428,27 @@ def _document_timeline_items(doc_meta: dict) -> list[str]:
     return [f"{year}: año mencionado en el texto." for year in years[:5]]
 
 
+def build_document_naming_metadata(doc_meta: dict, *, case_id: str) -> dict:
+    return {
+        "filename": _clean_filename(doc_meta.get("filename", "documento")),
+        "ingest_id": str(doc_meta.get("ingest_id") or "").strip(),
+        "status": _doc_status_label(doc_meta),
+        "alias": _suggest_document_display_name(doc_meta),
+        "tags": _suggest_document_tags(doc_meta),
+        "folder": _document_case_folder_suggestion(doc_meta, case_id),
+        "why_it_matters": _document_importance_note(doc_meta),
+        "timeline": _document_timeline_items(doc_meta),
+    }
+
+
 def render_document_naming_metadata_suggestion(doc_meta: dict, *, case_id: str) -> str:
-    filename = _clean_filename(doc_meta.get("filename", "documento"))
-    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
-    status = _doc_status_label(doc_meta)
-    suggested_name = _suggest_document_display_name(doc_meta)
-    tags = _suggest_document_tags(doc_meta)
-    chronology = _document_timeline_items(doc_meta)
+    metadata = build_document_naming_metadata(doc_meta, case_id=case_id)
+    filename = metadata["filename"]
+    ingest_id = metadata["ingest_id"]
+    status = metadata["status"]
+    suggested_name = metadata["alias"]
+    tags = metadata["tags"]
+    chronology = metadata["timeline"]
 
     lines = [
         "📎 Documento",
@@ -1444,10 +1468,10 @@ def render_document_naming_metadata_suggestion(doc_meta: dict, *, case_id: str) 
     lines.extend([
         "",
         "🗂️ Carpeta / caso sugerido",
-        f"- {_document_case_folder_suggestion(doc_meta, case_id)}",
+        f"- {metadata['folder']}",
         "",
         "🧭 Por qué importa",
-        f"- {_document_importance_note(doc_meta)}",
+        f"- {metadata['why_it_matters']}",
         "",
         "📅 Línea de tiempo",
     ])
@@ -1466,6 +1490,171 @@ def render_document_naming_metadata_suggestion(doc_meta: dict, *, case_id: str) 
         "Límite: organizo información registrada; no doy conclusiones legales.",
     ])
     return "\n".join(lines).strip()
+
+
+def _normalize_alias_save_text(text: str) -> str:
+    raw = (text or "").strip()
+    raw = re.sub(r"^val[,\s]+", "", raw, flags=re.I).strip()
+    raw = re.sub(r"[?!.]+$", "", raw).strip()
+    raw = unicodedata.normalize("NFKD", raw)
+    raw = "".join(ch for ch in raw if not unicodedata.combining(ch))
+    raw = re.sub(r"[,;:]+", " ", raw)
+    return re.sub(r"\s+", " ", raw).strip()
+
+
+def _extract_document_alias_save_request(text: str) -> dict:
+    norm = _normalize_alias_save_text(text)
+    low = norm.lower()
+    confirmation_markers = {
+        "guarda ese nombre",
+        "guarda ese nombre y etiquetas",
+        "si guardalo",
+        "si guarda ese nombre",
+        "usa ese nombre",
+        "guardalo",
+        "guardar ese nombre",
+    }
+    if low in confirmation_markers:
+        return {"kind": "confirm", "alias": "", "target": ""}
+
+    patterns = [
+        r"guarda\s+(.+?)\s+para\s+(.+)$",
+        r"renombra\s+(.+?)\s+como\s+(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, norm, flags=re.I)
+        if not match:
+            continue
+        if pattern.startswith("guarda"):
+            alias, target = match.group(1).strip(), match.group(2).strip()
+        else:
+            target, alias = match.group(1).strip(), match.group(2).strip()
+        alias = re.sub(r"\s+", " ", alias).strip()
+        target = re.sub(r"\s+", " ", target).strip()
+        if alias and target:
+            return {"kind": "explicit", "alias": alias, "target": target}
+    return {}
+
+
+def looks_like_document_alias_save_request(text: str) -> bool:
+    return bool(_extract_document_alias_save_request(text))
+
+
+def _with_document_alias_metadata(note_text: str, *, alias: str, tags: list[str] | str = "", folder: str = "", why_it_matters: str = "") -> str:
+    note_text = (note_text or "").strip()
+    alias = re.sub(r"\s+", " ", (alias or "").strip())
+    if isinstance(tags, str):
+        tag_text = re.sub(r"\s+", " ", tags.strip())
+    else:
+        tag_text = ", ".join(re.sub(r"\s+", " ", str(tag).strip()) for tag in tags if str(tag).strip())
+    folder = re.sub(r"\s+", " ", (folder or "").strip())
+    why_it_matters = re.sub(r"\s+", " ", (why_it_matters or "").strip())
+
+    cleaned = []
+    skip_prefixes = (
+        "- Alias:",
+        "- Etiquetas:",
+        "- Carpeta sugerida:",
+        "- Por qué importa:",
+    )
+    for line in note_text.splitlines():
+        if any(line.startswith(prefix) for prefix in skip_prefixes):
+            continue
+        cleaned.append(line.rstrip())
+
+    additions = []
+    if alias:
+        additions.append(f"- Alias: {alias}")
+    if tag_text:
+        additions.append(f"- Etiquetas: {tag_text}")
+    if folder:
+        additions.append(f"- Carpeta sugerida: {folder}")
+    if why_it_matters:
+        additions.append(f"- Por qué importa: {why_it_matters}")
+    return "\n".join(cleaned + additions).strip()
+
+
+def _persist_document_alias_metadata(case_id: str, chat_id: int, ingest_id: str, *, alias: str, tags: list[str] | str = "", folder: str = "", why_it_matters: str = "") -> dict:
+    ingest_id = (ingest_id or "").strip()
+    alias = (alias or "").strip()
+    if not ingest_id or not alias:
+        return {"saved": False}
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id, note_text
+        FROM case_notes
+        WHERE case_id=?
+          AND chat_id=?
+          AND source='telegram_attachment_vfms'
+          AND note_text LIKE ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (str(case_id), int(chat_id), f"%{ingest_id}%"),
+    )
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return {"saved": False}
+
+    row_id = row[0] if not isinstance(row, dict) else row["id"]
+    note_text = str(row[1] if not isinstance(row, dict) else row["note_text"] or "")
+    parsed = _parse_note(note_text)
+    updated = _with_document_alias_metadata(
+        note_text,
+        alias=alias,
+        tags=tags,
+        folder=folder,
+        why_it_matters=why_it_matters,
+    )
+    if updated != note_text:
+        cur.execute("UPDATE case_notes SET note_text=? WHERE id=?", (updated, int(row_id)))
+        conn.commit()
+    conn.close()
+    parsed.update({
+        "alias": alias,
+        "tags": ", ".join(tags) if isinstance(tags, list) else str(tags or ""),
+        "folder_suggestion": folder,
+        "why_it_matters": why_it_matters,
+        "saved": True,
+    })
+    return parsed
+
+
+def _alias_save_confirmation_reply(alias: str, original_filename: str, tags: list[str] | str = "") -> str:
+    alias = (alias or "").strip()
+    original_filename = _clean_filename(original_filename or "documento")
+    lines = [
+        "Listo. Guardé este nombre para el documento:",
+        alias,
+        "",
+        f"El archivo original sigue intacto: {original_filename}.",
+    ]
+    if tags:
+        tag_text = ", ".join(tags) if isinstance(tags, list) else str(tags)
+        tag_text = re.sub(r"\s+", " ", tag_text).strip()
+        if tag_text:
+            lines.extend(["", f"También guardé estas etiquetas: {tag_text}."])
+    return "\n".join(lines).strip()
+
+
+def _store_pending_document_alias(context, *, case_id: str, chat_id: int, doc_meta: dict, metadata: dict) -> None:
+    chat_data = getattr(context, "chat_data", None)
+    if chat_data is None:
+        return
+    chat_data["karen_pending_doc_alias"] = {
+        "case_id": str(case_id),
+        "chat_id": int(chat_id),
+        "ingest_id": str(doc_meta.get("ingest_id") or metadata.get("ingest_id") or "").strip(),
+        "filename": _clean_filename(doc_meta.get("filename") or metadata.get("filename") or "documento"),
+        "alias": str(metadata.get("alias") or "").strip(),
+        "tags": list(metadata.get("tags") or []),
+        "folder": str(metadata.get("folder") or "").strip(),
+        "why_it_matters": str(metadata.get("why_it_matters") or "").strip(),
+    }
 
 
 def _persist_specific_doc_summary(case_id: str, chat_id: int, doc_meta: dict, summary_text: str) -> bool:
@@ -1810,6 +1999,87 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     return True
 
 
+async def maybe_handle_document_alias_save_query(update, context, chat_id: int, text: str) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    request = _extract_document_alias_save_request(text)
+    if not request:
+        return False
+
+    case_id = get_active_case_id(int(chat_id))
+    if not case_id:
+        return False
+
+    if request.get("kind") == "confirm":
+        pending = getattr(context, "chat_data", {}).get("karen_pending_doc_alias") if context else None
+        if not pending or str(pending.get("case_id")) != str(case_id) or int(pending.get("chat_id") or 0) != int(chat_id):
+            await update.message.reply_text(
+                "Necesito saber cuál documento. Dime: 'guarda este nombre para [documento]'."
+            )
+            return True
+
+        saved = _persist_document_alias_metadata(
+            str(case_id),
+            int(chat_id),
+            str(pending.get("ingest_id") or ""),
+            alias=str(pending.get("alias") or ""),
+            tags=list(pending.get("tags") or []),
+            folder=str(pending.get("folder") or ""),
+            why_it_matters=str(pending.get("why_it_matters") or ""),
+        )
+        if not saved.get("saved"):
+            await update.message.reply_text(
+                "No pude guardar ese nombre todavía. Prueba diciendo: 'guarda este nombre para [documento]'."
+            )
+            return True
+
+        await update.message.reply_text(
+            _alias_save_confirmation_reply(
+                str(pending.get("alias") or ""),
+                str(saved.get("filename") or pending.get("filename") or "documento"),
+                list(pending.get("tags") or []),
+            )
+        )
+        return True
+
+    target = str(request.get("target") or "").strip()
+    alias = str(request.get("alias") or "").strip()
+    matches = _find_specific_doc_matches(str(case_id), int(chat_id), target, limit=5)
+    if len(matches) > 1:
+        await update.message.reply_text(_render_ambiguous_document_matches(matches))
+        return True
+    doc_meta = matches[0] if matches else None
+    if not doc_meta:
+        await update.message.reply_text(
+            f"No encontré un documento que coincida con '{target}'. "
+            "Puedes decir: 'Val, qué documentos tengo'."
+        )
+        return True
+
+    saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), doc_meta.get("ingest_id", ""))
+    if saved_summary:
+        doc_meta["saved_summary"] = saved_summary
+    metadata = build_document_naming_metadata(doc_meta, case_id=str(case_id))
+    saved = _persist_document_alias_metadata(
+        str(case_id),
+        int(chat_id),
+        str(doc_meta.get("ingest_id") or ""),
+        alias=alias,
+        tags=list(metadata.get("tags") or []),
+        folder=str(metadata.get("folder") or ""),
+        why_it_matters=str(metadata.get("why_it_matters") or ""),
+    )
+    if not saved.get("saved"):
+        await update.message.reply_text("No pude guardar ese nombre todavía. El archivo original no fue cambiado.")
+        return True
+
+    await update.message.reply_text(
+        _alias_save_confirmation_reply(alias, str(saved.get("filename") or doc_meta.get("filename") or "documento"), metadata.get("tags") or [])
+    )
+    return True
+
+
 async def maybe_handle_document_naming_metadata_query(update, context, chat_id: int, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
@@ -1866,5 +2136,13 @@ async def maybe_handle_document_naming_metadata_query(update, context, chat_id: 
     if saved_summary:
         doc_meta["saved_summary"] = saved_summary
 
+    metadata = build_document_naming_metadata(doc_meta, case_id=str(case_id))
+    _store_pending_document_alias(
+        context,
+        case_id=str(case_id),
+        chat_id=int(chat_id),
+        doc_meta=doc_meta,
+        metadata=metadata,
+    )
     await update.message.reply_text(render_document_naming_metadata_suggestion(doc_meta, case_id=str(case_id)))
     return True

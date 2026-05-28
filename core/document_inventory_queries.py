@@ -58,12 +58,20 @@ def _parse_note(note: str) -> dict:
     vfms_match = re.search(r"- VFMS ingest_id:\s*(.+)", note)
     caption_match = re.search(r"- Nota usuario:\s*(.+)", note)
     state_match = re.search(r"- Estado:\s*(.+)", note)
+    alias_match = re.search(r"- Alias:\s*(.+)", note)
+    tags_match = re.search(r"- Etiquetas:\s*(.+)", note)
+    folder_match = re.search(r"- Carpeta sugerida:\s*(.+)", note)
+    importance_match = re.search(r"- Por qué importa:\s*(.+)", note)
 
     return {
         "filename": file_match.group(1).strip() if file_match else "desconocido",
         "vfms_id": vfms_match.group(1).strip() if vfms_match else "?",
         "caption": caption_match.group(1).strip() if caption_match else "",
         "state": state_match.group(1).strip() if state_match else "",
+        "alias": alias_match.group(1).strip() if alias_match else "",
+        "tags": tags_match.group(1).strip() if tags_match else "",
+        "folder_suggestion": folder_match.group(1).strip() if folder_match else "",
+        "why_it_matters": importance_match.group(1).strip() if importance_match else "",
         "raw": note.lower(),
         "has_caption": bool(caption_match and caption_match.group(1).strip()),
     }
@@ -147,6 +155,10 @@ def _looks_generic_filename(filename: str) -> bool:
 
 
 def _display_title(item: dict) -> str:
+    alias = re.sub(r"\s+", " ", (item.get("alias") or item.get("display_name") or "").strip())
+    if alias:
+        return alias[:67].rstrip() + "..." if len(alias) > 70 else alias
+
     filename = _clean_filename(item.get("filename") or "")
     caption = re.sub(r"\s+", " ", (item.get("caption") or "").strip())
     kind = _filename_kind(filename)
@@ -298,6 +310,9 @@ def render_document_inventory_compact(parsed: list[dict], *, visible_limit: int 
         if _looks_generic_filename(filename):
             generic_hint_needed = True
         lines.append(f"{idx}. {title} — {date} · {type_label} · {status}{legacy}.")
+        alias = re.sub(r"\s+", " ", (item.get("alias") or item.get("display_name") or "").strip())
+        if alias and alias.lower() != filename.lower():
+            lines.append(f"   Original: {filename}")
 
     hidden = max(0, total - visible_limit)
     if hidden:
