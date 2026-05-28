@@ -94,6 +94,12 @@ SUMMARY_MARKERS = (
     "dame el resumen del documento",
     "hazme resumen de",
     "hazme el resumen de",
+    "resume este documento",
+    "resume el último documento",
+    "resume el ultimo documento",
+    "resume lo último que subí",
+    "resume lo ultimo que subi",
+    "documento que acabo de subir",
     "resume el documento",
     "resume el pdf",
     "resumen del documento",
@@ -110,7 +116,9 @@ NAMING_METADATA_MARKERS = (
     "qué es este documento",
     "organiza este documento",
     "ponle etiquetas a",
+    "ponle etiquetas al",
     "pon etiquetas a",
+    "pon etiquetas al",
     "que nombre le pondrias a",
     "qué nombre le pondrías a",
 )
@@ -123,6 +131,15 @@ def _clean_filename(filename: str) -> str:
     if "__" in filename:
         filename = filename.split("__", 1)[1].strip()
     return filename or "documento"
+
+
+def _normalize_spanish_text(text: str) -> str:
+    text = unicodedata.normalize("NFKD", (text or "").lower())
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"[¿?¡!.,:;]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"^val\s+", "", text).strip()
+    return text
 
 
 def _parse_note(note: str) -> dict:
@@ -197,6 +214,35 @@ def _find_doc_meta(case_id: str, ingest_id: str) -> dict:
     note = row[0] if not isinstance(row, dict) else row["note_text"]
     parsed = _parse_note(note)
     parsed["ingest_id"] = parsed.get("ingest_id") or ingest_id
+    return parsed
+
+
+def _find_latest_document_meta(case_id: str, chat_id: int) -> dict | None:
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT note_text, created_at
+        FROM case_notes
+        WHERE case_id=? AND chat_id=? AND source='telegram_attachment_vfms'
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (str(case_id), int(chat_id)),
+    )
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+
+    note_text = row[0] if not isinstance(row, dict) else row["note_text"]
+    created_at = row[1] if not isinstance(row, dict) else row["created_at"]
+    parsed = _parse_note(str(note_text or ""))
+    parsed["created_at"] = str(created_at or "")
+    parsed["text"] = _read_extracted_text(parsed.get("ingest_id", ""))
+    saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), parsed.get("ingest_id", ""))
+    if saved_summary:
+        parsed["saved_summary"] = saved_summary
     return parsed
 
 
@@ -1014,6 +1060,10 @@ def _extract_specific_doc_name(text: str) -> str:
     
     Note: Filters out generic requests like "resumen de documentos" (plural).
     """
+    latest_ref = _looks_like_latest_document_reference(text)
+    if latest_ref and re.search(r"\b(resume|resumen|transcribe)\b", _normalize_spanish_text(text)):
+        return "__latest__"
+
     text_low = (text or "").lower()
     
     # Remove Val prefix if present
@@ -1056,8 +1106,36 @@ def _extract_specific_doc_name(text: str) -> str:
     return ""
 
 
+def _looks_like_latest_document_reference(text: str) -> bool:
+    norm = _normalize_spanish_text(text)
+    markers = (
+        "ultimo documento",
+        "el ultimo documento",
+        "este documento",
+        "el documento que acabo de subir",
+        "documento que acabo de subir",
+        "lo ultimo que subi",
+        "ultimo que subi",
+    )
+    return any(marker in norm for marker in markers)
+
+
+def _looks_like_latest_upload_status_request(text: str) -> bool:
+    norm = _normalize_spanish_text(text)
+    markers = (
+        "que fue lo ultimo que subi",
+        "cual fue el ultimo documento que subi",
+        "ultimo documento que subi",
+        "lo ultimo que subi",
+        "ultimo que subi",
+    )
+    return any(marker in norm for marker in markers)
+
+
 def _extract_document_naming_target(text: str) -> str:
     raw = (text or "").strip()
+    if _looks_like_latest_document_reference(raw):
+        return ""
     low = raw.lower()
     low = re.sub(r"^val[,\s]+", "", low).strip()
     low = re.sub(r"[?!.]+$", "", low).strip()
@@ -1068,7 +1146,9 @@ def _extract_document_naming_target(text: str) -> str:
         r"clasifica\s+(.+)$",
         r"(?:organiza)\s+(.+)$",
         r"ponle\s+etiquetas\s+a\s+(.+)$",
+        r"ponle\s+etiquetas\s+al\s+(.+)$",
         r"pon\s+etiquetas\s+a\s+(.+)$",
+        r"pon\s+etiquetas\s+al\s+(.+)$",
         r"(?:que|qué)\s+nombre\s+le\s+pondr[ií]as\s+a\s+(.+)$",
     ]
     for pattern in patterns:
@@ -1307,6 +1387,27 @@ def _doc_status_label(doc_meta: dict) -> str:
     if "ocr" in state or "revision" in state or "revisión" in state:
         return "necesita OCR/revisión"
     return state or "guardado"
+
+
+def _doc_type_label(filename: str) -> str:
+    low = (filename or "").lower()
+    if low.endswith(".pdf"):
+        return "PDF"
+    if low.endswith((".doc", ".docx")):
+        return "Word"
+    if low.endswith((".jpg", ".jpeg", ".png", ".heic", ".webp")):
+        return "foto"
+    if low.endswith((".txt", ".md")):
+        return "texto"
+    return "desconocido"
+
+
+def _document_display_name(doc_meta: dict) -> str:
+    alias = re.sub(r"\s+", " ", str(doc_meta.get("alias") or "").strip())
+    if alias:
+        return alias
+    filename = _clean_filename(doc_meta.get("filename", "documento"))
+    return filename
 
 
 def _looks_like_land_case_doc(doc_meta: dict) -> bool:
@@ -1641,6 +1742,40 @@ def _alias_save_confirmation_reply(alias: str, original_filename: str, tags: lis
     return "\n".join(lines).strip()
 
 
+def render_latest_document_status(doc_meta: dict) -> str:
+    filename = _clean_filename(doc_meta.get("filename", "documento"))
+    display_name = _document_display_name(doc_meta)
+    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+    created_at = str(doc_meta.get("created_at") or "").strip()
+    date = created_at[:10] if created_at else "sin fecha"
+    status = _doc_status_label(doc_meta)
+    type_label = _doc_type_label(filename)
+
+    lines = [
+        "📎 Último documento registrado",
+        f"- Nombre: {display_name}",
+    ]
+    if display_name != filename:
+        lines.append(f"- Original: {filename}")
+    if ingest_id:
+        lines.append(f"- ID: {ingest_id}")
+    lines.extend([
+        f"- Fecha: {date}",
+        f"- Tipo: {type_label}",
+        f"- Estado: {status}",
+        "",
+        "Siguientes acciones útiles:",
+        "- resume este documento",
+        "- sugiere nombre para este documento",
+        "- extrae fechas importantes",
+    ])
+    if status != "resumen disponible":
+        lines.append("- generar resumen claro")
+    lines.append("")
+    lines.append("Límite: organizo información registrada; no renombro el archivo original.")
+    return "\n".join(lines).strip()
+
+
 def _store_pending_document_alias(context, *, case_id: str, chat_id: int, doc_meta: dict, metadata: dict) -> None:
     chat_data = getattr(context, "chat_data", None)
     if chat_data is None:
@@ -1824,11 +1959,14 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     
     if specific_doc_name:
         # User asked for summary of a specific document (e.g., "dame el resumen de six pdf")
-        matches = _find_specific_doc_matches(case_id, int(chat_id), specific_doc_name, limit=5)
-        if len(matches) > 1:
-            await update.message.reply_text(_render_ambiguous_document_matches(matches))
-            return True
-        doc_meta = matches[0] if matches else None
+        if specific_doc_name == "__latest__":
+            doc_meta = _find_latest_document_meta(str(case_id), int(chat_id))
+        else:
+            matches = _find_specific_doc_matches(case_id, int(chat_id), specific_doc_name, limit=5)
+            if len(matches) > 1:
+                await update.message.reply_text(_render_ambiguous_document_matches(matches))
+                return True
+            doc_meta = matches[0] if matches else None
         if doc_meta:
             ingest_id = str(doc_meta.get("ingest_id") or "").strip()
             saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), ingest_id)
@@ -1846,6 +1984,12 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
             return True
         else:
             # Document name didn't match anything in inventory
+            if specific_doc_name == "__latest__":
+                await update.message.reply_text(
+                    "Todavía no veo documentos registrados. Sube un PDF o Word y dime: "
+                    "'Val, transcribe este documento y hazme un resumen'."
+                )
+                return True
             reply = (
                 f"No encontré un documento que coincida con '{specific_doc_name}' "
                 f"en el inventario del CASE:{case_id}.\n\n"
@@ -1999,6 +2143,28 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     return True
 
 
+async def maybe_handle_latest_document_status_query(update, context, chat_id: int, text: str) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+    if not _looks_like_latest_upload_status_request(text):
+        return False
+
+    case_id = get_active_case_id(int(chat_id))
+    if not case_id:
+        return False
+
+    doc_meta = _find_latest_document_meta(str(case_id), int(chat_id))
+    if not doc_meta:
+        await update.message.reply_text(
+            "Todavía no veo documentos registrados. Sube un PDF o Word y dime: "
+            "'Val, transcribe este documento y hazme un resumen'."
+        )
+        return True
+
+    await update.message.reply_text(render_latest_document_status(doc_meta))
+    return True
+
+
 async def maybe_handle_document_alias_save_query(update, context, chat_id: int, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
@@ -2014,6 +2180,11 @@ async def maybe_handle_document_alias_save_query(update, context, chat_id: int, 
     if request.get("kind") == "confirm":
         pending = getattr(context, "chat_data", {}).get("karen_pending_doc_alias") if context else None
         if not pending or str(pending.get("case_id")) != str(case_id) or int(pending.get("chat_id") or 0) != int(chat_id):
+            if _find_latest_document_meta(str(case_id), int(chat_id)):
+                await update.message.reply_text(
+                    "Primero te sugiero un nombre para el último documento y luego lo guardamos."
+                )
+                return True
             await update.message.reply_text(
                 "Necesito saber cuál documento. Dime: 'guarda este nombre para [documento]'."
             )
@@ -2095,29 +2266,10 @@ async def maybe_handle_document_naming_metadata_query(update, context, chat_id: 
         target = "__latest__"
 
     if target == "__latest__":
-        conn = _get_conn()
-        cur = conn.cursor()
-        cur.execute(
-            """
-            SELECT note_text
-            FROM case_notes
-            WHERE case_id=? AND chat_id=? AND source='telegram_attachment_vfms'
-            ORDER BY id DESC
-            LIMIT 1
-            """,
-            (str(case_id), int(chat_id)),
-        )
-        row = cur.fetchone()
-        conn.close()
-        if not row:
+        doc_meta = _find_latest_document_meta(str(case_id), int(chat_id))
+        if not doc_meta:
             await update.message.reply_text("No encontré documentos registrados para organizar todavía.")
             return True
-        parsed = _parse_note(row[0] if not isinstance(row, dict) else row["note_text"])
-        parsed["text"] = _read_extracted_text(parsed.get("ingest_id", ""))
-        saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), parsed.get("ingest_id", ""))
-        if saved_summary:
-            parsed["saved_summary"] = saved_summary
-        doc_meta = parsed
     else:
         matches = _find_specific_doc_matches(str(case_id), int(chat_id), target, limit=5)
         if len(matches) > 1:

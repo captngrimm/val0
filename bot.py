@@ -123,6 +123,7 @@ from core.karen_next_action import maybe_handle_pending_next_action, karen_next_
 from core.document_inventory_queries import maybe_handle_document_query
 from core.document_semantic_queries import maybe_handle_document_semantic_query
 from core.document_summary_queries import (
+    maybe_handle_latest_document_status_query,
     maybe_handle_document_alias_save_query,
     maybe_handle_document_naming_metadata_query,
     maybe_handle_document_summary_query,
@@ -14627,6 +14628,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_DOCUMENT_ALIAS_SAVE_PIPELINE] failed: {e}")
 
     try:
+        if await maybe_handle_latest_document_status_query(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_LATEST_DOCUMENT_STATUS_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_document_naming_metadata_query(update, context, chat_id, text):
             return
     except Exception as e:
@@ -14647,6 +14654,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "hazme resumen de",
             "resume el documento",
             "resume el pdf",
+            "resume este documento",
+            "resume el último documento",
+            "resume el ultimo documento",
+            "documento que acabo de subir",
             "resumen del documento",
             "resumen de documento",
             "resumen de documentos",
@@ -14761,6 +14772,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if await maybe_handle_document_alias_save_query(update, context, chat_id, text):
+            return
+
+        if await maybe_handle_latest_document_status_query(update, context, chat_id, text):
             return
 
         if await maybe_handle_document_naming_metadata_query(update, context, chat_id, text):
