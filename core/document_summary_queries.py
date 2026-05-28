@@ -100,6 +100,20 @@ SUMMARY_MARKERS = (
     "resumen legal de documento",
 )
 
+NAMING_METADATA_MARKERS = (
+    "sugiere nombre para",
+    "sugerir nombre para",
+    "renombra",
+    "clasifica",
+    "que es este documento",
+    "qué es este documento",
+    "organiza este documento",
+    "ponle etiquetas a",
+    "pon etiquetas a",
+    "que nombre le pondrias a",
+    "qué nombre le pondrías a",
+)
+
 EXTRACTED_DIR = Path("/opt/val0/vfms_data/extracted")
 
 
@@ -1033,6 +1047,37 @@ def _extract_specific_doc_name(text: str) -> str:
     return ""
 
 
+def _extract_document_naming_target(text: str) -> str:
+    raw = (text or "").strip()
+    low = raw.lower()
+    low = re.sub(r"^val[,\s]+", "", low).strip()
+    low = re.sub(r"[?!.]+$", "", low).strip()
+
+    patterns = [
+        r"(?:sugiere|sugerir)\s+nombre\s+para\s+(.+)$",
+        r"renombra\s+(.+)$",
+        r"clasifica\s+(.+)$",
+        r"(?:organiza)\s+(.+)$",
+        r"ponle\s+etiquetas\s+a\s+(.+)$",
+        r"pon\s+etiquetas\s+a\s+(.+)$",
+        r"(?:que|qué)\s+nombre\s+le\s+pondr[ií]as\s+a\s+(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, low, flags=re.I)
+        if not match:
+            continue
+        target = (match.group(1) or "").strip()
+        if target in {"este documento", "el documento", "documento"}:
+            return ""
+        return target
+    return ""
+
+
+def looks_like_document_naming_metadata_request(text: str) -> bool:
+    low = (text or "").lower()
+    return any(marker in low for marker in NAMING_METADATA_MARKERS)
+
+
 def _normalize_doc_name(name: str) -> str:
     """
     Normalize a document name for matching.
@@ -1181,6 +1226,125 @@ def _mark_specific_doc_summary_available(case_id: str, chat_id: int, ingest_id: 
 def _generate_specific_doc_summary_text(doc_meta: dict) -> str:
     text = str(doc_meta.get("text") or "").strip()
     return _render_clean_specific_doc_summary_body(text)
+
+
+def _doc_status_label(doc_meta: dict) -> str:
+    state = str(doc_meta.get("state") or "").lower()
+    text = str(doc_meta.get("text") or "").strip()
+    if "resumen disponible" in state or str(doc_meta.get("saved_summary") or "").strip():
+        return "resumen disponible"
+    if text or "texto" in state or "extraído" in state or "extraido" in state or "indexado" in state:
+        return "texto leído"
+    if "ocr" in state or "revision" in state or "revisión" in state:
+        return "necesita OCR/revisión"
+    return state or "guardado"
+
+
+def _suggest_document_tags(doc_meta: dict) -> list[str]:
+    filename = _clean_filename(doc_meta.get("filename", ""))
+    text = str(doc_meta.get("text") or "")
+    combined = f"{filename}\n{text}".lower()
+    tags = []
+    if "finca" in combined or "10082" in combined:
+        tags.append("Finca 10082")
+    if filename.lower().endswith(".pdf"):
+        tags.append("PDF")
+    if "resumen disponible" in str(doc_meta.get("state") or "").lower() or doc_meta.get("saved_summary"):
+        tags.append("resumen")
+    if any(marker in combined for marker in ("registro público", "registro publico", "oficio", "auto no", "juzgado")):
+        tags.append("documento legal")
+    if "prueba" in combined:
+        tags.append("prueba")
+    if not tags:
+        tags.append("documento")
+
+    out = []
+    seen = set()
+    for tag in tags:
+        key = tag.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(tag)
+    return out[:6]
+
+
+def _suggest_document_display_name(doc_meta: dict) -> str:
+    text = str(doc_meta.get("text") or "")
+    header = _extract_legal_header(text)
+    registry = _extract_registry_points(text)
+    filename = _clean_filename(doc_meta.get("filename", "documento"))
+
+    if any("Finca No. 10082" in point for point in registry):
+        if header.get("tipo_documento"):
+            return f"Finca 10082 - {header['tipo_documento']}"
+        return "Finca 10082 - documento legal"
+    if header.get("tipo_documento"):
+        return header["tipo_documento"]
+    return re.sub(r"\s+", " ", filename.rsplit(".", 1)[0].replace("_", " ").replace("-", " ")).strip() or filename
+
+
+def _document_importance_note(doc_meta: dict) -> str:
+    text = str(doc_meta.get("text") or "")
+    registry = _extract_registry_points(text)
+    chronology = _extract_chronology(text)
+    if registry:
+        return "Ayuda a ubicar datos de la finca y actuaciones mencionadas para revisarlas con Nora."
+    if chronology:
+        return "Puede servir para ordenar fechas y eventos del caso antes de hablar con Nora."
+    if str(doc_meta.get("saved_summary") or "").strip():
+        return "Ya tiene resumen guardado, así que puede servir como referencia rápida del expediente."
+    return "Sirve para tener identificado el documento y decidir qué revisar después."
+
+
+def render_document_naming_metadata_suggestion(doc_meta: dict, *, case_id: str) -> str:
+    filename = _clean_filename(doc_meta.get("filename", "documento"))
+    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+    status = _doc_status_label(doc_meta)
+    suggested_name = _suggest_document_display_name(doc_meta)
+    tags = _suggest_document_tags(doc_meta)
+    chronology = _extract_chronology(str(doc_meta.get("text") or ""))
+
+    lines = [
+        "📎 Documento",
+        f"- Actual: {filename}",
+    ]
+    if ingest_id:
+        lines.append(f"- ID: {ingest_id}")
+    lines.append(f"- Estado: {status}")
+    lines.extend([
+        "",
+        "🏷️ Sugerencia de nombre",
+        f"- {suggested_name}",
+        "",
+        "🧩 Etiquetas sugeridas",
+    ])
+    lines.extend(f"- {tag}" for tag in tags)
+    lines.extend([
+        "",
+        "🗂️ Carpeta / caso sugerido",
+        f"- Finca / CASE:{case_id}",
+        "",
+        "🧭 Por qué importa",
+        f"- {_document_importance_note(doc_meta)}",
+        "",
+        "📅 Línea de tiempo",
+    ])
+    if chronology:
+        lines.extend(f"- {item}" for item in chronology[:5])
+    else:
+        lines.append("- No detecté una fecha principal dentro del texto; puedo usar la fecha de carga.")
+    lines.extend([
+        "",
+        "Siguiente paso:",
+        "- guardar este nombre",
+        "- extraer fechas",
+        "- preparar preguntas para Nora",
+        "",
+        "Todavía no cambié el nombre; solo te estoy proponiendo una ficha.",
+        "Límite: organizo información registrada; no doy conclusiones legales.",
+    ])
+    return "\n".join(lines).strip()
 
 
 def _persist_specific_doc_summary(case_id: str, chat_id: int, doc_meta: dict, summary_text: str) -> bool:
@@ -1517,4 +1681,60 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     # Step 10: Send chunked summary
     # ---------------------------
     await _reply_text_chunked(update, "\n".join(parts).strip())
+    return True
+
+
+async def maybe_handle_document_naming_metadata_query(update, context, chat_id: int, text: str) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+    if not looks_like_document_naming_metadata_request(text):
+        return False
+
+    case_id = get_active_case_id(int(chat_id))
+    if not case_id:
+        return False
+
+    target = _extract_document_naming_target(text)
+    if not target:
+        target = "__latest__"
+
+    if target == "__latest__":
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT note_text
+            FROM case_notes
+            WHERE case_id=? AND chat_id=? AND source='telegram_attachment_vfms'
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (str(case_id), int(chat_id)),
+        )
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            await update.message.reply_text("No encontré documentos registrados para organizar todavía.")
+            return True
+        parsed = _parse_note(row[0] if not isinstance(row, dict) else row["note_text"])
+        parsed["text"] = _read_extracted_text(parsed.get("ingest_id", ""))
+        saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), parsed.get("ingest_id", ""))
+        if saved_summary:
+            parsed["saved_summary"] = saved_summary
+        doc_meta = parsed
+    else:
+        doc_meta = _find_specific_doc_in_inventory(str(case_id), int(chat_id), target)
+
+    if not doc_meta:
+        await update.message.reply_text(
+            f"No encontré un documento que coincida con '{target}'. "
+            "Puedes decir: “Val, qué documentos tengo”."
+        )
+        return True
+
+    saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), doc_meta.get("ingest_id", ""))
+    if saved_summary:
+        doc_meta["saved_summary"] = saved_summary
+
+    await update.message.reply_text(render_document_naming_metadata_suggestion(doc_meta, case_id=str(case_id)))
     return True

@@ -122,7 +122,7 @@ from core.karen_meeting_prep import looks_like_karen_meeting_prep_request, rende
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
 from core.document_inventory_queries import maybe_handle_document_query
 from core.document_semantic_queries import maybe_handle_document_semantic_query
-from core.document_summary_queries import maybe_handle_document_summary_query
+from core.document_summary_queries import maybe_handle_document_naming_metadata_query, maybe_handle_document_summary_query
 from core.karen_case_facts import (
     CASE_KEY,
     load_karen_case_facts,
@@ -14616,6 +14616,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception(f"[KAREN_NORA_PREP_PRIORITY_GATE] failed: {e}")
 
+    try:
+        if await maybe_handle_document_naming_metadata_query(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DOCUMENT_NAMING_METADATA_PIPELINE] failed: {e}")
+
     # --------------------------------------------------
     # Karen/VFMS Document Summary Priority Gate
     # Explicit VFMS/document-summary requests must beat generic memory,
@@ -14742,6 +14748,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await maybe_handle_document_inventory(update, context, chat_id, text):
+            return
+
+        if await maybe_handle_document_naming_metadata_query(update, context, chat_id, text):
             return
 
         if await maybe_handle_document_query(update, context, chat_id, text):
