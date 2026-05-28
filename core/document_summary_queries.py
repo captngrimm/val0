@@ -52,6 +52,7 @@ async def _reply_text_chunked(update, text: str, limit: int = 3800):
 
 
 SUMMARY_MARKERS = (
+    # General summary requests (multiple documents)
     "resumen de documentos",
     "resumen documentos",
     "resumen de los documentos",
@@ -61,24 +62,20 @@ SUMMARY_MARKERS = (
     "resumen general",
     "resumen claro",
     "resumen estructurado",
-    "resumen del documento",
-    "resumen legal",
-    "resumen legal del documento",
-    "resumen legal de documento",
     "resumen legal de los documentos",
-    "cronología",
-    "cronologia",
-    "tabla cronológica",
-    "tabla cronologica",
-    "observaciones",
-    "recomendaciones para hablar con la abogada",
-    "hablar con la abogada",
     "resume documentos",
     "resume los documentos",
     "qué dicen los documentos",
     "que dicen los documentos",
     "qué dicen los pdf",
     "que dicen los pdf",
+    "observaciones",
+    "recomendaciones para hablar con la abogada",
+    "hablar con la abogada",
+    "cronología",
+    "cronologia",
+    "tabla cronológica",
+    "tabla cronologica",
     "formatos",
     "formato",
     "opciones de resumen",
@@ -88,6 +85,19 @@ SUMMARY_MARKERS = (
     "qué formatos tienes",
     "que formatos tienes",
     "vfms",
+    # Specific document summary requests (single, named/numbered document)
+    "resumen de",
+    "dame resumen de",
+    "dame el resumen de",
+    "dame resumen del documento",
+    "dame el resumen del documento",
+    "hazme resumen de",
+    "hazme el resumen de",
+    "resume el documento",
+    "resume el pdf",
+    "resumen del documento",
+    "resumen legal del documento",
+    "resumen legal de documento",
 )
 
 EXTRACTED_DIR = Path("/opt/val0/vfms_data/extracted")
@@ -875,6 +885,192 @@ Ejemplo:
 Dime cuál quieres, o dime “mezcla de varias” y te lo armo sin drama. Cero formulario del gobierno, prometido 😌"""
 
 
+
+
+def _extract_specific_doc_name(text: str) -> str:
+    """
+    Extract document name/ID from specific summary requests.
+    
+    Examples:
+    - "dame el resumen de six pdf" -> "six pdf"
+    - "resumen de six_pdf.pdf" -> "six_pdf.pdf"
+    - "resume el documento 1" -> "1"
+    
+    Note: Filters out generic requests like "resumen de documentos" (plural).
+    """
+    text_low = (text or "").lower()
+    
+    # Remove Val prefix if present
+    text_low = re.sub(r"^val[,\s]+", "", text_low).strip()
+    
+    # Generic document/plural patterns to exclude
+    generic_markers = (
+        "documentos",
+        "los documentos",
+        "de los documentos",
+        "los pdf",
+        "de los pdf",
+    )
+    
+    # Pattern: "resumen de X", "dame resumen de X", "hazmo resumen de X", etc.
+    patterns = [
+        r"(?:dame|hazme)?\s*(?:el)?\s*resumen\s+de\s+(.+?)(?:\s*$|\?|!)",
+        r"(?:dame|hazme)?\s*(?:el)?\s*resumen\s+del\s+documento\s+(.+?)(?:\s*$|\?|!)",
+        r"(?:resume)\s+(?:el)?\s*documento\s+(.+?)(?:\s*$|\?|!)",
+        r"(?:resume)\s+(?:el)?\s*pdf\s+(.+?)(?:\s*$|\?|!)",
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text_low, re.IGNORECASE)
+        if match:
+            name = match.group(1).strip()
+            # Clean up: remove trailing punctuation
+            name = re.sub(r"[!?,;\s]+$", "", name).strip()
+            if not re.search(r"\.(pdf|doc|docx|txt|jpg|jpeg|png)$", name, flags=re.I):
+                name = name.rstrip(".").strip()
+            
+            # Reject if it's a generic marker
+            name_lower = name.lower()
+            if any(marker in name_lower for marker in generic_markers):
+                return ""
+            
+            if name:
+                return name
+    
+    return ""
+
+
+def _normalize_doc_name(name: str) -> str:
+    """
+    Normalize a document name for matching.
+    Handles variations like "six pdf" vs "six_pdf.pdf"
+    """
+    name = (name or "").strip().lower()
+    # Remove extensions and extra spaces
+    name = re.sub(r"\.(pdf|doc|docx|txt|jpg|jpeg|png)$", "", name, flags=re.I)
+    # Replace underscores, hyphens, spaces with nothing for comparison
+    name = re.sub(r"[\s_-]+", "", name)
+    return name
+
+
+def _find_specific_doc_in_inventory(case_id: str, chat_id: int, doc_name: str) -> dict | None:
+    """
+    Find a document in VFMS inventory by name/ID.
+    
+    Returns:
+    - dict with {filename, ingest_id, caption, state, text} if found
+    - None if not found
+    """
+    if not doc_name:
+        return None
+    
+    doc_name_norm = _normalize_doc_name(doc_name)
+    if not doc_name_norm:
+        return None
+    
+    conn = _get_conn()
+    cur = conn.cursor()
+    
+    cur.execute(
+        """
+        SELECT note_text
+        FROM case_notes
+        WHERE case_id=? AND chat_id=? AND source='telegram_attachment_vfms'
+        ORDER BY id DESC
+        LIMIT 100
+        """,
+        (case_id, int(chat_id)),
+    )
+    
+    rows = cur.fetchall()
+    conn.close()
+    
+    for row in rows:
+        note = row[0] if not isinstance(row, dict) else row["note_text"]
+        parsed = _parse_note(note)
+        
+        filename = parsed.get("filename", "")
+        # Try matching both filename and ingest_id
+        filename_norm = _normalize_doc_name(filename)
+        ingest_id_norm = _normalize_doc_name(parsed.get("ingest_id", ""))
+        
+        if filename_norm == doc_name_norm or ingest_id_norm == doc_name_norm:
+            text = _read_extracted_text(parsed.get("ingest_id", ""))
+            return {
+                **parsed,
+                "text": text,
+            }
+    
+    return None
+
+
+def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
+    """
+    Build a reply for a specific document summary.
+    
+    If text is extracted, return a concise summary.
+    If not, return honest copy about what's available.
+    """
+    filename = _clean_filename(doc_meta.get("filename", ""))
+    display_title = re.sub(r"\s+", " ", re.sub(r"[_-]+", " ", filename.rsplit(".", 1)[0] if "." in filename else filename)).strip()
+    display_title = display_title or filename or "documento"
+    ingest_id = doc_meta.get("ingest_id", "")
+    caption = doc_meta.get("caption", "")
+    state = doc_meta.get("state", "").lower()
+    text = doc_meta.get("text", "").strip()
+    
+    lines = []
+    lines.append(f"📄 {filename}")
+    
+    if ingest_id:
+        lines.append(f"ID: {ingest_id}")
+    
+    if caption:
+        lines.append(f"Nota: {caption}")
+    
+    # Check if text is extracted
+    has_text = bool(text)
+    
+    if has_text:
+        if "resumen" in state or "summary" in state.lower():
+            # Already has summary
+            lines.append(f"Estado: {state}")
+            lines.append("")
+            lines.append("📋 Resumen disponible:")
+            # Return a concise summary - just the first facts
+            summary_lines = text.split("\n")[:10]
+            lines.extend([line.strip() for line in summary_lines if line.strip()])
+        else:
+            # Text is extracted but no summary yet
+            lines.append(f"Estado: {state or 'texto extraído e indexado'}")
+            lines.append("")
+            lines.append(
+                f"Ya tengo el texto leído de {display_title}, "
+                "pero todavía no tengo un resumen guardado. Puedo generar uno ahora."
+            )
+            lines.append("")
+            lines.append("Siguientes acciones útiles:")
+            lines.append("- generar resumen claro")
+            lines.append("- extraer fechas importantes")
+            lines.append("- preparar preguntas para Nora")
+    else:
+        lines.append("")
+        lines.append("⏳ El documento está registrado pero el texto aún no ha sido extraído.")
+        lines.append("")
+        if "necesita ocr" in state or "ocr" in state.lower():
+            lines.append("📌 Estado: Pendiente de OCR/extracción manual")
+        else:
+            lines.append(f"📌 Estado: {state or 'Por procesar'}")
+        lines.append("")
+        lines.append("Próximos pasos:")
+        lines.append("- Si es un PDF o imagen, puedo extraer el texto")
+        lines.append("- Luego podré hacerte un resumen")
+    
+    lines.append("")
+    lines.append("_Límite: resumo información registrada; no sustituye revisión legal o profesional._")
+    
+    return "\n".join(lines).strip()
+
 async def maybe_handle_document_summary_query(update, context, chat_id: int, text: str) -> bool:
     """
     Handles VFMS document summary requests in Telegram.
@@ -931,6 +1127,34 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
         return False
 
     # ---------------------------
+    # Step 0.5: Check for specific document summary request
+    # ---------------------------
+    specific_doc_name = _extract_specific_doc_name(text)
+    
+    case_id = get_active_case_id(int(chat_id))
+    if not case_id:
+        return False
+    
+    if specific_doc_name:
+        # User asked for summary of a specific document (e.g., "dame el resumen de six pdf")
+        doc_meta = _find_specific_doc_in_inventory(case_id, int(chat_id), specific_doc_name)
+        if doc_meta:
+            reply = _build_specific_doc_summary_reply(doc_meta)
+            await _reply_text_chunked(update, reply)
+            return True
+        else:
+            # Document name didn't match anything in inventory
+            reply = (
+                f"No encontré un documento que coincida con '{specific_doc_name}' "
+                f"en el inventario del CASE:{case_id}.\n\n"
+                f"Puedo ayudarte a:\n"
+                f"- Ver qué documentos tienes: 'qué documentos tengo'\n"
+                f"- Buscar por tipo: 'qué pdf tengo' o 'documentos de finca'\n"
+            )
+            await update.message.reply_text(reply)
+            return True
+
+    # ---------------------------
     # Step 1: Preview requests
     # ---------------------------
     if _looks_like_format_preview_request(text):
@@ -940,7 +1164,6 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
     # ---------------------------
     # Step 2: Get active case
     # ---------------------------
-    case_id = get_active_case_id(int(chat_id))
     if not case_id:
         return False
 

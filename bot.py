@@ -6543,6 +6543,11 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         try:
             early_doc_norm = _norm_text(text or "")
             early_doc_summary_markers = (
+                "dame el resumen de",
+                "dame resumen de",
+                "hazme resumen de",
+                "resume el documento",
+                "resume el pdf",
                 "resumen legal",
                 "resumen del documento",
                 "resumen de documento",
@@ -14621,6 +14626,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         priority_doc_norm = (text or "").lower()
         priority_doc_markers = (
             "vfms",
+            "dame el resumen de",
+            "dame resumen de",
+            "hazme resumen de",
+            "resume el documento",
+            "resume el pdf",
             "resumen del documento",
             "resumen de documento",
             "resumen de documentos",
@@ -14978,6 +14988,21 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
     except Exception as e:
         logger.exception(f"[KAREN_HANDLE_TEXT_CAPABILITIES_GUARD] failed: {e}")
+
+    try:
+        doc_summary_norm = _norm_text(text or "")
+        if (
+            "dame el resumen de" in doc_summary_norm
+            or "dame resumen de" in doc_summary_norm
+            or "hazme resumen de" in doc_summary_norm
+            or "resume el documento" in doc_summary_norm
+            or "resume el pdf" in doc_summary_norm
+            or "resumen de " in doc_summary_norm
+        ):
+            if await maybe_handle_document_summary_query(update, context, chat_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_HANDLE_TEXT_SPECIFIC_DOC_SUMMARY] failed: {e}")
 
     if await maybe_handle_document_query(update, context, chat_id, text):
         return
