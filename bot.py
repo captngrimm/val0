@@ -11638,7 +11638,9 @@ GCAL_DELETE_CANCEL_WORDS = (
 
 
 def _gcal_pending_expires_at():
-    return datetime.datetime.now(timezone.utc) + GCAL_PENDING_TTL
+    import datetime as dt
+
+    return dt.datetime.now(timezone.utc) + GCAL_PENDING_TTL
 
 
 def _gcal_action_id(action_type: str, chat_id: int) -> str:

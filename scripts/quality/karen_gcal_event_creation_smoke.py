@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import timedelta, timezone
 from pathlib import Path
 
 
@@ -111,6 +112,19 @@ def test_missing_fields_are_asked_before_creation() -> None:
     assert_contains(handler, "¿Qué título le pongo al evento?", "missing title asks title")
 
 
+def test_pending_expiration_datetime_collision_regression() -> None:
+    helper = _function_body(_bot_source(), "_gcal_pending_expires_at")
+    assert_not_contains(helper, "datetime.datetime.now", "pending expiration avoids datetime.datetime collision")
+    assert_contains(helper, "import datetime as dt", "pending expiration uses local datetime module alias")
+    namespace = {
+        "timezone": timezone,
+        "GCAL_PENDING_TTL": timedelta(days=365),
+    }
+    exec(helper, namespace)
+    expires_at = namespace["_gcal_pending_expires_at"]()
+    assert_true(hasattr(expires_at, "tzinfo") and expires_at.tzinfo is not None, "pending expiration returns aware datetime")
+
+
 def test_no_val_reminder_created_for_gcal_event() -> None:
     handler = _function_body(_bot_source(), "try_appointment_save_natural")
     pending_confirm = _function_body(_bot_source(), "maybe_handle_pending_gcal_appointment_confirmation")
@@ -141,6 +155,7 @@ def main() -> int:
     test_natural_calendar_phrases_route_to_gcal_creation()
     test_gcal_creation_priority_beats_draft_followup()
     test_missing_fields_are_asked_before_creation()
+    test_pending_expiration_datetime_collision_regression()
     test_no_val_reminder_created_for_gcal_event()
     test_success_and_failure_copy_are_honest()
     test_document_and_reminder_routes_remain_present()
