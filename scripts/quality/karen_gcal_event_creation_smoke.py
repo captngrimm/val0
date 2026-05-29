@@ -45,6 +45,7 @@ def _function_body(source: str, name: str) -> str:
 
 def test_natural_calendar_phrases_route_to_gcal_creation() -> None:
     source = _bot_source()
+    intent_helper = _function_body(source, "_looks_like_karen_gcal_event_create_request")
     handler = _function_body(source, "try_appointment_save_natural")
     handle_text = _function_body(source, "handle_text")
 
@@ -63,6 +64,29 @@ def test_natural_calendar_phrases_route_to_gcal_creation() -> None:
     assert_contains(handler, "GCAL_CREATE_ACTION_TYPE", "creates gcal pending action")
     assert_contains(handler, "weekday_names", "weekday date parser present")
     assert_contains(handler, "America/Panama", "uses Panama timezone")
+    assert_contains(intent_helper, 'norm.startswith("agenda ") and has_date and has_time', "agenda date/time create intent supported")
+
+
+def test_gcal_creation_priority_beats_draft_followup() -> None:
+    source = _bot_source()
+    handle_text = _function_body(source, "handle_text")
+    pipeline = _function_body(source, "_process_text_pipeline")
+    helper = _function_body(source, "_looks_like_karen_gcal_event_create_request")
+
+    assert_contains(helper, "agenda ", "agenda prueba calendario can be classified")
+    assert_contains(handle_text, "KAREN_GCAL_CREATE_EARLY_HANDLE_TEXT", "early handle_text gcal create gate")
+    assert_contains(pipeline, "KAREN_GCAL_CREATE_EARLY_PIPELINE", "early pipeline gcal create gate")
+
+    pipeline_early_idx = source.find("KAREN_GCAL_CREATE_EARLY_PIPELINE")
+    draft_idx = source.find("operator_route == \"draft_followup\"")
+    assert_true(pipeline_early_idx >= 0 and draft_idx >= 0 and pipeline_early_idx < draft_idx, "pipeline gcal create beats draft follow-up")
+
+    handle_early_idx = handle_text.find("KAREN_GCAL_CREATE_EARLY_HANDLE_TEXT")
+    pipeline_call_idx = handle_text.find("_process_text_pipeline")
+    assert_true(handle_early_idx >= 0 and pipeline_call_idx >= 0 and handle_early_idx < pipeline_call_idx, "handle_text gcal create beats pipeline fallback")
+
+    assert_not_contains(handle_text.split("KAREN_GCAL_CREATE_EARLY_PIPELINE", 1)[0], "Draft follow-up", "no draft copy before gcal create gate")
+    assert_contains(handler := _function_body(source, "try_appointment_save_natural"), "Google Calendar se encargará de sus notificaciones", "create route notification copy")
 
 
 def test_missing_fields_are_asked_before_creation() -> None:
@@ -100,6 +124,7 @@ def test_document_and_reminder_routes_remain_present() -> None:
 
 def main() -> int:
     test_natural_calendar_phrases_route_to_gcal_creation()
+    test_gcal_creation_priority_beats_draft_followup()
     test_missing_fields_are_asked_before_creation()
     test_no_val_reminder_created_for_gcal_event()
     test_success_and_failure_copy_are_honest()

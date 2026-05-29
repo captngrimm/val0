@@ -6207,6 +6207,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[KAREN_TASK_COMPLETION_PIPELINE] failed: {e}")
 
     try:
+        if _looks_like_karen_gcal_event_create_request(text):
+            if await try_appointment_save_natural(update, chat_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_CREATE_EARLY_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
             return
     except Exception as e:
@@ -6282,6 +6289,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             )
             await update.message.reply_text(reply, disable_web_page_preview=True)
             return
+
+        if _looks_like_karen_gcal_event_create_request(text):
+            if await try_appointment_save_natural(update, chat_id, text):
+                return
 
         early_capability_markers = (
             "que puedes hacer hoy",
@@ -11645,6 +11656,48 @@ def _norm_gcal_confirm_text(text: str) -> str:
     return t
 
 
+def _looks_like_karen_gcal_event_create_request(text: str) -> bool:
+    norm = _norm_gcal_confirm_text(text)
+    if not norm:
+        return False
+    if norm.startswith(("que ", "qué ", "dime ", "cual ", "cuál ", "muestrame ", "muéstrame ")):
+        return False
+    if "recuerdame" in norm or "recordatorio" in norm:
+        return False
+
+    explicit_markers = (
+        "agenda cita",
+        "agendar cita",
+        "programa cita",
+        "programar cita",
+        "crea evento",
+        "crear evento",
+        "google calendar",
+        "pon en mi calendario",
+        "pon en el calendario",
+        "agrega al calendario",
+        "agregar al calendario",
+        "agregala al calendario",
+        "agrégala al calendario",
+        "tengo cita",
+        "tengo una cita",
+        "cita con",
+        "reunion con",
+        "reunión con",
+        "tengo reunion",
+        "tengo reunión",
+    )
+    if any(marker in norm for marker in explicit_markers):
+        return True
+
+    has_date = bool(re.search(
+        r"\b(hoy|manana|mañana|pasado manana|pasado mañana|lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo|(?:el\s+)?[0-3]?\d(?:\s+de\s+\w+)?)\b",
+        norm,
+    ))
+    has_time = bool(re.search(r"\b(?:a\s+las|a\s+la)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b", norm))
+    return norm.startswith("agenda ") and has_date and has_time
+
+
 async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text) -> bool:
     from datetime import datetime
     from core.client_gcal_write import create_client_event
@@ -11991,7 +12044,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         "agregala al calendario",
         "agrégala al calendario",
     )
-    if not any(m in t for m in save_markers):
+    if not any(m in t for m in save_markers) and not _looks_like_karen_gcal_event_create_request(text):
         return False
 
     # Avoid hijacking lookup questions.
@@ -12137,6 +12190,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     title = re.sub(r"^(crea|crear)\s+(?:un\s+)?evento\s+(?:en\s+)?(?:google\s+calendar|mi\s+calendario|el\s+calendario|calendario)\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(pon)\s+en\s+(?:mi\s+|el\s+)?calendario\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(agrega|agregar)\s+(?:esto\s+)?(?:al|a\s+mi|en\s+mi)\s+calendario\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(agenda|agendar|programa|programar)\s+", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(registra|registrar|guarda|guardar|agenda|agendar|programa|programar)\s+cita\s*", "cita ", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(tengo\s+una\s+|tengo\s+)", "", title, flags=re.IGNORECASE).strip()
 
@@ -14696,6 +14750,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_SCHEDULE_EARLY_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if _looks_like_karen_gcal_event_create_request(text):
+            if await try_appointment_save_natural(update, chat_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_CREATE_EARLY_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
