@@ -6393,6 +6393,28 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         text_norm_greet = "".join(ch for ch in text_norm_greet if not unicodedata.combining(ch))
         text_norm_greet = re.sub(r"[¿?¡!.,:;]+", "", text_norm_greet).strip()
 
+        # M5J: Karen preferred-name/vocative hard guard.
+        # Stored active profile wins over contradictory recent memory.
+        karen_name_norm = re.sub(r"^(val|valeria|vale)\s+", "", text_norm_greet).strip()
+        if client_id == "karen":
+            if karen_name_norm in (
+                "cual es mi apodo registrado",
+                "como me vas a llamar",
+                "cual es mi nombre registrado",
+                "cual es mi apodo",
+            ):
+                await update.message.reply_text("Tany, con y griega, es tu apodo registrado.")
+                return
+
+            if karen_name_norm in (
+                "saludame como me llamarias normalmente",
+                "saludame como me llamarias",
+                "saludame normal",
+                "saludame",
+            ):
+                await update.message.reply_text("Tany, ¿qué movida seguimos hoy?")
+                return
+
         greeting_markers = (
             "hola",
             "hola val",
