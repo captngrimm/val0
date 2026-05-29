@@ -1434,8 +1434,16 @@ def _generate_specific_doc_summary_text(doc_meta: dict) -> str:
 def _doc_status_label(doc_meta: dict) -> str:
     state = str(doc_meta.get("state") or "").lower()
     text = str(doc_meta.get("text") or "").strip()
-    if "resumen disponible" in state or str(doc_meta.get("saved_summary") or "").strip():
+    saved_summary = str(doc_meta.get("saved_summary") or "").strip()
+
+    if saved_summary and _looks_like_watermark_dominated_saved_summary(saved_summary):
+        return "requiere OCR/revisión visual: resumen guardado parece marca de agua"
+    if saved_summary or "resumen disponible" in state:
+        if _looks_like_watermark_dominated_text(text):
+            return "requiere OCR/revisión visual: texto extraído parece marca de agua"
         return "resumen disponible"
+    if _looks_like_watermark_dominated_text(text):
+        return "requiere OCR/revisión visual: texto extraído parece marca de agua"
     if text or "texto" in state or "extraído" in state or "extraido" in state or "indexado" in state:
         return "texto leído"
     if "ocr" in state or "revision" in state or "revisión" in state:
@@ -1543,6 +1551,11 @@ def _looks_like_watermark_dominated_text(text: str) -> bool:
         return True
 
     return False
+
+
+# Status marker: resumen guardado parece marca de agua
+def _looks_like_watermark_dominated_saved_summary(saved_summary: str) -> bool:
+    return _looks_like_watermark_dominated_text(str(saved_summary or ""))
 
 
 def _looks_like_watermark_dominated_doc(doc_meta: dict) -> bool:
@@ -2004,6 +2017,8 @@ def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
     body_includes_limit = False
     
     if saved_summary:
+        if _looks_like_watermark_dominated_saved_summary(saved_summary):
+            return _watermark_guard_reply(filename or display_title or "documento")
         lines.append("Estado: resumen disponible")
         lines.append("")
         lines.append(_clean_specific_doc_summary_body_for_reply(saved_summary))
@@ -2133,6 +2148,11 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
             ingest_id = str(doc_meta.get("ingest_id") or "").strip()
             saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), ingest_id)
             if saved_summary:
+                if _looks_like_watermark_dominated_saved_summary(saved_summary):
+                    doc_meta["saved_summary"] = saved_summary
+                    reply = _watermark_guard_reply(str(doc_meta.get("filename") or "documento"))
+                    await _reply_text_chunked(update, reply)
+                    return True
                 doc_meta["saved_summary"] = saved_summary
             elif str(doc_meta.get("text") or "").strip():
                 generated_summary = _generate_specific_doc_summary_text(doc_meta)
@@ -2391,7 +2411,7 @@ async def maybe_handle_document_alias_save_query(update, context, chat_id: int, 
         return True
 
     saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), doc_meta.get("ingest_id", ""))
-    if saved_summary:
+    if saved_summary and not _looks_like_watermark_dominated_saved_summary(saved_summary):
         doc_meta["saved_summary"] = saved_summary
     metadata = build_document_naming_metadata(doc_meta, case_id=str(case_id))
     saved = _persist_document_alias_metadata(
@@ -2447,7 +2467,7 @@ async def maybe_handle_document_naming_metadata_query(update, context, chat_id: 
         return True
 
     saved_summary = _find_saved_specific_doc_summary(str(case_id), int(chat_id), doc_meta.get("ingest_id", ""))
-    if saved_summary:
+    if saved_summary and not _looks_like_watermark_dominated_saved_summary(saved_summary):
         doc_meta["saved_summary"] = saved_summary
 
     metadata = build_document_naming_metadata(doc_meta, case_id=str(case_id))
