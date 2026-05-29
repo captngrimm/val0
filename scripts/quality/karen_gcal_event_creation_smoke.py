@@ -43,6 +43,12 @@ def _function_body(source: str, name: str) -> str:
     return source[start:end]
 
 
+def _source_contains_order(source: str, first: str, second: str) -> bool:
+    first_idx = source.find(first)
+    second_idx = source.find(second)
+    return first_idx >= 0 and second_idx >= 0 and first_idx < second_idx
+
+
 def test_natural_calendar_phrases_route_to_gcal_creation() -> None:
     source = _bot_source()
     intent_helper = _function_body(source, "_looks_like_karen_gcal_event_create_request")
@@ -74,8 +80,15 @@ def test_gcal_creation_priority_beats_draft_followup() -> None:
     helper = _function_body(source, "_looks_like_karen_gcal_event_create_request")
 
     assert_contains(helper, "agenda ", "agenda prueba calendario can be classified")
+    assert_contains(handle_text, "[GCAL_CREATE_ROUTE] matched live text", "live route logging present")
+    assert_contains(pipeline, "[GCAL_CREATE_ROUTE] matched live text", "pipeline route logging present")
+    assert_contains(handle_text, "if _looks_like_karen_gcal_event_create_request(text)", "live handler uses actual intent helper")
     assert_contains(handle_text, "KAREN_GCAL_CREATE_EARLY_HANDLE_TEXT", "early handle_text gcal create gate")
     assert_contains(pipeline, "KAREN_GCAL_CREATE_EARLY_PIPELINE", "early pipeline gcal create gate")
+
+    live_gate_idx = handle_text.find("[GCAL_CREATE_ROUTE] matched live text")
+    shadow_idx = handle_text.find("_log_conversation_router_shadow")
+    assert_true(live_gate_idx >= 0 and shadow_idx >= 0 and live_gate_idx < shadow_idx, "live gcal gate beats router shadow")
 
     pipeline_early_idx = source.find("KAREN_GCAL_CREATE_EARLY_PIPELINE")
     draft_idx = source.find("operator_route == \"draft_followup\"")
@@ -87,6 +100,8 @@ def test_gcal_creation_priority_beats_draft_followup() -> None:
 
     assert_not_contains(handle_text.split("KAREN_GCAL_CREATE_EARLY_PIPELINE", 1)[0], "Draft follow-up", "no draft copy before gcal create gate")
     assert_contains(handler := _function_body(source, "try_appointment_save_natural"), "Google Calendar se encargará de sus notificaciones", "create route notification copy")
+
+    assert_true(_source_contains_order(source, "_looks_like_karen_gcal_event_create_request", "operator_route == \"draft_followup\""), "intent helper appears before draft router")
 
 
 def test_missing_fields_are_asked_before_creation() -> None:

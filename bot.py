@@ -6147,6 +6147,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     chat_id = chat.id
     client_id = resolve_client_id(chat_id)
 
+    try:
+        if _looks_like_karen_gcal_event_create_request(text):
+            logger.info("[GCAL_CREATE_ROUTE] matched live text category=gcal_event_create")
+            if await try_appointment_save_natural(update, chat_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[GCAL_CREATE_ROUTE_PIPELINE] failed: {e}")
+
     if looks_like_technical_paste(text):
         await update.message.reply_text(TECHNICAL_PASTE_REPLY)
         return
@@ -14696,6 +14704,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     client_id = resolve_client_id(chat_id)
     tg_msg_id = getattr(update.message, "message_id", None)
+
+    try:
+        if _looks_like_karen_gcal_event_create_request(text):
+            logger.info("[GCAL_CREATE_ROUTE] matched live text category=gcal_event_create")
+            if await try_appointment_save_natural(update, chat_id, text):
+                return
+    except Exception as e:
+        logger.exception(f"[GCAL_CREATE_ROUTE_HANDLE_TEXT] failed: {e}")
 
     if looks_like_technical_paste(text):
         await update.message.reply_text(TECHNICAL_PASTE_REPLY)
