@@ -14,7 +14,7 @@ def client_profile(client_id: str | None) -> dict[str, str]:
         return {
             "client_id": "karen",
             "display_name": "Karen",
-            "vocative": "Insanity",
+            "vocative": "Tany",
         }
     return {}
 

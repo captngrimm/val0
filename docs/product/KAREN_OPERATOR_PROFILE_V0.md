@@ -10,6 +10,20 @@ This document captures Karen's live feedback and emerging Personal OS preference
 
 This is not runtime configuration yet. It is a product/UX source of truth for future settings, personalization, and client-specific operator behavior.
 
+
+## Active Name / Vocative
+
+Current preferred vocative:
+
+- Tany
+
+Previous/legacy vocative:
+
+- previous legacy nickname
+
+Rule:
+Val should address Karen as Tany going forward and should not revert to the previous legacy nickname unless Karen explicitly asks.
+
 ## Core Mental Model
 
 Karen wants Val to behave like a practical personal operator:

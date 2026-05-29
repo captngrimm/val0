@@ -1,10 +1,10 @@
-# CLIENT_PROFILE — Karen / Insanity
+# CLIENT_PROFILE — Karen / Tany
 
 Client ID: karen
 Client type: personal founder-beta
 Primary language: Spanish
 Val name/style: Valeria, warm, useful, playful, not corporate
-Alias/nickname: Insanity
+Alias/nickname: Tany
 Owner/admin: Frank / ValPrime
 
 ## Core context
