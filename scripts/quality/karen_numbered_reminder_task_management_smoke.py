@@ -61,7 +61,8 @@ def test_agenda_has_numbered_reminders_tasks_and_natural_actions() -> None:
     assert_contains(tomorrow, "elimina el recordatorio 1", "natural delete hint")
     assert_contains(tomorrow, "cambia el recordatorio 2 para las 11", "natural edit hint")
     assert_contains(tomorrow, "marca la tarea 1 como hecha", "natural done hint")
-    assert_contains(tomorrow, "pon la tarea 1 para mañana", "natural schedule hint")
+    assert_contains(tomorrow, "elimina la tarea 1", "natural task delete hint")
+    assert_not_contains(tomorrow, "pon la tarea 1 para mañana", "tomorrow agenda avoids rescheduling already-dated tasks")
     assert_not_contains(tomorrow, "/rmd", "no slash command in agenda")
     assert_not_contains(dashboard, "/rmd", "no slash command in dashboard")
 

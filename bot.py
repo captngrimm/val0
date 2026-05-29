@@ -5338,6 +5338,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
     reminders = []
     tasks = []
+    reminder_like_tasks = []
 
     conn = _get_conn()
     cur = conn.cursor()
@@ -5402,12 +5403,16 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
             raw = str(row.get("raw_input") or "").strip()
             if raw:
-                tasks.append({"id": row.get("id"), "text": raw})
+                item = {"id": row.get("id"), "text": raw}
             else:
                 action = str(row.get("action") or "").strip()
                 target = str(row.get("target") or "").strip()
                 label = " ".join(x for x in [action, target] if x).strip() or f"tarea #{row.get('id')}"
-                tasks.append({"id": row.get("id"), "text": label})
+                item = {"id": row.get("id"), "text": label}
+            if _looks_like_reminder_command_text(item["text"]):
+                reminder_like_tasks.append(item)
+            else:
+                tasks.append(item)
 
     except Exception as e:
         tasks.append(f"- No pude leer tareas: {e}")
@@ -5420,7 +5425,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
     if reminders:
         for idx, item in enumerate(reminders, start=1):
             if isinstance(item, dict):
-                lines.append(f"{idx}. {item['time']} · {item['text']}")
+                lines.append(f"{idx}. {item['time']} · {item['text']}{_karen_reminder_time_note(item['text'], item['time'])}")
             else:
                 lines.append(f"- {item}")
     else:
@@ -5437,13 +5442,19 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
     else:
         lines.append("- No tienes tareas con fecha para mañana.")
 
+    if reminder_like_tasks:
+        lines.extend(["", "⚠️ Posible recordatorio guardado como tarea"])
+        for idx, item in enumerate(reminder_like_tasks, start=1):
+            lines.append(f"{idx}. {item['text']}")
+        lines.append("Puedes decir: “marca la tarea 2 como hecha”. Todavía no convierto tareas a recordatorios automáticamente.")
+
     lines.extend([
         "",
         "Acciones útiles:",
         "- elimina el recordatorio 1",
         "- cambia el recordatorio 2 para las 11",
         "- marca la tarea 1 como hecha",
-        "- pon la tarea 1 para mañana",
+        "- elimina la tarea 1",
     ])
 
     return "\n".join(lines)
@@ -5481,6 +5492,40 @@ def _karen_extract_number_after(noun: str, text: str) -> int | None:
     return None
 
 
+def _karen_reminder_time_note(text: str, scheduled_label: str) -> str:
+    clean = _norm_text(text or "")
+    if not clean:
+        return ""
+    scheduled_hour = ""
+    try:
+        scheduled_hour = str(scheduled_label or "")[:2].lstrip("0") or ""
+    except Exception:
+        scheduled_hour = ""
+    time_matches = re.findall(
+        r"\b(?:a\s+las?\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\s*m|p\s*m|md|mediodia|medio dia)?\b",
+        clean,
+    )
+    for hour, minute, suffix in time_matches:
+        hour_int = int(hour)
+        suffix = (suffix or "").replace(" ", "")
+        if suffix in {"pm", "pm"} and hour_int < 12:
+            hour_int += 12
+        if suffix in {"md", "mediodia", "mediodia"}:
+            hour_int = 12
+        if scheduled_hour and str(hour_int) != scheduled_hour:
+            return " ⚠️ texto menciona otra hora"
+    return ""
+
+
+def _looks_like_reminder_command_text(text: str) -> bool:
+    norm = _normalize_daily_operator_query(text)
+    if norm.startswith(("recuerdame", "recordatorio")):
+        return True
+    if "recuerdame" in norm and re.search(r"\b(manana|mañana|hoy|a las|am|pm|mediodia|medio dia|md|\d{1,2}:\d{2})\b", norm):
+        return True
+    return bool(norm.startswith(("val recuerdame", "vale recuerdame", "bal recuerdame")))
+
+
 def _karen_reminder_rows(chat_id: int, *, when: str = "all", limit: int = 25) -> list[dict]:
     from datetime import datetime, timedelta, timezone
     from zoneinfo import ZoneInfo
@@ -5506,10 +5551,14 @@ def _karen_reminder_rows(chat_id: int, *, when: str = "all", limit: int = 25) ->
             due_dt = datetime.strptime(due_raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(tz)
             local_date = due_dt.date().isoformat()
             due_local = due_dt.strftime("%Y-%m-%d %H:%M")
+            if when in {"all", "active"} and due_dt < now:
+                continue
+            if when == "past" and due_dt >= now:
+                continue
             if target_date and due_dt.date() != target_date:
                 continue
         except Exception:
-            if target_date:
+            if target_date or when == "past":
                 continue
         text_value = str(rd.get("text") or "").replace("\n", " ").strip() or f"recordatorio {rd.get('id')}"
         out.append({
@@ -5517,13 +5566,23 @@ def _karen_reminder_rows(chat_id: int, *, when: str = "all", limit: int = 25) ->
             "due_local": due_local,
             "local_date": local_date,
             "text": text_value,
+            "time_note": _karen_reminder_time_note(text_value, due_local[11:16] if len(due_local) >= 16 else due_local),
         })
     return out
 
 
+def _karen_past_reminder_count(chat_id: int) -> int:
+    return len(_karen_reminder_rows(chat_id, when="past", limit=100))
+
+
 def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
-    rows = _karen_reminder_rows(chat_id, when=when, limit=25)
-    title = "⏰ Recordatorios de mañana" if when == "tomorrow" else "⏰ Recordatorios de Val"
+    rows = _karen_reminder_rows(chat_id, when=when, limit=100)[:25]
+    if when == "past":
+        title = "⏰ Recordatorios vencidos"
+    elif when == "tomorrow":
+        title = "⏰ Recordatorios de mañana"
+    else:
+        title = "⏰ Recordatorios de Val"
     lines = [title, ""]
     if not rows:
         lines.append("No encontré recordatorios pendientes para esa consulta.")
@@ -5532,7 +5591,9 @@ def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
             due = str(row.get("due_local") or "").strip()
             text_value = str(row.get("text") or "").strip()
             time_label = due[11:16] if when == "tomorrow" and len(due) >= 16 else due
-            lines.append(f"{idx}. {time_label} · {text_value}")
+            lines.append(f"{idx}. {time_label} · {text_value}{row.get('time_note') or ''}")
+    if when in {"all", "active"} and _karen_past_reminder_count(chat_id):
+        lines.extend(["", "Hay recordatorios vencidos ocultos. Puedes pedir: “Val, recordatorios vencidos”."])
     lines.extend([
         "",
         "Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.",
@@ -5555,6 +5616,14 @@ def _looks_like_karen_reminder_list_query(text: str) -> str:
         "que tengo registrado como recordatorio",
         "que tengo en recordatorio",
     )
+    past_markers = (
+        "recordatorios vencidos",
+        "muestrame recordatorios pasados",
+        "muéstrame recordatorios pasados",
+        "recordatorios pasados",
+    )
+    if any(marker in norm for marker in past_markers):
+        return "past"
     if any(marker in norm for marker in tomorrow_markers):
         return "tomorrow"
     if any(marker in norm for marker in all_markers):
@@ -5564,6 +5633,8 @@ def _looks_like_karen_reminder_list_query(text: str) -> str:
 
 def _parse_karen_reminder_management(text: str) -> dict:
     norm = _normalize_daily_operator_query(text)
+    if "elimina recordatorios vencidos" in norm or "borra recordatorios vencidos" in norm:
+        return {"type": "bulk_past_delete_confirm", "number": None, "target": ""}
     number = _karen_extract_number_after("recordatorio", text)
     if number is None:
         generic = re.search(r"\belimina\s+el\s+(\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
@@ -5605,7 +5676,14 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
         await update.message.reply_text(f"¿Quieres eliminar el recordatorio {request.get('number')} o la tarea {request.get('number')}?")
         return True
 
-    rows = _karen_reminder_rows(int(chat_id), when="all", limit=25)
+    if request.get("type") == "bulk_past_delete_confirm":
+        await update.message.reply_text(
+            "Puedo revisar los recordatorios vencidos contigo, pero no los elimino en bloque sin confirmación. "
+            "Dime: “Val, recordatorios vencidos” y luego “elimina el recordatorio 1”."
+        )
+        return True
+
+    rows = _karen_reminder_rows(int(chat_id), when="all", limit=100)
     selected = None
     number = request.get("number")
     target = _norm_text(str(request.get("target") or ""))

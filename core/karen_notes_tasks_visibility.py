@@ -165,6 +165,15 @@ def is_auxiliary_task_row(row: Any) -> bool:
     return _task_source(row) == "auxiliary_task"
 
 
+def looks_like_reminder_command_task(text: Any) -> bool:
+    norm = normalize_visibility_prompt(str(text or ""))
+    if norm.startswith(("recuerdame", "recordatorio")):
+        return True
+    if norm.startswith(("val recuerdame", "vale recuerdame", "bal recuerdame")):
+        return True
+    return "recuerdame" in norm and bool(re.search(r"\b(manana|mañana|hoy|a las|am|pm|mediodia|medio dia|md|\d{1,2}:\d{2})\b", norm))
+
+
 def _looks_like_auxiliary_task_item(text: str) -> bool:
     norm = _note_key(text)
     if not norm:
@@ -537,11 +546,12 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, auxiliary_tasks: Iterable[A
         raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
         due = _task_due(row)
         due_label = due[:16].replace("T", " ") if due else "sin fecha"
-        lines.append(f"{idx}. {raw} — {due_label}")
+        marker = " · Posible recordatorio guardado como tarea" if looks_like_reminder_command_task(raw) else ""
+        lines.append(f"{idx}. {raw} — {due_label}{marker}")
 
     lines.extend([
         "",
-        "Puedes decir: “marca como hecha la tarea 1” o “pon esta tarea para mañana”.",
+        "Puedes decir: “marca como hecha la tarea 1”, “elimina la tarea 1” o “pon esta tarea para mañana”.",
     ])
     if any(is_auxiliary_task_row(row) for row in rows):
         lines.append("Algunas tareas sin fecha pueden necesitar que las convierta a tarea formal antes de cerrarlas.")
