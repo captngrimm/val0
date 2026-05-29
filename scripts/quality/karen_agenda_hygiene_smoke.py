@@ -53,7 +53,7 @@ def test_tomorrow_agenda_hygiene_copy() -> None:
     source = _bot_source()
     tomorrow = _function_body(source, "build_unified_tomorrow_dashboard")
     assert_contains(tomorrow, "enumerate(reminders, start=1)", "reminders remain numbered")
-    assert_contains(tomorrow, "enumerate(tasks, start=1)", "tasks remain numbered")
+    assert_contains(tomorrow, "task_display_number = 1", "tasks use unified visible numbering")
     assert_contains(tomorrow, "elimina el recordatorio 1", "reminder delete action")
     assert_contains(tomorrow, "cambia el recordatorio 2 para las 11", "reminder edit action")
     assert_contains(tomorrow, "marca la tarea 1 como hecha", "task done action")

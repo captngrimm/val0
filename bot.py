@@ -5433,10 +5433,13 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
     lines.append("")
     lines.append("📌 Tareas")
+    task_display_number = 1
     if tasks:
-        for idx, item in enumerate(tasks, start=1):
+        for item in tasks:
             if isinstance(item, dict):
-                lines.append(f"{idx}. {item['text']}")
+                lines.append(f"{task_display_number}. {item['text']}")
+                item["display_number"] = task_display_number
+                task_display_number += 1
             else:
                 lines.append(f"- {item}")
     else:
@@ -5444,9 +5447,15 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
     if reminder_like_tasks:
         lines.extend(["", "⚠️ Posible recordatorio guardado como tarea"])
-        for idx, item in enumerate(reminder_like_tasks, start=1):
-            lines.append(f"{idx}. {item['text']}")
-        lines.append("Puedes decir: “marca la tarea 2 como hecha”. Todavía no convierto tareas a recordatorios automáticamente.")
+        warning_numbers = []
+        for item in reminder_like_tasks:
+            lines.append(f"{task_display_number}. {item['text']}")
+            warning_numbers.append(task_display_number)
+            item["display_number"] = task_display_number
+            task_display_number += 1
+        if warning_numbers:
+            first_warning = warning_numbers[0]
+            lines.append(f"Puedes decir: “marca la tarea {first_warning} como hecha”. Todavía no convierto tareas a recordatorios automáticamente.")
 
     lines.extend([
         "",
@@ -5594,10 +5603,14 @@ def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
             lines.append(f"{idx}. {time_label} · {text_value}{row.get('time_note') or ''}")
     if when in {"all", "active"} and _karen_past_reminder_count(chat_id):
         lines.extend(["", "Hay recordatorios vencidos ocultos. Puedes pedir: “Val, recordatorios vencidos”."])
-    lines.extend([
-        "",
-        "Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.",
-    ])
+    lines.append("")
+    if when == "past":
+        lines.extend([
+            "Puedes decir: “elimina el recordatorio vencido 1”.",
+            "Conserva el historial si no estás segura.",
+        ])
+    else:
+        lines.append("Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.")
     return "\n".join(lines)
 
 

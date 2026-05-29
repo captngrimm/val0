@@ -57,7 +57,7 @@ def test_agenda_has_numbered_reminders_tasks_and_natural_actions() -> None:
     assert_contains(tomorrow, "⏰ Recordatorios", "reminder section")
     assert_contains(tomorrow, "📌 Tareas", "task section")
     assert_contains(tomorrow, "enumerate(reminders, start=1)", "reminders numbered")
-    assert_contains(tomorrow, "enumerate(tasks, start=1)", "tasks numbered")
+    assert_contains(tomorrow, "task_display_number = 1", "tasks numbered with unified visible counter")
     assert_contains(tomorrow, "elimina el recordatorio 1", "natural delete hint")
     assert_contains(tomorrow, "cambia el recordatorio 2 para las 11", "natural edit hint")
     assert_contains(tomorrow, "marca la tarea 1 como hecha", "natural done hint")
