@@ -6576,6 +6576,15 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 "reunión con",
                 "tengo reunion",
                 "tengo reunión",
+                "crea evento",
+                "crear evento",
+                "google calendar",
+                "pon en mi calendario",
+                "pon en el calendario",
+                "agrega al calendario",
+                "agregar al calendario",
+                "agregala al calendario",
+                "agrégala al calendario",
             )
 
             if any(m in karen_upper_norm for m in appointment_save_markers):
@@ -11730,11 +11739,10 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         })
         clear_pending_action(action.action_id)
         await update.message.reply_text(
-            f"📅 Listo{vocative}. Creé la cita en tu Google Calendar.\n\n"
-            f"• {pending['pretty_date']}\n"
-            f"• {pending['pretty_time']}\n"
-            f"• {result.title}\n\n"
-            "Solo creé este evento. No borré ni edité nada más."
+            f"📅 Listo{vocative}. Agregué al Google Calendar: "
+            f"{result.title} — {pending.get('pretty_short') or pending['pretty_date']} {pending['pretty_time']}.\n\n"
+            "Google Calendar se encargará de sus notificaciones según tu configuración.\n"
+            "Solo creé este evento. No creé recordatorios de Val, ni borré ni edité nada más."
         )
         return True
 
@@ -11742,7 +11750,7 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         "No pude crear la cita en Google Calendar todavía. 😬\n\n"
         f"Estado: {result.status}\n"
         f"Razón: {result.reason}\n\n"
-        "No se creó ningún evento."
+        "No se creó ningún evento. Puedo guardarlo como tarea o recordatorio de Val si quieres."
     )
     return True
 
@@ -11973,6 +11981,15 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         "reunión con",
         "tengo reunion",
         "tengo reunión",
+        "crea evento",
+        "crear evento",
+        "google calendar",
+        "pon en mi calendario",
+        "pon en el calendario",
+        "agrega al calendario",
+        "agregar al calendario",
+        "agregala al calendario",
+        "agrégala al calendario",
     )
     if not any(m in t for m in save_markers):
         return False
@@ -12012,6 +12029,28 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         relative_date_dt = now
         relative_date_label = "hoy"
 
+    weekday_names = {
+        "lunes": 0,
+        "martes": 1,
+        "miercoles": 2,
+        "miércoles": 2,
+        "jueves": 3,
+        "viernes": 4,
+        "sabado": 5,
+        "sábado": 5,
+        "domingo": 6,
+    }
+    weekday_date_dt = None
+    if relative_date_dt is None:
+        for weekday_name, weekday_idx in weekday_names.items():
+            if re.search(rf"\b(?:el\s+)?{weekday_name}\b", t):
+                days_ahead = (weekday_idx - now.weekday()) % 7
+                if days_ahead == 0:
+                    days_ahead = 7
+                weekday_date_dt = now + timedelta(days=days_ahead)
+                relative_date_label = weekday_name
+                break
+
     day = None
     month = None
     year = now.year
@@ -12032,12 +12071,15 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         day = relative_date_dt.day
         month = relative_date_dt.month
         year = relative_date_dt.year
+    elif weekday_date_dt is not None:
+        day = weekday_date_dt.day
+        month = weekday_date_dt.month
+        year = weekday_date_dt.year
 
     if not day or not month:
         await update.message.reply_text(
-            f"Sí puedo guardar la cita{vocative} 📅\n\n"
-            "Pero necesito la fecha. Dímelo así:\n"
-            "“Val, tengo cita con Nora el 28 a las 3pm”."
+            f"Sí puedo crear el evento en Google Calendar{vocative} 📅\n\n"
+            "Pero necesito la fecha. ¿Para qué fecha lo agendo?"
         )
         return True
 
@@ -12046,16 +12088,14 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     if not tm:
         if relative_date_label:
             await update.message.reply_text(
-                f"Sí puedo guardar la cita{vocative} 📅\n\n"
+                f"Sí puedo crear el evento en Google Calendar{vocative} 📅\n\n"
                 f"Tengo la fecha: {relative_date_label}.\n"
-                "Pero necesito la hora. Dímelo así:\n"
-                "“Val, tengo cita con Mabel mañana a las 3pm”."
+                "¿A qué hora lo agendo?"
             )
         else:
             await update.message.reply_text(
                 f"Tengo la fecha, pero me falta la hora{vocative} ⏰\n\n"
-                "Mándamelo así:\n"
-                "“Val, tengo cita con Nora el 28 a las 3pm”."
+                "¿A qué hora lo agendo?"
             )
         return True
 
@@ -12094,15 +12134,21 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     # Keep useful context after the time, e.g. "tema libro Finca 10082".
     title = raw
     title = re.sub(r"^\s*(val|valeria|vale)[,:]?\s*", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(crea|crear)\s+(?:un\s+)?evento\s+(?:en\s+)?(?:google\s+calendar|mi\s+calendario|el\s+calendario|calendario)\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(pon)\s+en\s+(?:mi\s+|el\s+)?calendario\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(agrega|agregar)\s+(?:esto\s+)?(?:al|a\s+mi|en\s+mi)\s+calendario\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(registra|registrar|guarda|guardar|agenda|agendar|programa|programar)\s+cita\s*", "cita ", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(tengo\s+una\s+|tengo\s+)", "", title, flags=re.IGNORECASE).strip()
 
     # Remove explicit/relative date words but do not destroy the subject/context.
     title = re.sub(r"\b(el|para el)\s+\d{1,2}(\s+de\s+\w+)?\b", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"\b(hoy|mañana|manana|pasado mañana|pasado manana)\b", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\b(lunes|martes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\b", "", title, flags=re.IGNORECASE).strip()
 
     # Remove only the time expression, preserving text after it.
     title = re.sub(r"\ba\s+la?s?\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\b(agregala|agrégala|agregalo|agrégalo|agrega|agregar|ponlo)\s+(?:al|a\s+mi|en\s+mi)\s+calendario\b", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"\b(?:en\s+)?google\s+calendar\b", "", title, flags=re.IGNORECASE).strip()
 
     title = re.sub(r"\s*,\s*", ", ", title).strip(" ,.;:-")
     title = re.sub(r"\s+", " ", title).strip()
@@ -12123,14 +12169,16 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     if title and not title.lower().startswith("cita"):
         title = "Cita: " + title
 
-    if not title:
-        title = "Cita"
+    if not title or title.lower() in {"cita", "evento", "reunion", "reunión"}:
+        await update.message.reply_text("¿Qué título le pongo al evento?")
+        return True
 
     reminder_text = f"{title}."
 
     weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][due_local.weekday()]
     month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][due_local.month]
     pretty_date = f"{weekday} {due_local.day} de {month_name}"
+    pretty_short = f"{weekday} {due_local.day:02d}/{due_local.month:02d}"
     pretty_time = due_local.strftime("%I:%M %p").lstrip("0")
 
     # Google Calendar write is now available for Karen, but must stay behind confirmation.
@@ -12140,6 +12188,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         "duration_minutes": 60,
         "description": "Evento creado por Val0 desde flujo natural de cita con confirmación explícita.",
         "pretty_date": pretty_date,
+        "pretty_short": pretty_short,
         "pretty_time": pretty_time,
     }
     _clear_existing_gcal_pending(chat_id, client_id, GCAL_CREATE_ACTION_TYPE)
@@ -12166,7 +12215,8 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         f"• {title}\n"
         "• Duración: 1 hora\n\n"
         "¿Confirmas que la cree en Google Calendar?\n"
-        "Respóndeme: “sí”, “dale” o “cancelar”."
+        "Respóndeme: “sí”, “dale” o “cancelar”.\n\n"
+        "Google Calendar se encargará de sus notificaciones según tu configuración."
     )
     await update.message.reply_text(msg)
     return True
@@ -15057,6 +15107,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "reunión con",
             "tengo reunion",
             "tengo reunión",
+            "crea evento",
+            "crear evento",
+            "google calendar",
+            "pon en mi calendario",
+            "pon en el calendario",
+            "agrega al calendario",
+            "agregar al calendario",
+            "agregala al calendario",
+            "agrégala al calendario",
         )
 
         if any(m in kr_norm for m in appointment_save_markers):
