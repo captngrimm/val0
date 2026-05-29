@@ -366,6 +366,7 @@ _PENDING_REMINDER_CONFIRM = {}
 _LAST_ACTION = {}
 _KAREN_NUMBERED_ACTION_DIRTY: dict[int, set[str]] = {}
 _KAREN_REMINDER_LIST_CONTEXT: dict[int, str] = {}
+_KAREN_GCAL_EVENT_LIST_CONTEXT: dict[int, dict] = {}
 _INLINE_NUDGE_LAST = {}
 # --------------------------------------------------
 # Logging
@@ -5425,7 +5426,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
     lines = [f"📅 Mañana ({pretty})", ""]
 
-    lines.append("⏰ Recordatorios")
+    lines.append("⏰ Recordatorios de Val")
     if reminders:
         for idx, item in enumerate(reminders, start=1):
             if isinstance(item, dict):
@@ -5436,7 +5437,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
         lines.append("- No tienes recordatorios para mañana.")
 
     lines.append("")
-    lines.append("📌 Tareas")
+    lines.append("📌 Tareas de Val")
     task_display_number = 1
     if tasks:
         for item in tasks:
@@ -5549,6 +5550,14 @@ def _is_karen_numbered_action_dirty(chat_id: int, kind: str) -> bool:
         return kind in _KAREN_NUMBERED_ACTION_DIRTY.get(int(chat_id), set())
     except Exception:
         return False
+
+
+def _karen_gcal_visible_events(chat_id: int) -> list[dict]:
+    try:
+        ctx = _KAREN_GCAL_EVENT_LIST_CONTEXT.get(int(chat_id), {}) or {}
+        return list(ctx.get("events") or [])
+    except Exception:
+        return []
 
 
 def _karen_reminder_time_note(text: str, scheduled_label: str) -> str:
@@ -5813,7 +5822,14 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
             requested_when = "active"
         else:
             _clear_karen_numbered_action_context(chat_id)
-            await update.message.reply_text(f"¿Quieres eliminar el recordatorio {request.get('number')} o la tarea {request.get('number')}?")
+            if _karen_gcal_visible_events(chat_id):
+                gcal_label = "Google " + "Calendar"
+                await update.message.reply_text(
+                    f"¿Quieres eliminar el evento {request.get('number')} de {gcal_label}, "
+                    f"el recordatorio {request.get('number')} de Val o la tarea {request.get('number')} de Val?"
+                )
+            else:
+                await update.message.reply_text(f"¿Quieres eliminar el recordatorio {request.get('number')} o la tarea {request.get('number')}?")
             return True
 
     row_scope = "past" if requested_when == "past" else "all"
@@ -5928,21 +5944,44 @@ async def maybe_handle_karen_task_creation(update: Update, context: ContextTypes
         return True
 
 
-def _format_client_gcal_events_section(client_id: str, start_local, end_local, tz_name: str = "America/Panama", limit: int = 10) -> str:
-    """
-    Read-only Google Calendar section for client agenda dashboards.
-
-    Safety:
-    - read-only only
-    - no event creation/update/delete
-    - clearly labels source as Google Calendar
-    - does not expose attendee/details/description
-    """
+def _format_client_gcal_event_time(raw_start: str, tz_name: str = "America/Panama") -> str:
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
+    raw_start = str(raw_start or "").strip()
+    label = raw_start
+    try:
+        if "T" in raw_start:
+            dt = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(ZoneInfo(tz_name))
+            label = dt.strftime("%a %d/%m %I:%M %p").replace(" 0", " ")
+        elif raw_start:
+            label = raw_start
+    except Exception:
+        pass
+    return label
+
+
+def _format_client_gcal_events_section(client_id: str, start_local, end_local, tz_name: str = "America/Panama", limit: int = 10, chat_id: int | None = None) -> str:
+    """
+    Google Calendar section for client agenda dashboards.
+
+    Safety:
+    - lists events by visible number
+    - create/delete still require explicit routes/confirmation
+    - clearly labels source as Google Calendar
+    - does not expose attendee/details/description
+    """
     try:
         from core.client_gcal_read import get_client_events_between
+
+        if chat_id is not None:
+            _KAREN_GCAL_EVENT_LIST_CONTEXT[int(chat_id)] = {
+                "ts": time.time(),
+                "client_id": client_id,
+                "events": [],
+            }
 
         result = get_client_events_between(
             client_id,
@@ -5952,7 +5991,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
             limit=limit,
         )
 
-        lines = ["🌐 Google Calendar · solo lectura"]
+        lines = ["📅 Eventos de Google Calendar"]
 
         if result.status == "not_connected":
             lines.append("- No está conectado para este cliente.")
@@ -5966,30 +6005,33 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
             lines.append("- No encontré eventos en Google Calendar para esta ventana.")
             return "\n".join(lines)
 
-        tz = ZoneInfo(tz_name)
-
-        for ev in result.events:
+        visible_events = []
+        for idx, ev in enumerate(result.events, start=1):
             raw_start = str(ev.get("start") or "").strip()
             title = str(ev.get("summary") or "(sin título)").strip()
+            label = _format_client_gcal_event_time(raw_start, tz_name=tz_name)
 
-            label = raw_start
-            try:
-                if "T" in raw_start:
-                    dt = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
-                    if dt.tzinfo is not None:
-                        dt = dt.astimezone(tz)
-                    label = dt.strftime("%a %d/%m %I:%M %p").replace(" 0", " ")
-                elif raw_start:
-                    label = raw_start
-            except Exception:
-                pass
+            lines.append(f"{idx}. {label} · {title}")
+            visible_events.append({
+                "number": idx,
+                "event_id": ev.get("id") or "",
+                "summary": title,
+                "start": raw_start,
+                "end": ev.get("end") or "",
+                "display_start": label,
+            })
 
-            lines.append(f"- {label} · {title}")
+        if chat_id is not None:
+            _KAREN_GCAL_EVENT_LIST_CONTEXT[int(chat_id)] = {
+                "ts": time.time(),
+                "client_id": client_id,
+                "events": visible_events,
+            }
 
         return "\n".join(lines)
 
     except Exception as e:
-        return "🌐 Google Calendar · solo lectura\n- No pude leer Google Calendar ahora mismo. Lo intento de nuevo más tarde."
+        return "📅 Eventos de Google Calendar\n- No pude leer Google Calendar ahora mismo. Lo intento de nuevo más tarde."
 
 
 def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> str:
@@ -6044,6 +6086,7 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
         end_local=end_local,
         tz_name=tz_name,
         limit=10,
+        chat_id=chat_id,
     )
     if window == "tomorrow":
         internal_lines = str(internal or "").splitlines()
@@ -6052,12 +6095,13 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
         internal_block = "\n".join(internal_lines).strip()
     else:
         internal_block = str(internal or "").strip()
+    internal_block = re.sub(r"(?m)^⏰ Recordatorios$", "⏰ Recordatorios de Val", internal_block)
+    internal_block = re.sub(r"(?m)^📌 Tareas$", "📌 Tareas de Val", internal_block)
 
-    return "\n\n".join([
-        title,
-        gcal,
-        "📌 Recordatorios y tareas\n" + internal_block,
-    ])
+    blocks = [title, gcal]
+    if internal_block:
+        blocks.append(internal_block)
+    return "\n\n".join(blocks)
 
 
 async def maybe_handle_karen_explicit_case_note(update, chat_id: int, client_id: str, text: str) -> bool:
@@ -6151,6 +6195,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[GCAL_CONFIRM_ROUTE_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[GCAL_DELETE_CONFIRM_ROUTE_PIPELINE] failed: {e}")
 
     try:
         if _looks_like_karen_gcal_event_create_request(text):
@@ -11624,9 +11674,13 @@ GCAL_CREATE_CANCEL_WORDS = (
 GCAL_DELETE_CONFIRM_WORDS = (
     "si",
     "sí",
+    "si confirma",
+    "sí confirma",
+    "confirma",
     "ok",
     "okay",
     "dale",
+    "correcto",
     "confirmo",
     "confirmar",
     "borralo",
@@ -11641,6 +11695,8 @@ GCAL_DELETE_CANCEL_WORDS = (
     "no",
     "cancelar",
     "cancela",
+    "dejalo",
+    "déjalo",
     "mejor no",
     "olvidalo",
     "olvídalo",
@@ -11664,7 +11720,7 @@ def _clear_existing_gcal_pending(chat_id: int, client_id: str, action_type: str)
         clear_pending_action(existing.action_id)
 
 
-def _get_gcal_pending_action_any_state(chat_id: int, client_id: str) -> PendingAction | None:
+def _get_gcal_pending_action_any_state(chat_id: int, client_id: str, action_type: str = GCAL_CREATE_ACTION_TYPE) -> PendingAction | None:
     from core import pending_actions as pending_store
 
     matches = []
@@ -11673,7 +11729,7 @@ def _get_gcal_pending_action_any_state(chat_id: int, client_id: str) -> PendingA
             continue
         if action.client_id != client_id:
             continue
-        if action.action_type != GCAL_CREATE_ACTION_TYPE:
+        if action.action_type != action_type:
             continue
         matches.append(action)
     if not matches:
@@ -11890,27 +11946,27 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
     client_id = resolve_client_id(chat_id)
     if not client_id:
         return False
-    action = get_pending_action(
-        chat_id,
-        action_type=GCAL_DELETE_ACTION_TYPE,
-        client_id=client_id,
-    )
+    action = _get_gcal_pending_action_any_state(chat_id, client_id, action_type=GCAL_DELETE_ACTION_TYPE)
     if not action:
         return False
+    if not _matches_gcal_pending_reply(text, action):
+        return False
     pending = action.payload
-    vocative = client_vocative(client_id)
     decision = classify_confirmation_reply(text, action)
 
     if decision == ConfirmationDecision.CANCEL:
         clear_pending_action(action.action_id)
         await update.message.reply_text(
-            f"Listo{vocative}. No borré nada de Google Calendar. 🛑📅"
+            "Listo, no eliminé el evento de Google Calendar."
         )
         return True
 
     if decision == ConfirmationDecision.EXPIRED:
         clear_pending_action(action.action_id)
-        return False
+        await update.message.reply_text(
+            "Esa confirmación ya venció. Vuelve a pedirme que elimine el evento."
+        )
+        return True
 
     if decision != ConfirmationDecision.CONFIRM:
         return False
@@ -11933,18 +11989,96 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
         })
         clear_pending_action(action.action_id)
         await update.message.reply_text(
-            f"🗑️ Listo{vocative}. Borré ese evento de Google Calendar.\n\n"
-            f"• {pending['summary']}\n"
-            f"• {pending['start']}\n\n"
-            "Solo borré ese evento específico. No toqué nada más."
+            "Listo. Eliminé de Google Calendar: "
+            f"{pending.get('summary') or 'evento'} — {pending.get('display_start') or pending.get('start') or ''}.\n\n"
+            "Solo eliminé ese evento específico. No toqué recordatorios ni tareas de Val."
         )
         return True
 
+    clear_pending_action(action.action_id)
     await update.message.reply_text(
-        "No pude borrar el evento todavía. 😬\n\n"
+        "No pude eliminar el evento de Google Calendar. No cambié nada.\n\n"
         f"Estado: {result.status}\n"
-        f"Razón: {result.reason}\n\n"
-        "No se borró ningún evento."
+        f"Razón: {result.reason}"
+    )
+    return True
+
+
+def _parse_karen_gcal_event_number_delete(text: str) -> int | None:
+    norm = _norm_gcal_confirm_text(text)
+    delete_verbs = r"(?:elimina|eliminar|borra|borrar|cancela|cancelar)"
+    number_words = r"(?:\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)"
+    patterns = (
+        rf"\b{delete_verbs}\s+(?:el\s+)?evento(?:\s+de\s+google\s+calendar|\s+google\s+calendar)?\s+(?P<num>{number_words})\b",
+        rf"\b{delete_verbs}\s+evento\s+(?P<num>{number_words})\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, norm)
+        if match:
+            return _karen_number_word_to_int(match.group("num"))
+    return None
+
+
+async def maybe_handle_karen_gcal_event_number_delete(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    number = _parse_karen_gcal_event_number_delete(text)
+    if number is None:
+        return False
+
+    client_id = resolve_client_id(chat_id)
+    if not client_id:
+        return False
+
+    events = _karen_gcal_visible_events(chat_id)
+    if not events:
+        await update.message.reply_text(
+            "No tengo una lista reciente de eventos de Google Calendar para usar ese número. "
+            "Pide “Val, qué tengo mañana?” y dime el número del evento."
+        )
+        return True
+
+    if int(number) < 1 or int(number) > len(events):
+        await update.message.reply_text(
+            "No veo ese número de evento en la última agenda. Pide “Val, qué tengo mañana?” para verla actualizada."
+        )
+        return True
+
+    selected = events[int(number) - 1]
+    if not selected.get("event_id"):
+        await update.message.reply_text(
+            "No pude identificar ese evento de Google Calendar con seguridad. No cambié nada."
+        )
+        return True
+
+    delete_payload = {
+        "event_id": selected.get("event_id") or "",
+        "summary": selected.get("summary") or "evento",
+        "start": selected.get("start") or "",
+        "end": selected.get("end") or "",
+        "display_start": selected.get("display_start") or selected.get("start") or "",
+        "number": int(number),
+    }
+    _clear_existing_gcal_pending(chat_id, client_id, GCAL_DELETE_ACTION_TYPE)
+    create_pending_action(
+        PendingAction(
+            action_id=_gcal_action_id(GCAL_DELETE_ACTION_TYPE, chat_id),
+            chat_id=int(chat_id),
+            client_id=client_id,
+            action_type=GCAL_DELETE_ACTION_TYPE,
+            display_summary=f"{delete_payload['display_start']} · {delete_payload['summary']}",
+            confirm_words=GCAL_DELETE_CONFIRM_WORDS,
+            cancel_words=GCAL_DELETE_CANCEL_WORDS,
+            expires_at=_gcal_pending_expires_at(),
+            payload=delete_payload,
+            audit_metadata={"source": "numbered_agenda_event_delete"},
+        )
+    )
+    await update.message.reply_text(
+        "Voy a eliminar este evento de Google Calendar:\n"
+        f"{delete_payload['summary']} — {delete_payload['display_start']}.\n\n"
+        "¿Confirmas?"
     )
     return True
 
@@ -14777,6 +14911,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[GCAL_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
 
     try:
+        if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[GCAL_DELETE_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
+
+    try:
         if _looks_like_karen_gcal_event_create_request(text):
             logger.info("[GCAL_CREATE_ROUTE] matched live text category=gcal_event_create")
             if await try_appointment_save_natural(update, chat_id, text):
@@ -15107,6 +15247,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            return
+        if await maybe_handle_karen_gcal_event_number_delete(update, chat_id, text):
             return
         if await try_gcal_delete_natural(update, chat_id, text):
             return
