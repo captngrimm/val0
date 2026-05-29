@@ -364,6 +364,7 @@ _PENDING_CASE_DISAMBIG = {}
 _PENDING_REMINDER_CONFIRM = {}
 # --- last action tracker (demo-safe undo) ---
 _LAST_ACTION = {}
+_KAREN_NUMBERED_ACTION_DIRTY: dict[int, set[str]] = {}
 _INLINE_NUDGE_LAST = {}
 # --------------------------------------------------
 # Logging
@@ -5319,6 +5320,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
     User-facing tomorrow dashboard.
     Combines reminders + open commitments so normal users don't see contradictory answers.
     """
+    _clear_karen_numbered_action_dirty(chat_id)
     from datetime import datetime, timedelta, timezone
     from zoneinfo import ZoneInfo
     from memory_store import _get_conn
@@ -5457,14 +5459,18 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
             first_warning = warning_numbers[0]
             lines.append(f"Puedes decir: “marca la tarea {first_warning} como hecha”. Todavía no convierto tareas a recordatorios automáticamente.")
 
-    lines.extend([
-        "",
-        "Acciones útiles:",
-        "- elimina el recordatorio 1",
-        "- cambia el recordatorio 2 para las 11",
-        "- marca la tarea 1 como hecha",
-        "- elimina la tarea 1",
-    ])
+    action_lines = ["", "Acciones útiles:"]
+    if reminders:
+        action_lines.append("- elimina el recordatorio 1")
+        edit_number = 2 if len(reminders) >= 2 else 1
+        action_lines.append(f"- cambia el recordatorio {edit_number} para las 11")
+    if tasks or reminder_like_tasks:
+        action_lines.extend([
+            "- marca la tarea 1 como hecha",
+            "- elimina la tarea 1",
+        ])
+    if len(action_lines) > 2:
+        lines.extend(action_lines)
 
     return "\n".join(lines)
 
@@ -5499,6 +5505,45 @@ def _karen_extract_number_after(noun: str, text: str) -> int | None:
     if match:
         return _karen_number_word_to_int(match.group(1))
     return None
+
+
+def _clear_karen_numbered_action_context(chat_id: int) -> None:
+    """Avoid stale numbered task/reminder follow-ups after a list-changing action."""
+    try:
+        _LAST_ACTION.pop(int(chat_id), None)
+    except Exception:
+        pass
+
+
+def _mark_karen_numbered_action_dirty(chat_id: int, kind: str) -> None:
+    try:
+        bucket = _KAREN_NUMBERED_ACTION_DIRTY.setdefault(int(chat_id), set())
+        bucket.add(kind)
+    except Exception:
+        pass
+
+
+def _clear_karen_numbered_action_dirty(chat_id: int, kind: str | None = None) -> None:
+    try:
+        key = int(chat_id)
+        if kind is None:
+            _KAREN_NUMBERED_ACTION_DIRTY.pop(key, None)
+            return
+        bucket = _KAREN_NUMBERED_ACTION_DIRTY.get(key)
+        if not bucket:
+            return
+        bucket.discard(kind)
+        if not bucket:
+            _KAREN_NUMBERED_ACTION_DIRTY.pop(key, None)
+    except Exception:
+        pass
+
+
+def _is_karen_numbered_action_dirty(chat_id: int, kind: str) -> bool:
+    try:
+        return kind in _KAREN_NUMBERED_ACTION_DIRTY.get(int(chat_id), set())
+    except Exception:
+        return False
 
 
 def _karen_reminder_time_note(text: str, scheduled_label: str) -> str:
@@ -5585,6 +5630,7 @@ def _karen_past_reminder_count(chat_id: int) -> int:
 
 
 def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
+    _clear_karen_numbered_action_dirty(chat_id, "reminder")
     rows = _karen_reminder_rows(chat_id, when=when, limit=100)[:25]
     if when == "past":
         title = "⏰ Recordatorios vencidos"
@@ -5603,14 +5649,15 @@ def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
             lines.append(f"{idx}. {time_label} · {text_value}{row.get('time_note') or ''}")
     if when in {"all", "active"} and _karen_past_reminder_count(chat_id):
         lines.extend(["", "Hay recordatorios vencidos ocultos. Puedes pedir: “Val, recordatorios vencidos”."])
-    lines.append("")
-    if when == "past":
-        lines.extend([
-            "Puedes decir: “elimina el recordatorio vencido 1”.",
-            "Conserva el historial si no estás segura.",
-        ])
-    else:
-        lines.append("Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.")
+    if rows:
+        lines.append("")
+        if when == "past":
+            lines.extend([
+                "Puedes decir: “elimina el recordatorio vencido 1”.",
+                "Conserva el historial si no estás segura.",
+            ])
+        else:
+            lines.append("Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.")
     return "\n".join(lines)
 
 
@@ -5654,15 +5701,17 @@ def _parse_karen_reminder_management(text: str) -> dict:
         if generic:
             number = _karen_number_word_to_int(generic.group(1))
             return {"type": "ambiguous_delete", "number": number, "target": ""}
+    elif re.fullmatch(r"recordatorio\s+(\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)", norm):
+        return {"type": "recordatorio_number_clarify", "number": number, "target": ""}
 
-    if re.search(r"\b(elimina|borra|cancela)\s+el\s+recordatorio\b", norm):
+    if re.search(r"\b(elimina|borra|cancela)\s+(?:el\s+)?recordatorio\b", norm):
         target = ""
-        m = re.search(r"\b(?:elimina|borra|cancela)\s+el\s+recordatorio\s+de\s+(.+)$", norm)
+        m = re.search(r"\b(?:elimina|borra|cancela)\s+(?:el\s+)?recordatorio\s+de\s+(.+)$", norm)
         if m:
             target = m.group(1).strip()
         return {"type": "delete", "number": number, "target": target}
 
-    if re.search(r"\b(cambia|mueve)\s+el\s+recordatorio\b", norm) or re.search(r"\bcambia\s+.+\s+para\b", norm):
+    if re.search(r"\b(cambia|mueve)\s+(?:el\s+)?recordatorio\b", norm) or re.search(r"\bcambia\s+.+\s+para\b", norm):
         target = ""
         m = re.search(r"\bcambia\s+(.+?)\s+para\b", norm)
         if m and "recordatorio" not in m.group(1):
@@ -5686,13 +5735,23 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
         return False
 
     if request.get("type") == "ambiguous_delete":
+        _clear_karen_numbered_action_context(chat_id)
         await update.message.reply_text(f"¿Quieres eliminar el recordatorio {request.get('number')} o la tarea {request.get('number')}?")
         return True
 
     if request.get("type") == "bulk_past_delete_confirm":
+        _clear_karen_numbered_action_context(chat_id)
         await update.message.reply_text(
             "Puedo revisar los recordatorios vencidos contigo, pero no los elimino en bloque sin confirmación. "
             "Dime: “Val, recordatorios vencidos” y luego “elimina el recordatorio 1”."
+        )
+        return True
+
+    if request.get("type") == "recordatorio_number_clarify":
+        _clear_karen_numbered_action_context(chat_id)
+        await update.message.reply_text(
+            f"¿Qué quieres hacer con el recordatorio {request.get('number')}? "
+            f"Puedes decir: “elimina el recordatorio {request.get('number')}”."
         )
         return True
 
@@ -5701,6 +5760,13 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
     number = request.get("number")
     target = _norm_text(str(request.get("target") or ""))
     if number:
+        if request.get("type") == "delete" and _is_karen_numbered_action_dirty(chat_id, "reminder"):
+            _clear_karen_numbered_action_context(chat_id)
+            await update.message.reply_text(
+                f"Después de borrar uno, la lista cambió. ¿Quieres que elimine el nuevo recordatorio {number}? "
+                "Pide primero “Val, qué recordatorios tengo” para verlo actualizado."
+            )
+            return True
         if 1 <= int(number) <= len(rows):
             selected = rows[int(number) - 1]
         else:
@@ -5722,8 +5788,9 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
     display_num = number or (rows.index(selected) + 1)
 
     if request.get("type") == "edit":
+        _clear_karen_numbered_action_context(chat_id)
         await update.message.reply_text(
-            "Puedo ayudarte, pero ahora mismo solo puedo eliminarlo y crear uno nuevo. "
+            "Todavía no puedo editarlo directamente. Puedo eliminarlo y crear uno nuevo con la nueva hora. "
             "¿Quieres que lo haga?"
         )
         return True
@@ -5735,10 +5802,16 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
         logger.exception(f"[KAREN_REMINDER_NUMBERED_DELETE] failed: {e}")
         ok = False
     if not ok:
+        _clear_karen_numbered_action_context(chat_id)
         await update.message.reply_text("No pude eliminar ese recordatorio. Puede que ya no esté pendiente.")
         return True
 
-    await update.message.reply_text(f"Listo. Eliminé el recordatorio {display_num}: {reminder_text}.")
+    _clear_karen_numbered_action_context(chat_id)
+    _mark_karen_numbered_action_dirty(chat_id, "reminder")
+    await update.message.reply_text(
+        f"Listo. Eliminé el recordatorio {display_num}: {reminder_text}.\n"
+        "La lista cambió; pide “Val, qué recordatorios tengo” antes de borrar otro por número."
+    )
     return True
 
 
@@ -13819,6 +13892,7 @@ async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: Con
             logger.exception(f"[KAREN_TASKS_VISIBILITY] failed: {e}")
             tasks = []
         auxiliary_tasks = load_karen_auxiliary_task_items(client_id)
+        _clear_karen_numbered_action_dirty(chat_id, "task")
         await update.message.reply_text(render_karen_tasks_view(tasks, auxiliary_tasks=auxiliary_tasks))
         return True
 
@@ -13837,11 +13911,17 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
     target = ""
     patterns = (
         r"marca\s+como\s+hecha\s+la\s+tarea\s+de\s+(.+)$",
+        r"marca\s+como\s+hecha\s+tarea\s+de\s+(.+)$",
         r"marcar\s+como\s+hecha\s+la\s+tarea\s+de\s+(.+)$",
+        r"marcar\s+como\s+hecha\s+tarea\s+de\s+(.+)$",
         r"marca\s+la\s+tarea\s+de\s+(.+?)\s+como\s+hecha$",
+        r"marca\s+tarea\s+de\s+(.+?)\s+como\s+hecha$",
         r"cierra\s+la\s+tarea\s+de\s+(.+)$",
+        r"cierra\s+tarea\s+de\s+(.+)$",
         r"completa\s+la\s+tarea\s+de\s+(.+)$",
+        r"completa\s+tarea\s+de\s+(.+)$",
         r"ya\s+hice\s+la\s+tarea\s+de\s+(.+)$",
+        r"ya\s+hice\s+tarea\s+de\s+(.+)$",
         r"ya\s+hice\s+(.+)$",
     )
     for pattern in patterns:
@@ -13855,7 +13935,7 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
 
 def _parse_karen_task_delete_request(text: str) -> int | None:
     norm = _normalize_daily_operator_query(text)
-    if not re.search(r"\b(borra|elimina|cancela)\s+la\s+tarea\b", norm):
+    if not re.search(r"\b(borra|elimina|cancela)\s+(?:la\s+)?tarea\b", norm):
         return None
     number = _karen_extract_number_after("tarea", text)
     return number or 0
@@ -13875,6 +13955,7 @@ async def maybe_handle_karen_task_delete_request(update: Update, context: Contex
     number = _parse_karen_task_delete_request(text)
     if number is None:
         return False
+    _clear_karen_numbered_action_context(chat_id)
     if not number:
         await update.message.reply_text("¿Quieres marcarla como hecha o eliminarla del listado?")
         return True
@@ -13967,6 +14048,13 @@ async def maybe_handle_karen_task_schedule_for_tomorrow(update: Update, context:
         await update.message.reply_text("No encontré tareas abiertas para poner para mañana.")
         return True
 
+    if request.get("number") is not None and _is_karen_numbered_action_dirty(chat_id, "task"):
+        _clear_karen_numbered_action_context(chat_id)
+        await update.message.reply_text(
+            f"La lista de tareas cambió. Pide “Val, qué tareas tengo” antes de actuar sobre la tarea {request.get('number')}."
+        )
+        return True
+
     selected, status = select_karen_task_for_schedule(rows, request)
     if selected is None:
         if status == "ambiguous":
@@ -14002,6 +14090,7 @@ async def maybe_handle_karen_task_schedule_for_tomorrow(update: Update, context:
                 confidence="derived_from_pending",
             )
             log_action(chat_id, "task_scheduled_from_pending", task_text)
+            _mark_karen_numbered_action_dirty(chat_id, "task")
         except Exception as e:
             logger.exception(f"[KAREN_TASK_SCHEDULE_CONVERT] failed: {e}")
             await update.message.reply_text("No pude poner esa tarea para mañana ahora mismo.")
@@ -14028,6 +14117,7 @@ async def maybe_handle_karen_task_schedule_for_tomorrow(update: Update, context:
                 )
                 return True
             log_action(chat_id, "task_scheduled_for_tomorrow", task_text)
+            _mark_karen_numbered_action_dirty(chat_id, "task")
         except Exception as e:
             logger.exception(f"[KAREN_TASK_SCHEDULE_UPDATE] failed: {e}")
             await update.message.reply_text("No pude poner esa tarea para mañana ahora mismo.")
@@ -14054,11 +14144,17 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
     norm = _normalize_daily_operator_query(text)
     completion_markers = (
         "marca como hecha la tarea",
+        "marca como hecha tarea",
         "marcar como hecha la tarea",
+        "marcar como hecha tarea",
         "marca la tarea",
+        "marca tarea",
         "ya hice la tarea",
+        "ya hice tarea",
         "cierra la tarea",
+        "cierra tarea",
         "completa la tarea",
+        "completa tarea",
         "ya hice",
     )
     if not any(marker in norm for marker in completion_markers):
@@ -14079,11 +14175,18 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
         return True
 
     if not rows:
+        _clear_karen_numbered_action_context(chat_id)
         await update.message.reply_text("No encontré tareas abiertas para marcar como hechas.")
         return True
 
     selected = None
     if number is not None:
+        if _is_karen_numbered_action_dirty(chat_id, "task"):
+            _clear_karen_numbered_action_context(chat_id)
+            await update.message.reply_text(
+                f"La lista de tareas cambió. Pide “Val, qué tareas tengo” antes de actuar sobre la tarea {number}."
+            )
+            return True
         if number < 1 or number > len(rows):
             await update.message.reply_text(
                 f"No veo una tarea {number}. Pide “Val, qué tareas tengo” para ver la lista actual."
@@ -14130,6 +14233,7 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
     task_text = str(selected_row.get("raw_input") or selected_row.get("action") or "tarea sin fecha").strip()
 
     if is_auxiliary_task_row(selected_row):
+        _clear_karen_numbered_action_context(chat_id)
         await update.message.reply_text(
             "Esa tarea está guardada como pendiente sin fecha. Puedo mostrarla, "
             "pero todavía necesito convertirla a tarea formal para cerrarla."
@@ -14160,10 +14264,13 @@ async def maybe_handle_karen_task_completion(update: Update, context: ContextTyp
         return True
 
     if not changed:
+        _clear_karen_numbered_action_context(chat_id)
         await update.message.reply_text("Esa tarea ya no aparece abierta. Pide “Val, qué tareas tengo” para verificar.")
         return True
 
     log_action(chat_id, "task_closed", task_text)
+    _clear_karen_numbered_action_context(chat_id)
+    _mark_karen_numbered_action_dirty(chat_id, "task")
     await update.message.reply_text(
         "✅ Listo. Marqué esta tarea como hecha:\n"
         f"- {task_text}\n\n"
@@ -14475,6 +14582,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception(f"[KAREN_TASK_SCHEDULE_EARLY_HANDLE_TEXT] failed: {e}")
 
+    try:
+        if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            return
+        if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
+            return
+        if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NUMBERED_ACTION_EARLY_HANDLE_TEXT] failed: {e}")
+
     # Reminder action intercept
     try:
         if await handle_reminder_action_intercept(
@@ -14705,6 +14822,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.exception(f"[FRANK_OPERATOR_MODE_V0] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen numbered reminder/task action priority gate v0
+    # Must beat Google Calendar delete/search and stale pending action flows.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            return
+        if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
+            return
+        if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NUMBERED_ACTION_PRIORITY_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Google Calendar Delete Priority Gate v0
