@@ -6403,7 +6403,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 "cual es mi nombre registrado",
                 "cual es mi apodo",
             ):
-                await update.message.reply_text("Tany, con y griega, es tu apodo registrado.")
+                await update.message.reply_text("Tu apodo registrado es: Tany. Lo estoy usando con y griega.")
                 return
 
             if karen_name_norm in (
