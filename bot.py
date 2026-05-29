@@ -365,6 +365,7 @@ _PENDING_REMINDER_CONFIRM = {}
 # --- last action tracker (demo-safe undo) ---
 _LAST_ACTION = {}
 _KAREN_NUMBERED_ACTION_DIRTY: dict[int, set[str]] = {}
+_KAREN_REMINDER_LIST_CONTEXT: dict[int, str] = {}
 _INLINE_NUDGE_LAST = {}
 # --------------------------------------------------
 # Logging
@@ -5321,6 +5322,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
     Combines reminders + open commitments so normal users don't see contradictory answers.
     """
     _clear_karen_numbered_action_dirty(chat_id)
+    _KAREN_REMINDER_LIST_CONTEXT[int(chat_id)] = "agenda"
     from datetime import datetime, timedelta, timezone
     from zoneinfo import ZoneInfo
     from memory_store import _get_conn
@@ -5504,6 +5506,9 @@ def _karen_extract_number_after(noun: str, text: str) -> int | None:
     match = re.search(rf"\b{re.escape(noun)}\s+(\d{{1,2}}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
     if match:
         return _karen_number_word_to_int(match.group(1))
+    match = re.search(rf"\b(primer|primero)\s+{re.escape(noun)}\b", norm)
+    if match:
+        return 1
     return None
 
 
@@ -5631,6 +5636,7 @@ def _karen_past_reminder_count(chat_id: int) -> int:
 
 def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
     _clear_karen_numbered_action_dirty(chat_id, "reminder")
+    _KAREN_REMINDER_LIST_CONTEXT[int(chat_id)] = "past" if when == "past" else "active"
     rows = _karen_reminder_rows(chat_id, when=when, limit=100)[:25]
     if when == "past":
         title = "⏰ Recordatorios vencidos"
@@ -5658,6 +5664,25 @@ def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
             ])
         else:
             lines.append("Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.")
+    return "\n".join(lines)
+
+
+def _render_karen_reminder_updated_list(chat_id: int, *, when: str) -> str:
+    _clear_karen_numbered_action_dirty(chat_id, "reminder")
+    _KAREN_REMINDER_LIST_CONTEXT[int(chat_id)] = "past" if when == "past" else "active"
+    rows = _karen_reminder_rows(chat_id, when=when, limit=100)[:25]
+    if when == "past":
+        if not rows:
+            return "Recordatorios vencidos actualizados\n\nNo tienes recordatorios vencidos."
+        lines = ["Recordatorios vencidos actualizados", ""]
+    else:
+        if not rows:
+            return "Recordatorios actualizados\n\nNo tienes recordatorios activos."
+        lines = ["Recordatorios actualizados", ""]
+    for idx, row in enumerate(rows, start=1):
+        due = str(row.get("due_local") or "").strip()
+        text_value = str(row.get("text") or "").strip()
+        lines.append(f"{idx}. {due} · {text_value}{row.get('time_note') or ''}")
     return "\n".join(lines)
 
 
@@ -5693,23 +5718,47 @@ def _looks_like_karen_reminder_list_query(text: str) -> str:
 
 def _parse_karen_reminder_management(text: str) -> dict:
     norm = _normalize_daily_operator_query(text)
-    if "elimina recordatorios vencidos" in norm or "borra recordatorios vencidos" in norm:
+    delete_verbs = r"(?:elimina|eliminar|borra|borrar|cancela|cancelar|quita|quitar)"
+    number_words = r"(?:\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)"
+    if re.search(rf"\b{delete_verbs}\s+recordatorios\s+(?:vencidos|pasados)\b", norm):
         return {"type": "bulk_past_delete_confirm", "number": None, "target": ""}
-    number = _karen_extract_number_after("recordatorio", text)
+
+    past_number = None
+    past_match = re.search(
+        rf"\brecordatorio\s+(?:vencido|vencidos|pasado|pasados)\s+(?P<num>{number_words})\b",
+        norm,
+    )
+    if not past_match:
+        past_match = re.search(
+            rf"\b(?P<num>primer|primero)\s+recordatorio\s+(?:vencido|pasado)\b",
+            norm,
+        )
+    if past_match:
+        past_number = _karen_number_word_to_int(past_match.group("num"))
+
+    number = past_number or _karen_extract_number_after("recordatorio", text)
     if number is None:
-        generic = re.search(r"\belimina\s+el\s+(\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
+        generic = re.search(rf"\b{delete_verbs}\s+(?:el\s+)?(?P<num>{number_words})\b", norm)
         if generic:
-            number = _karen_number_word_to_int(generic.group(1))
-            return {"type": "ambiguous_delete", "number": number, "target": ""}
+            number = _karen_number_word_to_int(generic.group("num"))
+            return {"type": "context_delete", "number": number, "target": ""}
+    elif past_number is not None and re.fullmatch(
+        rf"(?:recordatorio\s+(?:vencido|vencidos|pasado|pasados)\s+{number_words}|(?:primer|primero)\s+recordatorio\s+(?:vencido|pasado))",
+        norm,
+    ):
+        return {"type": "recordatorio_number_clarify", "number": past_number, "target": "", "when": "past"}
     elif re.fullmatch(r"recordatorio\s+(\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)", norm):
         return {"type": "recordatorio_number_clarify", "number": number, "target": ""}
 
-    if re.search(r"\b(elimina|borra|cancela)\s+(?:el\s+)?recordatorio\b", norm):
+    if past_number is not None and re.search(rf"\b{delete_verbs}\s+(?:el\s+)?recordatorio\s+(?:vencido|vencidos|pasado|pasados)\b", norm):
+        return {"type": "delete", "number": past_number, "target": "", "when": "past"}
+
+    if re.search(rf"\b{delete_verbs}\s+(?:el\s+)?recordatorio\b", norm):
         target = ""
-        m = re.search(r"\b(?:elimina|borra|cancela)\s+(?:el\s+)?recordatorio\s+de\s+(.+)$", norm)
+        m = re.search(rf"\b{delete_verbs}\s+(?:el\s+)?recordatorio\s+de\s+(.+)$", norm)
         if m:
             target = m.group(1).strip()
-        return {"type": "delete", "number": number, "target": target}
+        return {"type": "delete", "number": number, "target": target, "when": "active"}
 
     if re.search(r"\b(cambia|mueve)\s+(?:el\s+)?recordatorio\b", norm) or re.search(r"\bcambia\s+.+\s+para\b", norm):
         target = ""
@@ -5755,7 +5804,20 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
         )
         return True
 
-    rows = _karen_reminder_rows(int(chat_id), when="all", limit=100)
+    requested_when = str(request.get("when") or "").strip()
+    if not requested_when and request.get("type") == "context_delete":
+        last_context = _KAREN_REMINDER_LIST_CONTEXT.get(int(chat_id), "")
+        if last_context == "past":
+            requested_when = "past"
+        elif last_context == "active":
+            requested_when = "active"
+        else:
+            _clear_karen_numbered_action_context(chat_id)
+            await update.message.reply_text(f"¿Quieres eliminar el recordatorio {request.get('number')} o la tarea {request.get('number')}?")
+            return True
+
+    row_scope = "past" if requested_when == "past" else "all"
+    rows = _karen_reminder_rows(int(chat_id), when=row_scope, limit=100)
     selected = None
     number = request.get("number")
     target = _norm_text(str(request.get("target") or ""))
@@ -5807,10 +5869,13 @@ async def maybe_handle_karen_reminder_management(update: Update, context: Contex
         return True
 
     _clear_karen_numbered_action_context(chat_id)
-    _mark_karen_numbered_action_dirty(chat_id, "reminder")
+    updated = _render_karen_reminder_updated_list(int(chat_id), when="past" if requested_when == "past" else "all")
+    if requested_when == "past":
+        lead = f"Listo. Eliminé el recordatorio vencido: {reminder_text}."
+    else:
+        lead = f"Listo. Eliminé: {reminder_text}."
     await update.message.reply_text(
-        f"Listo. Eliminé el recordatorio {display_num}: {reminder_text}.\n"
-        "La lista cambió; pide “Val, qué recordatorios tengo” antes de borrar otro por número."
+        f"{lead}\n\n{updated}"
     )
     return True
 

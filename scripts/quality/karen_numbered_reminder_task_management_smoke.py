@@ -80,7 +80,7 @@ def test_reminder_management_routes_and_copy() -> None:
     assert_contains(list_helper, "cambia el recordatorio 1 para las 10", "list edit hint")
     assert_not_contains(list_helper, "/rmd", "natural list hides slash commands")
 
-    assert_contains(helper, "elimina|borra|cancela", "delete verbs parsed")
+    assert_contains(helper, "elimina|eliminar|borra|borrar|cancela|cancelar|quita|quitar", "delete verbs parsed")
     assert_contains(helper, "cambia|mueve", "edit verbs parsed")
     assert_contains(handler, "cancel_reminder", "delete uses reminder cancellation")
     assert_contains(handler, "Listo. Eliminé el recordatorio", "delete confirmation")

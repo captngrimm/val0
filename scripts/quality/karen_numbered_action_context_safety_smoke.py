@@ -83,16 +83,15 @@ def test_no_fake_edit_success_and_context_cleared() -> None:
     assert_not_contains(handler, "se ajustó", "no fake adjusted copy")
     assert_not_contains(handler, "ya está cambiado", "no fake changed copy")
     assert_contains(handler, "_clear_karen_numbered_action_context", "numbered action clears stale context")
-    assert_contains(handler, "_mark_karen_numbered_action_dirty", "delete marks numbered list changed")
-    assert_contains(handler, "_is_karen_numbered_action_dirty", "repeat numbered action checks changed list")
-    assert_contains(handler, "La lista cambió", "delete tells user list changed")
-    assert_contains(handler, "Después de borrar uno, la lista cambió", "repeat numbered delete asks refresh")
+    assert_contains(handler, "_is_karen_numbered_action_dirty", "repeat numbered action checks changed list when dirty")
+    assert_contains(handler, "_render_karen_reminder_updated_list", "delete refreshes visible reminder list")
+    assert_contains(handler, "Listo. Eliminé", "delete confirmation remains present")
 
 
 def test_ambiguous_delete_asks_clarification() -> None:
     parser = _function_body(_bot_source(), "_parse_karen_reminder_management")
     handler = _function_body(_bot_source(), "maybe_handle_karen_reminder_management")
-    assert_contains(parser, "ambiguous_delete", "ambiguous numeric delete is recognized")
+    assert_contains(parser, "context_delete", "context numeric delete is recognized")
     assert_contains(handler, "¿Quieres eliminar el recordatorio", "ambiguous delete asks recordatorio vs tarea")
 
 
