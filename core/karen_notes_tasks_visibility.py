@@ -14,9 +14,32 @@ def normalize_visibility_prompt(text: str) -> str:
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
-    norm = re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+    norm = re.sub(r"^(bal|val|valeria|vale)\s+", "", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
     return norm
+
+
+def _number_word_to_int(value: str) -> int | None:
+    norm = normalize_visibility_prompt(value)
+    if norm.isdigit():
+        return int(norm)
+    return {
+        "uno": 1,
+        "una": 1,
+        "primer": 1,
+        "primero": 1,
+        "dos": 2,
+        "segundo": 2,
+        "tres": 3,
+        "tercero": 3,
+        "cuatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "siete": 7,
+        "ocho": 8,
+        "nueve": 9,
+        "diez": 10,
+    }.get(norm)
 
 
 def looks_like_karen_notes_query(text: str) -> bool:
@@ -37,6 +60,12 @@ def looks_like_karen_tasks_query(text: str) -> bool:
     norm = normalize_visibility_prompt(text)
     return norm in {
         "que tareas tengo",
+        "que tareas activas tengo",
+        "que tareas pendientes tengo",
+        "cuales son mis tareas registradas",
+        "cuáles son mis tareas registradas",
+        "que tareas registradas tengo",
+        "que tareas activas hay",
         "que tareas tengo pendientes",
         "tareas pendientes",
         "mis tareas",
@@ -49,15 +78,15 @@ def parse_karen_task_schedule_for_tomorrow(text: str) -> dict[str, Any] | None:
     norm = normalize_visibility_prompt(text)
     if "para manana" not in norm:
         return None
-    if not re.search(r"\b(pon|registra|agenda|programa)\b", norm):
+    if not re.search(r"\b(pon|registra|agenda|programa|cambia)\b", norm):
         return None
 
     number_match = re.search(
-        r"\b(?:pon|registra|agenda|programa)\s+la\s+tarea\s+(?P<num>\d{1,2})\s+para\s+manana\b",
+        r"\b(?:pon|registra|agenda|programa|cambia)\s+la\s+tarea\s+(?P<num>\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+para\s+manana\b",
         norm,
     )
     if number_match:
-        return {"number": int(number_match.group("num")), "target": "", "current": False}
+        return {"number": _number_word_to_int(number_match.group("num")), "target": "", "current": False}
 
     if re.search(r"\b(?:pon|registra|agenda|programa)\s+esta\s+tarea\s+para\s+manana\b", norm):
         return {"number": None, "target": "", "current": True}

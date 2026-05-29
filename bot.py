@@ -5372,7 +5372,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
                 label = due_raw[:16]
 
             txt = str(row.get("text") or "").strip() or f"recordatorio #{row.get('id')}"
-            reminders.append(f"- {label} · {txt}")
+            reminders.append({"id": row.get("id"), "time": label, "text": txt})
 
     except Exception as e:
         reminders.append(f"- No pude leer recordatorios: {e}")
@@ -5402,12 +5402,12 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
             raw = str(row.get("raw_input") or "").strip()
             if raw:
-                tasks.append(f"- {raw}")
+                tasks.append({"id": row.get("id"), "text": raw})
             else:
                 action = str(row.get("action") or "").strip()
                 target = str(row.get("target") or "").strip()
                 label = " ".join(x for x in [action, target] if x).strip() or f"tarea #{row.get('id')}"
-                tasks.append(f"- {label}")
+                tasks.append({"id": row.get("id"), "text": label})
 
     except Exception as e:
         tasks.append(f"- No pude leer tareas: {e}")
@@ -5418,21 +5418,285 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
     lines.append("⏰ Recordatorios")
     if reminders:
-        lines.extend(reminders)
+        for idx, item in enumerate(reminders, start=1):
+            if isinstance(item, dict):
+                lines.append(f"{idx}. {item['time']} · {item['text']}")
+            else:
+                lines.append(f"- {item}")
     else:
         lines.append("- No tienes recordatorios para mañana.")
 
     lines.append("")
     lines.append("📌 Tareas")
     if tasks:
-        lines.extend(tasks)
+        for idx, item in enumerate(tasks, start=1):
+            if isinstance(item, dict):
+                lines.append(f"{idx}. {item['text']}")
+            else:
+                lines.append(f"- {item}")
     else:
         lines.append("- No tienes tareas con fecha para mañana.")
 
-    lines.append("")
-    lines.append("Siguiente paso: si quieres, puedo ayudarte a ordenar esto por prioridad.")
+    lines.extend([
+        "",
+        "Acciones útiles:",
+        "- elimina el recordatorio 1",
+        "- cambia el recordatorio 2 para las 11",
+        "- marca la tarea 1 como hecha",
+        "- pon la tarea 1 para mañana",
+    ])
 
     return "\n".join(lines)
+
+
+def _karen_number_word_to_int(value: str) -> int | None:
+    norm = _norm_text(value or "")
+    words = {
+        "uno": 1,
+        "una": 1,
+        "primer": 1,
+        "primero": 1,
+        "dos": 2,
+        "segundo": 2,
+        "tres": 3,
+        "tercero": 3,
+        "cuatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "siete": 7,
+        "ocho": 8,
+        "nueve": 9,
+        "diez": 10,
+    }
+    if norm.isdigit():
+        return int(norm)
+    return words.get(norm)
+
+
+def _karen_extract_number_after(noun: str, text: str) -> int | None:
+    norm = _norm_text(text or "")
+    match = re.search(rf"\b{re.escape(noun)}\s+(\d{{1,2}}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
+    if match:
+        return _karen_number_word_to_int(match.group(1))
+    return None
+
+
+def _karen_reminder_rows(chat_id: int, *, when: str = "all", limit: int = 25) -> list[dict]:
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import list_reminders_for_chat
+
+    rows = list_reminders_for_chat(int(chat_id), statuses=["pending", "sending"], limit=max(1, int(limit or 25))) or []
+    tz = ZoneInfo("America/Panama")
+    now = datetime.now(tz)
+    if when == "tomorrow":
+        target_date = (now + timedelta(days=1)).date()
+    elif when == "today":
+        target_date = now.date()
+    else:
+        target_date = None
+
+    out = []
+    for row in rows:
+        rd = dict(row) if hasattr(row, "keys") else dict(row)
+        due_raw = str(rd.get("due_at_utc") or "").strip()
+        due_local = due_raw
+        local_date = ""
+        try:
+            due_dt = datetime.strptime(due_raw, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone(tz)
+            local_date = due_dt.date().isoformat()
+            due_local = due_dt.strftime("%Y-%m-%d %H:%M")
+            if target_date and due_dt.date() != target_date:
+                continue
+        except Exception:
+            if target_date:
+                continue
+        text_value = str(rd.get("text") or "").replace("\n", " ").strip() or f"recordatorio {rd.get('id')}"
+        out.append({
+            **rd,
+            "due_local": due_local,
+            "local_date": local_date,
+            "text": text_value,
+        })
+    return out
+
+
+def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
+    rows = _karen_reminder_rows(chat_id, when=when, limit=25)
+    title = "⏰ Recordatorios de mañana" if when == "tomorrow" else "⏰ Recordatorios de Val"
+    lines = [title, ""]
+    if not rows:
+        lines.append("No encontré recordatorios pendientes para esa consulta.")
+    else:
+        for idx, row in enumerate(rows, start=1):
+            due = str(row.get("due_local") or "").strip()
+            text_value = str(row.get("text") or "").strip()
+            time_label = due[11:16] if when == "tomorrow" and len(due) >= 16 else due
+            lines.append(f"{idx}. {time_label} · {text_value}")
+    lines.extend([
+        "",
+        "Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.",
+    ])
+    return "\n".join(lines)
+
+
+def _looks_like_karen_reminder_list_query(text: str) -> str:
+    norm = _normalize_daily_operator_query(text)
+    tomorrow_markers = (
+        "que recordatorios tengo manana",
+        "que recordatorios tengo mañana",
+        "recordatorios de manana",
+        "recordatorios de mañana",
+    )
+    all_markers = (
+        "que recordatorios tengo",
+        "dime mis recordatorios",
+        "muestrame mis recordatorios",
+        "que tengo registrado como recordatorio",
+        "que tengo en recordatorio",
+    )
+    if any(marker in norm for marker in tomorrow_markers):
+        return "tomorrow"
+    if any(marker in norm for marker in all_markers):
+        return "all"
+    return ""
+
+
+def _parse_karen_reminder_management(text: str) -> dict:
+    norm = _normalize_daily_operator_query(text)
+    number = _karen_extract_number_after("recordatorio", text)
+    if number is None:
+        generic = re.search(r"\belimina\s+el\s+(\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
+        if generic:
+            number = _karen_number_word_to_int(generic.group(1))
+            return {"type": "ambiguous_delete", "number": number, "target": ""}
+
+    if re.search(r"\b(elimina|borra|cancela)\s+el\s+recordatorio\b", norm):
+        target = ""
+        m = re.search(r"\b(?:elimina|borra|cancela)\s+el\s+recordatorio\s+de\s+(.+)$", norm)
+        if m:
+            target = m.group(1).strip()
+        return {"type": "delete", "number": number, "target": target}
+
+    if re.search(r"\b(cambia|mueve)\s+el\s+recordatorio\b", norm) or re.search(r"\bcambia\s+.+\s+para\b", norm):
+        target = ""
+        m = re.search(r"\bcambia\s+(.+?)\s+para\b", norm)
+        if m and "recordatorio" not in m.group(1):
+            target = m.group(1).strip()
+        return {"type": "edit", "number": number, "target": target}
+
+    return {}
+
+
+async def maybe_handle_karen_reminder_management(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str) -> bool:
+    if not update.message:
+        return False
+
+    list_when = _looks_like_karen_reminder_list_query(text)
+    if list_when:
+        await update.message.reply_text(_render_karen_reminder_list(int(chat_id), when=list_when))
+        return True
+
+    request = _parse_karen_reminder_management(text)
+    if not request:
+        return False
+
+    if request.get("type") == "ambiguous_delete":
+        await update.message.reply_text(f"¿Quieres eliminar el recordatorio {request.get('number')} o la tarea {request.get('number')}?")
+        return True
+
+    rows = _karen_reminder_rows(int(chat_id), when="all", limit=25)
+    selected = None
+    number = request.get("number")
+    target = _norm_text(str(request.get("target") or ""))
+    if number:
+        if 1 <= int(number) <= len(rows):
+            selected = rows[int(number) - 1]
+        else:
+            await update.message.reply_text("No veo ese número de recordatorio. Pide “Val, qué recordatorios tengo” para ver la lista.")
+            return True
+    elif target:
+        matches = [row for row in rows if target in _norm_text(str(row.get("text") or ""))]
+        if len(matches) == 1:
+            selected = matches[0]
+        elif len(matches) > 1:
+            await update.message.reply_text("Encontré más de un recordatorio parecido. Pide “Val, qué recordatorios tengo” y dime el número.")
+            return True
+
+    if not selected:
+        await update.message.reply_text("No pude identificar un recordatorio claro. Pide “Val, qué recordatorios tengo” y dime el número.")
+        return True
+
+    reminder_text = str(selected.get("text") or "recordatorio").strip()
+    display_num = number or (rows.index(selected) + 1)
+
+    if request.get("type") == "edit":
+        await update.message.reply_text(
+            "Puedo ayudarte, pero ahora mismo solo puedo eliminarlo y crear uno nuevo. "
+            "¿Quieres que lo haga?"
+        )
+        return True
+
+    try:
+        from memory_store import cancel_reminder
+        ok = bool(cancel_reminder(int(chat_id), int(selected.get("id"))))
+    except Exception as e:
+        logger.exception(f"[KAREN_REMINDER_NUMBERED_DELETE] failed: {e}")
+        ok = False
+    if not ok:
+        await update.message.reply_text("No pude eliminar ese recordatorio. Puede que ya no esté pendiente.")
+        return True
+
+    await update.message.reply_text(f"Listo. Eliminé el recordatorio {display_num}: {reminder_text}.")
+    return True
+
+
+def _extract_karen_task_creation_text(text: str) -> str:
+    norm = _normalize_daily_operator_query(text)
+    if norm.startswith("recuerdame") or norm.startswith("recordatorio"):
+        return ""
+    patterns = (
+        r"^(?:registra|agrega|anota)\s+(?:una\s+)?tarea\s*:?\s+(.+)$",
+        r"^tarea\s*:?\s+(.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, norm)
+        if match:
+            task_text = re.sub(r"\s+", " ", (match.group(1) or "").strip())
+            return task_text[:180].strip()
+    return ""
+
+
+async def maybe_handle_karen_task_creation(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+    case_id = ""
+    try:
+        case_id = get_active_case_id(int(chat_id)) or ""
+    except Exception:
+        case_id = ""
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
+    if not is_karen_flow:
+        return False
+    task_text = _extract_karen_task_creation_text(text)
+    if not task_text:
+        return False
+    try:
+        from memory_store import upsert_commitment
+        upsert_commitment(
+            chat_id=int(chat_id),
+            raw_input=task_text,
+            action=task_text,
+            target="",
+            due_date=None,
+            confidence="explicit_task",
+        )
+        await update.message.reply_text(f"Listo. Guardé esta tarea: {task_text}.")
+        return True
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_CREATE] failed: {e}")
+        await update.message.reply_text("Intenté guardar la tarea, pero algo falló.")
+        return True
 
 
 def _format_client_gcal_events_section(client_id: str, start_local, end_local, tz_name: str = "America/Panama", limit: int = 10) -> str:
@@ -5678,6 +5942,18 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE_PIPELINE] failed: {e}")
 
     try:
+        if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_REMINDER_MANAGEMENT_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_creation(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_CREATE_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_karen_notes_tasks_visibility(update, context, chat_id, client_id, text):
             return
     except Exception as e:
@@ -5688,6 +5964,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_SCHEDULE_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
@@ -13051,7 +13333,7 @@ def _normalize_daily_operator_query(text: str) -> str:
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
-    norm = re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+    norm = re.sub(r"^(bal|val|valeria|vale)\s+", "", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
     return norm
 
@@ -13456,10 +13738,10 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
     norm = _norm_text(text or "")
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
-    norm = re.sub(r"^(val|valeria|vale)\s+", "", norm).strip()
+    norm = re.sub(r"^(bal|val|valeria|vale)\s+", "", norm).strip()
 
-    number_match = re.search(r"\btarea\s+(?P<num>\d{1,2})\b", norm)
-    number = int(number_match.group("num")) if number_match else None
+    number_match = re.search(r"\btarea\s+(?P<num>\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
+    number = _karen_number_word_to_int(number_match.group("num")) if number_match else None
 
     target = ""
     patterns = (
@@ -13478,6 +13760,39 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
             break
 
     return number, target
+
+
+def _parse_karen_task_delete_request(text: str) -> int | None:
+    norm = _normalize_daily_operator_query(text)
+    if not re.search(r"\b(borra|elimina|cancela)\s+la\s+tarea\b", norm):
+        return None
+    number = _karen_extract_number_after("tarea", text)
+    return number or 0
+
+
+async def maybe_handle_karen_task_delete_request(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+    case_id = ""
+    try:
+        case_id = get_active_case_id(int(chat_id)) or ""
+    except Exception:
+        case_id = ""
+    is_karen_flow = str(chat_id) == str(KAREN_CHAT_ID) or client_id == resolve_client_id(KAREN_CHAT_ID) or str(case_id) == CASE_KEY
+    if not is_karen_flow:
+        return False
+    number = _parse_karen_task_delete_request(text)
+    if number is None:
+        return False
+    if not number:
+        await update.message.reply_text("¿Quieres marcarla como hecha o eliminarla del listado?")
+        return True
+    await update.message.reply_text(
+        f"¿Quieres marcar la tarea {number} como hecha o eliminarla del listado? "
+        "Para mantener historial, lo más seguro es: “marca la tarea "
+        f"{number} como hecha”."
+    )
+    return True
 
 
 def _tomorrow_panama_date() -> str:
@@ -14091,6 +14406,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE_HANDLE_TEXT] failed: {e}")
 
     try:
+        if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_REMINDER_MANAGEMENT_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_creation(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_CREATE_HANDLE_TEXT] failed: {e}")
+
+    try:
         if await maybe_handle_karen_notes_tasks_visibility(update, context, chat_id, client_id, text):
             return
     except Exception as e:
@@ -14101,6 +14428,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_SCHEDULE_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
