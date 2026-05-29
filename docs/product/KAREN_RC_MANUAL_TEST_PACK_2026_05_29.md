@@ -83,7 +83,7 @@ Expected:
 
 - Val says the registered nickname is Tany.
 - Val uses Tany in the greeting.
-- Val does not say Insanity.
+- Val does not use the previous legacy nickname.
 - Val does not say Tani.
 - Val answers in Spanish.
 

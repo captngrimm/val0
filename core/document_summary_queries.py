@@ -713,6 +713,9 @@ def _pick_grounded_bullets(text: str, limit: int = 6) -> list[str]:
 
 
 def _doc_summary(filename: str, ingest_id: str, caption: str, state: str, text: str) -> str:
+    if _looks_like_watermark_dominated_text(text):
+        return _watermark_guard_reply(filename)
+
     bullets = _pick_grounded_bullets(text)
 
     lines = [
@@ -1493,6 +1496,71 @@ def _render_recent_documents_clarification(docs: list[dict]) -> str:
     return "\n".join(lines).strip()
 
 
+
+def _normalize_watermark_text(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower()
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _looks_like_watermark_dominated_text(text: str) -> bool:
+    """
+    Detect PDFs where extracted text is mostly a repeated watermark,
+    not the visible legal/body content.
+
+    Example:
+    'Copia para propositos informativos solamente' repeated across pages.
+    """
+    norm = _normalize_watermark_text(text)
+    if not norm:
+        return False
+
+    watermark_variants = (
+        "copia para propositos informativos solamente",
+        "copia para propósitos informativos solamente",
+    )
+
+    hits = 0
+    stripped = norm
+    for marker in watermark_variants:
+        marker_norm = _normalize_watermark_text(marker)
+        count = stripped.count(marker_norm)
+        hits += count
+        stripped = stripped.replace(marker_norm, " ")
+
+    stripped = re.sub(r"\s+", " ", stripped).strip()
+
+    # If the watermark appears repeatedly and little useful text remains,
+    # the extracted text is not reliable enough for summary.
+    if hits >= 2 and len(stripped) < 600:
+        return True
+
+    # If almost everything extracted is the watermark, also block it.
+    watermark_chars = sum(norm.count(_normalize_watermark_text(m)) * len(_normalize_watermark_text(m)) for m in watermark_variants)
+    if hits >= 1 and watermark_chars >= max(40, int(len(norm) * 0.55)):
+        return True
+
+    return False
+
+
+def _looks_like_watermark_dominated_doc(doc_meta: dict) -> bool:
+    return _looks_like_watermark_dominated_text(str((doc_meta or {}).get("text") or ""))
+
+
+def _watermark_guard_reply(filename: str = "documento") -> str:
+    clean_name = _clean_filename(filename or "documento")
+    return (
+        "⚠️ Este PDF necesita OCR o revisión visual antes de resumirlo bien.\n\n"
+        f"Archivo: {clean_name}\n\n"
+        "Lo que pude extraer como texto parece estar dominado por una marca de agua "
+        "tipo “Copia para propósitos informativos solamente”, no por el contenido legal real.\n\n"
+        "El documento sí puede tener contenido visible, pero no debo generar un resumen "
+        "con texto basura repetido. Puedes subir una copia más limpia o marcarlo para OCR/revisión manual."
+    )
+
+
 def _looks_like_land_case_doc(doc_meta: dict) -> bool:
     combined = f"{doc_meta.get('filename') or ''}\n{doc_meta.get('text') or ''}".lower()
     return any(marker in combined for marker in (
@@ -1832,6 +1900,8 @@ def render_latest_document_status(doc_meta: dict) -> str:
     created_at = str(doc_meta.get("created_at") or "").strip()
     date = created_at[:10] if created_at else "sin fecha"
     status = _doc_status_label(doc_meta)
+    if _looks_like_watermark_dominated_doc(doc_meta):
+        status = "requiere OCR/revisión visual: texto extraído parece marca de agua"
     type_label = _doc_type_label(filename)
 
     lines = [

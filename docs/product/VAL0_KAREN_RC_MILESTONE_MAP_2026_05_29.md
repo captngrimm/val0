@@ -159,7 +159,7 @@ PASS:
   “Tu apodo registrado es: Tany. Lo estoy usando con y griega.”
 - Normal greeting:
   “Tany, ¿qué movida seguimos hoy?”
-- No Insanity/Tani drift in those direct routes.
+- No legacy-name/Tani drift in those direct routes.
 
 ### Documents
 
@@ -254,3 +254,24 @@ Create Karen RC Manual Test Pack and send Karen a short human version.
 Then wait for live feedback.
 
 Do not start another feature lane until live testing identifies a blocker.
+
+## 10. Voice Normalization / Intent Recovery Backlog
+
+Karen uses Val heavily by voice, so Val needs a future voice-normalization layer.
+
+Goal:
+
+- recover obvious voice transcription mistakes from context
+- normalize phrases like “va el que...” into likely “Val, qué...”
+- avoid treating weird voice text as case memory too early
+- if confidence is low, ask a simple confirmation instead of routing to the wrong feature
+
+Examples:
+
+- “va el que fue el último que subí” should be interpreted as “Val, qué fue lo último que subí?”
+- voice typos that sound like operator commands should be clarified before action
+- document commands by voice should route like typed document commands when possible
+
+Status:
+
+Backlog / product-design note. Do not implement as broad runtime logic until a safer intent-normalization design exists.
