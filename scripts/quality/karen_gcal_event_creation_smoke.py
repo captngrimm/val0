@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -105,6 +105,100 @@ def test_gcal_creation_priority_beats_draft_followup() -> None:
     assert_true(_source_contains_order(source, "_looks_like_karen_gcal_event_create_request", "operator_route == \"draft_followup\""), "intent helper appears before draft router")
 
 
+def test_gcal_confirmation_priority_beats_stale_pending_actions() -> None:
+    source = _bot_source()
+    handle_text = _function_body(source, "handle_text")
+    pipeline = _function_body(source, "_process_text_pipeline")
+    pending_confirm = _function_body(source, "maybe_handle_pending_gcal_appointment_confirmation")
+    early_confirm = _function_body(source, "maybe_handle_karen_gcal_create_confirmation_first")
+    any_state = _function_body(source, "_get_gcal_pending_action_any_state")
+
+    assert_contains(any_state, "GCAL_CREATE_ACTION_TYPE", "early confirmation lookup is scoped to gcal create")
+    assert_contains(early_confirm, "[GCAL_CONFIRM_ROUTE] matched pending gcal_create_event reply", "early confirmation route logging present")
+    assert_contains(handle_text, "maybe_handle_karen_gcal_create_confirmation_first", "handle_text checks gcal confirmation first")
+    assert_contains(pipeline, "maybe_handle_karen_gcal_create_confirmation_first", "pipeline checks gcal confirmation first")
+    assert_true(
+        handle_text.find("maybe_handle_karen_gcal_create_confirmation_first") < handle_text.find("_looks_like_karen_gcal_event_create_request"),
+        "handle_text confirmation beats create/draft routes",
+    )
+    assert_true(
+        pipeline.find("maybe_handle_karen_gcal_create_confirmation_first") < pipeline.find("_looks_like_karen_gcal_event_create_request"),
+        "pipeline confirmation beats create/draft routes",
+    )
+
+    assert_contains(pending_confirm, "Esa confirmación ya venció", "expired pending has explicit copy")
+    assert_contains(pending_confirm, "Listo, no creé el evento en Google Calendar", "cancel copy is scoped to gcal")
+    assert_contains(pending_confirm, "No pude crear el evento en Google Calendar por un problema de autorización/conexión", "failure copy is scoped")
+    assert_not_contains(pending_confirm, "Tany", "gcal confirmation does not leak stale user name")
+    assert_not_contains(pending_confirm, "jardinero", "gcal confirmation does not leak stale event title")
+    assert_not_contains(pending_confirm, "Draft follow-up", "gcal confirmation does not draft-followup")
+    assert_not_contains(pending_confirm, "/journal", "gcal confirmation does not suggest journal")
+
+
+def test_gcal_pending_action_classifier_is_isolated() -> None:
+    from core.pending_actions import (
+        ConfirmationDecision,
+        PendingAction,
+        classify_confirmation_reply,
+        clear_pending_action,
+        create_pending_action,
+        get_pending_action,
+    )
+
+    chat_id = 707070
+    client_id = "ka" + "ren"
+    now = datetime.now(timezone.utc)
+    stale = create_pending_action(
+        PendingAction(
+            action_id="smoke:stale-reminder",
+            chat_id=chat_id,
+            client_id=client_id,
+            action_type="reminder_create",
+            display_summary="Tany, confirmado: escribirle al jardinero mañana a las 9 am",
+            confirm_words=("sí", "si confirma"),
+            cancel_words=("no",),
+            expires_at=now + timedelta(minutes=10),
+            payload={"title": "escribirle al jardinero"},
+        )
+    )
+    gcal = create_pending_action(
+        PendingAction(
+            action_id="smoke:gcal-create",
+            chat_id=chat_id,
+            client_id=client_id,
+            action_type="gcal_create_event",
+            display_summary="sábado 30 de mayo · 10:00 AM · Cita: prueba calendario",
+            confirm_words=("sí", "si confirma", "sí confirma", "confirma", "dale", "correcto"),
+            cancel_words=("no", "cancelar", "déjalo", "dejalo"),
+            expires_at=now + timedelta(minutes=10),
+            payload={"title": "Cita: prueba calendario"},
+        )
+    )
+    try:
+        selected = get_pending_action(chat_id, action_type="gcal_create_event", client_id=client_id, now=now)
+        assert_true(selected is not None, "gcal pending action selected")
+        assert_true(selected.action_id == gcal.action_id, "stale generic pending cannot override gcal pending")
+        assert_true(classify_confirmation_reply("Sí, confirma", selected, now=now) == ConfirmationDecision.CONFIRM, "sí confirma confirms gcal")
+        assert_true(classify_confirmation_reply("correcto", selected, now=now) == ConfirmationDecision.CONFIRM, "correcto confirms gcal")
+        assert_true(classify_confirmation_reply("déjalo", selected, now=now) == ConfirmationDecision.CANCEL, "déjalo cancels gcal")
+
+        expired = PendingAction(
+            action_id="smoke:gcal-expired",
+            chat_id=chat_id,
+            client_id=client_id,
+            action_type="gcal_create_event",
+            display_summary="expired gcal",
+            confirm_words=("sí",),
+            cancel_words=("no",),
+            expires_at=now - timedelta(seconds=1),
+        )
+        assert_true(classify_confirmation_reply("sí", expired, now=now) == ConfirmationDecision.EXPIRED, "expired gcal pending is detected")
+        assert_not_contains(stale.display_summary, "prueba calendario", "fixture separates stale action from gcal action")
+    finally:
+        clear_pending_action(stale.action_id)
+        clear_pending_action(gcal.action_id)
+
+
 def test_missing_fields_are_asked_before_creation() -> None:
     handler = _function_body(_bot_source(), "try_appointment_save_natural")
     assert_contains(handler, "¿Para qué fecha lo agendo?", "missing date asks date")
@@ -139,8 +233,8 @@ def test_success_and_failure_copy_are_honest() -> None:
     assert_contains(pending_confirm, "Agregué al Google Calendar", "success copy says gcal event added")
     assert_contains(pending_confirm, "Google Calendar se encargará de sus notificaciones", "success mentions gcal notifications")
     assert_contains(handler, "Google Calendar se encargará de sus notificaciones", "confirmation preview mentions notifications")
-    assert_contains(pending_confirm, "No se creó ningún evento", "failure does not fake success")
-    assert_contains(pending_confirm, "Puedo guardarlo como tarea o recordatorio de Val", "failure offers Val fallback")
+    assert_contains(pending_confirm, "No lo marqué como creado", "failure does not fake success")
+    assert_contains(pending_confirm, "clear_pending_action(action.action_id)", "terminal confirmation paths clear gcal pending")
     assert_contains(pending_confirm, "create_client_event", "uses real client-scoped gcal writer")
 
 
@@ -154,6 +248,8 @@ def test_document_and_reminder_routes_remain_present() -> None:
 def main() -> int:
     test_natural_calendar_phrases_route_to_gcal_creation()
     test_gcal_creation_priority_beats_draft_followup()
+    test_gcal_confirmation_priority_beats_stale_pending_actions()
+    test_gcal_pending_action_classifier_is_isolated()
     test_missing_fields_are_asked_before_creation()
     test_pending_expiration_datetime_collision_regression()
     test_no_val_reminder_created_for_gcal_event()

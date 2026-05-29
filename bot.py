@@ -6148,6 +6148,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     client_id = resolve_client_id(chat_id)
 
     try:
+        if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[GCAL_CONFIRM_ROUTE_PIPELINE] failed: {e}")
+
+    try:
         if _looks_like_karen_gcal_event_create_request(text):
             logger.info("[GCAL_CREATE_ROUTE] matched live text category=gcal_event_create")
             if await try_appointment_save_natural(update, chat_id, text):
@@ -11584,9 +11590,13 @@ GCAL_PENDING_TTL = timedelta(days=365)
 GCAL_CREATE_CONFIRM_WORDS = (
     "si",
     "sí",
+    "si confirma",
+    "sí confirma",
+    "confirma",
     "ok",
     "okay",
     "dale",
+    "correcto",
     "confirmo",
     "confirmar",
     "confirmalo",
@@ -11604,6 +11614,8 @@ GCAL_CREATE_CANCEL_WORDS = (
     "cancela",
     "cancelalo",
     "cancélalo",
+    "dejalo",
+    "déjalo",
     "mejor no",
     "olvidalo",
     "olvídalo",
@@ -11653,6 +11665,24 @@ def _clear_existing_gcal_pending(chat_id: int, client_id: str, action_type: str)
         clear_pending_action(existing.action_id)
 
 
+def _get_gcal_pending_action_any_state(chat_id: int, client_id: str) -> PendingAction | None:
+    from core import pending_actions as pending_store
+
+    matches = []
+    for action in pending_store._PENDING_ACTIONS.values():
+        if int(action.chat_id) != int(chat_id):
+            continue
+        if action.client_id != client_id:
+            continue
+        if action.action_type != GCAL_CREATE_ACTION_TYPE:
+            continue
+        matches.append(action)
+    if not matches:
+        return None
+    matches.sort(key=lambda action: action.created_at, reverse=True)
+    return matches[0]
+
+
 def _norm_gcal_confirm_text(text: str) -> str:
     import re
     import unicodedata
@@ -11664,6 +11694,21 @@ def _norm_gcal_confirm_text(text: str) -> str:
     t = re.sub(r"\s+", " ", t).strip()
     t = re.sub(r"^(val|valeria|vale)\s+", "", t).strip()
     return t
+
+
+def _matches_gcal_pending_reply(text: str, action: PendingAction) -> bool:
+    norm = _norm_gcal_confirm_text(text)
+    if not norm:
+        return False
+    confirm_words = {_norm_gcal_confirm_text(word) for word in action.confirm_words}
+    cancel_words = {_norm_gcal_confirm_text(word) for word in action.cancel_words}
+    return norm in confirm_words or norm in cancel_words
+
+
+def _gcal_user_event_title(title: str) -> str:
+    display = (title or "").strip()
+    display = re.sub(r"(?i)^cita:\s*", "", display).strip()
+    return display or (title or "").strip() or "evento"
 
 
 def _looks_like_karen_gcal_event_create_request(text: str) -> bool:
@@ -11708,6 +11753,22 @@ def _looks_like_karen_gcal_event_create_request(text: str) -> bool:
     return norm.startswith("agenda ") and has_date and has_time
 
 
+async def maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+
+    client_id = resolve_client_id(chat_id)
+    if not client_id:
+        return False
+
+    action = _get_gcal_pending_action_any_state(chat_id, client_id)
+    if not action or not _matches_gcal_pending_reply(text, action):
+        return False
+
+    logger.info("[GCAL_CONFIRM_ROUTE] matched pending gcal_create_event reply")
+    return await maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text)
+
+
 async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text) -> bool:
     from datetime import datetime
     from core.client_gcal_write import create_client_event
@@ -11718,32 +11779,34 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
     client_id = resolve_client_id(chat_id)
     if not client_id:
         return False
-    action = get_pending_action(
-        chat_id,
-        action_type=GCAL_CREATE_ACTION_TYPE,
-        client_id=client_id,
-    )
+    action = _get_gcal_pending_action_any_state(chat_id, client_id)
     if not action:
         return False
+    if not _matches_gcal_pending_reply(text, action):
+        return False
+
     pending = action.payload
-    vocative = client_vocative(client_id)
     decision = classify_confirmation_reply(text, action)
 
     if decision == ConfirmationDecision.CANCEL:
         clear_pending_action(action.action_id)
         await update.message.reply_text(
-            f"Listo{vocative}. No creé nada en Google Calendar. 🛑📅"
+            "Listo, no creé el evento en Google Calendar."
         )
         return True
 
     if decision == ConfirmationDecision.EXPIRED:
         clear_pending_action(action.action_id)
-        return False
+        await update.message.reply_text(
+            "Esa confirmación ya venció. Vuelve a pedirme que agende la cita."
+        )
+        return True
 
     if decision != ConfirmationDecision.CONFIRM:
         return False
 
     start_dt = datetime.fromisoformat(pending["start_iso"])
+    display_title = _gcal_user_event_title(pending.get("title") or "")
 
     # Duplicate guard: avoid creating the same event twice for same title/time.
     try:
@@ -11772,10 +11835,10 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         if duplicate:
             clear_pending_action(action.action_id)
             await update.message.reply_text(
-                f"📅 Esa cita ya existe en Google Calendar{vocative}. No la dupliqué.\n\n"
+                "📅 Esa cita ya existe en Google Calendar. No la dupliqué.\n\n"
                 f"• {pending['pretty_date']}\n"
                 f"• {pending['pretty_time']}\n"
-                f"• {pending['title']}\n\n"
+                f"• {display_title}\n\n"
                 "Tu agenda queda limpia y sin eventos repetidos. 😌"
             )
             return True
@@ -11802,18 +11865,19 @@ async def maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, te
         })
         clear_pending_action(action.action_id)
         await update.message.reply_text(
-            f"📅 Listo{vocative}. Agregué al Google Calendar: "
-            f"{result.title} — {pending.get('pretty_short') or pending['pretty_date']} {pending['pretty_time']}.\n\n"
+            "Listo. Agregué al Google Calendar: "
+            f"{display_title} — {pending.get('pretty_short') or pending['pretty_date']} {pending['pretty_time']}.\n\n"
             "Google Calendar se encargará de sus notificaciones según tu configuración.\n"
             "Solo creé este evento. No creé recordatorios de Val, ni borré ni edité nada más."
         )
         return True
 
+    clear_pending_action(action.action_id)
     await update.message.reply_text(
-        "No pude crear la cita en Google Calendar todavía. 😬\n\n"
+        "No pude crear el evento en Google Calendar por un problema de autorización/conexión. "
+        "No lo marqué como creado.\n\n"
         f"Estado: {result.status}\n"
-        f"Razón: {result.reason}\n\n"
-        "No se creó ningún evento. Puedo guardarlo como tarea o recordatorio de Val si quieres."
+        f"Razón: {result.reason}"
     )
     return True
 
@@ -12254,6 +12318,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         "pretty_date": pretty_date,
         "pretty_short": pretty_short,
         "pretty_time": pretty_time,
+        "source_phrase_category": "natural_gcal_event_create",
     }
     _clear_existing_gcal_pending(chat_id, client_id, GCAL_CREATE_ACTION_TYPE)
     create_pending_action(
@@ -12267,7 +12332,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
             cancel_words=GCAL_CREATE_CANCEL_WORDS,
             expires_at=_gcal_pending_expires_at(),
             payload=appointment_payload,
-            audit_metadata={"source": "natural_appointment_confirmation"},
+            audit_metadata={"source": "natural_appointment_confirmation", "source_phrase_category": "natural_gcal_event_create"},
         )
     )
 
@@ -14706,6 +14771,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     client_id = resolve_client_id(chat_id)
     tg_msg_id = getattr(update.message, "message_id", None)
+
+    try:
+        if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[GCAL_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
 
     try:
         if _looks_like_karen_gcal_event_create_request(text):
