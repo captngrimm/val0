@@ -6057,7 +6057,6 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
         title,
         gcal,
         "📌 Recordatorios y tareas\n" + internal_block,
-        "Modo: lectura solamente. No creé, cambié ni borré eventos.",
     ])
 
 
@@ -14039,7 +14038,6 @@ def _build_karen_daily_operator_reply(chat_id: int, client_id: str, *, compact: 
 
     lines.extend([
         "",
-        "Modo: lectura solamente. No creé, cambié ni borré nada.",
         "Esto es una organización operativa; no sustituye revisión legal.",
     ])
     deterministic_text = "\n".join(lines)

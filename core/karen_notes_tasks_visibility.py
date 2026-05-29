@@ -397,7 +397,6 @@ def render_karen_case_notes_view(notes: Iterable[Any], *, case_id: str = CASE_KE
             "No encontré notas guardadas para la finca/caso todavía.",
             "",
             "Para guardar una, dime: “Val, guarda nota de finca: ...”",
-            "Modo: lectura solamente. No creé, cambié ni borré nada.",
         ])
         return "\n".join(lines)
 
@@ -418,7 +417,6 @@ def render_karen_case_notes_view(notes: Iterable[Any], *, case_id: str = CASE_KE
     lines.extend([
         "",
         f"Mostré hasta {display_limit} notas recientes.",
-        "Modo: lectura solamente. No creé, cambié ni borré nada.",
     ])
     return "\n".join(lines)
 
@@ -525,7 +523,6 @@ def render_karen_case_pendientes_view(
     lines.extend([
         "",
         f"Siguiente paso sugerido: {next_action}.",
-        "Modo: lectura solamente. No creé, cambié ni borré nada.",
     ])
     return "\n".join(lines)
 
@@ -538,7 +535,6 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, auxiliary_tasks: Iterable[A
             "No encontré tareas abiertas para este chat.",
             "",
             "Puedes crear una con: “Val, tengo que ...”.",
-            "Modo: lectura solamente. No creé, cambié ni borré nada.",
         ])
         return "\n".join(lines)
 
@@ -555,5 +551,4 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, auxiliary_tasks: Iterable[A
     ])
     if any(is_auxiliary_task_row(row) for row in rows):
         lines.append("Algunas tareas sin fecha pueden necesitar que las convierta a tarea formal antes de cerrarlas.")
-    lines.append("Modo: lectura solamente. No creé, cambié ni borré nada.")
     return "\n".join(lines)
