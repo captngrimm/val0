@@ -367,6 +367,8 @@ _LAST_ACTION = {}
 _KAREN_NUMBERED_ACTION_DIRTY: dict[int, set[str]] = {}
 _KAREN_REMINDER_LIST_CONTEXT: dict[int, str] = {}
 _KAREN_GCAL_EVENT_LIST_CONTEXT: dict[int, dict] = {}
+_KAREN_PENDING_REMINDER_CONTEXT: dict[int, dict] = {}
+_KAREN_PENDING_TASK_DELETE_CONTEXT: dict[int, dict] = {}
 _INLINE_NUDGE_LAST = {}
 # --------------------------------------------------
 # Logging
@@ -6352,6 +6354,43 @@ def _parse_karen_time_phrase(norm: str) -> tuple[int, int] | None:
     return hour, minute
 
 
+def _karen_small_number_word_to_int(token: str) -> int | None:
+    value = _karen_number_word_to_int(token)
+    if value is not None:
+        return value
+    return {
+        "cero": 0,
+        "once": 11,
+        "doce": 12,
+        "trece": 13,
+        "catorce": 14,
+        "quince": 15,
+        "veinte": 20,
+        "treinta": 30,
+        "cuarenta": 40,
+        "cincuenta": 50,
+        "sesenta": 60,
+    }.get(str(token or "").strip())
+
+
+def _parse_karen_relative_minutes(norm: str) -> tuple[int, tuple[int, int], object] | None:
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    match = re.search(
+        r"\b(?:en|dentro\s+de)\s+(?P<num>\d{1,3}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta)\s+minutos?\b",
+        norm,
+    )
+    if not match:
+        return None
+    minutes = _karen_small_number_word_to_int(match.group("num"))
+    if not minutes or minutes < 1:
+        return None
+    tz = ZoneInfo("America/Panama")
+    due_local = dt.datetime.now(tz) + dt.timedelta(minutes=int(minutes))
+    return int(minutes), (due_local.hour, due_local.minute), due_local.date()
+
+
 def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None:
     import datetime as dt
     from datetime import date
@@ -6375,8 +6414,12 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
     if now_local.tzinfo is None:
         now_local = now_local.replace(tzinfo=tz)
 
+    relative_minutes = _parse_karen_relative_minutes(norm)
     target_date = None
     date_span = None
+    if relative_minutes:
+        _, rel_time, rel_date = relative_minutes
+        target_date = rel_date
     explicit = re.search(
         r"\b(?P<weekday>lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+(?P<day>[0-3]?\d)\s+(?:de\s+)?(?P<month>enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|jul|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)\b",
         norm,
@@ -6411,7 +6454,7 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
             target_date = now_local.date()
             date_span = re.search(r"\bhoy\b", norm).span()
 
-    time_parts = _parse_karen_time_phrase(norm)
+    time_parts = relative_minutes[1] if relative_minutes else _parse_karen_time_phrase(norm)
     time_match = re.search(
         r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b",
         norm,
@@ -6420,6 +6463,11 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
     title = norm
     title = re.sub(r"^(?:recuerdame|recordarme|recordatorio)\s+", "", title).strip()
     title = re.sub(r"^quiero\s+registrar\s+un\s+recordatorio\s+(?:para\s+)?", "", title).strip()
+    title = re.sub(
+        r"\b(?:en|dentro\s+de)\s+(?:\d{1,3}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta)\s+minutos?\b",
+        " ",
+        title,
+    )
     title = re.sub(
         r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b",
         " ",
@@ -6452,6 +6500,145 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
     return {"title": title, "date": target_date, "time": time_parts}
 
 
+def _remember_karen_pending_reminder(chat_id: int, parsed: dict, missing: str) -> None:
+    _KAREN_PENDING_REMINDER_CONTEXT[int(chat_id)] = {
+        "title": parsed.get("title") or "",
+        "date": parsed.get("date"),
+        "time": parsed.get("time"),
+        "missing": missing,
+        "ts": time.time(),
+    }
+
+
+def _parse_karen_pending_reminder_reply(text: str) -> dict:
+    import datetime as dt
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    raw = text or ""
+    norm = _norm_text(raw)
+    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal|pal|va\s+el)\s+", "", norm).strip()
+
+    tz = ZoneInfo("America/Panama")
+    now_local = dt.datetime.now(tz)
+    out = {"title": "", "date": None, "time": None}
+
+    relative_minutes = _parse_karen_relative_minutes(norm)
+    if relative_minutes:
+        _, rel_time, rel_date = relative_minutes
+        out["date"] = rel_date
+        out["time"] = rel_time
+
+    if out["date"] is None:
+        explicit = re.search(
+            r"\b(?P<day>[0-3]?\d)\s+(?:de\s+)?(?P<month>enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|jul|julio|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)\b",
+            norm,
+        )
+        if explicit:
+            month = _karen_month_number(explicit.group("month"))
+            day = int(explicit.group("day"))
+            if month:
+                try:
+                    candidate = date(now_local.year, month, day)
+                    if candidate < now_local.date():
+                        candidate = date(now_local.year + 1, month, day)
+                    out["date"] = candidate
+                except ValueError:
+                    pass
+        elif "manana" in norm or "mañana" in norm:
+            out["date"] = (now_local + dt.timedelta(days=1)).date()
+        elif norm in {"hoy", "para hoy"} or "para hoy" in norm:
+            out["date"] = now_local.date()
+        else:
+            weekday_match = re.search(
+                r"\b(?:para\s+el\s+|para\s+|el\s+)?(?P<prefix>proximo|próximo)?\s*(?P<weekday>lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+                norm,
+            )
+            if weekday_match:
+                idx = _karen_weekday_index(weekday_match.group("weekday"))
+                if idx is not None:
+                    out["date"] = _karen_next_weekday_date(idx, now=now_local, force_next=bool(weekday_match.group("prefix")))
+
+    if out["time"] is None:
+        out["time"] = _parse_karen_time_phrase(norm)
+
+    if out["date"] is None and out["time"] is None:
+        title = re.sub(
+            r"\b(?:en|dentro\s+de)\s+(?:\d{1,3}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta)\s+minutos?\b",
+            " ",
+            norm,
+        )
+        title = re.sub(
+            r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b",
+            " ",
+            title,
+        )
+        title = re.sub(r"\b(?:para\s+)?(?:manana|mañana|hoy)\b", " ", title)
+        title = re.sub(r"\s+", " ", title).strip(" .,:;")
+        if title not in {"", "para", "el", "la"}:
+            out["title"] = title
+    return out
+
+
+async def maybe_handle_karen_pending_reminder_context(update, chat_id: int, client_id: str, text: str) -> bool:
+    if not _is_karen_client_id(client_id) or not update or not getattr(update, "message", None):
+        return False
+    pending = _KAREN_PENDING_REMINDER_CONTEXT.get(int(chat_id))
+    if not pending:
+        return False
+    if time.time() - float(pending.get("ts") or 0) > 900:
+        _KAREN_PENDING_REMINDER_CONTEXT.pop(int(chat_id), None)
+        return False
+
+    update_bits = _parse_karen_pending_reminder_reply(text)
+    if update_bits.get("date"):
+        pending["date"] = update_bits["date"]
+    if update_bits.get("time"):
+        pending["time"] = update_bits["time"]
+    if update_bits.get("title") and not pending.get("title"):
+        pending["title"] = update_bits["title"]
+    pending["ts"] = time.time()
+    _KAREN_PENDING_REMINDER_CONTEXT[int(chat_id)] = pending
+
+    if not pending.get("date"):
+        await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿Para qué fecha lo pongo?")
+        return True
+    if not pending.get("title"):
+        await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿Qué quieres que te recuerde?")
+        return True
+    if not pending.get("time"):
+        await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿A qué hora lo pongo?")
+        return True
+
+    from memory_store import insert_reminder
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo("America/Panama")
+    hour, minute = pending["time"]
+    target_date = pending["date"]
+    due_local = dt.datetime(target_date.year, target_date.month, target_date.day, hour, minute, 0, tzinfo=tz)
+    due_utc = due_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    title = _display_karen_reminder_title(str(pending["title"]).strip())
+    insert_reminder(
+        chat_id=int(chat_id),
+        due_at_utc=due_utc,
+        text=title,
+        status="pending",
+        entity_type="reminder",
+        parent_ref=None,
+    )
+    _KAREN_PENDING_REMINDER_CONTEXT.pop(int(chat_id), None)
+    weekday = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][due_local.weekday()]
+    month_name = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][due_local.month]
+    await update.message.reply_text(
+        f"Listo, Tany. Guardé el recordatorio: {title} — {weekday} {due_local.day} de {month_name}, {due_local.strftime('%I:%M %p').lstrip('0')}."
+    )
+    return True
+
+
 async def maybe_handle_karen_natural_weekday_reminder(update, chat_id: int, client_id: str, text: str) -> bool:
     if not _is_karen_client_id(client_id) or not update or not getattr(update, "message", None):
         return False
@@ -6459,12 +6646,15 @@ async def maybe_handle_karen_natural_weekday_reminder(update, chat_id: int, clie
     if not parsed:
         return False
     if not parsed.get("date"):
+        _remember_karen_pending_reminder(chat_id, parsed, "date")
         await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿Para qué fecha lo pongo?")
         return True
     if not parsed.get("title"):
+        _remember_karen_pending_reminder(chat_id, parsed, "title")
         await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿Qué quieres que te recuerde?")
         return True
     if not parsed.get("time"):
+        _remember_karen_pending_reminder(chat_id, parsed, "time")
         await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿A qué hora lo pongo?")
         return True
 
@@ -6477,7 +6667,7 @@ async def maybe_handle_karen_natural_weekday_reminder(update, chat_id: int, clie
     target_date = parsed["date"]
     due_local = dt.datetime(target_date.year, target_date.month, target_date.day, hour, minute, 0, tzinfo=tz)
     due_utc = due_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    title = str(parsed["title"]).strip()
+    title = _display_karen_reminder_title(str(parsed["title"]).strip())
     rid = insert_reminder(
         chat_id=int(chat_id),
         due_at_utc=due_utc,
@@ -6663,10 +6853,28 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[GCAL_CONFIRM_ROUTE_PIPELINE] failed: {e}")
 
     try:
+        if await maybe_handle_karen_pending_reminder_context(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_PENDING_REMINDER_CONTEXT_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
             return
     except Exception as e:
         logger.exception(f"[GCAL_DELETE_CONFIRM_ROUTE_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_gcal_event_number_delete(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_EVENT_NUMBER_DELETE_PIPELINE] failed: {e}")
 
     try:
         if _looks_like_karen_gcal_event_create_request(text):
@@ -6706,12 +6914,20 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[CLIENT_WORKFLOW_GUARD_PIPELINE] failed: {e}")
 
     try:
+        if await maybe_handle_karen_notes_tasks_visibility(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_EARLY_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_karen_explicit_case_note(update, chat_id, client_id, text):
             return
     except Exception as e:
         logger.exception(f"[KAREN_EXPLICIT_CASE_NOTE_PIPELINE] failed: {e}")
 
     try:
+        if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            return
         if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
             return
     except Exception as e:
@@ -11952,7 +12168,7 @@ async def try_anchored_reminder_before_appointment_natural(update, chat_id, text
     t = "".join(ch for ch in t if not unicodedata.combining(ch))
     t = re.sub(r"[¿?¡!.,;]+", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
-    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria)\s+", "", t).strip()
+    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria|vale|bal|pal|va\s+el)\s+", "", t).strip()
 
     if not (t.startswith("recuerdame") or t.startswith("recordarme") or t.startswith("recordatorio")):
         return False
@@ -12247,7 +12463,7 @@ def _norm_gcal_confirm_text(text: str) -> str:
     t = "".join(ch for ch in t if not unicodedata.combining(ch))
     t = re.sub(r"[¿?¡!.,:;]+", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
-    t = re.sub(r"^(val|valeria|vale)\s+", "", t).strip()
+    t = re.sub(r"^(val|valeria|vale|bal|pal|va\s+el)\s+", "", t).strip()
     return t
 
 
@@ -12266,6 +12482,17 @@ def _gcal_user_event_title(title: str) -> str:
     return display or (title or "").strip() or "evento"
 
 
+def _cleanup_karen_gcal_event_title(title: str) -> str:
+    value = str(title or "").strip()
+    value = re.sub(r"\s+", " ", value)
+    value = re.sub(r"^[,.;:\-\s]+", "", value).strip()
+    value = re.sub(r"(?i)^(?:el|la|lo|este|esto)\s*[,.;:\-]+\s*", "", value).strip()
+    value = re.sub(r"(?i)^(?:el|la|lo|este|esto)\s+(?=(?:llamar|cita|reunion|reunión|reunirme|hablar|ir|recoger|llevar)\b)", "", value).strip()
+    value = re.sub(r"(?i)\b(?:de\s+la|de\s+el|del|a\s+la|a\s+las)\s*$", "", value).strip(" ,.;:-")
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
+
+
 def _looks_like_karen_gcal_event_create_request(text: str) -> bool:
     norm = _norm_gcal_confirm_text(text)
     if not norm:
@@ -12278,6 +12505,8 @@ def _looks_like_karen_gcal_event_create_request(text: str) -> bool:
     explicit_markers = (
         "agenda cita",
         "agendar cita",
+        "agenda para",
+        "agendar para",
         "programa cita",
         "programar cita",
         "crea evento",
@@ -12739,7 +12968,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     t = "".join(ch for ch in t if not unicodedata.combining(ch))
     t = re.sub(r"[¿?¡!.,;]+", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
-    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria)\s+", "", t).strip()
+    t = re.sub(r"^\s*(?:oye\s+)?(?:val|valeria|vale|bal|pal|va\s+el)\s+", "", t).strip()
 
     save_markers = (
         "tengo cita",
@@ -12751,6 +12980,8 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         "guardar cita",
         "agenda cita",
         "agendar cita",
+        "agenda para",
+        "agendar para",
         "programa cita",
         "programar cita",
         "reunion con",
@@ -12909,11 +13140,12 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     # Extract a compact title for display.
     # Keep useful context after the time, e.g. "tema libro Finca 10082".
     title = raw
-    title = re.sub(r"^\s*(val|valeria|vale)[,:]?\s*", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^\s*(val|valeria|vale|bal|pal|va\s+el)[,:]?\s*", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(crea|crear)\s+(?:un\s+)?evento\s+(?:en\s+)?(?:google\s+calendar|mi\s+calendario|el\s+calendario|calendario)\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(pon)\s+en\s+(?:mi\s+|el\s+)?calendario\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(agrega|agregar)\s+(?:esto\s+)?(?:al|a\s+mi|en\s+mi)\s+calendario\s*:?\s*", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(agenda|agendar|programa|programar)\s+", "", title, flags=re.IGNORECASE).strip()
+    title = re.sub(r"^(para\s+(?:el\s+)?)", "", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(registra|registrar|guarda|guardar|agenda|agendar|programa|programar)\s+cita\s*", "cita ", title, flags=re.IGNORECASE).strip()
     title = re.sub(r"^(tengo\s+una\s+|tengo\s+)", "", title, flags=re.IGNORECASE).strip()
 
@@ -12929,6 +13161,7 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
 
     title = re.sub(r"\s*,\s*", ", ", title).strip(" ,.;:-")
     title = re.sub(r"\s+", " ", title).strip()
+    title = _cleanup_karen_gcal_event_title(title)
 
     # Clean common speech-to-text leftovers before final title normalization.
     title = re.sub(r"^(para\s+el\s+)+", "", title, flags=re.IGNORECASE).strip()
@@ -14833,6 +15066,120 @@ def _parse_karen_task_delete_request(text: str) -> int | None:
     return number or 0
 
 
+def _looks_like_karen_task_delete_followup(text: str) -> str | None:
+    norm = _normalize_daily_operator_query(text)
+    if re.search(r"\b(marca|marcar)\w*\s+(?:como\s+)?hecha\b", norm) or norm in {"hecha", "como hecha", "marcar hecha"}:
+        return "done"
+    delete_markers = (
+        "eliminarla",
+        "eliminarlo",
+        "eliminar del listado",
+        "eliminarla del listado",
+        "eliminarlo del listado",
+        "borrala",
+        "borralo",
+        "sacala del listado",
+        "sacarlo del listado",
+        "quitarla",
+        "quitarlo",
+        "quita del listado",
+        "removerla",
+        "removerlo",
+    )
+    if norm in delete_markers or any(marker in norm for marker in delete_markers):
+        return "delete"
+    return None
+
+
+async def maybe_handle_karen_task_delete_followup(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    if not update.message:
+        return False
+    pending = _KAREN_PENDING_TASK_DELETE_CONTEXT.get(int(chat_id))
+    if not pending:
+        return False
+    if time.time() - float(pending.get("ts") or 0) > 600:
+        _KAREN_PENDING_TASK_DELETE_CONTEXT.pop(int(chat_id), None)
+        return False
+    choice = _looks_like_karen_task_delete_followup(text)
+    if not choice:
+        return False
+
+    task_text = str(pending.get("task_text") or "esta tarea").strip()
+    task_id = pending.get("task_id")
+    if choice == "done":
+        if not task_id:
+            _KAREN_PENDING_TASK_DELETE_CONTEXT.pop(int(chat_id), None)
+            await update.message.reply_text(
+                "Esa tarea está guardada como pendiente sin fecha. Puedo mostrarla, pero todavía necesito convertirla a tarea formal para cerrarla."
+            )
+            return True
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE commitments
+                SET status='done',
+                    completed_at=CURRENT_TIMESTAMP
+                WHERE id=? AND chat_id=? AND status='open'
+                """,
+                (int(task_id), int(chat_id)),
+            )
+            changed = cur.rowcount
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_DONE] failed: {e}")
+            await update.message.reply_text("No pude marcar esa tarea como hecha ahora mismo.")
+            return True
+        _KAREN_PENDING_TASK_DELETE_CONTEXT.pop(int(chat_id), None)
+        _mark_karen_numbered_action_dirty(chat_id, "task")
+        if not changed:
+            await update.message.reply_text("Esa tarea ya no aparece abierta. Pide “Val, qué tareas tengo” para verificar.")
+            return True
+        await update.message.reply_text(f"Listo. Marqué esta tarea como hecha: {task_text}.")
+        return True
+
+    if pending.get("is_auxiliary") or not task_id:
+        _KAREN_PENDING_TASK_DELETE_CONTEXT.pop(int(chat_id), None)
+        await update.message.reply_text(
+            "Todavía no elimino tareas del historial; puedo marcarla como hecha para quitarla de pendientes. "
+            "¿Quieres que la marque como hecha?"
+        )
+        return True
+
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE commitments
+            SET status='deleted',
+                completed_at=CURRENT_TIMESTAMP
+            WHERE id=? AND chat_id=? AND status='open'
+            """,
+            (int(task_id), int(chat_id)),
+        )
+        changed = cur.rowcount
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_DELETE] failed: {e}")
+        await update.message.reply_text(
+            "Todavía no elimino tareas del historial; puedo marcarla como hecha para quitarla de pendientes. "
+            "¿Quieres que la marque como hecha?"
+        )
+        return True
+
+    _KAREN_PENDING_TASK_DELETE_CONTEXT.pop(int(chat_id), None)
+    _mark_karen_numbered_action_dirty(chat_id, "task")
+    if not changed:
+        await update.message.reply_text("Esa tarea ya no aparece abierta. Pide “Val, qué tareas tengo” para verificar.")
+        return True
+    await update.message.reply_text(f"Listo. Quité esta tarea del listado activo: {task_text}.")
+    return True
+
+
 async def maybe_handle_karen_task_delete_request(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
     if not update.message:
         return False
@@ -14849,8 +15196,31 @@ async def maybe_handle_karen_task_delete_request(update: Update, context: Contex
         return False
     _clear_karen_numbered_action_context(chat_id)
     if not number:
+        _KAREN_PENDING_TASK_DELETE_CONTEXT[int(chat_id)] = {"task_id": None, "task_text": "", "is_auxiliary": False, "ts": time.time()}
         await update.message.reply_text("¿Quieres marcarla como hecha o eliminarla del listado?")
         return True
+    try:
+        from memory_store import fetch_open_commitments
+
+        rows = merge_karen_task_items(
+            fetch_open_commitments(int(chat_id), limit=20) or [],
+            load_karen_auxiliary_task_items(client_id),
+        )
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_FETCH] failed: {e}")
+        rows = []
+    if rows and 1 <= int(number) <= len(rows):
+        selected = _karen_task_row_dict(rows[int(number) - 1])
+        task_text = str(selected.get("raw_input") or selected.get("action") or f"tarea {number}").strip()
+        _KAREN_PENDING_TASK_DELETE_CONTEXT[int(chat_id)] = {
+            "task_id": selected.get("id") if not is_auxiliary_task_row(selected) else None,
+            "task_text": task_text,
+            "is_auxiliary": bool(is_auxiliary_task_row(selected)),
+            "number": int(number),
+            "ts": time.time(),
+        }
+    else:
+        _KAREN_PENDING_TASK_DELETE_CONTEXT[int(chat_id)] = {"task_id": None, "task_text": f"tarea {number}", "is_auxiliary": False, "number": int(number), "ts": time.time()}
     await update.message.reply_text(
         f"¿Quieres marcar la tarea {number} como hecha o eliminarla del listado? "
         "Para mantener historial, lo más seguro es: “marca la tarea "
@@ -15433,10 +15803,28 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[GCAL_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
 
     try:
+        if await maybe_handle_karen_pending_reminder_context(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_PENDING_REMINDER_CONTEXT_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_HANDLE_TEXT] failed: {e}")
+
+    try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
             return
     except Exception as e:
         logger.exception(f"[GCAL_DELETE_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_gcal_event_number_delete(update, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_EVENT_NUMBER_DELETE_HANDLE_TEXT] failed: {e}")
 
     try:
         if _looks_like_karen_gcal_event_create_request(text):
@@ -15520,6 +15908,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_GCAL_CREATE_EARLY_HANDLE_TEXT] failed: {e}")
 
     try:
+        if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            return
         if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
             return
         if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
@@ -15543,6 +15933,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[CLIENT_WORKFLOW_GUARD] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_notes_tasks_visibility(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NOTES_TASKS_VISIBILITY_EARLY_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_explicit_case_note(update, chat_id, client_id, text):

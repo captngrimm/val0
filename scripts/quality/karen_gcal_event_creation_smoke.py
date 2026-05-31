@@ -72,6 +72,21 @@ def test_natural_calendar_phrases_route_to_gcal_creation() -> None:
     assert_contains(handler, "weekday_names", "weekday date parser present")
     assert_contains(handler, "America/Panama", "uses Panama timezone")
     assert_contains(intent_helper, 'norm.startswith("agenda ") and has_date and has_time', "agenda date/time create intent supported")
+    assert_contains(handler, "agenda para", "voice/natural agenda para phrase supported")
+
+
+def test_voice_title_cleanup_for_gcal_create() -> None:
+    source = _bot_source()
+    normalizer = _function_body(source, "_norm_gcal_confirm_text")
+    cleanup = _function_body(source, "_cleanup_karen_gcal_event_title")
+    handler = _function_body(source, "try_appointment_save_natural")
+
+    for token in ("bal", "pal", "va\\s+el"):
+        assert_contains(normalizer, token, f"voice assistant prefix normalized: {token}")
+    assert_contains(cleanup, "de\\s+la", "cleanup removes dangling de la")
+    assert_contains(cleanup, "llamar", "cleanup only strips filler before meaningful verbs")
+    assert_contains(handler, "_cleanup_karen_gcal_event_title", "create handler applies title cleanup")
+    assert_contains(handler, "Cita: ", "valid cleaned title still becomes calendar event title")
 
 
 def test_gcal_creation_priority_beats_draft_followup() -> None:
@@ -247,6 +262,7 @@ def test_document_and_reminder_routes_remain_present() -> None:
 
 def main() -> int:
     test_natural_calendar_phrases_route_to_gcal_creation()
+    test_voice_title_cleanup_for_gcal_create()
     test_gcal_creation_priority_beats_draft_followup()
     test_gcal_confirmation_priority_beats_stale_pending_actions()
     test_gcal_pending_action_classifier_is_isolated()

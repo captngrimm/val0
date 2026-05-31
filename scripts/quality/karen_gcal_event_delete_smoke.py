@@ -67,6 +67,8 @@ def test_numbered_event_delete_confirmation_is_scoped() -> None:
 
     for phrase in ("elimina", "borra", "cancela", "evento", "google"):
         assert_contains(parser, phrase, f"parser supports {phrase}")
+    assert_contains(parser, "dos", "parser supports voice word-number event delete")
+    assert_contains(_function_body(source, "_norm_gcal_confirm_text"), "bal|pal|va\\s+el", "voice prefixes normalize before gcal delete")
     assert_contains(numbered_delete, "GCAL_DELETE_ACTION_TYPE", "numbered delete creates gcal delete pending action")
     assert_contains(numbered_delete, "Voy a eliminar este evento de Google Calendar", "delete asks confirmation")
     assert_contains(numbered_delete, "create_pending_action", "delete does not happen immediately")
