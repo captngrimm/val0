@@ -5291,7 +5291,7 @@ def build_unified_pending_dashboard(chat_id: int) -> str:
             except Exception:
                 pass
 
-            txt = str(row.get("text") or "").strip() or f"recordatorio #{row.get('id')}"
+            txt = _display_karen_reminder_title(str(row.get("text") or "").strip()) or f"recordatorio #{row.get('id')}"
             reminders.append(f"- {label} · {txt}")
 
     except Exception as e:
@@ -5377,7 +5377,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
             except Exception:
                 label = due_raw[:16]
 
-            txt = str(row.get("text") or "").strip() or f"recordatorio #{row.get('id')}"
+            txt = _display_karen_reminder_title(str(row.get("text") or "").strip()) or f"recordatorio #{row.get('id')}"
             reminders.append({"id": row.get("id"), "time": label, "text": txt})
 
     except Exception as e:
@@ -5612,6 +5612,13 @@ def _karen_reminder_time_note(text: str, scheduled_label: str) -> str:
     return ""
 
 
+def _display_karen_reminder_title(text: str) -> str:
+    value = str(text or "").strip()
+    if _norm_text(value).strip(" .") == "cumpleanos de miguel":
+        return "cumpleaños de Miguel"
+    return value
+
+
 def _looks_like_reminder_command_text(text: str) -> bool:
     norm = _normalize_daily_operator_query(text)
     if norm.startswith(("recuerdame", "recordatorio")):
@@ -5655,7 +5662,7 @@ def _karen_reminder_rows(chat_id: int, *, when: str = "all", limit: int = 25) ->
         except Exception:
             if target_date or when == "past":
                 continue
-        text_value = str(rd.get("text") or "").replace("\n", " ").strip() or f"recordatorio {rd.get('id')}"
+        text_value = _display_karen_reminder_title(str(rd.get("text") or "").replace("\n", " ").strip()) or f"recordatorio {rd.get('id')}"
         out.append({
             **rd,
             "due_local": due_local,
@@ -6019,7 +6026,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
             limit=limit,
         )
 
-        lines = ["📅 Eventos de Google Calendar"]
+        lines = ["🌐 Eventos de Google Calendar"]
 
         if result.status == "not_connected":
             lines.append("- No está conectado para este cliente.")
@@ -6060,7 +6067,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
         return "\n".join(lines)
 
     except Exception as e:
-        return "📅 Eventos de Google Calendar\n- No pude leer Google Calendar ahora mismo. Lo intento de nuevo más tarde."
+        return "🌐 Eventos de Google Calendar\n- No pude leer Google Calendar ahora mismo. Lo intento de nuevo más tarde."
 
 
 def _karen_month_number(name: str) -> int | None:
@@ -6210,7 +6217,7 @@ def _build_val_agenda_for_date(chat_id: int, target_date) -> str:
                 time_label = dt_utc.astimezone(tz).strftime("%H:%M")
             except Exception:
                 pass
-            lines.append(f"{idx}. {time_label} · {str(text_value or '').strip() or f'recordatorio #{rid}'}")
+            lines.append(f"{idx}. {time_label} · {_display_karen_reminder_title(str(text_value or '').strip()) or f'recordatorio #{rid}'}")
     else:
         lines.append("- No tienes recordatorios de Val para esa fecha.")
 
@@ -6236,7 +6243,7 @@ def build_client_weekday_agenda_dashboard(client_id: str, chat_id: int, target_d
     end_local = start_local + timedelta(days=1)
     weekday = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][target_date.weekday()]
     month_name = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][target_date.month]
-    title = f"📅 Agenda para {weekday} {target_date.day} de {month_name}"
+    title = f"🗓️ Agenda para {weekday} {target_date.day} de {month_name}"
     gcal = _format_client_gcal_events_section(
         client_id=client_id,
         start_local=start_local,
@@ -6506,7 +6513,7 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
         target = now + timedelta(days=1)
         start_local = datetime(target.year, target.month, target.day, 0, 0, 0, tzinfo=tz)
         end_local = start_local + timedelta(days=1)
-        title = "📅 Agenda de mañana"
+        title = "🗓️ Agenda de mañana"
         try:
             internal = build_unified_tomorrow_dashboard(int(chat_id))
         except Exception as e:
@@ -6515,7 +6522,7 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
     elif window == "week":
         start_local = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=tz)
         end_local = start_local + timedelta(days=7)
-        title = "📅 Agenda de los próximos 7 días"
+        title = "🗓️ Agenda de los próximos 7 días"
         try:
             internal = _generate_week_horizon(int(chat_id), days=7)
         except Exception as e:
@@ -6524,7 +6531,7 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
     else:
         start_local = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=tz)
         end_local = start_local + timedelta(days=1)
-        title = "📅 Agenda de hoy"
+        title = "🗓️ Agenda de hoy"
         try:
             internal = _generate_morning_brief_det(int(chat_id), start_local.date().isoformat())
         except Exception as e:
@@ -13289,7 +13296,7 @@ async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
     month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][target_start.month]
     pretty = f"{weekday} {target_start.day} de {month_name}"
 
-    lines = [f"📅 Agenda para {pretty}"]
+    lines = [f"🗓️ Agenda para {pretty}"]
 
     found = False
 
@@ -13302,7 +13309,7 @@ async def try_agenda_date_lookup_natural(update, chat_id, text) -> bool:
                 "id": r[0], "text": r[1], "due_at_utc": r[2], "status": r[3],
                 "entity_type": r[4], "parent_ref": r[5],
             }
-            txt = (rd.get("text") or "").replace("\n", " ").strip()
+            txt = _display_karen_reminder_title((rd.get("text") or "").replace("\n", " ").strip())
             due = (rd.get("due_at_utc") or "").strip()
             time_label = "sin hora"
             try:

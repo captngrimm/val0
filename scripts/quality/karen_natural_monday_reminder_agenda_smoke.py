@@ -61,12 +61,15 @@ def test_monday_reminder_parser_covers_live_variants() -> None:
 def test_weekday_agenda_uses_current_dashboard_sections() -> None:
     parser = function_body("_parse_karen_weekday_agenda_target")
     dashboard = function_body("build_client_weekday_agenda_dashboard")
+    gcal_section = function_body("_format_client_gcal_events_section")
     internal = function_body("_build_val_agenda_for_date")
     handler = function_body("maybe_handle_karen_weekday_agenda_query")
 
     assert_contains(parser, "que tengo", "weekday agenda parser catches qué tengo")
     assert_contains(parser, "lunes", "weekday agenda parser catches Monday")
-    assert_contains(dashboard, "📅 Agenda para", "weekday dashboard title")
+    assert_contains(dashboard, "🗓️ Agenda para", "weekday dashboard title")
+    assert_contains(gcal_section, "🌐 Eventos de Google Calendar", "weekday dashboard uses globe for Google Calendar")
+    assert_not_contains(gcal_section, "📅 Eventos de Google Calendar", "weekday dashboard avoids duplicate calendar emoji")
     assert_contains(dashboard, "_format_client_gcal_events_section", "weekday dashboard includes Google Calendar events")
     assert_contains(internal, "⏰ Recordatorios de Val", "weekday dashboard uses Val reminders section")
     assert_contains(internal, "📌 Tareas de Val", "weekday dashboard uses Val tasks section")

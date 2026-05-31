@@ -74,7 +74,7 @@ def main() -> int:
 
     test_route("Val, qué sigue para mí?", ROUTE_NEXT_ACTION)
 
-    agenda_marker = "📅 Agenda de mañana\n\n🌐 Google Calendar"
+    agenda_marker = "🗓️ Agenda de mañana\n\n🌐 Eventos de Google Calendar"
     assert_contains(agenda_marker, "Agenda", "agenda marker")
     assert_contains(agenda_marker, "Google Calendar", "agenda source marker")
 

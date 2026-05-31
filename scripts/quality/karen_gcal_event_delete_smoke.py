@@ -50,7 +50,8 @@ def test_agenda_labels_and_numbered_gcal_events() -> None:
     tomorrow = _function_body(source, "build_unified_tomorrow_dashboard")
     agenda = _function_body(source, "build_client_agenda_dashboard")
 
-    assert_contains(gcal_section, "📅 Eventos de Google Calendar", "agenda uses event section name")
+    assert_contains(gcal_section, "🌐 Eventos de Google Calendar", "agenda uses event section name")
+    assert_not_contains(gcal_section, "📅 Eventos de Google Calendar", "agenda avoids duplicate calendar emoji")
     assert_not_contains(gcal_section, "Google Calendar · solo lectura", "agenda does not call gcal read-only")
     assert_contains(gcal_section, 'lines.append(f"{idx}. {label} · {title}")', "gcal events are numbered")
     assert_contains(tomorrow, "⏰ Recordatorios de Val", "reminder section names Val")

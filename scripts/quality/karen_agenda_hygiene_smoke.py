@@ -51,7 +51,12 @@ def _function_body(source: str, name: str) -> str:
 
 def test_tomorrow_agenda_hygiene_copy() -> None:
     source = _bot_source()
+    dashboard = _function_body(source, "build_client_agenda_dashboard")
+    gcal_section = _function_body(source, "_format_client_gcal_events_section")
     tomorrow = _function_body(source, "build_unified_tomorrow_dashboard")
+    assert_contains(dashboard, "🗓️ Agenda de mañana", "agenda title uses calendar-page emoji")
+    assert_contains(gcal_section, "🌐 Eventos de Google Calendar", "gcal section uses globe emoji")
+    assert_not_contains(gcal_section, "📅 Eventos de Google Calendar", "gcal section avoids duplicate calendar emoji")
     assert_contains(tomorrow, "enumerate(reminders, start=1)", "reminders remain numbered")
     assert_contains(tomorrow, "task_display_number = 1", "tasks use unified visible numbering")
     assert_contains(tomorrow, "elimina el recordatorio 1", "reminder delete action")
