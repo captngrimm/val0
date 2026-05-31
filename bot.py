@@ -5560,6 +5560,26 @@ def _karen_gcal_visible_events(chat_id: int) -> list[dict]:
         return []
 
 
+def _is_karen_gcal_event_context_stale(chat_id: int) -> bool:
+    try:
+        ctx = _KAREN_GCAL_EVENT_LIST_CONTEXT.get(int(chat_id), {}) or {}
+        return bool(ctx.get("stale_after_delete"))
+    except Exception:
+        return False
+
+
+def _mark_karen_gcal_event_context_stale(chat_id: int) -> None:
+    try:
+        ctx = dict(_KAREN_GCAL_EVENT_LIST_CONTEXT.get(int(chat_id), {}) or {})
+        ctx["events"] = []
+        ctx["stale_after_delete"] = True
+        ctx["stale_reason"] = "deleted_numbered_gcal_event"
+        ctx["ts"] = time.time()
+        _KAREN_GCAL_EVENT_LIST_CONTEXT[int(chat_id)] = ctx
+    except Exception:
+        pass
+
+
 def _is_karen_client_id(client_id: str) -> bool:
     try:
         return str(client_id or "") == str(resolve_client_id(KAREN_CHAT_ID))
@@ -5988,6 +6008,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
                 "ts": time.time(),
                 "client_id": client_id,
                 "events": [],
+                "stale_after_delete": False,
             }
 
         result = get_client_events_between(
@@ -6033,6 +6054,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
                 "ts": time.time(),
                 "client_id": client_id,
                 "events": visible_events,
+                "stale_after_delete": False,
             }
 
         return "\n".join(lines)
@@ -6391,8 +6413,11 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
     title = norm
     title = re.sub(r"^(?:recuerdame|recordarme|recordatorio)\s+", "", title).strip()
     title = re.sub(r"^quiero\s+registrar\s+un\s+recordatorio\s+(?:para\s+)?", "", title).strip()
-    if time_match:
-        title = (title[:time_match.start()] + " " + title[time_match.end():]).strip()
+    title = re.sub(
+        r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b",
+        " ",
+        title,
+    )
     if date_span:
         # Recompute spans after possible time removal by textual date regex cleanup.
         title = re.sub(
@@ -6401,6 +6426,16 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
             title,
         )
         title = re.sub(r"\b(?:para\s+)?(?:manana|mañana|hoy)\b", " ", title)
+    title = re.sub(
+        r"\b(?:el\s+)?(?:proximo|próximo)?\s*(?:lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+        " ",
+        title,
+    )
+    title = re.sub(
+        r"\b[0-3]?\d\s+(?:de\s+)?(?:enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|jul|julio|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)\b",
+        " ",
+        title,
+    )
     title = re.sub(r"\blo puedes hacer\b", " ", title)
     title = re.sub(r"\bpuedes hacerlo\b", " ", title)
     title = re.sub(r"\s+", " ", title).strip(" .,:;")
@@ -12429,11 +12464,20 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
     if decision != ConfirmationDecision.CONFIRM:
         return False
 
-    result = delete_client_event(
-        client_id,
-        pending["event_id"],
-        dry_run=False,
-    )
+    try:
+        result = delete_client_event(
+            client_id,
+            pending["event_id"],
+            dry_run=False,
+        )
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_DELETE_CONFIRM] failed: {e}")
+        clear_pending_action(action.action_id)
+        await update.message.reply_text(
+            "No pude eliminar ese evento. Es posible que ya no exista o que Google Calendar no lo haya encontrado. "
+            "No toqué recordatorios ni tareas de Val."
+        )
+        return True
 
     if result.status == "deleted":
         _audit_client_gcal_event("delete", chat_id, client_id, {
@@ -12446,6 +12490,7 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
             "source": "natural_delete_confirmation",
         })
         clear_pending_action(action.action_id)
+        _mark_karen_gcal_event_context_stale(chat_id)
         await update.message.reply_text(
             "Listo. Eliminé de Google Calendar: "
             f"{pending.get('summary') or 'evento'} — {pending.get('display_start') or pending.get('start') or ''}.\n\n"
@@ -12455,9 +12500,8 @@ async def maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text) -
 
     clear_pending_action(action.action_id)
     await update.message.reply_text(
-        "No pude eliminar el evento de Google Calendar. No cambié nada.\n\n"
-        f"Estado: {result.status}\n"
-        f"Razón: {result.reason}"
+        "No pude eliminar ese evento. Es posible que ya no exista o que Google Calendar no lo haya encontrado. "
+        "No toqué recordatorios ni tareas de Val."
     )
     return True
 
@@ -12488,6 +12532,13 @@ async def maybe_handle_karen_gcal_event_number_delete(update, chat_id, text) -> 
     client_id = resolve_client_id(chat_id)
     if not client_id:
         return False
+
+    if _is_karen_gcal_event_context_stale(chat_id):
+        await update.message.reply_text(
+            "La lista de eventos cambió después de borrar uno. "
+            "Pídeme “qué tengo mañana” o “qué tengo para el lunes” para verla actualizada antes de borrar otro evento por número."
+        )
+        return True
 
     events = _karen_gcal_visible_events(chat_id)
     if not events:

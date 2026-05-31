@@ -72,8 +72,10 @@ def test_numbered_event_delete_confirmation_is_scoped() -> None:
     assert_not_contains(numbered_delete.split("create_pending_action", 1)[0], "delete_client_event", "numbered delete does not delete before confirmation")
     assert_contains(pending_delete, "delete_client_event", "confirmation uses real gcal delete helper")
     assert_contains(pending_delete, "dry_run=False", "confirmation performs real helper delete only after confirmation")
+    assert_contains(pending_delete, "_mark_karen_gcal_event_context_stale", "success stales visible gcal event context")
     assert_contains(pending_delete, "Listo. Eliminé de Google Calendar", "success copy names gcal delete")
-    assert_contains(pending_delete, "No pude eliminar el evento de Google Calendar. No cambié nada.", "failure copy does not fake success")
+    assert_contains(pending_delete, "No pude eliminar ese evento", "failure copy does not fake success")
+    assert_contains(pending_delete, "ya no exista", "failure mentions already-gone event")
     assert_contains(pending_delete, "No toqué recordatorios ni tareas de Val", "gcal delete success preserves separation")
     assert_not_contains(pending_delete, "Eliminé el recordatorio", "gcal delete success does not claim reminder deletion")
 
