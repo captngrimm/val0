@@ -5560,6 +5560,13 @@ def _karen_gcal_visible_events(chat_id: int) -> list[dict]:
         return []
 
 
+def _is_karen_client_id(client_id: str) -> bool:
+    try:
+        return str(client_id or "") == str(resolve_client_id(KAREN_CHAT_ID))
+    except Exception:
+        return False
+
+
 def _karen_reminder_time_note(text: str, scheduled_label: str) -> str:
     clean = _norm_text(text or "")
     if not clean:
@@ -6034,6 +6041,417 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
         return "📅 Eventos de Google Calendar\n- No pude leer Google Calendar ahora mismo. Lo intento de nuevo más tarde."
 
 
+def _karen_month_number(name: str) -> int | None:
+    months = {
+        "enero": 1, "ene": 1,
+        "febrero": 2, "feb": 2,
+        "marzo": 3, "mar": 3,
+        "abril": 4, "abr": 4,
+        "mayo": 5, "may": 5,
+        "junio": 6, "jun": 6,
+        "julio": 7, "jul": 7,
+        "agosto": 8, "ago": 8,
+        "septiembre": 9, "setiembre": 9, "sep": 9, "sept": 9,
+        "octubre": 10, "oct": 10,
+        "noviembre": 11, "nov": 11,
+        "diciembre": 12, "dic": 12,
+    }
+    return months.get(_norm_text(name or ""))
+
+
+def _karen_weekday_index(name: str) -> int | None:
+    return {
+        "lunes": 0,
+        "martes": 1,
+        "miercoles": 2,
+        "miércoles": 2,
+        "jueves": 3,
+        "viernes": 4,
+        "sabado": 5,
+        "sábado": 5,
+        "domingo": 6,
+    }.get(_norm_text(name or ""))
+
+
+def _karen_next_weekday_date(weekday_idx: int, *, now=None, force_next: bool = False):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo("America/Panama")
+    now_local = now or datetime.now(tz)
+    if now_local.tzinfo is None:
+        now_local = now_local.replace(tzinfo=tz)
+    days_ahead = (int(weekday_idx) - now_local.weekday()) % 7
+    if days_ahead == 0 or force_next:
+        days_ahead = 7 if days_ahead == 0 else days_ahead
+    return (now_local + timedelta(days=days_ahead)).date()
+
+
+def _parse_karen_weekday_agenda_target(text: str, *, now=None):
+    import datetime as dt
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    norm = _norm_text(text or "")
+    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal)\s+", "", norm).strip()
+    if not re.search(r"\b(que tengo|que hay|tengo algo|hay algo|agenda)\b", norm):
+        return None
+
+    explicit = re.search(
+        r"\b(?P<weekday>lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+(?P<day>[0-3]?\d)\s+(?:de\s+)?(?P<month>enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|julio|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)\b",
+        norm,
+    )
+    tz = ZoneInfo("America/Panama")
+    now_local = now or dt.datetime.now(tz)
+    if explicit:
+        month = _karen_month_number(explicit.group("month"))
+        day = int(explicit.group("day"))
+        year = now_local.year
+        if month:
+            try:
+                target = date(year, month, day)
+                if target < now_local.date():
+                    target = date(year + 1, month, day)
+                return target
+            except ValueError:
+                return None
+
+    match = re.search(
+        r"\b(?:para\s+el\s+|para\s+|el\s+)?(?P<prefix>proximo|próximo)?\s*(?P<weekday>lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+        norm,
+    )
+    if not match:
+        return None
+    weekday_idx = _karen_weekday_index(match.group("weekday"))
+    if weekday_idx is None:
+        return None
+    return _karen_next_weekday_date(weekday_idx, now=now_local, force_next=bool(match.group("prefix")))
+
+
+def _build_val_agenda_for_date(chat_id: int, target_date) -> str:
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from memory_store import _get_conn
+
+    tz = ZoneInfo("America/Panama")
+    start_local = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=tz)
+    end_local = datetime(target_date.year, target_date.month, target_date.day, 23, 59, 59, tzinfo=tz)
+    start_utc = start_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    end_utc = end_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    date_key = target_date.isoformat()
+
+    reminders = []
+    tasks = []
+    try:
+        conn = _get_conn()
+        conn.row_factory = None
+        cur = conn.cursor()
+        reminders = cur.execute(
+            """
+            SELECT id, text, due_at_utc
+            FROM reminders
+            WHERE chat_id = ?
+              AND status IN ('pending', 'sending', 'sent')
+              AND due_at_utc >= ?
+              AND due_at_utc <= ?
+            ORDER BY due_at_utc ASC, id ASC
+            LIMIT 20
+            """,
+            (int(chat_id), start_utc, end_utc),
+        ).fetchall() or []
+        tasks = cur.execute(
+            """
+            SELECT id, raw_input, action, target, due_date
+            FROM commitments
+            WHERE chat_id = ?
+              AND status = 'open'
+              AND substr(COALESCE(due_date, ''), 1, 10) = ?
+            ORDER BY id ASC
+            LIMIT 20
+            """,
+            (int(chat_id), date_key),
+        ).fetchall() or []
+        conn.close()
+    except Exception:
+        reminders = []
+        tasks = []
+
+    lines = ["⏰ Recordatorios de Val"]
+    if reminders:
+        for idx, row in enumerate(reminders, start=1):
+            rid, text_value, due_at_utc = row[0], row[1], row[2]
+            time_label = "sin hora"
+            try:
+                dt_utc = datetime.strptime(str(due_at_utc or ""), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                time_label = dt_utc.astimezone(tz).strftime("%H:%M")
+            except Exception:
+                pass
+            lines.append(f"{idx}. {time_label} · {str(text_value or '').strip() or f'recordatorio #{rid}'}")
+    else:
+        lines.append("- No tienes recordatorios de Val para esa fecha.")
+
+    lines.extend(["", "📌 Tareas de Val"])
+    if tasks:
+        for idx, row in enumerate(tasks, start=1):
+            raw = str(row[1] or "").strip()
+            label = raw or " ".join(part for part in (str(row[2] or "").strip(), str(row[3] or "").strip()) if part).strip() or f"tarea #{row[0]}"
+            lines.append(f"{idx}. {label}")
+    else:
+        lines.append("- No tienes tareas de Val con fecha para ese día.")
+
+    return "\n".join(lines)
+
+
+def build_client_weekday_agenda_dashboard(client_id: str, chat_id: int, target_date) -> str:
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    tz_name = "America/Panama"
+    tz = ZoneInfo(tz_name)
+    start_local = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=tz)
+    end_local = start_local + timedelta(days=1)
+    weekday = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][target_date.weekday()]
+    month_name = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][target_date.month]
+    title = f"📅 Agenda para {weekday} {target_date.day} de {month_name}"
+    gcal = _format_client_gcal_events_section(
+        client_id=client_id,
+        start_local=start_local,
+        end_local=end_local,
+        tz_name=tz_name,
+        limit=10,
+        chat_id=chat_id,
+    )
+    internal = _build_val_agenda_for_date(chat_id, target_date)
+    return "\n\n".join([title, gcal, internal])
+
+
+async def maybe_handle_karen_weekday_agenda_query(update, chat_id: int, client_id: str, text: str) -> bool:
+    if not _is_karen_client_id(client_id) or not update or not getattr(update, "message", None):
+        return False
+    target_date = _parse_karen_weekday_agenda_target(text)
+    if not target_date:
+        return False
+    await update.message.reply_text(
+        build_client_weekday_agenda_dashboard(client_id, chat_id, target_date),
+        disable_web_page_preview=True,
+    )
+    return True
+
+
+def _karen_registered_name_norm(text: str) -> str:
+    norm = _norm_text(text or "")
+    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal)\s+", "", norm).strip()
+    return norm
+
+
+async def maybe_handle_karen_name_language_guard(update, chat_id: int, client_id: str, text: str) -> bool:
+    if not _is_karen_client_id(client_id) or not update or not getattr(update, "message", None):
+        return False
+
+    norm = _karen_registered_name_norm(text)
+    nickname_queries = {
+        "que apodo me tienes registrado",
+        "cual es mi apodo registrado",
+        "cuál es mi apodo registrado",
+        "cual es mi apodo",
+        "como me vas a llamar",
+        "como me tienes registrada",
+        "cual es mi nombre registrado",
+    }
+    if norm in nickname_queries:
+        await update.message.reply_text("Tu apodo registrado es: Tany. Lo estoy usando con y griega.")
+        return True
+
+    wants_tany_name = "tany" in norm and (
+        "apodo" in norm
+        or "llamar" in norm
+        or "llames" in norm
+        or "nombre" in norm
+    )
+    if wants_tany_name and re.search(r"\b(cambia|cambiar|pon|poner|puedes|llamar|llamame|llámame|oficial)\b", norm):
+        try:
+            upsert_fact(chat_id=int(chat_id), fact_key="preferred_name", fact_value="Tany")
+        except Exception as e:
+            logger.exception(f"[KAREN_NAME_GUARD_UPSERT] failed: {e}")
+        await update.message.reply_text("Listo, Tany. Tu apodo/nombre preferido registrado es Tany; te voy a llamar Tany.")
+        return True
+
+    spanish_markers = (
+        "responde en espanol",
+        "responde en español",
+        "respondeme en espanol",
+        "respóndeme en español",
+        "hablame en espanol",
+        "háblame en español",
+        "quiero que respondas en espanol",
+        "quiero que respondas en español",
+    )
+    if norm in spanish_markers or any(marker in norm for marker in spanish_markers):
+        try:
+            upsert_fact(chat_id=int(chat_id), fact_key="preferred_language", fact_value="es")
+        except Exception as e:
+            logger.exception(f"[KAREN_LANGUAGE_GUARD_UPSERT] failed: {e}")
+        await update.message.reply_text("Claro, Tany. Te respondo en español.")
+        return True
+
+    return False
+
+
+def _parse_karen_time_phrase(norm: str) -> tuple[int, int] | None:
+    match = re.search(
+        r"\ba\s+las?\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?(?:\s+de\s+la\s+(?P<daypart>manana|mañana|tarde|noche))?\b",
+        norm,
+    )
+    if not match:
+        return None
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute") or "0")
+    ampm = match.group("ampm")
+    daypart = match.group("daypart")
+    if ampm == "pm" and hour < 12:
+        hour += 12
+    elif ampm == "am" and hour == 12:
+        hour = 0
+    elif not ampm and daypart in ("tarde", "noche") and 1 <= hour <= 11:
+        hour += 12
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return None
+    return hour, minute
+
+
+def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None:
+    import datetime as dt
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    raw = text or ""
+    norm = _norm_text(raw)
+    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal)\s+", "", norm).strip()
+    if not (
+        norm.startswith(("recuerdame", "recordatorio", "recordarme"))
+        or "registrar un recordatorio" in norm
+        or "registrar recordatorio" in norm
+        or "un recordatorio para" in norm
+    ):
+        return None
+
+    tz = ZoneInfo("America/Panama")
+    now_local = now or dt.datetime.now(tz)
+    if now_local.tzinfo is None:
+        now_local = now_local.replace(tzinfo=tz)
+
+    target_date = None
+    date_span = None
+    explicit = re.search(
+        r"\b(?P<weekday>lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\s+(?P<day>[0-3]?\d)\s+(?:de\s+)?(?P<month>enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|julio|jul|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic)\b",
+        norm,
+    )
+    if explicit:
+        month = _karen_month_number(explicit.group("month"))
+        day = int(explicit.group("day"))
+        year = now_local.year
+        if month:
+            try:
+                target_date = date(year, month, day)
+                if target_date < now_local.date():
+                    target_date = date(year + 1, month, day)
+                date_span = explicit.span()
+            except ValueError:
+                target_date = None
+
+    if target_date is None:
+        weekday_match = re.search(
+            r"\b(?:para\s+el\s+|para\s+|el\s+)?(?P<prefix>proximo|próximo)?\s*(?P<weekday>lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+            norm,
+        )
+        if weekday_match:
+            idx = _karen_weekday_index(weekday_match.group("weekday"))
+            if idx is not None:
+                target_date = _karen_next_weekday_date(idx, now=now_local, force_next=bool(weekday_match.group("prefix")))
+                date_span = weekday_match.span()
+        elif "manana" in norm or "mañana" in norm:
+            target_date = (now_local + dt.timedelta(days=1)).date()
+            date_span = re.search(r"\bmanana|mañana\b", norm).span()
+        elif "hoy" in norm:
+            target_date = now_local.date()
+            date_span = re.search(r"\bhoy\b", norm).span()
+
+    time_parts = _parse_karen_time_phrase(norm)
+    time_match = re.search(
+        r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b",
+        norm,
+    )
+
+    title = norm
+    title = re.sub(r"^(?:recuerdame|recordarme|recordatorio)\s+", "", title).strip()
+    title = re.sub(r"^quiero\s+registrar\s+un\s+recordatorio\s+(?:para\s+)?", "", title).strip()
+    if time_match:
+        title = (title[:time_match.start()] + " " + title[time_match.end():]).strip()
+    if date_span:
+        # Recompute spans after possible time removal by textual date regex cleanup.
+        title = re.sub(
+            r"\b(?:para\s+el\s+|para\s+|el\s+)?(?:proximo|próximo)?\s*(?:lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)(?:\s+[0-3]?\d\s+(?:de\s+)?(?:enero|ene|febrero|feb|marzo|mar|abril|abr|mayo|may|junio|jun|jul|julio|agosto|ago|septiembre|setiembre|sep|sept|octubre|oct|noviembre|nov|diciembre|dic))?\b",
+            " ",
+            title,
+        )
+        title = re.sub(r"\b(?:para\s+)?(?:manana|mañana|hoy)\b", " ", title)
+    title = re.sub(r"\blo puedes hacer\b", " ", title)
+    title = re.sub(r"\bpuedes hacerlo\b", " ", title)
+    title = re.sub(r"\s+", " ", title).strip(" .,:;")
+    if title in {"", "para", "el", "recordatorio"}:
+        title = ""
+
+    return {"title": title, "date": target_date, "time": time_parts}
+
+
+async def maybe_handle_karen_natural_weekday_reminder(update, chat_id: int, client_id: str, text: str) -> bool:
+    if not _is_karen_client_id(client_id) or not update or not getattr(update, "message", None):
+        return False
+    parsed = _parse_karen_natural_reminder_request(text)
+    if not parsed:
+        return False
+    if not parsed.get("date"):
+        await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿Para qué fecha lo pongo?")
+        return True
+    if not parsed.get("title"):
+        await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿Qué quieres que te recuerde?")
+        return True
+    if not parsed.get("time"):
+        await update.message.reply_text("Sí puedo crear el recordatorio, Tany. ¿A qué hora lo pongo?")
+        return True
+
+    from memory_store import insert_reminder
+    import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo("America/Panama")
+    hour, minute = parsed["time"]
+    target_date = parsed["date"]
+    due_local = dt.datetime(target_date.year, target_date.month, target_date.day, hour, minute, 0, tzinfo=tz)
+    due_utc = due_local.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    title = str(parsed["title"]).strip()
+    rid = insert_reminder(
+        chat_id=int(chat_id),
+        due_at_utc=due_utc,
+        text=title,
+        status="pending",
+        entity_type="reminder",
+        parent_ref=None,
+    )
+    weekday = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][due_local.weekday()]
+    month_name = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][due_local.month]
+    await update.message.reply_text(
+        f"Listo, Tany. Guardé el recordatorio: {title} — {weekday} {due_local.day} de {month_name}, {due_local.strftime('%I:%M %p').lstrip('0')}."
+    )
+    return True
+
+
 def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> str:
     """
     Combined client agenda dashboard:
@@ -6109,7 +6527,7 @@ async def maybe_handle_karen_explicit_case_note(update, chat_id: int, client_id:
     Karen MVP note capture for explicit "guarda nota de finca/caso" phrasing.
     Keeps saved context separate from agenda/cita/reminder language.
     """
-    if client_id != "karen" or not update or not getattr(update, "message", None):
+    if not _is_karen_client_id(client_id) or not update or not getattr(update, "message", None):
         return False
 
     raw = (text or "").strip()
@@ -6191,6 +6609,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     client_id = resolve_client_id(chat_id)
 
     try:
+        if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NAME_LANGUAGE_GUARD_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):
             return
     except Exception as e:
@@ -6209,6 +6633,18 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 return
     except Exception as e:
         logger.exception(f"[GCAL_CREATE_ROUTE_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_weekday_agenda_query(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_WEEKDAY_AGENDA_PIPELINE] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_natural_weekday_reminder(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NATURAL_WEEKDAY_REMINDER_PIPELINE] failed: {e}")
 
     if looks_like_technical_paste(text):
         await update.message.reply_text(TECHNICAL_PASTE_REPLY)
@@ -6396,7 +6832,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         # M5J: Karen preferred-name/vocative hard guard.
         # Stored active profile wins over contradictory recent memory.
         karen_name_norm = re.sub(r"^(val|valeria|vale)\s+", "", text_norm_greet).strip()
-        if client_id == "karen":
+        if _is_karen_client_id(client_id):
             if karen_name_norm in (
                 "cual es mi apodo registrado",
                 "como me vas a llamar",
@@ -14927,6 +15363,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tg_msg_id = getattr(update.message, "message_id", None)
 
     try:
+        if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NAME_LANGUAGE_GUARD_HANDLE_TEXT] failed: {e}")
+
+    try:
         if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):
             return
     except Exception as e:
@@ -14945,6 +15387,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
     except Exception as e:
         logger.exception(f"[GCAL_CREATE_ROUTE_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_weekday_agenda_query(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_WEEKDAY_AGENDA_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_natural_weekday_reminder(update, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_NATURAL_WEEKDAY_REMINDER_HANDLE_TEXT] failed: {e}")
 
     if looks_like_technical_paste(text):
         await update.message.reply_text(TECHNICAL_PASTE_REPLY)
