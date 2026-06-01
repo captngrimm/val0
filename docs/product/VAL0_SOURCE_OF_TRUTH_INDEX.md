@@ -60,6 +60,14 @@ Role: visual second brain / graph / library view, not source of truth and not ru
 
 Use the value map and inventory diagnostic to identify active source-of-truth docs, roadmap docs, architecture reports, ops playbooks, parking-lot ideas, client/private state, historical reports, possible stale/duplicate docs, and unknown docs that need review.
 
+## Dynamic Roadmap Intake
+
+- `docs/product/ROADMAP_01_DYNAMIC_INTAKE_DESIGN.md`
+- `docs/product/ROADMAP_INTAKE_RESPONSE_TEMPLATE.md`
+- `docs/product/ROADMAP_NEWSLETTER_INTAKE_PROMPT.md`
+
+Use these for future newsletter/article/idea intake. They define how to evaluate signals against Val0 source-of-truth docs without auto-updating the roadmap or interrupting the active sprint without approval.
+
 ## Commands
 
 ```bash
