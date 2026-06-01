@@ -40,17 +40,45 @@ def function_body(name: str) -> str:
 def test_task_query_beats_case_routes() -> None:
     handle = function_body("handle_text")
     pipeline = function_body("_process_text_pipeline")
+    hard_gate = function_body("maybe_handle_karen_task_query_hard_gate")
     visibility = function_body("maybe_handle_karen_notes_tasks_visibility")
-
+    for phrase in (
+        "Val, ¿qué tareas tengo activa?",
+        "Vale. ¿Qué tareas tengo activas?",
+        "val que tareas tengo activas?",
+    ):
+        assert_true("tareas" in phrase.lower(), f"live phrase covered: {phrase}")
+    assert_contains(hard_gate, "looks_like_karen_tasks_query", "hard gate uses task query matcher")
+    assert_contains(hard_gate, "render_karen_tasks_view", "hard gate renders accepted task view")
+    assert_contains(hard_gate, "fetch_open_commitments", "hard gate reads tasks only")
+    assert_not_contains(hard_gate, "insert_memory_item", "hard gate does not insert memory")
+    assert_not_contains(hard_gate, "load_karen_case_facts", "hard gate does not render finca facts")
+    assert_not_contains(hard_gate, "Esto es lo que tengo guardado del caso del terreno", "hard gate does not include case summary copy")
     assert_contains(visibility, "looks_like_karen_tasks_query", "visibility route recognizes tasks query")
     assert_contains(visibility, "render_karen_tasks_view", "task query renders task list")
     for body, label in ((handle, "handle_text"), (pipeline, "pipeline")):
-        task_idx = body.find("maybe_handle_karen_notes_tasks_visibility")
+        task_idx = body.find("maybe_handle_karen_task_query_hard_gate")
+        gcal_idx = body.find("maybe_handle_karen_gcal_create_confirmation_first")
         case_idx = body.find("maybe_handle_karen_case_facts")
+        case_status_idx = body.find("maybe_handle_karen_case_status")
         day0_idx = body.find("maybe_handle_karen_day0_route")
+        memory_idx = body.find("[MEMORY_TEST_TEXT] inserting memory")
         assert_true(task_idx >= 0, f"{label} has task visibility route")
+        assert_true(gcal_idx < 0 or task_idx < gcal_idx, f"{label} task route beats gcal")
         assert_true(case_idx < 0 or task_idx < case_idx, f"{label} task route beats case facts")
+        assert_true(case_status_idx < 0 or task_idx < case_status_idx, f"{label} task route beats case status")
         assert_true(day0_idx < 0 or task_idx < day0_idx, f"{label} task route beats day0 finca summary")
+        assert_true(memory_idx < 0 or task_idx < memory_idx, f"{label} task route beats memory insertion")
+
+    matcher = (ROOT / "core/karen_notes_tasks_visibility.py").read_text(encoding="utf-8")
+    for expected in (
+        "que\\s+tareas?\\s+tengo\\s+activas?",
+        "que tarea tengo",
+        "que tareas tengo activa",
+        "va\\s+el",
+        "pal",
+    ):
+        assert_contains(matcher, expected, f"matcher covers {expected}")
 
 
 def test_task_delete_clarification_does_not_route_to_gcal() -> None:

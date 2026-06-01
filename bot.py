@@ -6846,6 +6846,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         logger.exception(f"[KAREN_NAME_LANGUAGE_GUARD_PIPELINE] failed: {e}")
 
+    # RC-KAREN-05B HARD TASK QUERY GATE:
+    # Must remain above GCal/document/case routes and MEMORY_TEST_TEXT insertion.
+    try:
+        if await maybe_handle_karen_task_query_hard_gate(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_QUERY_HARD_GATE_PIPELINE] failed: {e}")
+
     try:
         if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):
             return
@@ -15024,6 +15032,33 @@ async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: Con
     return False
 
 
+async def maybe_handle_karen_task_query_hard_gate(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
+    """
+    Ultra-early Karen task-list guard.
+
+    Keep this above GCal/document/case routes and above MEMORY_TEST_TEXT insertion:
+    live voice transcriptions like "Val, qué tareas tengo activa?" must render
+    tasks, not become memory or finca/case summaries.
+    """
+    if not update.message:
+        return False
+    if not _is_karen_client_id(client_id):
+        return False
+    if not looks_like_karen_tasks_query(text):
+        return False
+    try:
+        from memory_store import fetch_open_commitments
+
+        tasks = fetch_open_commitments(int(chat_id), limit=10) or []
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_QUERY_HARD_GATE_FETCH] failed: {e}")
+        tasks = []
+    auxiliary_tasks = load_karen_auxiliary_task_items(client_id)
+    _clear_karen_numbered_action_dirty(chat_id, "task")
+    await update.message.reply_text(render_karen_tasks_view(tasks, auxiliary_tasks=auxiliary_tasks))
+    return True
+
+
 def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
     norm = _norm_text(text or "")
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
@@ -15795,6 +15830,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_NAME_LANGUAGE_GUARD_HANDLE_TEXT] failed: {e}")
+
+    # RC-KAREN-05B HARD TASK QUERY GATE:
+    # Must remain above GCal/document/case routes and MEMORY_TEST_TEXT insertion.
+    try:
+        if await maybe_handle_karen_task_query_hard_gate(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_QUERY_HARD_GATE_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):

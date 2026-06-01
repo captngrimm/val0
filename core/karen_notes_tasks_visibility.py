@@ -14,7 +14,7 @@ def normalize_visibility_prompt(text: str) -> str:
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
-    norm = re.sub(r"^(bal|val|valeria|vale)\s+", "", norm).strip()
+    norm = re.sub(r"^(bal|pal|val|valeria|vale|va\s+el)\s+", "", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
     return norm
 
@@ -58,8 +58,18 @@ def looks_like_karen_notes_query(text: str) -> bool:
 
 def looks_like_karen_tasks_query(text: str) -> bool:
     norm = normalize_visibility_prompt(text)
+    if re.fullmatch(r"que\s+tareas?\s+tengo\s+activas?", norm):
+        return True
+    if re.fullmatch(r"que\s+tareas?\s+activas?\s+tengo", norm):
+        return True
+    if re.fullmatch(r"que\s+tareas?\s+tengo", norm):
+        return True
     return norm in {
         "que tareas tengo",
+        "que tarea tengo",
+        "que tarea activa tengo",
+        "que tarea tengo activa",
+        "que tareas tengo activa",
         "que tareas activas tengo",
         "que tareas pendientes tengo",
         "cuales son mis tareas registradas",
