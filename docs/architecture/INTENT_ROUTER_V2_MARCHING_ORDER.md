@@ -90,6 +90,21 @@ ARCH-02 adds `core/intent_router_v2.py` as a shadow classifier only.
 
 The goal is to compare predicted intent against the current routes before any refactor changes behavior. For now, the shadow hook can log predicted intent, confidence, reason, client, and text preview. A future step is to log predicted intent vs actual handler once handler labels are available across the existing routes.
 
+## ARCH-03 Shadow Sample Harness
+
+ARCH-03 adds `scripts/diagnostics/intent_router_v2_sample_harness.py`.
+
+The harness runs curated real and representative Karen phrases through `classify_intent_shadow` without Telegram, external services, or state mutation. It prints expected vs predicted intent and can emit JSON with `--json`.
+
+Use it to quickly inspect shadow classifier behavior before changing router rules:
+
+```bash
+python3 scripts/diagnostics/intent_router_v2_sample_harness.py
+python3 scripts/diagnostics/intent_router_v2_sample_harness.py --json
+```
+
+This is still shadow-only. Passing the harness does not mean runtime behavior changed; it means the planned router prediction matches the current expected intent map for sampled phrases.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior

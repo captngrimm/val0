@@ -133,10 +133,6 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
             needs_confirmation=False,
         ))
 
-    if _has_any(normalized, ("que tengo manana", "que tengo hoy", "agenda de manana", "agenda para", "que tengo para el lunes", "que tengo el lunes", "que hay en mi calendario")):
-        if not _has_any(normalized, ("agenda prueba", "agenda cita", "crea evento", "pon en mi calendario", "agrega al calendario")):
-            return _decision(_candidate("agenda_query", 0.95, "deterministic", normalized, "matched agenda/calendar read query", client))
-
     if _has_any(normalized, ("crea evento", "google calendar", "pon en mi calendario", "agrega al calendario")) or re.search(r"\bagenda\s+.+\b(?:manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b.+\b(?:a las|am|pm|\d)", normalized):
         return _decision(_candidate(
             "gcal_create",
@@ -147,6 +143,10 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
             client,
             needs_confirmation=True,
         ))
+
+    if _has_any(normalized, ("que tengo manana", "que tengo hoy", "agenda de manana", "agenda para", "que tengo para el lunes", "que tengo el lunes", "que hay en mi calendario")):
+        if not _has_any(normalized, ("agenda prueba", "agenda cita", "crea evento", "pon en mi calendario", "agrega al calendario")):
+            return _decision(_candidate("agenda_query", 0.95, "deterministic", normalized, "matched agenda/calendar read query", client))
 
     if re.search(r"\b(elimina|borra|cancela|quita)\s+(?:el\s+)?(?:evento|evento de google calendar)\s+(?:\d+|uno|dos|tres)\b", normalized):
         return _decision(_candidate(
