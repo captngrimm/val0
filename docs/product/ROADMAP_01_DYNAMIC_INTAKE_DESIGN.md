@@ -14,6 +14,8 @@ The goal is not to execute every interesting idea. The goal is to:
 
 This is a design document only. It does not implement ingestion automation.
 
+ValPrime is the roadmap keeper. The intake chat should analyze inputs and output copy-pasteable `/roadmap_signal` blocks for ValPrime review. No Notion dependency is required or assumed.
+
 ## Inputs
 
 The intake lane may eventually evaluate:
@@ -92,6 +94,7 @@ Save target:
 
 - Do not auto-update roadmap without explicit approval.
 - Do not let newsletters derail active sprint unless urgent and high impact.
+- Do not depend on Notion or external task tools.
 - Separate facts from speculation.
 - Cite/source if available in future.
 - Do not ingest sensitive client data into public docs.
@@ -112,13 +115,15 @@ The intake evaluator should compare signals against:
 
 The evaluator should not treat a pasted source as higher authority than these source-of-truth files.
 
+For now, weekly review can be manual. The intake chat should produce `/roadmap_signal` blocks that ValPrime can hold until a future `/roadmap_review` command exists.
+
 ## Future Phases
 
-- ROADMAP-02: Idea Registry schema
-- ROADMAP-03: ValPrime parking lot extraction
-- ROADMAP-04: Newsletter paste intake prompt
-- ROADMAP-05: Daily synthesis / "Milkshake Time"
-- ROADMAP-06: Roadmap update proposal generator
+- ROADMAP-02: ValPrime roadmap signal protocol
+- ROADMAP-03: Roadmap signal registry storage design
+- ROADMAP-04: ValPrime `/roadmap_signal` command implementation
+- ROADMAP-05: `/roadmap_review` synthesis / "Milkshake Time"
+- ROADMAP-06: optional scheduler/reminder, no Notion required
 - ROADMAP-07: Obsidian export/index
 
 ## Runtime Note
