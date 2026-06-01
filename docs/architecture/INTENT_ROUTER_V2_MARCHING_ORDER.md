@@ -184,6 +184,14 @@ It records the ROUTER-11 live shadow observation pass for `document_summary`, `g
 
 Shadow mode was disabled after the observation window, Karen RC full smoke passed, and there is no behavior change.
 
+## ROUTER-14 Final Shadow Coverage Update
+
+ROUTER-14 adds `docs/architecture/ROUTER_14_FINAL_SHADOW_COVERAGE_UPDATE.md`.
+
+It records the ROUTER-13 shadow observation pass. The observed lanes were already covered after ROUTER-12, so the honest coverage remains 11 `COVERED`, 4 `NEEDS_LIVE_OBSERVATION`, 0 `NEEDS_ACTUAL_LABEL`, and 2 `SHADOW_ONLY`.
+
+Shadow mode was disabled after the observation window, Karen RC full smoke passed 24/24, and there is no behavior change.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior
