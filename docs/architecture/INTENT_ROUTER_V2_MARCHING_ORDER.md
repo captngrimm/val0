@@ -1,0 +1,140 @@
+# Intent Router v2 Marching Order
+
+## Why This Exists
+
+Karen RC was stabilized with tactical hard gates. That was the right short-term move: Karen needed reliable live behavior across identity, Spanish-first replies, agenda, Google Calendar, reminders, tasks, documents, watermark guards, and on-demand OCR.
+
+Those hard gates are not the long-term architecture. They protect the RC, but they also make route order harder to reason about as features grow. Intent Router v2 is the cleanup lane after Karen RC PASS.
+
+## Current Pain
+
+- `bot.py` contains many route checks and priority gates.
+- There are duplicated live paths for similar text handling.
+- Karen-specific hard gates were added to stop urgent regressions.
+- Case, memory, and document routes have previously hijacked direct utilities like tasks, reminders, and agenda.
+- Voice transcription variants add prefixes, typos, and word-number variants that are currently handled tactically.
+- The LLM/generic fallback can still be dangerous if it is reached before direct user commands are exhausted.
+
+## Target Routing Order
+
+1. Pending actions
+2. Destructive confirmations
+3. Direct utilities:
+   - agenda
+   - Google Calendar
+   - reminders
+   - tasks
+4. Documents / OCR
+5. Case/finca/legal context
+6. Memory capture
+7. LLM fallback
+
+## Proposed Intent Router v2 Shape
+
+### IntentCandidate
+
+An `IntentCandidate` is a possible interpretation of a message.
+
+Fields:
+
+- `intent_type`
+- `confidence`
+- `source`
+- `normalized_text`
+- `required_context`
+- `destructive`
+- `client_scope`
+
+Examples of `source`:
+
+- deterministic matcher
+- pending action context
+- voice normalization
+- LLM classifier fallback
+
+### IntentDecision
+
+An `IntentDecision` is the selected route.
+
+Fields:
+
+- `selected_intent`
+- `handler`
+- `reason`
+- `blocked_by`
+- `needs_confirmation`
+
+The decision should explain why the route won, especially when it blocks another plausible route.
+
+### RouterPriorityMap
+
+The `RouterPriorityMap` owns the priority model:
+
+- deterministic first
+- pending/destructive actions before new intents
+- direct utilities before context/memory
+- LLM only fallback
+
+The priority map should be explicit enough that a new route cannot accidentally jump ahead of tasks, reminders, agenda, or documents.
+
+## Migration Plan
+
+### Phase 0: Freeze RC Behavior
+
+- Keep current Karen RC behavior frozen.
+- Maintain `scripts/quality/karen_rc_full_smoke.py`.
+- Do not start route refactors unless the full RC smoke is passing.
+
+### Phase 1: Inventory Current Routes
+
+- Run `python3 scripts/diagnostics/route_inventory.py`.
+- Identify duplicate routes, old fallback routes, and routes that exist in more than one live path.
+- Mark which routes are Karen-specific, reusable, or legacy.
+
+### Phase 2: Shadow Mode Router
+
+- Introduce a router wrapper in shadow mode.
+- Log predicted intent vs actual handled route.
+- Do not change behavior.
+- Use the logs to find mismatches before moving handlers.
+
+### Phase 3: Migrate One Lane At A Time
+
+Move lanes into the router in this order:
+
+1. tasks
+2. reminders
+3. agenda/GCal
+4. documents
+5. case/finca
+6. memory
+
+Each lane needs lane-specific smokes before and after migration.
+
+### Phase 4: Remove Obsolete Hard Gates
+
+- Remove old hard gates only after lane smokes and live Karen checks pass.
+- Keep fallbacks honest during the transition.
+- Do not remove a guard just because the new router compiles.
+
+## Guardrails
+
+- No route can write/delete without explicit confirmation.
+- Pending actions always beat new intents.
+- Memory capture must never beat direct user commands.
+- Case/finca must never beat agenda/tasks/reminders/docs.
+- Documents/OCR must never trigger on random short replies like `sí`, `hoy`, or `ok`.
+- LLM fallback must be last.
+
+## Testing Requirements
+
+Router refactor cannot begin unless:
+
+- `python3 scripts/quality/karen_rc_full_smoke.py --keep-going` passes.
+- Route inventory exists.
+- Each migrated lane has lane-specific smokes.
+- Live Karen behavior is not regressed.
+
+## Operational Note
+
+After Karen RC PASS, shift from stabilization hard gates to Intent Router v2. Do not add major features until the router/refactor plan exists unless an urgent Karen client blocker appears.
