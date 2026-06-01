@@ -202,6 +202,12 @@ With `task_create` added as a diagnostic lane, current coverage remains 11 `COVE
 
 This is diagnostics-only. No message is routed through Intent Router v2 and there is no behavior change.
 
+## OBSIDIAN-01 Vault Role Clarification
+
+OBSIDIAN-01 adds `docs/architecture/OBSIDIAN_01_VAULT_ROLE_CLARIFICATION.md`.
+
+Obsidian and `/home/forge/valeria_vault` are not router or runtime sources of truth. They may later visualize trusted ValPrime, OPEL, Forge, and repo docs, including router observations, but Intent Router v2 decisions must remain owned by tested repo code, smokes, and explicit architecture docs.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior
