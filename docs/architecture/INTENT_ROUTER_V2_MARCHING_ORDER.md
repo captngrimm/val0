@@ -156,6 +156,14 @@ ROUTER-08 expands `scripts/diagnostics/intent_router_v2_sample_harness.py` with 
 - It does not call Telegram, Google Calendar, OCR, memory, or live services.
 - There is no behavior change and no message is routed through Intent Router v2.
 
+## ROUTER-09 Coverage Gap Report
+
+ROUTER-09 adds `docs/architecture/ROUTER_09_COVERAGE_GAP_REPORT.md` and `scripts/diagnostics/intent_router_v2_coverage_report.py`.
+
+The report compares sample-harness coverage, shadow classifier coverage, actual legacy handler labels, and clean observation evidence. It identifies which lanes are `COVERED`, `SHADOW_ONLY`, `NEEDS_ACTUAL_LABEL`, or `NEEDS_LIVE_OBSERVATION` before any router migration proposal.
+
+This remains diagnostics-only. There is no behavior change.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior
