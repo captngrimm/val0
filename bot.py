@@ -6915,6 +6915,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_karen_gcal_create_confirmation_first", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[GCAL_CONFIRM_ROUTE_PIPELINE] failed: {e}")
@@ -6933,6 +6934,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_pending_gcal_delete_confirmation", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[GCAL_DELETE_CONFIRM_ROUTE_PIPELINE] failed: {e}")
@@ -6962,6 +6964,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_karen_natural_weekday_reminder(update, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("reminder_create", "maybe_handle_karen_natural_weekday_reminder", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_NATURAL_WEEKDAY_REMINDER_PIPELINE] failed: {e}")
@@ -7036,12 +7039,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     try:
         if _looks_like_karen_gcal_event_create_request(text):
             if await try_appointment_save_natural(update, chat_id, text):
+                _maybe_log_intent_router_v2_actual("gcal_create", "try_appointment_save_natural", chat_id=chat_id, message_id=shadow_message_id, text=text)
                 return
     except Exception as e:
         logger.exception(f"[KAREN_GCAL_CREATE_EARLY_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("agenda_query", "maybe_handle_karen_day0_route", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_DAY0_ROUTE_RELIABILITY_PIPELINE] failed: {e}")
@@ -15965,6 +15970,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_karen_gcal_create_confirmation_first", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[GCAL_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
@@ -15983,6 +15989,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_pending_gcal_delete_confirmation", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[GCAL_DELETE_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
@@ -16012,6 +16019,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_natural_weekday_reminder(update, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("reminder_create", "maybe_handle_karen_natural_weekday_reminder", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_NATURAL_WEEKDAY_REMINDER_HANDLE_TEXT] failed: {e}")
@@ -16154,6 +16162,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_day0_route(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("agenda_query", "maybe_handle_karen_day0_route", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_DAY0_ROUTE_RELIABILITY] failed: {e}")
@@ -16347,8 +16356,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_pending_gcal_delete_confirmation", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
         if await maybe_handle_karen_gcal_event_number_delete(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("gcal_delete", "maybe_handle_karen_gcal_event_number_delete", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
         if await try_gcal_delete_natural(update, chat_id, text):
             _maybe_log_intent_router_v2_actual("gcal_delete", "try_gcal_delete_natural", chat_id=chat_id, message_id=tg_msg_id, text=text)
@@ -16417,6 +16428,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 0) Pending Google Calendar appointment confirmation.
         # Must run before appointment parsing so "sí"/"dale" confirms the draft.
         if await maybe_handle_pending_gcal_appointment_confirmation(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_pending_gcal_appointment_confirmation", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
 
         # 1) Multi-intent beta shield:

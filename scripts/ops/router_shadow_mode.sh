@@ -28,6 +28,43 @@ require_root() {
   fi
 }
 
+is_secret_env_key() {
+  local key_upper
+  key_upper="$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"
+  [[ "${key_upper}" == *KEY* \
+    || "${key_upper}" == *TOKEN* \
+    || "${key_upper}" == *SECRET* \
+    || "${key_upper}" == *PASSWORD* \
+    || "${key_upper}" == *PASS* \
+    || "${key_upper}" == *CREDENTIAL* \
+    || "${key_upper}" == "RESEND_API_KEY" ]]
+}
+
+print_redacted_environment() {
+  local raw_env token key value
+  raw_env="$(systemctl show "${SERVICE_NAME}" --property=Environment --value --no-pager 2>/dev/null || true)"
+  echo "Environment (secret values redacted):"
+  if [[ -z "${raw_env}" ]]; then
+    echo "  <empty or unavailable>"
+    return
+  fi
+
+  # systemctl prints Environment as a space-separated assignment list. This keeps
+  # status useful while avoiding raw KEY/TOKEN/SECRET/PASSWORD values in output.
+  for token in ${raw_env}; do
+    key="${token%%=*}"
+    value="${token#*=}"
+    if [[ "${token}" != *"="* ]]; then
+      continue
+    fi
+    if is_secret_env_key "${key}"; then
+      printf '  %s=***REDACTED***\n' "${key}"
+    else
+      printf '  %s=%s\n' "${key}" "${value}"
+    fi
+  done
+}
+
 enable_shadow() {
   require_root "enable"
   install -d -m 0755 "${DROPIN_DIR}"
@@ -59,7 +96,7 @@ show_status() {
     echo "Drop-in is not present. Shadow mode should be OFF unless configured elsewhere."
   fi
   echo
-  systemctl show "${SERVICE_NAME}" --property=Environment --no-pager || true
+  print_redacted_environment
   echo
   systemctl status "${SERVICE_NAME}" --no-pager || true
 }

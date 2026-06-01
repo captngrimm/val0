@@ -33,6 +33,9 @@ def test_playbook_content() -> None:
         "match=False",
         "/etc/systemd/system/val0-bot.service.d/intent-router-shadow.conf",
         'Environment="VAL0_INTENT_ROUTER_V2_SHADOW=true"',
+        "status output redacts secret-like environment values",
+        "Do not paste raw systemd environment output externally",
+        "Shadow mode should be disabled after every observation test window",
     ):
         assert_contains(text, needle, "playbook content")
 
@@ -50,8 +53,17 @@ def test_helper_content_and_syntax() -> None:
         'systemctl restart "${SERVICE_NAME}"',
         "journalctl",
         "This command must be run as root",
+        "is_secret_env_key",
+        "print_redacted_environment",
+        "RESEND_API_KEY",
+        "***REDACTED***",
+        "--property=Environment --value",
     ):
         assert_contains(text, needle, "helper script content")
+    assert_true(
+        'systemctl show "${SERVICE_NAME}" --property=Environment --no-pager' not in text,
+        "helper does not print raw systemctl Environment output",
+    )
 
     result = subprocess.run(
         ["bash", "-n", "scripts/ops/router_shadow_mode.sh"],

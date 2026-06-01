@@ -49,6 +49,8 @@ sudo systemctl restart val0-bot.service
 sudo systemctl status val0-bot.service --no-pager
 ```
 
+The helper command `sudo scripts/ops/router_shadow_mode.sh status` is safe to use for observation: status output redacts secret-like environment values such as keys, tokens, passwords, credentials, and `RESEND_API_KEY`. Do not paste raw systemd environment output externally.
+
 ## Disable Shadow Mode
 
 Remove the drop-in or set the value to false. The preferred cleanup is to remove the drop-in:
@@ -67,6 +69,8 @@ sudo journalctl -u val0-bot.service -n 100 --no-pager | grep -F "[INTENT_ROUTER_
 ```
 
 No new `[INTENT_ROUTER_V2_SHADOW]` lines should appear after disable and restart.
+
+Shadow mode should be disabled after every observation test window.
 
 ## Suggested Test Commands
 

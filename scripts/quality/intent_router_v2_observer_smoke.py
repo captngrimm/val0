@@ -62,6 +62,13 @@ def test_bot_actual_labels_are_shadow_only() -> None:
         '"gcal_create", "try_appointment_save_natural"',
         '"gcal_delete", "maybe_handle_karen_gcal_event_number_delete"',
         '"document_ocr", "maybe_handle_document_ocr_query"',
+        '"agenda_query", "maybe_handle_karen_weekday_agenda_query"',
+        '"agenda_query", "maybe_handle_karen_day0_route"',
+        '"reminder_create", "handle_reminder_gate"',
+        '"reminder_create", "maybe_handle_karen_natural_weekday_reminder"',
+        '"destructive_confirmation", "maybe_handle_karen_gcal_create_confirmation_first"',
+        '"destructive_confirmation", "maybe_handle_pending_gcal_delete_confirmation"',
+        '"destructive_confirmation", "maybe_handle_pending_gcal_appointment_confirmation"',
     ):
         assert_contains(bot, needle, "bot observer labels")
 

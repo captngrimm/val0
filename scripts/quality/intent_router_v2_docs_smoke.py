@@ -111,11 +111,15 @@ def test_runtime_behavior_files_not_modified() -> None:
         " M docs/architecture/INTENT_ROUTER_V2_MARCHING_ORDER.md",
         "A  docs/ops/ROUTER_05_SHADOW_OBSERVATION_PLAYBOOK.md",
         "?? docs/ops/ROUTER_05_SHADOW_OBSERVATION_PLAYBOOK.md",
+        " M docs/ops/ROUTER_05_SHADOW_OBSERVATION_PLAYBOOK.md",
         "A  scripts/ops/router_shadow_mode.sh",
         "?? scripts/ops/router_shadow_mode.sh",
+        " M scripts/ops/router_shadow_mode.sh",
         "?? scripts/ops/",
         "A  scripts/quality/router_shadow_playbook_smoke.py",
         "?? scripts/quality/router_shadow_playbook_smoke.py",
+        " M scripts/quality/router_shadow_playbook_smoke.py",
+        " M scripts/quality/intent_router_v2_observer_smoke.py",
     )
     for raw in result.stdout.splitlines():
         if not raw.strip():
