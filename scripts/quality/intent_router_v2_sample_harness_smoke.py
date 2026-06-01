@@ -35,10 +35,20 @@ def test_harness_exists_compiles_and_contains_samples() -> None:
     source = HARNESS.read_text(encoding="utf-8")
     for needle in (
         "Val que tareas tengo activas?",
+        "Val elimina la tarea 1",
+        "Eliminarla del listado",
         "Recuérdame en 10 minutos llamar a Mabel",
+        "Val qué recordatorios tengo",
+        "elimina el recordatorio 1",
         "Val agenda prueba calendario mañana a las 10am",
+        "borrar evento dos",
         "Val resume con OCR el último documento",
+        "Val resume documento 2",
         "Qué tengo guardado del caso del terreno",
+        "Vale qué tareas tengo activas",
+        "va el que tengo mañana",
+        "bal resume con OCR el último documento",
+        "jajaja",
         "--json",
         "--allow-failures",
         "classify_intent_shadow",
@@ -70,12 +80,30 @@ def test_harness_runs_text_and_json() -> None:
     rows = json.loads(json_run.stdout)
     assert_true(isinstance(rows, list) and len(rows) >= 20, "json output has sample rows")
     assert_true(all(row.get("pass") for row in rows), "json output all pass")
-    assert_true(any(row.get("expected") == "document_ocr" for row in rows), "json output includes OCR sample")
+    expected_intents = {str(row.get("expected") or "") for row in rows}
+    for intent in (
+        "task_delete",
+        "reminder_query",
+        "gcal_delete",
+        "document_summary",
+        "document_ocr",
+        "case_status",
+        "llm_fallback",
+    ):
+        assert_true(intent in expected_intents, f"json output includes {intent}")
+    inputs = {str(row.get("input") or "") for row in rows}
+    for phrase in (
+        "Vale qué tareas tengo activas",
+        "va el que tengo mañana",
+        "bal resume con OCR el último documento",
+    ):
+        assert_true(phrase in inputs, f"json output includes voice typo example: {phrase}")
 
 
 def test_architecture_doc_mentions_arch_03() -> None:
     doc = DOC.read_text(encoding="utf-8")
     assert_contains(doc, "ARCH-03 Shadow Sample Harness", "doc mentions ARCH-03")
+    assert_contains(doc, "ROUTER-08 Expanded Shadow Sample Set", "doc mentions ROUTER-08")
     assert_contains(doc, "intent_router_v2_sample_harness.py", "doc mentions harness path")
     assert_contains(doc, "--json", "doc mentions json mode")
 

@@ -147,6 +147,15 @@ ROUTER-07 records the first clean real shadow observation pass:
 - Karen RC full smoke passed after shadow mode was disabled.
 - There was no behavior change.
 
+## ROUTER-08 Expanded Shadow Sample Set
+
+ROUTER-08 expands `scripts/diagnostics/intent_router_v2_sample_harness.py` with dangerous and ambiguous real-world phrases before any router refactor.
+
+- Coverage now includes task delete/complete, reminder query/delete/update, Google Calendar delete variants, pending confirmations, numbered document references, OCR requests, case/finca variants, voice-prefix typo examples, and LLM fallback samples.
+- The harness remains diagnostics-only.
+- It does not call Telegram, Google Calendar, OCR, memory, or live services.
+- There is no behavior change and no message is routed through Intent Router v2.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior

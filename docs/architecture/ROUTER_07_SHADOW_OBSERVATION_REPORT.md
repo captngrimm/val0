@@ -55,3 +55,7 @@ python3 scripts/quality/karen_rc_full_smoke.py --keep-going
 - ROUTER-08: Expand shadow sample set with delete/reminder/document variants.
 - ROUTER-09: Shadow actual-label coverage for remaining high-value routes.
 - ROUTER-10: First shadow-only migration candidate proposal, with no runtime behavior changes.
+
+## Follow-up
+
+ROUTER-08 expands the shadow sample harness after this first clean observation. The goal is to cover dangerous and ambiguous phrases in diagnostics before any runtime router refactor begins.

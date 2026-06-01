@@ -148,7 +148,7 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
         if not _has_any(normalized, ("agenda prueba", "agenda cita", "crea evento", "pon en mi calendario", "agrega al calendario")):
             return _decision(_candidate("agenda_query", 0.95, "deterministic", normalized, "matched agenda/calendar read query", client))
 
-    if re.search(r"\b(elimina|borra|cancela|quita)\s+(?:el\s+)?(?:evento|evento de google calendar)\s+(?:\d+|uno|dos|tres)\b", normalized):
+    if re.search(r"\b(elimina|eliminar|borra|borrar|cancela|cancelar|quita|quitar)\s+(?:el\s+)?(?:evento|evento de google calendar|compromiso)\s+(?:\d+|uno|dos|tres)\b", normalized):
         return _decision(_candidate(
             "gcal_delete",
             0.96,
@@ -160,13 +160,49 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
             needs_confirmation=True,
         ))
 
+    if re.search(r"\b(elimina|eliminar|borra|borrar|cancela|cancelar|quita|quitar)\s+(?:el\s+)?recordatorio\s+(?:\d+|uno|dos|tres)\b", normalized):
+        return _decision(_candidate(
+            "reminder_delete",
+            0.95,
+            "deterministic",
+            normalized,
+            "matched numbered reminder delete",
+            client,
+            destructive=True,
+            needs_confirmation=True,
+        ))
+
+    if re.search(r"\b(cambia|cambiar|mueve|mover)\s+(?:el\s+)?recordatorio\s+(?:\d+|uno|dos|tres)\b", normalized):
+        return _decision(_candidate(
+            "reminder_update",
+            0.90,
+            "deterministic",
+            normalized,
+            "matched numbered reminder update",
+            client,
+            destructive=False,
+            needs_confirmation=True,
+        ))
+
     if re.search(r"\brecuerdame\b", normalized) or re.search(r"\brecordatorio\s+(?:para|de)\b", normalized):
         return _decision(_candidate("reminder_create", 0.94, "deterministic", normalized, "matched reminder creation", client))
 
     if _has_any(normalized, ("que recordatorios tengo", "recordatorios de manana", "recordatorios vencidos", "recordatorios pasados")):
         return _decision(_candidate("reminder_query", 0.94, "deterministic", normalized, "matched reminder query", client))
 
-    if re.search(r"\b(elimina|borra|quita|cancela)\s+(?:la\s+)?tarea\s+(?:\d+|uno|dos|tres)\b", normalized):
+    if re.search(r"\b(marca|marcar|completa|completar|cierra|cerrar)\s+(?:la\s+)?tarea\s+(?:\d+|uno|dos|tres)\b", normalized):
+        return _decision(_candidate(
+            "task_complete",
+            0.95,
+            "deterministic",
+            normalized,
+            "matched numbered task completion",
+            client,
+            destructive=False,
+            needs_confirmation=False,
+        ))
+
+    if re.search(r"\b(elimina|eliminar|borra|borrar|quita|quitar|cancela|cancelar)\s+(?:la\s+)?tarea\s+(?:\d+|uno|dos|tres)\b", normalized):
         return _decision(_candidate(
             "task_delete",
             0.95,
@@ -184,10 +220,10 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
     if _has_any(normalized, ("resume con ocr", "resumen con ocr", "haz ocr", "lee visualmente", "lectura visual")):
         return _decision(_candidate("document_ocr", 0.95, "deterministic", normalized, "matched explicit document OCR request", client))
 
-    if _has_any(normalized, ("resume el ultimo documento", "resumen del documento", "dame el resumen", "resume este documento", "que documentos tengo", "inventario de documentos")):
+    if _has_any(normalized, ("resume el ultimo documento", "resume documento", "resume el documento", "resumen del documento", "dame el resumen", "resume este documento", "que documentos tengo", "inventario de documentos")):
         return _decision(_candidate("document_summary", 0.90, "deterministic", normalized, "matched document summary/inventory request", client))
 
-    if _has_any(normalized, ("caso del terreno", "finca", "nora", "abogada", "estatus del caso", "que tengo del caso")):
+    if _has_any(normalized, ("caso del terreno", "finca", "herederos", "nora", "abogada", "estatus del caso", "que tengo del caso")):
         return _decision(_candidate("case_status", 0.86, "deterministic", normalized, "matched case/finca/legal context", client))
 
     if _has_any(normalized, ("guarda", "recuerda que", "anota", "nota")) and len(normalized) >= 12:
