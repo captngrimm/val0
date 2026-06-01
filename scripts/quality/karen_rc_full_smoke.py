@@ -39,6 +39,7 @@ def _checks() -> list[Check]:
         Check("GCal stale delete guard", [py, "scripts/quality/karen_gcal_delete_stale_context_smoke.py"]),
         Check("Monday reminder/agenda", [py, "scripts/quality/karen_natural_monday_reminder_agenda_smoke.py"]),
         Check("pending reminder context", [py, "scripts/quality/karen_pending_reminder_context_smoke.py"]),
+        Check("Karen reminder time parser", ["./scripts/val0py", "scripts/quality/karen_reminder_time_parser_smoke.py"]),
         Check("numbered reminder/task management", [py, "scripts/quality/karen_numbered_reminder_task_management_smoke.py"]),
         Check("vencidos reminder variants", [py, "scripts/quality/karen_reminder_vencidos_action_variants_smoke.py"]),
         Check("tomorrow agenda/task completion", [py, "scripts/quality/karen_tomorrow_agenda_task_completion_smoke.py"]),

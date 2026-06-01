@@ -6207,7 +6207,7 @@ def _parse_karen_weekday_agenda_target(text: str, *, now=None):
     from zoneinfo import ZoneInfo
 
     norm = _norm_text(text or "")
-    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"[¿?¡!.,;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal)\s+", "", norm).strip()
     if not re.search(r"\b(que tengo|que hay|tengo algo|hay algo|agenda)\b", norm):
@@ -6356,7 +6356,7 @@ async def maybe_handle_karen_weekday_agenda_query(update, chat_id: int, client_i
 
 def _karen_registered_name_norm(text: str) -> str:
     norm = _norm_text(text or "")
-    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"[¿?¡!.,;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal)\s+", "", norm).strip()
     return norm
@@ -6416,26 +6416,56 @@ async def maybe_handle_karen_name_language_guard(update, chat_id: int, client_id
 
 
 def _parse_karen_time_phrase(norm: str) -> tuple[int, int] | None:
-    match = re.search(
-        r"\ba\s+las?\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?(?:\s+de\s+la\s+(?P<daypart>manana|mañana|tarde|noche))?\b",
-        norm,
-    )
+    """
+    Parse Karen reminder clock phrases without losing minutes.
+
+    Supports:
+    - a las 9:20
+    - a las 9 y 20
+    - para las 9:20
+    - 9:20
+    - 3 de la tarde
+    - 10 de la noche
+    - 13 / 13:30 military-style
+    """
+    patterns = [
+        # Prefer phrases with daypart so "3 de la tarde" becomes 15:00.
+        r"\b(?:a\s+las?|a\s+la|para\s+las?|para\s+la)?\s*"
+        r"(?P<hour>\d{1,2})"
+        r"(?:(?::|\s+y\s+|\s+con\s+)(?P<minute>\d{1,2}))?"
+        r"\s*(?P<ampm>am|pm|a\s*m|p\s*m)?"
+        r"\s+de\s+la\s+(?P<daypart>manana|mañana|tarde|noche)\b",
+
+        # General clock expression.
+        r"\b(?:a\s+las?|a\s+la|para\s+las?|para\s+la)?\s*"
+        r"(?P<hour>\d{1,2})"
+        r"(?:(?::|\s+y\s+|\s+con\s+)(?P<minute>\d{1,2}))?"
+        r"\s*(?P<ampm>am|pm|a\s*m|p\s*m)?\b",
+    ]
+
+    match = None
+    for pattern in patterns:
+        match = re.search(pattern, norm)
+        if match:
+            break
     if not match:
         return None
+
     hour = int(match.group("hour"))
     minute = int(match.group("minute") or "0")
-    ampm = match.group("ampm")
-    daypart = match.group("daypart")
+    ampm = (match.group("ampm") or "").replace(" ", "")
+    daypart = match.groupdict().get("daypart")
+
     if ampm == "pm" and hour < 12:
         hour += 12
     elif ampm == "am" and hour == 12:
         hour = 0
     elif not ampm and daypart in ("tarde", "noche") and 1 <= hour <= 11:
         hour += 12
+
     if not (0 <= hour <= 23 and 0 <= minute <= 59):
         return None
     return hour, minute
-
 
 def _karen_small_number_word_to_int(token: str) -> int | None:
     value = _karen_number_word_to_int(token)
@@ -6456,9 +6486,40 @@ def _karen_small_number_word_to_int(token: str) -> int | None:
     }.get(str(token or "").strip())
 
 
-def _parse_karen_relative_minutes(norm: str) -> tuple[int, tuple[int, int], object] | None:
+def _parse_karen_relative_minutes(norm: str, *, now=None) -> tuple[int, tuple[int, int], object] | None:
     import datetime as dt
     from zoneinfo import ZoneInfo
+
+    tz = ZoneInfo("America/Panama")
+    base_now = now or dt.datetime.now(tz)
+    if getattr(base_now, "tzinfo", None) is None:
+        base_now = base_now.replace(tzinfo=tz)
+
+    half_hour = re.search(r"\b(?:en|dentro\s+de)\s+(?:media\s+hora|medio\s+hora)\b", norm)
+    if half_hour:
+        minutes = 30
+        due_local = base_now + dt.timedelta(minutes=minutes)
+        return minutes, (due_local.hour, due_local.minute), due_local.date()
+
+    hour_and_half = re.search(
+        r"\b(?:en|dentro\s+de)\s+(?:una|1)\s+hora\s+y\s+media\b",
+        norm,
+    )
+    if hour_and_half:
+        minutes = 90
+        due_local = base_now + dt.timedelta(minutes=minutes)
+        return minutes, (due_local.hour, due_local.minute), due_local.date()
+
+    hour_match = re.search(
+        r"\b(?:en|dentro\s+de)\s+(?P<num>\d{1,2}|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+horas?\b",
+        norm,
+    )
+    if hour_match:
+        hours = _karen_small_number_word_to_int(hour_match.group("num"))
+        if hours and hours >= 1:
+            minutes = int(hours) * 60
+            due_local = base_now + dt.timedelta(minutes=minutes)
+            return minutes, (due_local.hour, due_local.minute), due_local.date()
 
     match = re.search(
         r"\b(?:en|dentro\s+de)\s+(?P<num>\d{1,3}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta)\s+minutos?\b",
@@ -6469,8 +6530,7 @@ def _parse_karen_relative_minutes(norm: str) -> tuple[int, tuple[int, int], obje
     minutes = _karen_small_number_word_to_int(match.group("num"))
     if not minutes or minutes < 1:
         return None
-    tz = ZoneInfo("America/Panama")
-    due_local = dt.datetime.now(tz) + dt.timedelta(minutes=int(minutes))
+    due_local = base_now + dt.timedelta(minutes=int(minutes))
     return int(minutes), (due_local.hour, due_local.minute), due_local.date()
 
 
@@ -6481,7 +6541,7 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
 
     raw = text or ""
     norm = _norm_text(raw)
-    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"[¿?¡!.,;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal)\s+", "", norm).strip()
     if not (
@@ -6497,7 +6557,7 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
     if now_local.tzinfo is None:
         now_local = now_local.replace(tzinfo=tz)
 
-    relative_minutes = _parse_karen_relative_minutes(norm)
+    relative_minutes = _parse_karen_relative_minutes(norm, now=now_local)
     target_date = None
     date_span = None
     if relative_minutes:
@@ -6547,7 +6607,12 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
     title = re.sub(r"^(?:recuerdame|recordarme|recordatorio)\s+", "", title).strip()
     title = re.sub(r"^quiero\s+registrar\s+un\s+recordatorio\s+(?:para\s+)?", "", title).strip()
     title = re.sub(
-        r"\b(?:en|dentro\s+de)\s+(?:\d{1,3}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta)\s+minutos?\b",
+        r"\b(?:en|dentro\s+de)\s+(?:"
+        r"media\s+hora|medio\s+hora|"
+        r"(?:una|1)\s+hora\s+y\s+media|"
+        r"(?:\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+horas?|"
+        r"(?:\d{1,3}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta)\s+minutos?"
+        r")\b",
         " ",
         title,
     )
@@ -6600,7 +6665,7 @@ def _parse_karen_pending_reminder_reply(text: str) -> dict:
 
     raw = text or ""
     norm = _norm_text(raw)
-    norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
+    norm = re.sub(r"[¿?¡!.,;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye|val|valeria|vale|bal|pal|va\s+el)\s+", "", norm).strip()
 
