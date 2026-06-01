@@ -123,6 +123,20 @@ Example comparison:
 
 This comparison data will guide the future router refactor. Once handler labels are broad enough, we can measure mismatches before moving any lane from legacy hard gates into router-owned decisions.
 
+## ROUTER-05 Shadow Observation Playbook
+
+ROUTER-05 adds the operator playbook and helper command for short-window shadow observation:
+
+- Playbook: `docs/ops/ROUTER_05_SHADOW_OBSERVATION_PLAYBOOK.md`
+- Helper: `scripts/ops/router_shadow_mode.sh`
+
+The helper can temporarily enable `VAL0_INTENT_ROUTER_V2_SHADOW=true` through a systemd drop-in, inspect shadow/actual/compare logs, and disable the drop-in again. This remains short-window observation only:
+
+- Shadow mode is default OFF.
+- There is no behavior change.
+- No message is routed through Intent Router v2.
+- The comparison logs guide future refactor work; they do not directly change runtime behavior.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior
