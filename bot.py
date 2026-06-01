@@ -66,6 +66,7 @@ from core.founder_intro import (
     render_founder_intro_response,
 )
 from core.conversation_router import classify_deterministic_intent, normalize_message
+from core.intent_router_v2 import classify_intent_shadow
 from core.case_timeline import (
     build_timeline_events_from_case_notes,
     safe_timeline_event_summary,
@@ -379,6 +380,29 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger("val0-bot")
+
+
+def _maybe_log_intent_router_v2_shadow(text: str, *, chat_id: int | None = None, client_id: str | None = None, pending_state=None) -> None:
+    if os.getenv("VAL0_INTENT_ROUTER_V2_SHADOW", "").strip().lower() != "true":
+        return
+    try:
+        decision = classify_intent_shadow(
+            text or "",
+            client_id=client_id,
+            chat_id=chat_id,
+            pending_state=pending_state,
+        )
+        preview = re.sub(r"\s+", " ", str(text or "")).strip()[:160]
+        logger.info(
+            '[INTENT_ROUTER_V2_SHADOW] client=%s intent=%s confidence=%.2f reason="%s" text="%s"',
+            client_id or "unknown",
+            decision.selected_intent,
+            float(decision.confidence or 0.0),
+            str(decision.reason or "")[:180],
+            preview,
+        )
+    except Exception as e:
+        logger.exception(f"[INTENT_ROUTER_V2_SHADOW] failed: {e}")
 
 # =========================
 # CASE CAPTURE (Phase B0)
@@ -6840,6 +6864,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     chat = update.effective_chat
     chat_id = chat.id
     client_id = resolve_client_id(chat_id)
+    _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id)
 
     try:
         if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):
@@ -15882,6 +15907,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     client_id = resolve_client_id(chat_id)
     tg_msg_id = getattr(update.message, "message_id", None)
+    _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id)
 
     try:
         if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):

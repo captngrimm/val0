@@ -78,14 +78,20 @@ def test_runtime_behavior_files_not_modified() -> None:
     assert_true(result.returncode == 0, "git status succeeded")
     allowed_prefixes = (
         " M clients/karen/CLIENT_GROCERY.md",
+        " M bot.py",
+        "A  core/intent_router_v2.py",
+        "?? core/intent_router_v2.py",
         "A  docs/architecture/INTENT_ROUTER_V2_MARCHING_ORDER.md",
         "?? docs/architecture/INTENT_ROUTER_V2_MARCHING_ORDER.md",
         "A  scripts/diagnostics/route_inventory.py",
         "?? scripts/diagnostics/route_inventory.py",
         "A  scripts/quality/intent_router_v2_docs_smoke.py",
         "?? scripts/quality/intent_router_v2_docs_smoke.py",
+        "A  scripts/quality/intent_router_v2_shadow_smoke.py",
+        "?? scripts/quality/intent_router_v2_shadow_smoke.py",
         " M scripts/diagnostics/route_inventory.py",
         " M scripts/quality/intent_router_v2_docs_smoke.py",
+        " M scripts/quality/intent_router_v2_shadow_smoke.py",
         " M docs/architecture/INTENT_ROUTER_V2_MARCHING_ORDER.md",
     )
     for raw in result.stdout.splitlines():

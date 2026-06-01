@@ -77,6 +77,19 @@ The `RouterPriorityMap` owns the priority model:
 
 The priority map should be explicit enough that a new route cannot accidentally jump ahead of tasks, reminders, agenda, or documents.
 
+## ARCH-02 Shadow Skeleton
+
+ARCH-02 adds `core/intent_router_v2.py` as a shadow classifier only.
+
+- The shadow classifier exists.
+- It is default OFF.
+- It is enabled only with `VAL0_INTENT_ROUTER_V2_SHADOW=true`.
+- It does not route messages.
+- It does not remove or bypass any current Karen RC hard gate.
+- It does not call external APIs or mutate state.
+
+The goal is to compare predicted intent against the current routes before any refactor changes behavior. For now, the shadow hook can log predicted intent, confidence, reason, client, and text preview. A future step is to log predicted intent vs actual handler once handler labels are available across the existing routes.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior
