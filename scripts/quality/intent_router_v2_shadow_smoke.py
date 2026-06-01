@@ -78,9 +78,9 @@ def test_classifier_examples() -> None:
 def test_shadow_env_defaults_off_and_hook_is_non_routing() -> None:
     assert_true(os.getenv("VAL0_INTENT_ROUTER_V2_SHADOW") != "true", "shadow env defaults off in smoke")
     bot = _read("bot.py")
-    assert_contains(bot, 'VAL0_INTENT_ROUTER_V2_SHADOW", "").strip().lower() != "true"', "env-gated shadow hook")
+    assert_contains(bot, 'VAL0_INTENT_ROUTER_V2_SHADOW", "").strip().lower() == "true"', "env-gated shadow hook")
     assert_contains(bot, "[INTENT_ROUTER_V2_SHADOW]", "shadow log marker")
-    assert_contains(bot, "_maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id)", "hook called in text paths")
+    assert_contains(bot, "_maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id, message_id=", "hook called in text paths")
 
     start = bot.find("def _maybe_log_intent_router_v2_shadow")
     end = bot.find("\n# =========================", start)

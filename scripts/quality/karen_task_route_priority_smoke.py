@@ -59,7 +59,7 @@ def test_task_query_beats_case_routes() -> None:
     assert_contains(visibility, "render_karen_tasks_view", "task query renders task list")
     for body, label in ((handle, "handle_text"), (pipeline, "pipeline")):
         task_idx = body.find("maybe_handle_karen_task_query_hard_gate")
-        task_call_block = body[task_idx:task_idx + 180] if task_idx >= 0 else ""
+        task_call_block = body[task_idx:task_idx + 360] if task_idx >= 0 else ""
         gcal_idx = body.find("maybe_handle_karen_gcal_create_confirmation_first")
         case_idx = body.find("maybe_handle_karen_case_facts")
         case_status_idx = body.find("maybe_handle_karen_case_status")

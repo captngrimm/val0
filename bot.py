@@ -67,6 +67,11 @@ from core.founder_intro import (
 )
 from core.conversation_router import classify_deterministic_intent, normalize_message
 from core.intent_router_v2 import classify_intent_shadow
+from core.intent_router_v2_observer import (
+    record_actual_intent,
+    record_predicted_intent,
+    render_intent_observation,
+)
 from core.case_timeline import (
     build_timeline_events_from_case_notes,
     safe_timeline_event_summary,
@@ -382,8 +387,12 @@ logging.basicConfig(
 logger = logging.getLogger("val0-bot")
 
 
-def _maybe_log_intent_router_v2_shadow(text: str, *, chat_id: int | None = None, client_id: str | None = None, pending_state=None) -> None:
-    if os.getenv("VAL0_INTENT_ROUTER_V2_SHADOW", "").strip().lower() != "true":
+def _intent_router_v2_shadow_enabled() -> bool:
+    return os.getenv("VAL0_INTENT_ROUTER_V2_SHADOW", "").strip().lower() == "true"
+
+
+def _maybe_log_intent_router_v2_shadow(text: str, *, chat_id: int | None = None, client_id: str | None = None, message_id=None, pending_state=None) -> None:
+    if not _intent_router_v2_shadow_enabled():
         return
     try:
         decision = classify_intent_shadow(
@@ -392,6 +401,7 @@ def _maybe_log_intent_router_v2_shadow(text: str, *, chat_id: int | None = None,
             chat_id=chat_id,
             pending_state=pending_state,
         )
+        record_predicted_intent(chat_id, message_id, decision)
         preview = re.sub(r"\s+", " ", str(text or "")).strip()[:160]
         logger.info(
             '[INTENT_ROUTER_V2_SHADOW] client=%s intent=%s confidence=%.2f reason="%s" text="%s"',
@@ -403,6 +413,27 @@ def _maybe_log_intent_router_v2_shadow(text: str, *, chat_id: int | None = None,
         )
     except Exception as e:
         logger.exception(f"[INTENT_ROUTER_V2_SHADOW] failed: {e}")
+
+
+def _maybe_log_intent_router_v2_actual(actual_intent: str, handler_name: str, *, chat_id: int | None = None, message_id=None, text: str = "", reason: str = "") -> None:
+    if not _intent_router_v2_shadow_enabled():
+        return
+    try:
+        observation = record_actual_intent(chat_id, message_id, actual_intent, handler_name, reason=reason)
+        preview = re.sub(r"\s+", " ", str(text or "")).strip()[:160]
+        logger.info(
+            '[INTENT_ROUTER_V2_ACTUAL] intent=%s handler=%s text="%s"',
+            actual_intent,
+            handler_name,
+            preview,
+        )
+        if observation.predicted_intent:
+            logger.info(
+                "[INTENT_ROUTER_V2_COMPARE] %s",
+                render_intent_observation(observation),
+            )
+    except Exception as e:
+        logger.exception(f"[INTENT_ROUTER_V2_ACTUAL] failed: {e}")
 
 # =========================
 # CASE CAPTURE (Phase B0)
@@ -6864,7 +6895,8 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     chat = update.effective_chat
     chat_id = chat.id
     client_id = resolve_client_id(chat_id)
-    _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id)
+    shadow_message_id = getattr(update.message, "message_id", None)
+    _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id, message_id=shadow_message_id)
 
     try:
         if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):
@@ -6876,6 +6908,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     # Must remain above GCal/document/case routes and MEMORY_TEST_TEXT insertion.
     try:
         if await maybe_handle_karen_task_query_hard_gate(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_query", "maybe_handle_karen_task_query_hard_gate", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_QUERY_HARD_GATE_PIPELINE] failed: {e}")
@@ -6906,6 +6939,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_karen_gcal_event_number_delete(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("gcal_delete", "maybe_handle_karen_gcal_event_number_delete", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_GCAL_EVENT_NUMBER_DELETE_PIPELINE] failed: {e}")
@@ -6914,12 +6948,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         if _looks_like_karen_gcal_event_create_request(text):
             logger.info("[GCAL_CREATE_ROUTE] matched live text category=gcal_event_create")
             if await try_appointment_save_natural(update, chat_id, text):
+                _maybe_log_intent_router_v2_actual("gcal_create", "try_appointment_save_natural", chat_id=chat_id, message_id=shadow_message_id, text=text)
                 return
     except Exception as e:
         logger.exception(f"[GCAL_CREATE_ROUTE_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_weekday_agenda_query(update, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("agenda_query", "maybe_handle_karen_weekday_agenda_query", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_WEEKDAY_AGENDA_PIPELINE] failed: {e}")
@@ -7887,6 +7923,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
         try:
             if await maybe_handle_document_ocr_query(update, context, chat_id, text):
+                _maybe_log_intent_router_v2_actual("document_ocr", "maybe_handle_document_ocr_query", chat_id=chat_id, message_id=shadow_message_id, text=text)
                 return
         except Exception as e:
             logger.exception(f"[KAREN_DOCUMENT_OCR_EARLY_PIPELINE] failed: {e}")
@@ -7930,6 +7967,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 and any(m in early_doc_norm for m in early_doc_context_markers)
             ):
                 if await maybe_handle_document_summary_query(update, context, chat_id, text):
+                    _maybe_log_intent_router_v2_actual("document_summary", "maybe_handle_document_summary_query", chat_id=chat_id, message_id=shadow_message_id, text=text)
                     return
         except Exception as e:
             logger.exception(f"[KAREN_COMBINED_LEGAL_DOC_SUMMARY_GATE] failed: {e}")
@@ -9848,6 +9886,7 @@ Classifier confidence: {confidence}
     # --------------------------------------------------
     try:
         if await handle_reminder_gate(update, chat_id, text, _audit):
+            _maybe_log_intent_router_v2_actual("reminder_create", "handle_reminder_gate", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
 
     except Exception as e:
@@ -15907,7 +15946,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     client_id = resolve_client_id(chat_id)
     tg_msg_id = getattr(update.message, "message_id", None)
-    _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id)
+    _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id, message_id=tg_msg_id)
 
     try:
         if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):
@@ -15919,6 +15958,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Must remain above GCal/document/case routes and MEMORY_TEST_TEXT insertion.
     try:
         if await maybe_handle_karen_task_query_hard_gate(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_query", "maybe_handle_karen_task_query_hard_gate", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_QUERY_HARD_GATE_HANDLE_TEXT] failed: {e}")
@@ -15949,6 +15989,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_gcal_event_number_delete(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("gcal_delete", "maybe_handle_karen_gcal_event_number_delete", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_GCAL_EVENT_NUMBER_DELETE_HANDLE_TEXT] failed: {e}")
@@ -15957,12 +15998,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if _looks_like_karen_gcal_event_create_request(text):
             logger.info("[GCAL_CREATE_ROUTE] matched live text category=gcal_event_create")
             if await try_appointment_save_natural(update, chat_id, text):
+                _maybe_log_intent_router_v2_actual("gcal_create", "try_appointment_save_natural", chat_id=chat_id, message_id=tg_msg_id, text=text)
                 return
     except Exception as e:
         logger.exception(f"[GCAL_CREATE_ROUTE_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_weekday_agenda_query(update, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("agenda_query", "maybe_handle_karen_weekday_agenda_query", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_WEEKDAY_AGENDA_HANDLE_TEXT] failed: {e}")
@@ -16308,6 +16351,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if await maybe_handle_karen_gcal_event_number_delete(update, chat_id, text):
             return
         if await try_gcal_delete_natural(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("gcal_delete", "try_gcal_delete_natural", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_GCAL_DELETE_PRIORITY_GATE] failed: {e}")
@@ -16667,6 +16711,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_document_ocr_query(update, context, chat_id, text):
+            _maybe_log_intent_router_v2_actual("document_ocr", "maybe_handle_document_ocr_query", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_DOCUMENT_OCR_PIPELINE] failed: {e}")
@@ -16707,6 +16752,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if any(m in priority_doc_norm for m in priority_doc_markers):
             if await maybe_handle_document_summary_query(update, context, chat_id, text):
+                _maybe_log_intent_router_v2_actual("document_summary", "maybe_handle_document_summary_query", chat_id=chat_id, message_id=tg_msg_id, text=text)
                 return
     except Exception as e:
         logger.exception(f"[KAREN_VFMS_PRIORITY_SUMMARY_GATE] failed: {e}")
@@ -16732,6 +16778,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await handle_reminder_gate(update, chat_id, text, _audit):
+            _maybe_log_intent_router_v2_actual("reminder_create", "handle_reminder_gate", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[REMINDER_PRIORITY_GATE] failed: {e}")
@@ -16820,6 +16867,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if await maybe_handle_document_ocr_query(update, context, chat_id, text):
+            _maybe_log_intent_router_v2_actual("document_ocr", "maybe_handle_document_ocr_query", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
 
         if await maybe_handle_document_query(update, context, chat_id, text):
@@ -16829,6 +16877,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if await maybe_handle_document_summary_query(update, context, chat_id, text):
+            _maybe_log_intent_router_v2_actual("document_summary", "maybe_handle_document_summary_query", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
 
         if await maybe_handle_document_semantic_query(update, context, chat_id, text):
@@ -16854,6 +16903,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await maybe_handle_karen_case_status(update, context, text):
+            _maybe_log_intent_router_v2_actual("case_status", "maybe_handle_karen_case_status", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_CASE_STATUS_GATE] failed: {e}")

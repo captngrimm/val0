@@ -105,6 +105,24 @@ python3 scripts/diagnostics/intent_router_v2_sample_harness.py --json
 
 This is still shadow-only. Passing the harness does not mean runtime behavior changed; it means the planned router prediction matches the current expected intent map for sampled phrases.
 
+## ROUTER-04 Predicted vs Actual Handler Labels
+
+ROUTER-04 adds shadow-only observation helpers for comparing predicted intent against the current legacy handler that actually consumed a message.
+
+- Predicted intent comes from Intent Router v2.
+- Actual intent comes from lightweight legacy handler labels.
+- Logging remains gated by `VAL0_INTENT_ROUTER_V2_SHADOW=true`.
+- The router is still shadow-only.
+- There is no behavior change and no message is routed through Intent Router v2.
+
+Example comparison:
+
+```text
+[INTENT_ROUTER_V2_COMPARE] predicted=task_query actual=task_query match=True confidence=0.95 handler=maybe_handle_karen_task_query_hard_gate
+```
+
+This comparison data will guide the future router refactor. Once handler labels are broad enough, we can measure mismatches before moving any lane from legacy hard gates into router-owned decisions.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior
