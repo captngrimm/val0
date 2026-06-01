@@ -71,10 +71,20 @@ Use the value map and inventory diagnostic to identify active source-of-truth do
 
 Use these for future newsletter/article/idea intake. They define how to evaluate signals against Val0 source-of-truth docs without auto-updating the roadmap or interrupting the active sprint without approval. ValPrime is the roadmap keeper; intake chat should emit copy-pasteable `/roadmap_signal` blocks for manual review, and ValPrime should eventually append those records into a roadmap signal registry. Current phase remains manual/design. There is no Notion dependency.
 
+## New Chat Recovery
+
+- `docs/ops/NEWCHAT_01_RECOVERY_PROTOCOL.md`
+- `docs/ops/NEWCHAT_BRIDGE_PROMPT.md`
+- `scripts/diagnostics/new_chat_recovery_brief.py`
+- ValPrime `/continuity` or natural "new chat bundle"
+
+Use these to recover a new Val0 cockpit without relying on memory. ValPrime continuity provides the human/operational bundle; repo diagnostics verify technical state.
+
 ## Commands
 
 ```bash
 python3 scripts/quality/karen_rc_full_smoke.py --keep-going
+python3 scripts/diagnostics/new_chat_recovery_brief.py
 python3 scripts/diagnostics/intent_router_v2_sample_harness.py
 python3 scripts/diagnostics/intent_router_v2_coverage_report.py
 python3 scripts/diagnostics/markdown_docs_inventory.py
