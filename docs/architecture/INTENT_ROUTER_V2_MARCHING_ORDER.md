@@ -164,6 +164,18 @@ The report compares sample-harness coverage, shadow classifier coverage, actual 
 
 This remains diagnostics-only. There is no behavior change.
 
+## ROUTER-10 Missing Actual Labels
+
+ROUTER-10 adds shadow-only actual labels for previously unlabeled legacy routes:
+
+- `pending_action_reply`
+- `reminder_query`
+- `reminder_delete`
+- `reminder_update`
+- `task_complete`
+
+The next step is live shadow observation for these intents. This remains observer-only; no message is routed through Intent Router v2 and there is no behavior change.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior

@@ -82,3 +82,15 @@ python3 scripts/diagnostics/intent_router_v2_coverage_report.py --json
 ```
 
 The script reads the sample harness, scans observer labels, checks the ROUTER-07 observation report, and writes a local copy under `tmp/router_coverage/`.
+
+## ROUTER-10 Update
+
+ROUTER-10 adds the missing actual labels for:
+
+- `pending_action_reply`
+- `reminder_query`
+- `reminder_delete`
+- `reminder_update`
+- `task_complete`
+
+After this label-only change, those lanes should move from `NEEDS_ACTUAL_LABEL` to `NEEDS_LIVE_OBSERVATION`. The next step is a short shadow observation window for those intents. This is still not a router refactor and introduces no behavior change.

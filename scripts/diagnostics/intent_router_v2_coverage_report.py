@@ -83,7 +83,7 @@ def _actual_label_intents() -> set[str]:
     bot = _read(BOT)
     intents: set[str] = set()
     for intent in KNOWN_CLASSIFIER_INTENTS:
-        if f'"{intent}",' in bot or f"'{intent}'," in bot:
+        if f'"{intent}",' in bot or f"'{intent}'," in bot or f'"{intent}"' in bot or f"'{intent}'" in bot:
             intents.add(intent)
     if "[INTENT_ROUTER_V2_ACTUAL]" not in bot or "record_actual_intent" not in bot:
         return set()

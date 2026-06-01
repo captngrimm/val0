@@ -5871,6 +5871,19 @@ def _parse_karen_reminder_management(text: str) -> dict:
     return {}
 
 
+def _observer_intent_for_karen_reminder_management(text: str) -> str:
+    list_when = _looks_like_karen_reminder_list_query(text)
+    if list_when:
+        return "reminder_query"
+    request = _parse_karen_reminder_management(text)
+    request_type = str(request.get("type") or "")
+    if request_type == "edit":
+        return "reminder_update"
+    if request_type in {"delete", "context_delete", "recordatorio_number_clarify", "bulk_past_delete_confirm"}:
+        return "reminder_delete"
+    return "reminder_query"
+
+
 async def maybe_handle_karen_reminder_management(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str) -> bool:
     if not update.message:
         return False
@@ -6922,12 +6935,14 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_karen_pending_reminder_context(update, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_karen_pending_reminder_context", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_PENDING_REMINDER_CONTEXT_PIPELINE] failed: {e}")
 
     try:
         if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_karen_task_delete_followup", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_PIPELINE] failed: {e}")
@@ -7000,8 +7015,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_karen_task_delete_followup", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
         if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            _maybe_log_intent_router_v2_actual(_observer_intent_for_karen_reminder_management(text), "maybe_handle_karen_reminder_management", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_REMINDER_MANAGEMENT_PIPELINE] failed: {e}")
@@ -7032,6 +7049,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_complete", "maybe_handle_karen_task_completion", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_COMPLETION_PIPELINE] failed: {e}")
@@ -9759,6 +9777,7 @@ Classifier confidence: {confidence}
 
     try:
         if await handle_pending_reminder_confirmation(update, chat_id, text, _LAST_ACTION):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "handle_pending_reminder_confirmation", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[PENDING_REMINDER_CONFIRM] failed: {e}")
@@ -15977,12 +15996,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_pending_reminder_context(update, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_karen_pending_reminder_context", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_PENDING_REMINDER_CONTEXT_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_karen_task_delete_followup", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_HANDLE_TEXT] failed: {e}")
@@ -16087,12 +16108,15 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_task_delete_followup(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_karen_task_delete_followup", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
         if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            _maybe_log_intent_router_v2_actual(_observer_intent_for_karen_reminder_management(text), "maybe_handle_karen_reminder_management", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
         if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
             return
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_complete", "maybe_handle_karen_task_completion", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_NUMBERED_ACTION_EARLY_HANDLE_TEXT] failed: {e}")
@@ -16126,6 +16150,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            _maybe_log_intent_router_v2_actual(_observer_intent_for_karen_reminder_management(text), "maybe_handle_karen_reminder_management", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_REMINDER_MANAGEMENT_HANDLE_TEXT] failed: {e}")
@@ -16156,6 +16181,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_complete", "maybe_handle_karen_task_completion", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_COMPLETION_HANDLE_TEXT] failed: {e}")
@@ -16341,10 +16367,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await maybe_handle_karen_reminder_management(update, context, chat_id, text):
+            _maybe_log_intent_router_v2_actual(_observer_intent_for_karen_reminder_management(text), "maybe_handle_karen_reminder_management", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
         if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
             return
         if await maybe_handle_karen_task_completion(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_complete", "maybe_handle_karen_task_completion", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_NUMBERED_ACTION_PRIORITY_GATE] failed: {e}")

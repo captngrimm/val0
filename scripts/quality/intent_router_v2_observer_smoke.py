@@ -69,6 +69,14 @@ def test_bot_actual_labels_are_shadow_only() -> None:
         '"destructive_confirmation", "maybe_handle_karen_gcal_create_confirmation_first"',
         '"destructive_confirmation", "maybe_handle_pending_gcal_delete_confirmation"',
         '"destructive_confirmation", "maybe_handle_pending_gcal_appointment_confirmation"',
+        '"pending_action_reply", "maybe_handle_karen_pending_reminder_context"',
+        '"pending_action_reply", "maybe_handle_karen_task_delete_followup"',
+        '"pending_action_reply", "handle_pending_reminder_confirmation"',
+        '"task_complete", "maybe_handle_karen_task_completion"',
+        "_observer_intent_for_karen_reminder_management",
+        "reminder_query",
+        "reminder_delete",
+        "reminder_update",
     ):
         assert_contains(bot, needle, "bot observer labels")
 

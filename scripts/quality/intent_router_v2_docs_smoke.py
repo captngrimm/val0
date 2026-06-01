@@ -130,10 +130,13 @@ def test_runtime_behavior_files_not_modified() -> None:
         " M scripts/quality/intent_router_v2_sample_harness_smoke.py",
         "A  docs/architecture/ROUTER_09_COVERAGE_GAP_REPORT.md",
         "?? docs/architecture/ROUTER_09_COVERAGE_GAP_REPORT.md",
+        " M docs/architecture/ROUTER_09_COVERAGE_GAP_REPORT.md",
         "A  scripts/diagnostics/intent_router_v2_coverage_report.py",
         "?? scripts/diagnostics/intent_router_v2_coverage_report.py",
+        " M scripts/diagnostics/intent_router_v2_coverage_report.py",
         "A  scripts/quality/intent_router_v2_coverage_report_smoke.py",
         "?? scripts/quality/intent_router_v2_coverage_report_smoke.py",
+        " M scripts/quality/intent_router_v2_coverage_report_smoke.py",
     )
     for raw in result.stdout.splitlines():
         if not raw.strip():

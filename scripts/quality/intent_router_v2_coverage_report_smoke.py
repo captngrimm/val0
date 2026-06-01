@@ -67,6 +67,18 @@ def test_script_exists_compiles_and_runs() -> None:
     rows = json.loads(json_result.stdout)
     assert_true(isinstance(rows, list) and rows, "coverage json has rows")
     assert_true(any(row.get("intent") == "document_summary" for row in rows), "json has document_summary")
+    status_by_intent = {str(row.get("intent")): str(row.get("status")) for row in rows}
+    for intent in (
+        "pending_action_reply",
+        "reminder_delete",
+        "reminder_query",
+        "reminder_update",
+        "task_complete",
+    ):
+        assert_true(
+            status_by_intent.get(intent) == "NEEDS_LIVE_OBSERVATION",
+            f"{intent} moved past missing actual label",
+        )
 
 
 def test_report_doc_content() -> None:
@@ -88,6 +100,9 @@ def test_report_doc_content() -> None:
         "clean shadow observation",
         "Karen RC full smoke passing",
         "not a router refactor",
+        "ROUTER-10",
+        "pending_action_reply",
+        "task_complete",
     ):
         assert_contains(text, needle, "coverage report doc")
 
@@ -101,6 +116,7 @@ def test_marching_order_mentions_router_09() -> None:
         "scripts/diagnostics/intent_router_v2_coverage_report.py",
         "NEEDS_ACTUAL_LABEL",
         "NEEDS_LIVE_OBSERVATION",
+        "ROUTER-10 Missing Actual Labels",
     ):
         assert_contains(text, needle, "marching order ROUTER-09")
 
