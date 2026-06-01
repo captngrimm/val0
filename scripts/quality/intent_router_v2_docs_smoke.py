@@ -137,6 +137,10 @@ def test_runtime_behavior_files_not_modified() -> None:
         "A  scripts/quality/intent_router_v2_coverage_report_smoke.py",
         "?? scripts/quality/intent_router_v2_coverage_report_smoke.py",
         " M scripts/quality/intent_router_v2_coverage_report_smoke.py",
+        "A  docs/architecture/ROUTER_12_POST_OBSERVATION_COVERAGE_UPDATE.md",
+        "?? docs/architecture/ROUTER_12_POST_OBSERVATION_COVERAGE_UPDATE.md",
+        "A  scripts/quality/intent_router_v2_post_observation_coverage_smoke.py",
+        "?? scripts/quality/intent_router_v2_post_observation_coverage_smoke.py",
     )
     for raw in result.stdout.splitlines():
         if not raw.strip():

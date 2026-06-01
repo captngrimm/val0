@@ -94,3 +94,14 @@ ROUTER-10 adds the missing actual labels for:
 - `task_complete`
 
 After this label-only change, those lanes should move from `NEEDS_ACTUAL_LABEL` to `NEEDS_LIVE_OBSERVATION`. The next step is a short shadow observation window for those intents. This is still not a router refactor and introduces no behavior change.
+
+## ROUTER-12 Update
+
+ROUTER-12 records a clean follow-up shadow observation for:
+
+- `document_summary`
+- `gcal_delete`
+- `reminder_query`
+- `reminder_delete`
+
+Those lanes should now move to `COVERED`. Remaining `NEEDS_LIVE_OBSERVATION` gaps are `pending_action_reply`, `reminder_update`, `task_complete`, and `task_delete`.

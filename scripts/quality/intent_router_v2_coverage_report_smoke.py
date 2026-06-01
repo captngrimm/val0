@@ -70,15 +70,16 @@ def test_script_exists_compiles_and_runs() -> None:
     status_by_intent = {str(row.get("intent")): str(row.get("status")) for row in rows}
     for intent in (
         "pending_action_reply",
-        "reminder_delete",
-        "reminder_query",
         "reminder_update",
         "task_complete",
+        "task_delete",
     ):
         assert_true(
             status_by_intent.get(intent) == "NEEDS_LIVE_OBSERVATION",
             f"{intent} moved past missing actual label",
         )
+    for intent in ("document_summary", "gcal_delete", "reminder_query", "reminder_delete"):
+        assert_true(status_by_intent.get(intent) == "COVERED", f"{intent} covered after ROUTER-11")
 
 
 def test_report_doc_content() -> None:
@@ -101,6 +102,7 @@ def test_report_doc_content() -> None:
         "Karen RC full smoke passing",
         "not a router refactor",
         "ROUTER-10",
+        "ROUTER-12",
         "pending_action_reply",
         "task_complete",
     ):

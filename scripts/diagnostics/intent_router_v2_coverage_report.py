@@ -17,7 +17,10 @@ from scripts.diagnostics.intent_router_v2_sample_harness import SAMPLES  # noqa:
 
 
 BOT = ROOT / "bot.py"
-OBSERVATION_REPORT = ROOT / "docs" / "architecture" / "ROUTER_07_SHADOW_OBSERVATION_REPORT.md"
+OBSERVATION_REPORTS = (
+    ROOT / "docs" / "architecture" / "ROUTER_07_SHADOW_OBSERVATION_REPORT.md",
+    ROOT / "docs" / "architecture" / "ROUTER_12_POST_OBSERVATION_COVERAGE_UPDATE.md",
+)
 OUTPUT_RELATIVE = Path("tmp/router_coverage/intent_router_v2_coverage_report.txt")
 OUTPUT_PATH = ROOT / OUTPUT_RELATIVE
 
@@ -43,6 +46,25 @@ KNOWN_CLASSIFIER_INTENTS = (
 )
 
 SHADOW_ONLY_INTENTS = {"memory_capture_candidate", "llm_fallback"}
+
+STATIC_OBSERVED_BY_REPORT = {
+    "ROUTER_07_SHADOW_OBSERVATION_REPORT.md": {
+        "task_query",
+        "agenda_query",
+        "gcal_create",
+        "destructive_confirmation",
+        "reminder_create",
+        "document_ocr",
+        "case_status",
+    },
+    "ROUTER_12_POST_OBSERVATION_COVERAGE_UPDATE.md": {
+        "document_summary",
+        "gcal_delete",
+        "reminder_query",
+        "reminder_delete",
+        "reminder_create",
+    },
+}
 
 
 def _read(path: Path) -> str:
@@ -91,8 +113,13 @@ def _actual_label_intents() -> set[str]:
 
 
 def _observed_intents() -> set[str]:
-    report = _read(OBSERVATION_REPORT)
-    return {intent for intent in KNOWN_CLASSIFIER_INTENTS if intent in report and "match=True" in report}
+    observed: set[str] = set()
+    for path in OBSERVATION_REPORTS:
+        text = _read(path)
+        if not text or "match=True" not in text:
+            continue
+        observed.update(STATIC_OBSERVED_BY_REPORT.get(path.name, set()))
+    return observed
 
 
 def _status(intent: str, *, sample_count: int, has_classifier: bool, has_actual_label: bool, observed: bool) -> str:

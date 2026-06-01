@@ -176,6 +176,14 @@ ROUTER-10 adds shadow-only actual labels for previously unlabeled legacy routes:
 
 The next step is live shadow observation for these intents. This remains observer-only; no message is routed through Intent Router v2 and there is no behavior change.
 
+## ROUTER-12 Post-Observation Coverage Update
+
+ROUTER-12 adds `docs/architecture/ROUTER_12_POST_OBSERVATION_COVERAGE_UPDATE.md`.
+
+It records the ROUTER-11 live shadow observation pass for `document_summary`, `gcal_delete`, `reminder_query`, `reminder_delete`, and an additional `reminder_create` phrase. After this observation, the coverage report should show 11 `COVERED`, 4 `NEEDS_LIVE_OBSERVATION`, 0 `NEEDS_ACTUAL_LABEL`, and 2 `SHADOW_ONLY`.
+
+Shadow mode was disabled after the observation window, Karen RC full smoke passed, and there is no behavior change.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior
