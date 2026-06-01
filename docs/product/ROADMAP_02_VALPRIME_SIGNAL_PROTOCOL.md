@@ -8,6 +8,8 @@ ValPrime is the roadmap keeper. Not Notion.
 
 The intake chat analyzes incoming material. ValPrime stores and reviews roadmap signals. The user approves major changes before any roadmap, sprint, or source-of-truth update.
 
+ROADMAP-03 defines the signal registry storage design. `docs/product/ROADMAP_SIGNAL_SCHEMA_V0.md` defines the structured `/roadmap_signal` fields.
+
 ## Roles
 
 - Newsletter/Idea Intake Chat = analyst.
@@ -84,6 +86,7 @@ Suggested rhythm:
 Future ValPrime command:
 
 - `/roadmap_review` summarizes accumulated signals, groups patterns, and proposes whether anything should become a roadmap update.
+- A future `/roadmap_signal` command should append structured records into a roadmap signal registry. Current phase remains manual/design.
 
 ## Guardrails
 
@@ -98,7 +101,7 @@ Future ValPrime command:
 
 ## Future Phases
 
-- ROADMAP-03: Roadmap signal registry storage design.
+- ROADMAP-03: Roadmap signal registry storage design and `ROADMAP_SIGNAL_SCHEMA_V0.md`.
 - ROADMAP-04: ValPrime `/roadmap_signal` command implementation.
 - ROADMAP-05: `/roadmap_review` synthesis.
 - ROADMAP-06: optional scheduler/reminder, no Notion required.

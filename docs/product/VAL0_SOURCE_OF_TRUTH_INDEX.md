@@ -64,10 +64,12 @@ Use the value map and inventory diagnostic to identify active source-of-truth do
 
 - `docs/product/ROADMAP_01_DYNAMIC_INTAKE_DESIGN.md`
 - `docs/product/ROADMAP_02_VALPRIME_SIGNAL_PROTOCOL.md`
+- `docs/product/ROADMAP_03_SIGNAL_REGISTRY_STORAGE_DESIGN.md`
+- `docs/product/ROADMAP_SIGNAL_SCHEMA_V0.md`
 - `docs/product/ROADMAP_INTAKE_RESPONSE_TEMPLATE.md`
 - `docs/product/ROADMAP_NEWSLETTER_INTAKE_PROMPT.md`
 
-Use these for future newsletter/article/idea intake. They define how to evaluate signals against Val0 source-of-truth docs without auto-updating the roadmap or interrupting the active sprint without approval. ValPrime is the roadmap keeper; intake chat should emit copy-pasteable `/roadmap_signal` blocks for manual review. There is no Notion dependency.
+Use these for future newsletter/article/idea intake. They define how to evaluate signals against Val0 source-of-truth docs without auto-updating the roadmap or interrupting the active sprint without approval. ValPrime is the roadmap keeper; intake chat should emit copy-pasteable `/roadmap_signal` blocks for manual review, and ValPrime should eventually append those records into a roadmap signal registry. Current phase remains manual/design. There is no Notion dependency.
 
 ## Commands
 
