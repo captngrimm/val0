@@ -33,6 +33,10 @@ SAMPLES: tuple[Sample, ...] = (
     Sample("task_management", "elimina tarea 2", "task_delete"),
     Sample("task_management", "Eliminarla del listado", "pending_action_reply", "pending task-delete clarification follow-up", {"type": "task_delete_clarification"}),
     Sample("task_management", "marca la tarea 1 como hecha", "task_complete", "task completion is distinct from destructive delete"),
+    Sample("task_management", "Val registra tarea: router prueba completar", "task_create"),
+    Sample("task_management", "registra tarea: comprar leche", "task_create"),
+    Sample("task_management", "Val agrega tarea pedir cotización", "task_create"),
+    Sample("task_management", "guarda tarea: llamar al topógrafo", "task_create"),
 
     Sample("reminders", "Recuérdame en 10 minutos llamar a Mabel", "reminder_create"),
     Sample("reminders", "Val recuérdame cumpleaños de Miguel el lunes a las 10", "reminder_create"),

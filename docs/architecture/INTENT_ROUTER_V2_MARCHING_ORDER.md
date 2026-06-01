@@ -188,9 +188,19 @@ Shadow mode was disabled after the observation window, Karen RC full smoke passe
 
 ROUTER-14 adds `docs/architecture/ROUTER_14_FINAL_SHADOW_COVERAGE_UPDATE.md`.
 
-It records the ROUTER-13 shadow observation pass. The observed lanes were already covered after ROUTER-12, so the honest coverage remains 11 `COVERED`, 4 `NEEDS_LIVE_OBSERVATION`, 0 `NEEDS_ACTUAL_LABEL`, and 2 `SHADOW_ONLY`.
+It records the ROUTER-13 shadow observation pass. The observed lanes were already covered after ROUTER-12, so the honest ROUTER-14 coverage remained 11 `COVERED`, 4 `NEEDS_LIVE_OBSERVATION`, 0 `NEEDS_ACTUAL_LABEL`, and 2 `SHADOW_ONLY`.
 
 Shadow mode was disabled after the observation window, Karen RC full smoke passed 24/24, and there is no behavior change.
+
+## ROUTER-16 Pending Context + Task Create Update
+
+ROUTER-16 adds `docs/architecture/ROUTER_16_PENDING_CONTEXT_TASK_CREATE_UPDATE.md`.
+
+It fixes a shadow-only pending-context mismatch for task-delete clarification replies and adds the diagnostic `task_create` intent. Orphan follow-up phrases such as `Eliminarla del listado` remain fallback unless pending task-delete context is available.
+
+With `task_create` added as a diagnostic lane, current coverage remains 11 `COVERED`, increases to 5 `NEEDS_LIVE_OBSERVATION`, keeps 0 `NEEDS_ACTUAL_LABEL`, and keeps 2 `SHADOW_ONLY`. The new live-observation gap is `task_create`.
+
+This is diagnostics-only. No message is routed through Intent Router v2 and there is no behavior change.
 
 ## Migration Plan
 

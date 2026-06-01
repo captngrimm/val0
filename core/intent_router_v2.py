@@ -214,6 +214,16 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
             needs_confirmation=True,
         ))
 
+    if re.search(r"\b(registra|registrar|agrega|agregar|guarda|guardar|anota|anotar)\s+(?:una\s+)?tarea\b", normalized) or normalized.startswith("tarea "):
+        return _decision(_candidate(
+            "task_create",
+            0.93,
+            "deterministic",
+            normalized,
+            "matched explicit task creation",
+            client,
+        ))
+
     if _has_any(normalized, ("que tareas tengo", "tareas activas", "tareas pendientes", "tareas registrada", "tarea activa", "tareas activa")):
         return _decision(_candidate("task_query", 0.95, "deterministic", normalized, "matched task query", client))
 

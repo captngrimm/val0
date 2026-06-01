@@ -391,10 +391,24 @@ def _intent_router_v2_shadow_enabled() -> bool:
     return os.getenv("VAL0_INTENT_ROUTER_V2_SHADOW", "").strip().lower() == "true"
 
 
+def _intent_router_v2_pending_state_for_shadow(chat_id: int | None):
+    if chat_id is None:
+        return None
+    try:
+        pending_task_delete = _KAREN_PENDING_TASK_DELETE_CONTEXT.get(int(chat_id))
+        if pending_task_delete and time.time() - float(pending_task_delete.get("ts") or 0) <= 600:
+            return {"type": "task_delete_clarification"}
+    except Exception:
+        return None
+    return None
+
+
 def _maybe_log_intent_router_v2_shadow(text: str, *, chat_id: int | None = None, client_id: str | None = None, message_id=None, pending_state=None) -> None:
     if not _intent_router_v2_shadow_enabled():
         return
     try:
+        if pending_state is None:
+            pending_state = _intent_router_v2_pending_state_for_shadow(chat_id)
         decision = classify_intent_shadow(
             text or "",
             client_id=client_id,
@@ -7025,6 +7039,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
 
     try:
         if await maybe_handle_karen_task_creation(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_create", "maybe_handle_karen_task_creation", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_CREATE_PIPELINE] failed: {e}")
@@ -16157,6 +16172,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         if await maybe_handle_karen_task_creation(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_create", "maybe_handle_karen_task_creation", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_CREATE_HANDLE_TEXT] failed: {e}")

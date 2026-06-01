@@ -36,6 +36,7 @@ KNOWN_CLASSIFIER_INTENTS = (
     "reminder_delete",
     "reminder_update",
     "task_query",
+    "task_create",
     "task_delete",
     "task_complete",
     "document_summary",

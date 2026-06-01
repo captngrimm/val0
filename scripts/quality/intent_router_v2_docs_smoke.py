@@ -143,8 +143,14 @@ def test_runtime_behavior_files_not_modified() -> None:
         "?? scripts/quality/intent_router_v2_post_observation_coverage_smoke.py",
         "A  docs/architecture/ROUTER_14_FINAL_SHADOW_COVERAGE_UPDATE.md",
         "?? docs/architecture/ROUTER_14_FINAL_SHADOW_COVERAGE_UPDATE.md",
+        " M docs/architecture/ROUTER_14_FINAL_SHADOW_COVERAGE_UPDATE.md",
         "A  scripts/quality/intent_router_v2_router14_coverage_smoke.py",
         "?? scripts/quality/intent_router_v2_router14_coverage_smoke.py",
+        " M scripts/quality/intent_router_v2_router14_coverage_smoke.py",
+        "A  docs/architecture/ROUTER_16_PENDING_CONTEXT_TASK_CREATE_UPDATE.md",
+        "?? docs/architecture/ROUTER_16_PENDING_CONTEXT_TASK_CREATE_UPDATE.md",
+        "A  scripts/quality/intent_router_v2_pending_context_smoke.py",
+        "?? scripts/quality/intent_router_v2_pending_context_smoke.py",
     )
     for raw in result.stdout.splitlines():
         if not raw.strip():

@@ -37,6 +37,8 @@ def test_harness_exists_compiles_and_contains_samples() -> None:
         "Val que tareas tengo activas?",
         "Val elimina la tarea 1",
         "Eliminarla del listado",
+        "Val registra tarea: router prueba completar",
+        "Val agrega tarea pedir cotización",
         "Recuérdame en 10 minutos llamar a Mabel",
         "Val qué recordatorios tengo",
         "elimina el recordatorio 1",
@@ -83,6 +85,7 @@ def test_harness_runs_text_and_json() -> None:
     expected_intents = {str(row.get("expected") or "") for row in rows}
     for intent in (
         "task_delete",
+        "task_create",
         "reminder_query",
         "gcal_delete",
         "document_summary",

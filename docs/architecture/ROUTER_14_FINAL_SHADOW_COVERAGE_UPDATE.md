@@ -58,3 +58,7 @@ Shadow-only lanes remain:
 ## Operational Note
 
 Shadow mode was disabled after the ROUTER-13 observation window. Karen RC full smoke passed 24/24 afterward. This report is documentation only and does not change routing, handlers, or user-facing behavior.
+
+## ROUTER-16 Follow-up
+
+ROUTER-16 adds a diagnostic `task_create` intent and passes lightweight pending task-delete context into the shadow classifier. This fixes the ROUTER-15 `Eliminarla del listado` prediction mismatch only when pending context exists. The remaining coverage counts may change because `task_create` becomes a new diagnostic lane, but runtime behavior remains unchanged.

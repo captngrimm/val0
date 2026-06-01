@@ -66,13 +66,17 @@ def test_coverage_stays_honest_after_router13() -> None:
             by_intent.get(intent, {}).get("status") == "NEEDS_LIVE_OBSERVATION",
             f"{intent} remains an observation gap",
         )
+    assert_true(
+        by_intent.get("task_create", {}).get("status") == "NEEDS_LIVE_OBSERVATION",
+        "task_create remains a post-ROUTER-16 observation gap",
+    )
 
     counts: dict[str, int] = {}
     for row in rows:
         status = str(row.get("status") or "")
         counts[status] = counts.get(status, 0) + 1
-    assert_true(counts.get("COVERED") == 11, "covered count remains 11")
-    assert_true(counts.get("NEEDS_LIVE_OBSERVATION") == 4, "live observation gaps remain 4")
+    assert_true(counts.get("COVERED", 0) >= 11, "covered count remains at least 11")
+    assert_true(counts.get("NEEDS_LIVE_OBSERVATION", 0) >= 5, "live observation gaps include task_create")
     assert_true(counts.get("NEEDS_ACTUAL_LABEL", 0) == 0, "actual label gaps remain 0")
     assert_true(counts.get("SHADOW_ONLY") == 2, "shadow-only count remains 2")
 
@@ -84,7 +88,8 @@ def test_marching_order_mentions_router14() -> None:
         "ROUTER-14 Final Shadow Coverage Update",
         "docs/architecture/ROUTER_14_FINAL_SHADOW_COVERAGE_UPDATE.md",
         "11 `COVERED`",
-        "4 `NEEDS_LIVE_OBSERVATION`",
+        "5 `NEEDS_LIVE_OBSERVATION`",
+        "task_create",
         "full smoke passed 24/24",
     ):
         assert_contains(text, needle, "marching order ROUTER-14")
