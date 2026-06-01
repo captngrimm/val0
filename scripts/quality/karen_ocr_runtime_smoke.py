@@ -19,6 +19,7 @@ from core.document_summary_queries import (  # noqa: E402
     _extract_document_ocr_target,
     _looks_like_document_ocr_request,
     _watermark_guard_reply,
+    OCR_WORKING_MESSAGE,
 )
 
 
@@ -82,7 +83,7 @@ def test_normal_watermark_summary_does_not_auto_ocr() -> None:
     })
     assert_contains(reply, "necesita OCR o revisión visual", "watermark guard still wins")
     assert_contains(reply, "Val, resume con OCR el último documento", "guard suggests explicit OCR command")
-    assert_not_contains(reply, "Resumen generado usando OCR", "normal summary does not auto-run OCR")
+    assert_not_contains(reply, "Resumen generado con OCR", "normal summary does not auto-run OCR")
 
     guard = _watermark_guard_reply("Auto_secuestro.pdf")
     assert_contains(guard, "resume con OCR", "watermark guard includes OCR next action")
@@ -99,9 +100,24 @@ def test_ocr_summary_copy_and_separate_storage_markers() -> None:
         "OFICIO dirigido al REGISTRO Público. DEMANDA relacionada con FINCA 10082."
     )
     reply = _build_ocr_summary_reply(doc_meta, ocr_text, pages=3)
-    assert_contains(reply, "Resumen generado usando OCR/lectura visual del PDF.", "OCR disclosure")
+    assert_contains(reply, "Resumen generado con OCR/lectura visual del PDF. Es una primera pasada", "OCR first-pass disclosure")
+    assert_contains(reply, "Nota: por ahora revisé hasta las primeras 3 páginas.", "OCR page-limit note")
     assert_contains(reply, "📋 Resumen claro", "summary style kept")
-    assert_contains(reply, "no sustituye revisión legal o profesional", "legal limit kept")
+    assert_contains(reply, "Puede tener errores de OCR", "OCR error disclaimer")
+    assert_contains(reply, "no sustituye la revisión de la abogada o del documento original", "lawyer/original review disclaimer")
+    assert_contains(reply, "extraer fechas importantes", "OCR next action dates")
+    assert_contains(reply, "sacar datos registrales", "OCR next action registry")
+    assert_contains(reply, "preparar preguntas para Nora", "OCR next action Nora")
+    assert_contains(reply, "hacer una versión más limpia del resumen", "OCR next action clean version")
+    assert_not_contains(reply, "Límite: resumo información registrada", "OCR summary avoids robotic generic limit")
+
+
+def test_ocr_working_copy_exists() -> None:
+    assert_contains(OCR_WORKING_MESSAGE, "Estoy leyendo visualmente el PDF con OCR", "working copy")
+    assert_contains(OCR_WORKING_MESSAGE, "puede tardar un momento", "working copy human timing")
+    source = _source("core/document_summary_queries.py")
+    assert_contains(source, "await update.message.reply_text(OCR_WORKING_MESSAGE)", "working copy sent before OCR")
+    assert_true(source.find("OCR_WORKING_MESSAGE") < source.find("run_pdf_ocr(pdf_path"), "working copy appears before OCR run")
 
     summary_source = _source("core/document_summary_queries.py")
     assert_contains(summary_source, "source=\"generated_ocr\"", "OCR stored separately")
@@ -123,6 +139,7 @@ def main() -> int:
     test_route_phrase_detection()
     test_normal_watermark_summary_does_not_auto_ocr()
     test_ocr_summary_copy_and_separate_storage_markers()
+    test_ocr_working_copy_exists()
     test_bot_route_ordering()
     print("PASS: Karen OCR runtime smoke cases passed.")
     return 0

@@ -745,6 +745,14 @@ def _doc_summary(filename: str, ingest_id: str, caption: str, state: str, text: 
 
 
 SUMMARY_LIMIT_LINE = "Límite: resumo información registrada; no sustituye revisión legal o profesional."
+OCR_WORKING_MESSAGE = (
+    "⏳ Estoy leyendo visualmente el PDF con OCR. "
+    "Esto puede tardar un momento si el documento es escaneado o tiene marca de agua."
+)
+OCR_SUMMARY_LIMIT_LINE = (
+    "Nota importante: esto es una lectura automática para ayudarte a ordenar el documento. "
+    "Puede tener errores de OCR y no sustituye la revisión de la abogada o del documento original."
+)
 
 
 def _render_clean_specific_doc_summary_body(text: str) -> str:
@@ -2271,7 +2279,7 @@ def _build_ocr_summary_reply(doc_meta: dict, ocr_text: str, *, pages: int = 0) -
     filename = _document_display_name(doc_meta)
     original = _clean_filename(doc_meta.get("filename", "documento"))
     ingest_id = str(doc_meta.get("ingest_id") or "").strip()
-    summary_body = _clean_specific_doc_summary_body_for_reply(_render_clean_specific_doc_summary_body(ocr_text))
+    bullets = _pick_grounded_bullets(ocr_text, limit=6)
 
     lines = [f"📄 {filename}"]
     if filename != original:
@@ -2281,11 +2289,25 @@ def _build_ocr_summary_reply(doc_meta: dict, ocr_text: str, *, pages: int = 0) -
     lines.extend([
         "Estado: resumen generado con OCR",
         "",
-        "Resumen generado usando OCR/lectura visual del PDF.",
+        "Resumen generado con OCR/lectura visual del PDF. Es una primera pasada sobre el documento escaneado.",
     ])
-    if pages:
-        lines.append(f"Nota: primera pasada sobre hasta {pages} página(s).")
-    lines.extend(["", summary_body])
+    page_count = int(pages or DEFAULT_MAX_PAGES)
+    lines.append(f"Nota: por ahora revisé hasta las primeras {page_count} páginas.")
+    lines.extend(["", "📋 Resumen claro"])
+    if bullets:
+        lines.extend(f"- {bullet}" for bullet in bullets)
+    else:
+        lines.append("- No hay texto OCR suficiente para resumir este documento con confianza.")
+    lines.extend([
+        "",
+        "Siguientes acciones útiles:",
+        "- extraer fechas importantes",
+        "- sacar datos registrales",
+        "- preparar preguntas para Nora",
+        "- hacer una versión más limpia del resumen",
+        "",
+        OCR_SUMMARY_LIMIT_LINE,
+    ])
     return "\n".join(lines).strip()
 
 
@@ -2335,6 +2357,7 @@ async def maybe_handle_document_ocr_query(update, context, chat_id: int, text: s
             )
         return True
 
+    await update.message.reply_text(OCR_WORKING_MESSAGE)
     ocr_result = run_pdf_ocr(pdf_path, max_pages=DEFAULT_MAX_PAGES)
     if ocr_result.status not in {"ok", "low_quality"} or not (ocr_result.combined_text or "").strip():
         await update.message.reply_text(_render_ocr_unusable_reply(doc_meta, reason=ocr_result.error or ocr_result.status))
