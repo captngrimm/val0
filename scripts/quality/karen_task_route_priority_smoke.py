@@ -51,6 +51,7 @@ def test_task_query_beats_case_routes() -> None:
     assert_contains(hard_gate, "looks_like_karen_tasks_query", "hard gate uses task query matcher")
     assert_contains(hard_gate, "render_karen_tasks_view", "hard gate renders accepted task view")
     assert_contains(hard_gate, "fetch_open_commitments", "hard gate reads tasks only")
+    assert_contains(hard_gate, "[KAREN_TASK_QUERY_HARD_GATE] handled=True", "hard gate logs terminal handling")
     assert_not_contains(hard_gate, "insert_memory_item", "hard gate does not insert memory")
     assert_not_contains(hard_gate, "load_karen_case_facts", "hard gate does not render finca facts")
     assert_not_contains(hard_gate, "Esto es lo que tengo guardado del caso del terreno", "hard gate does not include case summary copy")
@@ -58,12 +59,14 @@ def test_task_query_beats_case_routes() -> None:
     assert_contains(visibility, "render_karen_tasks_view", "task query renders task list")
     for body, label in ((handle, "handle_text"), (pipeline, "pipeline")):
         task_idx = body.find("maybe_handle_karen_task_query_hard_gate")
+        task_call_block = body[task_idx:task_idx + 180] if task_idx >= 0 else ""
         gcal_idx = body.find("maybe_handle_karen_gcal_create_confirmation_first")
         case_idx = body.find("maybe_handle_karen_case_facts")
         case_status_idx = body.find("maybe_handle_karen_case_status")
         day0_idx = body.find("maybe_handle_karen_day0_route")
         memory_idx = body.find("[MEMORY_TEST_TEXT] inserting memory")
         assert_true(task_idx >= 0, f"{label} has task visibility route")
+        assert_contains(task_call_block, "return", f"{label} hard gate returns immediately")
         assert_true(gcal_idx < 0 or task_idx < gcal_idx, f"{label} task route beats gcal")
         assert_true(case_idx < 0 or task_idx < case_idx, f"{label} task route beats case facts")
         assert_true(case_status_idx < 0 or task_idx < case_status_idx, f"{label} task route beats case status")

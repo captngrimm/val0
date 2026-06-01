@@ -15025,11 +15025,49 @@ async def maybe_handle_karen_notes_tasks_visibility(update: Update, context: Con
             logger.exception(f"[KAREN_TASKS_VISIBILITY] failed: {e}")
             tasks = []
         auxiliary_tasks = load_karen_auxiliary_task_items(client_id)
+        actual_reminders, completed_tasks = _karen_task_hygiene_sources(chat_id)
         _clear_karen_numbered_action_dirty(chat_id, "task")
-        await update.message.reply_text(render_karen_tasks_view(tasks, auxiliary_tasks=auxiliary_tasks))
+        await update.message.reply_text(
+            render_karen_tasks_view(
+                tasks,
+                auxiliary_tasks=auxiliary_tasks,
+                actual_reminders=actual_reminders,
+                completed_tasks=completed_tasks,
+            )
+        )
         return True
 
     return False
+
+
+def _karen_task_hygiene_sources(chat_id: int) -> tuple[list, list]:
+    reminders: list = []
+    completed: list = []
+    try:
+        from memory_store import list_reminders_for_chat
+
+        reminders = list_reminders_for_chat(int(chat_id), statuses=["pending", "sending", "sent"], limit=100) or []
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_HYGIENE_REMINDERS] failed: {e}")
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        completed = cur.execute(
+            """
+            SELECT id, raw_input, action, target, due_date, confidence, status, completed_at, created_at
+            FROM commitments
+            WHERE chat_id=?
+              AND status IN ('done', 'deleted')
+            ORDER BY COALESCE(completed_at, created_at) DESC, id DESC
+            LIMIT 100
+            """,
+            (int(chat_id),),
+        ).fetchall() or []
+        conn.close()
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_HYGIENE_COMPLETED] failed: {e}")
+        completed = []
+    return reminders, completed
 
 
 async def maybe_handle_karen_task_query_hard_gate(update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id: int, client_id: str, text: str) -> bool:
@@ -15054,8 +15092,17 @@ async def maybe_handle_karen_task_query_hard_gate(update: Update, context: Conte
         logger.exception(f"[KAREN_TASK_QUERY_HARD_GATE_FETCH] failed: {e}")
         tasks = []
     auxiliary_tasks = load_karen_auxiliary_task_items(client_id)
+    actual_reminders, completed_tasks = _karen_task_hygiene_sources(chat_id)
     _clear_karen_numbered_action_dirty(chat_id, "task")
-    await update.message.reply_text(render_karen_tasks_view(tasks, auxiliary_tasks=auxiliary_tasks))
+    await update.message.reply_text(
+        render_karen_tasks_view(
+            tasks,
+            auxiliary_tasks=auxiliary_tasks,
+            actual_reminders=actual_reminders,
+            completed_tasks=completed_tasks,
+        )
+    )
+    logger.info("[KAREN_TASK_QUERY_HARD_GATE] handled=True text=%r", text)
     return True
 
 

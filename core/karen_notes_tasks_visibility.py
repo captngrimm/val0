@@ -175,6 +175,10 @@ def is_auxiliary_task_row(row: Any) -> bool:
     return _task_source(row) == "auxiliary_task"
 
 
+def _task_status(row: Any) -> str:
+    return str(_row_value(row, "status", 6, "") or "").strip().lower()
+
+
 def looks_like_reminder_command_task(text: Any) -> bool:
     norm = normalize_visibility_prompt(str(text or ""))
     if norm.startswith(("recuerdame", "recordatorio")):
@@ -182,6 +186,59 @@ def looks_like_reminder_command_task(text: Any) -> bool:
     if norm.startswith(("val recuerdame", "vale recuerdame", "bal recuerdame")):
         return True
     return "recuerdame" in norm and bool(re.search(r"\b(manana|mañana|hoy|a las|am|pm|mediodia|medio dia|md|\d{1,2}:\d{2})\b", norm))
+
+
+def _task_reminder_equivalence_key(text: Any) -> str:
+    norm = normalize_visibility_prompt(str(text or ""))
+    norm = re.sub(r"^(?:val|vale|valeria|bal|pal|va\s+el)\s+", "", norm).strip()
+    norm = re.sub(r"^(?:recuerdame|recordatorio|recordarme)\s+", "", norm).strip()
+    norm = re.sub(
+        r"\b(?:para\s+el\s+|para\s+|el\s+)?(?:proximo|próximo)?\s*(?:lunes|martes|miercoles|miércoles|jueves|viernes|sabado|sábado|domingo)\b",
+        " ",
+        norm,
+    )
+    norm = re.sub(r"\b(?:manana|mañana|hoy)\b", " ", norm)
+    norm = re.sub(r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    return _note_key(norm)
+
+
+def _completed_task_keys(completed_tasks: Iterable[Any] | None) -> set[str]:
+    out: set[str] = set()
+    for row in completed_tasks or ():
+        text = _task_text(row)
+        key = _note_key(text)
+        if key:
+            out.add(key)
+    return out
+
+
+def _actual_reminder_keys(actual_reminders: Iterable[Any] | None) -> set[str]:
+    out: set[str] = set()
+    for row in actual_reminders or ():
+        text = _row_value(row, "text", 8, "") or _row_value(row, "raw_input", 1, "")
+        key = _task_reminder_equivalence_key(text)
+        if key:
+            out.add(key)
+    return out
+
+
+def _hide_stale_task_from_view(row: Any, *, actual_reminder_keys: set[str], completed_task_keys: set[str]) -> bool:
+    if _task_status(row) in {"deleted", "archived", "cancelled", "canceled", "done"}:
+        return True
+    text = _task_text(row)
+    key = _note_key(text)
+    if key and key in completed_task_keys:
+        return True
+    if is_auxiliary_task_row(row) and key in completed_task_keys:
+        return True
+    if looks_like_reminder_command_task(text):
+        reminder_key = _task_reminder_equivalence_key(text)
+        if reminder_key and reminder_key in actual_reminder_keys:
+            return True
+        if normalize_visibility_prompt(text).startswith(("val recuerdame", "vale recuerdame", "bal recuerdame", "pal recuerdame", "va el recuerdame")):
+            return True
+    return False
 
 
 def _looks_like_auxiliary_task_item(text: str) -> bool:
@@ -537,8 +594,22 @@ def render_karen_case_pendientes_view(
     return "\n".join(lines)
 
 
-def render_karen_tasks_view(tasks: Iterable[Any], *, auxiliary_tasks: Iterable[Any] | None = None, limit: int = 10) -> str:
-    rows = merge_karen_task_items(tasks, auxiliary_tasks)
+def render_karen_tasks_view(
+    tasks: Iterable[Any],
+    *,
+    auxiliary_tasks: Iterable[Any] | None = None,
+    actual_reminders: Iterable[Any] | None = None,
+    completed_tasks: Iterable[Any] | None = None,
+    limit: int = 10,
+) -> str:
+    merged_rows = merge_karen_task_items(tasks, auxiliary_tasks)
+    reminder_keys = _actual_reminder_keys(actual_reminders)
+    done_keys = _completed_task_keys(completed_tasks)
+    rows = [
+        row for row in merged_rows
+        if not _hide_stale_task_from_view(row, actual_reminder_keys=reminder_keys, completed_task_keys=done_keys)
+    ]
+    hidden_count = max(0, len(merged_rows) - len(rows))
     lines = ["📌 Tareas pendientes", ""]
     if not rows:
         lines.extend([
@@ -561,4 +632,6 @@ def render_karen_tasks_view(tasks: Iterable[Any], *, auxiliary_tasks: Iterable[A
     ])
     if any(is_auxiliary_task_row(row) for row in rows):
         lines.append("Algunas tareas sin fecha pueden necesitar que las convierta a tarea formal antes de cerrarlas.")
+    if hidden_count:
+        lines.append("Oculté posibles recordatorios antiguos guardados como tarea.")
     return "\n".join(lines)
