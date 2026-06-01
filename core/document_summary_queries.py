@@ -753,6 +753,7 @@ OCR_SUMMARY_LIMIT_LINE = (
     "Nota importante: esto es una lectura automática para ayudarte a ordenar el documento. "
     "Puede tener errores de OCR y no sustituye la revisión de la abogada o del documento original."
 )
+OCR_CACHED_MESSAGE = "📄 Ya tenía una lectura OCR guardada de este documento. Te muestro esa versión."
 
 
 def _render_clean_specific_doc_summary_body(text: str) -> str:
@@ -2311,6 +2312,15 @@ def _build_ocr_summary_reply(doc_meta: dict, ocr_text: str, *, pages: int = 0) -
     return "\n".join(lines).strip()
 
 
+def _with_cached_ocr_notice(reply: str) -> str:
+    reply = (reply or "").strip()
+    if not reply:
+        return OCR_CACHED_MESSAGE
+    if reply.startswith(OCR_CACHED_MESSAGE):
+        return reply
+    return f"{OCR_CACHED_MESSAGE}\n\n{reply}"
+
+
 async def maybe_handle_document_ocr_query(update, context, chat_id: int, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
@@ -2341,18 +2351,25 @@ async def maybe_handle_document_ocr_query(update, context, chat_id: int, text: s
     saved_ocr = _find_saved_doc_ocr(str(case_id), int(chat_id), str(doc_meta.get("ingest_id") or ""))
     if saved_ocr.get("text"):
         if wants_summary:
-            await _reply_text_chunked(update, _build_ocr_summary_reply(doc_meta, saved_ocr["text"], pages=int(saved_ocr.get("pages") or 0)))
+            await _reply_text_chunked(
+                update,
+                _with_cached_ocr_notice(
+                    _build_ocr_summary_reply(doc_meta, saved_ocr["text"], pages=int(saved_ocr.get("pages") or 0))
+                ),
+            )
         else:
             await update.message.reply_text(
-                _render_ocr_status_reply(
-                    doc_meta,
-                    type("OCRSaved", (), {
-                        "recommendation": saved_ocr.get("recommendation") or "ocr_usable",
-                        "pages_processed": int(saved_ocr.get("pages") or 0),
-                        "char_count": int(saved_ocr.get("char_count") or len(saved_ocr.get("text") or "")),
-                        "legal_marker_counts": {},
-                    })(),
-                    first_pass=True,
+                _with_cached_ocr_notice(
+                    _render_ocr_status_reply(
+                        doc_meta,
+                        type("OCRSaved", (), {
+                            "recommendation": saved_ocr.get("recommendation") or "ocr_usable",
+                            "pages_processed": int(saved_ocr.get("pages") or 0),
+                            "char_count": int(saved_ocr.get("char_count") or len(saved_ocr.get("text") or "")),
+                            "legal_marker_counts": {},
+                        })(),
+                        first_pass=True,
+                    )
                 )
             )
         return True

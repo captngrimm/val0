@@ -16,10 +16,12 @@ from core.document_ocr_runtime import (  # noqa: E402
 from core.document_summary_queries import (  # noqa: E402
     _build_specific_doc_summary_reply,
     _build_ocr_summary_reply,
+    _with_cached_ocr_notice,
     _extract_document_ocr_target,
     _looks_like_document_ocr_request,
     _watermark_guard_reply,
     OCR_WORKING_MESSAGE,
+    OCR_CACHED_MESSAGE,
 )
 
 
@@ -118,6 +120,19 @@ def test_ocr_working_copy_exists() -> None:
     source = _source("core/document_summary_queries.py")
     assert_contains(source, "await update.message.reply_text(OCR_WORKING_MESSAGE)", "working copy sent before OCR")
     assert_true(source.find("OCR_WORKING_MESSAGE") < source.find("run_pdf_ocr(pdf_path"), "working copy appears before OCR run")
+    saved_idx = source.find("if saved_ocr.get(\"text\"):")
+    progress_idx = source.find("await update.message.reply_text(OCR_WORKING_MESSAGE)")
+    assert_true(saved_idx >= 0 and progress_idx > saved_idx, "cached OCR branch is checked before progress message")
+
+
+def test_cached_ocr_copy_exists_without_processing_claim() -> None:
+    assert_contains(OCR_CACHED_MESSAGE, "Ya tenía una lectura OCR guardada", "cached OCR message")
+    cached_reply = _with_cached_ocr_notice("📄 Documento\nResumen generado con OCR/lectura visual del PDF.")
+    assert_contains(cached_reply, OCR_CACHED_MESSAGE, "cached reply preface")
+    assert_contains(cached_reply, "Resumen generado con OCR/lectura visual del PDF", "cached keeps summary framing")
+    assert_not_contains(cached_reply, "Estoy leyendo visualmente", "cached reply does not imply live processing")
+    source = _source("core/document_summary_queries.py")
+    assert_contains(source, "_with_cached_ocr_notice(", "cached path wrapper")
 
     summary_source = _source("core/document_summary_queries.py")
     assert_contains(summary_source, "source=\"generated_ocr\"", "OCR stored separately")
@@ -140,6 +155,7 @@ def main() -> int:
     test_normal_watermark_summary_does_not_auto_ocr()
     test_ocr_summary_copy_and_separate_storage_markers()
     test_ocr_working_copy_exists()
+    test_cached_ocr_copy_exists_without_processing_claim()
     test_bot_route_ordering()
     print("PASS: Karen OCR runtime smoke cases passed.")
     return 0
