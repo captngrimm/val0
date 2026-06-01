@@ -53,12 +53,20 @@ OCR for Registro Publico / watermark PDFs is v1 operational, with conservative o
 
 Role: visual second brain / graph / library view, not source of truth and not runtime.
 
+## Markdown docs inventory / value map
+
+- `docs/product/VAL0_DOCS_VALUE_MAP.md`
+- `scripts/diagnostics/markdown_docs_inventory.py`
+
+Use the value map and inventory diagnostic to identify active source-of-truth docs, roadmap docs, architecture reports, ops playbooks, parking-lot ideas, client/private state, historical reports, possible stale/duplicate docs, and unknown docs that need review.
+
 ## Commands
 
 ```bash
 python3 scripts/quality/karen_rc_full_smoke.py --keep-going
 python3 scripts/diagnostics/intent_router_v2_sample_harness.py
 python3 scripts/diagnostics/intent_router_v2_coverage_report.py
+python3 scripts/diagnostics/markdown_docs_inventory.py
 bash scripts/ops/router_shadow_mode.sh status
 bash scripts/ops/router_shadow_mode.sh enable
 bash scripts/ops/router_shadow_mode.sh disable
