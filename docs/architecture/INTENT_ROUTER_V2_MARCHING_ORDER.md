@@ -137,6 +137,16 @@ The helper can temporarily enable `VAL0_INTENT_ROUTER_V2_SHADOW=true` through a 
 - No message is routed through Intent Router v2.
 - The comparison logs guide future refactor work; they do not directly change runtime behavior.
 
+## ROUTER-07 Shadow Observation Report
+
+ROUTER-07 records the first clean real shadow observation pass:
+
+- Report: `docs/architecture/ROUTER_07_SHADOW_OBSERVATION_REPORT.md`
+- Tested lanes included task query, agenda query, Google Calendar create, destructive confirmation/cancel, reminder create, document OCR, and case status.
+- The observed predicted-vs-actual pairs were `match=True`.
+- Karen RC full smoke passed after shadow mode was disabled.
+- There was no behavior change.
+
 ## Migration Plan
 
 ### Phase 0: Freeze RC Behavior

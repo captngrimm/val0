@@ -120,6 +120,10 @@ def test_runtime_behavior_files_not_modified() -> None:
         "?? scripts/quality/router_shadow_playbook_smoke.py",
         " M scripts/quality/router_shadow_playbook_smoke.py",
         " M scripts/quality/intent_router_v2_observer_smoke.py",
+        "A  docs/architecture/ROUTER_07_SHADOW_OBSERVATION_REPORT.md",
+        "?? docs/architecture/ROUTER_07_SHADOW_OBSERVATION_REPORT.md",
+        "A  scripts/quality/router_shadow_observation_report_smoke.py",
+        "?? scripts/quality/router_shadow_observation_report_smoke.py",
     )
     for raw in result.stdout.splitlines():
         if not raw.strip():
