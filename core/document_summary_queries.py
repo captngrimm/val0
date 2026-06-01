@@ -1,10 +1,12 @@
 import re
 import unicodedata
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 
 from memory_store import get_active_case_id, _get_conn, insert_case_note
+from core.document_ocr_runtime import DEFAULT_MAX_PAGES, run_pdf_ocr
 
 
 async def _reply_text_chunked(update, text: str, limit: int = 3800):
@@ -129,6 +131,8 @@ NAMING_METADATA_MARKERS = (
 )
 
 EXTRACTED_DIR = Path("/opt/val0/vfms_data/extracted")
+RAW_DIR = Path("/opt/val0/vfms_data/raw")
+OCR_TEXT_DIR = Path("/opt/val0/vfms_data/ocr_runtime")
 
 
 def _clean_filename(filename: str) -> str:
@@ -1570,7 +1574,8 @@ def _watermark_guard_reply(filename: str = "documento") -> str:
         "Lo que pude extraer como texto parece estar dominado por una marca de agua "
         "tipo “Copia para propósitos informativos solamente”, no por el contenido legal real.\n\n"
         "El documento sí puede tener contenido visible, pero no debo generar un resumen "
-        "con texto basura repetido. Puedes subir una copia más limpia o marcarlo para OCR/revisión manual."
+        "con texto basura repetido. Puedes subir una copia más limpia o marcarlo para OCR/revisión manual.\n\n"
+        "Puedes decir: “Val, resume con OCR el último documento”."
     )
 
 
@@ -2015,6 +2020,9 @@ def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
     # Check if text is extracted
     has_text = bool(text)
     body_includes_limit = False
+
+    if has_text and _looks_like_watermark_dominated_text(text):
+        return _watermark_guard_reply(filename or display_title or "documento")
     
     if saved_summary:
         if _looks_like_watermark_dominated_saved_summary(saved_summary):
@@ -2063,6 +2071,285 @@ def _build_specific_doc_summary_reply(doc_meta: dict) -> str:
     reply = "\n".join(lines).strip()
     reply = re.sub(r"\n{3,}", "\n\n", reply)
     return reply
+
+
+def _looks_like_document_ocr_request(text: str) -> bool:
+    norm = _normalize_spanish_text(text)
+    return any(marker in norm for marker in (
+        "resume con ocr",
+        "resumen con ocr",
+        "haz ocr",
+        "hacer ocr",
+        "lee visualmente",
+        "lectura visual",
+    ))
+
+
+def _ocr_request_wants_summary(text: str) -> bool:
+    norm = _normalize_spanish_text(text)
+    return any(marker in norm for marker in ("resume", "resumen", "resumir"))
+
+
+def _extract_document_ocr_target(text: str) -> str:
+    if _looks_like_latest_document_reference(text):
+        return "__current__" if _latest_document_reference_kind(text) == "current" else "__latest__"
+
+    number_ref = _extract_document_number_ref(text)
+    if number_ref:
+        return str(number_ref)
+
+    raw = (text or "").strip()
+    low = re.sub(r"^val[,\s]+", "", raw.lower()).strip()
+    low = re.sub(r"[?!.]+$", "", low).strip()
+    patterns = [
+        r"(?:resume|resumen)\s+con\s+ocr\s+(?:de|del)?\s*(?:el\s+)?(?:documento\s+)?(.+)$",
+        r"(?:haz|hacer)\s+ocr\s+(?:de|del)?\s*(?:el\s+)?(?:documento\s+)?(.+)$",
+        r"lee\s+visualmente\s+(?:de|del)?\s*(?:el\s+)?(?:documento\s+)?(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, low, flags=re.I)
+        if not match:
+            continue
+        target = re.sub(r"\s+", " ", (match.group(1) or "").strip())
+        if target in {"", "este", "este documento", "ultimo", "último", "el ultimo", "el último"}:
+            return "__latest__"
+        return target
+    return "__latest__"
+
+
+def _raw_pdf_path_for_doc(doc_meta: dict) -> Path | None:
+    ingest_id = str((doc_meta or {}).get("ingest_id") or "").strip()
+    if not ingest_id or not RAW_DIR.exists():
+        return None
+    matches = sorted(RAW_DIR.glob(f"{ingest_id}__*"))
+    for match in matches:
+        if match.suffix.lower() == ".pdf":
+            return match
+    return matches[0] if matches else None
+
+
+def _ocr_text_path(ingest_id: str) -> Path:
+    safe_ingest = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(ingest_id or "").strip()) or "documento"
+    return OCR_TEXT_DIR / f"{safe_ingest}__ocr_runtime.txt"
+
+
+def _find_saved_doc_ocr(case_id: str, chat_id: int, ingest_id: str) -> dict:
+    ingest_id = (ingest_id or "").strip()
+    if not ingest_id:
+        return {}
+
+    text_path = _ocr_text_path(ingest_id)
+    text = text_path.read_text(encoding="utf-8", errors="replace").strip() if text_path.exists() else ""
+
+    conn = _get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT note_text
+        FROM case_notes
+        WHERE case_id=?
+          AND chat_id=?
+          AND source='generated_ocr'
+          AND note_text LIKE ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (str(case_id), int(chat_id), f"%{ingest_id}%"),
+    )
+    row = cur.fetchone()
+    conn.close()
+    note_text = str(row[0] if row and not isinstance(row, dict) else (row["note_text"] if row else "")).strip()
+    if not text and not note_text:
+        return {}
+
+    pages_match = re.search(r"(?m)^- OCR pages:\s*(\d+)", note_text)
+    chars_match = re.search(r"(?m)^- OCR char_count:\s*(\d+)", note_text)
+    status_match = re.search(r"(?m)^- OCR status:\s*(.+)$", note_text)
+    recommendation_match = re.search(r"(?m)^- OCR recommendation:\s*(.+)$", note_text)
+    return {
+        "text": text,
+        "status": status_match.group(1).strip() if status_match else ("ok" if text else ""),
+        "pages": int(pages_match.group(1)) if pages_match else 0,
+        "char_count": int(chars_match.group(1)) if chars_match else len(text),
+        "recommendation": recommendation_match.group(1).strip() if recommendation_match else ("ocr_usable" if text else ""),
+    }
+
+
+def _persist_document_ocr_result(case_id: str, chat_id: int, doc_meta: dict, ocr_result) -> dict:
+    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+    if not ingest_id or not str(getattr(ocr_result, "combined_text", "") or "").strip():
+        return {"saved": False}
+
+    OCR_TEXT_DIR.mkdir(parents=True, exist_ok=True)
+    path = _ocr_text_path(ingest_id)
+    path.write_text(str(ocr_result.combined_text or "").strip(), encoding="utf-8")
+
+    generated_at = str(getattr(ocr_result, "generated_at", "") or datetime.now(timezone.utc).isoformat(timespec="seconds"))
+    note_text = "\n".join([
+        "OCR generado de documento VFMS",
+        f"- VFMS ingest_id: {ingest_id}",
+        f"- Archivo: {_clean_filename(doc_meta.get('filename', 'documento'))}",
+        f"- OCR status: {ocr_result.status}",
+        f"- OCR recommendation: {ocr_result.recommendation}",
+        f"- OCR pages: {ocr_result.pages_processed}",
+        f"- OCR char_count: {ocr_result.char_count}",
+        f"- OCR watermark_count: {ocr_result.watermark_count}",
+        f"- OCR generated_at: {generated_at}",
+        f"- OCR text_path: {path}",
+        "- Nota: OCR guardado separado del texto extraído embebido; no reemplaza la extracción original.",
+    ]).strip()
+
+    existing = _find_saved_doc_ocr(str(case_id), int(chat_id), ingest_id)
+    if not existing:
+        insert_case_note(
+            chat_id=int(chat_id),
+            case_id=str(case_id),
+            note_text=note_text,
+            source="generated_ocr",
+        )
+    return {"saved": True, "text_path": str(path)}
+
+
+def _resolve_document_for_ocr(case_id: str, chat_id: int, text: str) -> tuple[dict | None, str]:
+    target = _extract_document_ocr_target(text)
+    if target == "__current__":
+        recent_docs = _find_ordered_document_inventory(str(case_id), int(chat_id), limit=3)
+        if _recent_documents_need_clarification(recent_docs):
+            return {"_clarification": _render_recent_documents_clarification(recent_docs)}, target
+        return (recent_docs[0] if recent_docs else None), target
+    if target == "__latest__":
+        return _find_latest_document_meta(str(case_id), int(chat_id)), target
+
+    matches = _find_specific_doc_matches(str(case_id), int(chat_id), target, limit=5)
+    if len(matches) > 1:
+        return {"_clarification": _render_ambiguous_document_matches(matches)}, target
+    return (matches[0] if matches else None), target
+
+
+def _render_ocr_unusable_reply(doc_meta: dict, *, reason: str = "") -> str:
+    filename = _document_display_name(doc_meta)
+    lines = [
+        "No pude extraer texto suficiente con OCR.",
+        f"Documento: {filename}",
+        "Este documento necesita revisión manual o una copia más limpia.",
+    ]
+    if reason:
+        lines.append(f"Detalle técnico breve: {reason[:180]}")
+    return "\n".join(lines).strip()
+
+
+def _render_ocr_status_reply(doc_meta: dict, ocr_result, *, first_pass: bool = True) -> str:
+    filename = _document_display_name(doc_meta)
+    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+    markers = [
+        marker for marker, count in (getattr(ocr_result, "legal_marker_counts", {}) or {}).items()
+        if int(count or 0) > 0
+    ]
+    lines = [
+        f"👁️ OCR listo para: {filename}",
+    ]
+    if ingest_id:
+        lines.append(f"ID: {ingest_id}")
+    lines.extend([
+        f"Estado OCR: {ocr_result.recommendation}",
+        f"Páginas leídas: {ocr_result.pages_processed}",
+        f"Caracteres OCR: {ocr_result.char_count}",
+    ])
+    if markers:
+        lines.append("Marcadores legales detectados: " + ", ".join(markers[:8]))
+    if first_pass:
+        lines.append(f"Nota: hice una primera lectura visual de hasta {DEFAULT_MAX_PAGES} páginas.")
+    lines.extend([
+        "",
+        "Siguiente paso:",
+        "- Val, resume con OCR este documento",
+    ])
+    return "\n".join(lines).strip()
+
+
+def _build_ocr_summary_reply(doc_meta: dict, ocr_text: str, *, pages: int = 0) -> str:
+    filename = _document_display_name(doc_meta)
+    original = _clean_filename(doc_meta.get("filename", "documento"))
+    ingest_id = str(doc_meta.get("ingest_id") or "").strip()
+    summary_body = _clean_specific_doc_summary_body_for_reply(_render_clean_specific_doc_summary_body(ocr_text))
+
+    lines = [f"📄 {filename}"]
+    if filename != original:
+        lines.append(f"Original: {original}")
+    if ingest_id:
+        lines.append(f"ID: {ingest_id}")
+    lines.extend([
+        "Estado: resumen generado con OCR",
+        "",
+        "Resumen generado usando OCR/lectura visual del PDF.",
+    ])
+    if pages:
+        lines.append(f"Nota: primera pasada sobre hasta {pages} página(s).")
+    lines.extend(["", summary_body])
+    return "\n".join(lines).strip()
+
+
+async def maybe_handle_document_ocr_query(update, context, chat_id: int, text: str) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+    if not _looks_like_document_ocr_request(text):
+        return False
+
+    case_id = get_active_case_id(int(chat_id))
+    if not case_id:
+        return False
+
+    doc_meta, target = _resolve_document_for_ocr(str(case_id), int(chat_id), text)
+    if doc_meta and doc_meta.get("_clarification"):
+        await update.message.reply_text(str(doc_meta["_clarification"]))
+        return True
+    if not doc_meta:
+        await update.message.reply_text(
+            f"No encontré un documento que coincida con '{target}'. "
+            "Puedes decir: “Val, qué documentos tengo”."
+        )
+        return True
+
+    pdf_path = _raw_pdf_path_for_doc(doc_meta)
+    if not pdf_path or not pdf_path.exists():
+        await update.message.reply_text("No encontré el PDF original para hacer OCR. No cambié el texto registrado.")
+        return True
+
+    wants_summary = _ocr_request_wants_summary(text)
+    saved_ocr = _find_saved_doc_ocr(str(case_id), int(chat_id), str(doc_meta.get("ingest_id") or ""))
+    if saved_ocr.get("text"):
+        if wants_summary:
+            await _reply_text_chunked(update, _build_ocr_summary_reply(doc_meta, saved_ocr["text"], pages=int(saved_ocr.get("pages") or 0)))
+        else:
+            await update.message.reply_text(
+                _render_ocr_status_reply(
+                    doc_meta,
+                    type("OCRSaved", (), {
+                        "recommendation": saved_ocr.get("recommendation") or "ocr_usable",
+                        "pages_processed": int(saved_ocr.get("pages") or 0),
+                        "char_count": int(saved_ocr.get("char_count") or len(saved_ocr.get("text") or "")),
+                        "legal_marker_counts": {},
+                    })(),
+                    first_pass=True,
+                )
+            )
+        return True
+
+    ocr_result = run_pdf_ocr(pdf_path, max_pages=DEFAULT_MAX_PAGES)
+    if ocr_result.status not in {"ok", "low_quality"} or not (ocr_result.combined_text or "").strip():
+        await update.message.reply_text(_render_ocr_unusable_reply(doc_meta, reason=ocr_result.error or ocr_result.status))
+        return True
+
+    _persist_document_ocr_result(str(case_id), int(chat_id), doc_meta, ocr_result)
+    if ocr_result.recommendation != "ocr_usable" and ocr_result.char_count < 250:
+        await update.message.reply_text(_render_ocr_unusable_reply(doc_meta, reason=ocr_result.recommendation))
+        return True
+
+    if wants_summary:
+        await _reply_text_chunked(update, _build_ocr_summary_reply(doc_meta, ocr_result.combined_text, pages=ocr_result.pages_processed))
+    else:
+        await update.message.reply_text(_render_ocr_status_reply(doc_meta, ocr_result, first_pass=True))
+    return True
 
 async def maybe_handle_document_summary_query(update, context, chat_id: int, text: str) -> bool:
     """
@@ -2155,6 +2442,10 @@ async def maybe_handle_document_summary_query(update, context, chat_id: int, tex
                     return True
                 doc_meta["saved_summary"] = saved_summary
             elif str(doc_meta.get("text") or "").strip():
+                if _looks_like_watermark_dominated_doc(doc_meta):
+                    reply = _watermark_guard_reply(str(doc_meta.get("filename") or "documento"))
+                    await _reply_text_chunked(update, reply)
+                    return True
                 generated_summary = _generate_specific_doc_summary_text(doc_meta)
                 _persist_specific_doc_summary(str(case_id), int(chat_id), doc_meta, generated_summary)
                 doc_meta["saved_summary"] = generated_summary

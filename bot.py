@@ -126,6 +126,7 @@ from core.document_summary_queries import (
     maybe_handle_latest_document_status_query,
     maybe_handle_document_alias_save_query,
     maybe_handle_document_naming_metadata_query,
+    maybe_handle_document_ocr_query,
     maybe_handle_document_summary_query,
 )
 from core.karen_case_facts import (
@@ -7859,6 +7860,12 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         except Exception as e:
             logger.exception(f"[KAREN_NORA_PREP_EARLY_GATE] failed: {e}")
 
+        try:
+            if await maybe_handle_document_ocr_query(update, context, chat_id, text):
+                return
+        except Exception as e:
+            logger.exception(f"[KAREN_DOCUMENT_OCR_EARLY_PIPELINE] failed: {e}")
+
         # Karen combined legal/document summary requests must beat generic draft-follow-up routing.
         # Example:
         # "Val, hazme un resumen legal del documento con cronología, datos clave,
@@ -7869,6 +7876,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
                 "dame el resumen de",
                 "dame resumen de",
                 "hazme resumen de",
+                "resume con ocr",
+                "resumen con ocr",
+                "haz ocr",
+                "lee visualmente",
                 "resume el documento",
                 "resume el pdf",
                 "resumen legal",
@@ -16628,6 +16639,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception(f"[KAREN_DOCUMENT_NAMING_METADATA_PIPELINE] failed: {e}")
 
+    try:
+        if await maybe_handle_document_ocr_query(update, context, chat_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_DOCUMENT_OCR_PIPELINE] failed: {e}")
+
     # --------------------------------------------------
     # Karen/VFMS Document Summary Priority Gate
     # Explicit VFMS/document-summary requests must beat generic memory,
@@ -16641,6 +16658,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "dame el resumen de",
             "dame resumen de",
             "hazme resumen de",
+            "resume con ocr",
+            "resumen con ocr",
+            "haz ocr",
+            "lee visualmente",
             "transcribe este documento",
             "transcribe el documento que acabo de subir",
             "haz un resumen",
@@ -16770,6 +16791,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         if await maybe_handle_document_naming_metadata_query(update, context, chat_id, text):
+            return
+
+        if await maybe_handle_document_ocr_query(update, context, chat_id, text):
             return
 
         if await maybe_handle_document_query(update, context, chat_id, text):
