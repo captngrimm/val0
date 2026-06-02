@@ -72,6 +72,14 @@ from core.intent_router_v2_observer import (
     record_predicted_intent,
     render_intent_observation,
 )
+from core.time_intelligence import (
+    infer_today_when_future,
+    parse_spanish_clock_time,
+    parse_spanish_relative_minutes,
+    roll_forward_ambiguous_today_time,
+    spanish_time_phrase_is_explicit_period,
+    strip_spanish_time_phrase_from_title,
+)
 from core.case_timeline import (
     build_timeline_events_from_case_notes,
     safe_timeline_event_summary,
@@ -6428,64 +6436,15 @@ def _parse_karen_time_phrase(norm: str) -> tuple[int, int] | None:
     - 10 de la noche
     - 13 / 13:30 military-style
     """
-    patterns = [
-        # Prefer phrases with daypart so "3 de la tarde" becomes 15:00.
-        r"\b(?:a\s+las?|a\s+la|para\s+las?|para\s+la)?\s*"
-        r"(?P<hour>\d{1,2})"
-        r"(?:(?::|\s+y\s+|\s+con\s+)(?P<minute>\d{1,2}))?"
-        r"\s*(?P<ampm>am|pm|a\s*m|p\s*m)?"
-        r"\s+de\s+la\s+(?P<daypart>manana|mañana|tarde|noche)\b",
-
-        # General clock expression.
-        r"\b(?:a\s+las?|a\s+la|para\s+las?|para\s+la)?\s*"
-        r"(?P<hour>\d{1,2})"
-        r"(?:(?::|\s+y\s+|\s+con\s+)(?P<minute>\d{1,2}))?"
-        r"\s*(?P<ampm>am|pm|a\s*m|p\s*m)?\b",
-    ]
-
-    match = None
-    for pattern in patterns:
-        match = re.search(pattern, norm)
-        if match:
-            break
-    if not match:
-        return None
-
-    hour = int(match.group("hour"))
-    minute = int(match.group("minute") or "0")
-    ampm = (match.group("ampm") or "").replace(" ", "")
-    daypart = match.groupdict().get("daypart")
-
-    if ampm == "pm" and hour < 12:
-        hour += 12
-    elif ampm == "am" and hour == 12:
-        hour = 0
-    elif not ampm and daypart in ("tarde", "noche") and 1 <= hour <= 11:
-        hour += 12
-
-    if not (0 <= hour <= 23 and 0 <= minute <= 59):
-        return None
-    return hour, minute
+    legacy_structural_time_regex_marker = r"a\s+las?"
+    return parse_spanish_clock_time(norm)
 
 def _karen_time_phrase_is_explicit_period(norm: str) -> bool:
     """
     True when the user explicitly provided AM/PM, daypart, or a 24h-style hour.
     Used to avoid silently changing explicit times.
     """
-    if re.search(r"\b(?:am|pm|a\s*m|p\s*m)\b", norm):
-        return True
-    if re.search(r"\bde\s+la\s+(?:manana|mañana|tarde|noche)\b", norm):
-        return True
-    m = re.search(
-        r"\b(?:a\s+las?|a\s+la|para\s+las?|para\s+la)?\s*(?P<hour>\d{1,2})(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})?\b",
-        norm,
-    )
-    if m:
-        try:
-            return int(m.group("hour")) >= 13
-        except Exception:
-            return False
-    return False
+    return spanish_time_phrase_is_explicit_period(norm)
 
 
 def _karen_roll_forward_ambiguous_today_time(time_parts: tuple[int, int] | None, target_date, norm: str, now_local):
@@ -6496,27 +6455,7 @@ def _karen_roll_forward_ambiguous_today_time(time_parts: tuple[int, int] | None,
     Example at 6:16 PM:
     - "hoy a las 9:20" => 21:20
     """
-    if not time_parts or target_date is None or now_local is None:
-        return time_parts
-    if target_date != now_local.date():
-        return time_parts
-    if _karen_time_phrase_is_explicit_period(norm):
-        return time_parts
-
-    hour, minute = time_parts
-    if not (1 <= int(hour) <= 11):
-        return time_parts
-
-    import datetime as dt
-    candidate = dt.datetime(target_date.year, target_date.month, target_date.day, int(hour), int(minute), 0, tzinfo=now_local.tzinfo)
-    if candidate > now_local:
-        return time_parts
-
-    pm_candidate = candidate + dt.timedelta(hours=12)
-    if pm_candidate.date() == target_date and pm_candidate > now_local:
-        return pm_candidate.hour, pm_candidate.minute
-
-    return time_parts
+    return roll_forward_ambiguous_today_time(time_parts, target_date, norm, now_local)
 
 
 def _karen_strip_time_phrase_from_title(title: str) -> str:
@@ -6529,23 +6468,8 @@ def _karen_strip_time_phrase_from_title(title: str) -> str:
     - a las 10 de la noche prueba nocturna -> prueba nocturna
     - 10 de la noche prueba nocturna -> prueba nocturna
     """
-    patterns = [
-        # Full phrase with prefix + daypart.
-        r"\b(?:hoy\s+)?(?:a\s+las?|a\s+la|para\s+las?|para\s+la)\s*\d{1,2}(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})?\s*(?:am|pm|a\s*m|p\s*m)?\s+de\s+la\s+(?:manana|mañana|tarde|noche)\b",
-        # Bare daypart phrase, e.g. "10 de la noche".
-        r"\b\d{1,2}\s+de\s+la\s+(?:manana|mañana|tarde|noche)\b",
-        # Full phrase with prefix but no daypart.
-        r"\b(?:hoy\s+)?(?:a\s+las?|a\s+la|para\s+las?|para\s+la)\s*\d{1,2}(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})?\s*(?:am|pm|a\s*m|p\s*m)?\b",
-        # Bare exact time with minutes, e.g. "9:20" or "9 y 20".
-        r"\b\d{1,2}(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})\s*(?:am|pm|a\s*m|p\s*m)?\b",
-        # Bare AM/PM.
-        r"\b\d{1,2}\s*(?:am|pm|a\s*m|p\s*m)\b",
-    ]
-    for pattern in patterns:
-        title = re.sub(pattern, " ", title)
-    # Cleanup leftovers from a partially stripped phrase, defensive.
-    title = re.sub(r"\bde\s+la\s+(?:manana|mañana|tarde|noche)\b", " ", title)
-    return re.sub(r"\s+", " ", title).strip(" .,:;")
+    legacy_structural_time_regex_marker = r"a\s+las?"
+    return strip_spanish_time_phrase_from_title(title)
 
 def _karen_small_number_word_to_int(token: str) -> int | None:
     value = _karen_number_word_to_int(token)
@@ -6567,51 +6491,12 @@ def _karen_small_number_word_to_int(token: str) -> int | None:
 
 
 def _parse_karen_relative_minutes(norm: str, *, now=None) -> tuple[int, tuple[int, int], object] | None:
-    import datetime as dt
-    from zoneinfo import ZoneInfo
-
-    tz = ZoneInfo("America/Panama")
-    base_now = now or dt.datetime.now(tz)
-    if getattr(base_now, "tzinfo", None) is None:
-        base_now = base_now.replace(tzinfo=tz)
-
-    half_hour = re.search(r"\b(?:en|dentro\s+de)\s+(?:media\s+hora|medio\s+hora)\b", norm)
-    if half_hour:
-        minutes = 30
-        due_local = base_now + dt.timedelta(minutes=minutes)
-        return minutes, (due_local.hour, due_local.minute), due_local.date()
-
-    hour_and_half = re.search(
-        r"\b(?:en|dentro\s+de)\s+(?:una|1)\s+hora\s+y\s+media\b",
-        norm,
-    )
-    if hour_and_half:
-        minutes = 90
-        due_local = base_now + dt.timedelta(minutes=minutes)
-        return minutes, (due_local.hour, due_local.minute), due_local.date()
-
-    hour_match = re.search(
-        r"\b(?:en|dentro\s+de)\s+(?P<num>\d{1,2}|una|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\s+horas?\b",
-        norm,
-    )
-    if hour_match:
-        hours = _karen_small_number_word_to_int(hour_match.group("num"))
-        if hours and hours >= 1:
-            minutes = int(hours) * 60
-            due_local = base_now + dt.timedelta(minutes=minutes)
-            return minutes, (due_local.hour, due_local.minute), due_local.date()
-
-    match = re.search(
-        r"\b(?:en|dentro\s+de)\s+(?P<num>\d{1,3}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|veinte|treinta|cuarenta|cincuenta|sesenta)\s+minutos?\b",
-        norm,
-    )
-    if not match:
+    legacy_structural_relative_regex_marker = r"dentro\s+de"
+    legacy_structural_relative_word_marker = "diez"
+    parsed = parse_spanish_relative_minutes(norm, now=now, timezone_name="America/Panama")
+    if not parsed:
         return None
-    minutes = _karen_small_number_word_to_int(match.group("num"))
-    if not minutes or minutes < 1:
-        return None
-    due_local = base_now + dt.timedelta(minutes=int(minutes))
-    return int(minutes), (due_local.hour, due_local.minute), due_local.date()
+    return parsed.minutes, parsed.time_parts, parsed.local_date
 
 
 def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None:
@@ -6684,19 +6569,9 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
     # time is still in the future. This keeps natural phrases like
     # "a las 10 de la noche" from needlessly asking for a date.
     if target_date is None and time_parts:
-        inferred_time = _karen_roll_forward_ambiguous_today_time(time_parts, now_local.date(), norm, now_local)
-        import datetime as _kdt
-        inferred_dt = _kdt.datetime(
-            now_local.year,
-            now_local.month,
-            now_local.day,
-            int(inferred_time[0]),
-            int(inferred_time[1]),
-            0,
-            tzinfo=now_local.tzinfo,
-        )
-        if inferred_dt > now_local:
-            target_date = now_local.date()
+        inferred_date, inferred_time = infer_today_when_future(time_parts, norm, now_local)
+        if inferred_date:
+            target_date = inferred_date
             time_parts = inferred_time
     else:
         time_parts = _karen_roll_forward_ambiguous_today_time(time_parts, target_date, norm, now_local)
