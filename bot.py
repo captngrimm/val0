@@ -5819,6 +5819,10 @@ def _looks_like_karen_reminder_list_query(text: str) -> str:
     )
     all_markers = (
         "que recordatorios tengo",
+        "que recordatorios activos tengo",
+        "que recordatorios pendientes tengo",
+        "recordatorios activos",
+        "recordatorios pendientes",
         "dime mis recordatorios",
         "muestrame mis recordatorios",
         "que tengo registrado como recordatorio",
@@ -6275,7 +6279,7 @@ def _build_val_agenda_for_date(chat_id: int, target_date) -> str:
             SELECT id, text, due_at_utc
             FROM reminders
             WHERE chat_id = ?
-              AND status IN ('pending', 'sending', 'sent')
+              AND status IN ('pending', 'sending')
               AND due_at_utc >= ?
               AND due_at_utc <= ?
             ORDER BY due_at_utc ASC, id ASC
@@ -6840,12 +6844,12 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
         end_local = start_local + timedelta(days=1)
         title = "🗓️ Agenda de hoy"
         try:
-            internal = _generate_morning_brief_det(int(chat_id), start_local.date().isoformat())
+            internal = _build_val_agenda_for_date(int(chat_id), start_local.date())
         except Exception as e:
             internal = f"No pude leer agenda interna de hoy: {e}"
 
         if not internal:
-            internal = "No encontré recordatorios ni términos internos para hoy."
+            internal = "No encontré recordatorios ni tareas de Val para hoy."
 
     gcal = _format_client_gcal_events_section(
         client_id=client_id,
@@ -7151,7 +7155,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         early_norm = re.sub(r"[¿?¡!.,:;]+", " ", early_norm)
         early_norm = re.sub(r"\s+", " ", early_norm).strip()
         early_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", early_norm).strip()
-        early_norm = re.sub(r"^(val|valeria|vale)\s+", "", early_norm).strip()
+        early_norm = re.sub(r"^(val|valeria|vale|bal|pal|va\s+el)\s+", "", early_norm).strip()
         early_norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", early_norm).strip()
 
         # EARLY KAREN AGENDA HARD OVERRIDE
@@ -14779,7 +14783,7 @@ def _normalize_daily_operator_query(text: str) -> str:
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
-    norm = re.sub(r"^(bal|val|valeria|vale)\s+", "", norm).strip()
+    norm = re.sub(r"^(bal|pal|val|valeria|vale|va\s+el)\s+", "", norm).strip()
     norm = re.sub(r"^(a ver|bueno|ok|okay|oye)\s+", "", norm).strip()
     return norm
 
@@ -15258,7 +15262,7 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
     norm = _norm_text(text or "")
     norm = re.sub(r"[¿?¡!.,:;]+", " ", norm)
     norm = re.sub(r"\s+", " ", norm).strip()
-    norm = re.sub(r"^(bal|val|valeria|vale)\s+", "", norm).strip()
+    norm = re.sub(r"^(bal|pal|val|valeria|vale|va\s+el)\s+", "", norm).strip()
 
     number_match = re.search(r"\btarea\s+(?P<num>\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
     number = _karen_number_word_to_int(number_match.group("num")) if number_match else None
@@ -16648,6 +16652,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "qué tengo en recordatorio",
             "que recordatorios tengo",
             "qué recordatorios tengo",
+            "que recordatorios activos tengo",
+            "qué recordatorios activos tengo",
+            "que recordatorios pendientes tengo",
+            "qué recordatorios pendientes tengo",
+            "recordatorios activos",
+            "recordatorios pendientes",
             "dime mis recordatorios",
             "muestrame mis recordatorios",
             "muéstrame mis recordatorios",

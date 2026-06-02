@@ -33,6 +33,7 @@ def _checks() -> list[Check]:
         Check("Tany vocative", [py, "scripts/quality/karen_vocative_tany_smoke.py"]),
         Check("natural name/language guard", [py, "scripts/quality/karen_natural_name_language_guard_smoke.py"]),
         Check("agenda hygiene", [py, "scripts/quality/karen_agenda_hygiene_smoke.py"]),
+        Check("Karen agenda active route", [py, "scripts/quality/karen_agenda_active_route_smoke.py"]),
         Check("Karen Day0 routes", [py, "scripts/quality/karen_day0_route_smoke.py"]),
         Check("GCal event creation", [py, "scripts/quality/karen_gcal_event_creation_smoke.py"]),
         Check("GCal event delete", [py, "scripts/quality/karen_gcal_event_delete_smoke.py"]),
