@@ -6316,7 +6316,7 @@ def _build_val_agenda_for_date(chat_id: int, target_date) -> str:
                 pass
             lines.append(f"{idx}. {time_label} · {_display_karen_reminder_title(str(text_value or '').strip()) or f'recordatorio #{rid}'}")
     else:
-        lines.append("- No tienes recordatorios de Val para esa fecha.")
+        lines.append("- No tienes recordatorios.")
 
     lines.extend(["", "📌 Tareas de Val"])
     if tasks:
@@ -6325,7 +6325,7 @@ def _build_val_agenda_for_date(chat_id: int, target_date) -> str:
             label = raw or " ".join(part for part in (str(row[2] or "").strip(), str(row[3] or "").strip()) if part).strip() or f"tarea #{row[0]}"
             lines.append(f"{idx}. {label}")
     else:
-        lines.append("- No tienes tareas de Val con fecha para ese día.")
+        lines.append("- No tienes tareas.")
 
     return "\n".join(lines)
 
