@@ -6679,7 +6679,27 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
             date_span = re.search(r"\bhoy\b", norm).span()
 
     time_parts = relative_minutes[1] if relative_minutes else _parse_karen_time_phrase(norm)
-    time_parts = _karen_roll_forward_ambiguous_today_time(time_parts, target_date, norm, now_local)
+
+    # If the user gave a clear time but no date, infer today when that resolved
+    # time is still in the future. This keeps natural phrases like
+    # "a las 10 de la noche" from needlessly asking for a date.
+    if target_date is None and time_parts:
+        inferred_time = _karen_roll_forward_ambiguous_today_time(time_parts, now_local.date(), norm, now_local)
+        import datetime as _kdt
+        inferred_dt = _kdt.datetime(
+            now_local.year,
+            now_local.month,
+            now_local.day,
+            int(inferred_time[0]),
+            int(inferred_time[1]),
+            0,
+            tzinfo=now_local.tzinfo,
+        )
+        if inferred_dt > now_local:
+            target_date = now_local.date()
+            time_parts = inferred_time
+    else:
+        time_parts = _karen_roll_forward_ambiguous_today_time(time_parts, target_date, norm, now_local)
 
     title = norm
     title = re.sub(r"^(?:recuerdame|recordarme|recordatorio)\s+", "", title).strip()

@@ -47,8 +47,19 @@ def main():
         now=evening_now,
     )
     assert night is not None
+    assert_eq(night["date"].isoformat(), "2026-06-01", "night no-date infers today")
     assert_eq(night["time"], (22, 0), "10 de la noche -> 22:00")
     assert_eq(night["title"], "prueba nocturna", "night title cleanup")
+
+    afternoon_now = dt.datetime(2026, 6, 1, 10, 53, 0, tzinfo=ZoneInfo("America/Panama"))
+    no_date_night = bot._parse_karen_natural_reminder_request(
+        "Val recuérdame a las 10 de la noche prueba nocturna v2",
+        now=afternoon_now,
+    )
+    assert no_date_night is not None
+    assert_eq(no_date_night["date"].isoformat(), "2026-06-01", "no-date future night infers today")
+    assert_eq(no_date_night["time"], (22, 0), "no-date future night time")
+    assert_eq(no_date_night["title"], "prueba nocturna v2", "no-date night title cleanup")
 
     pending = bot._parse_karen_pending_reminder_reply("Para las 9:20")
     assert_eq(pending["time"], (9, 20), "pending Para las 9:20")
