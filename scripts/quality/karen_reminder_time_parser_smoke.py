@@ -32,6 +32,24 @@ def main():
     assert_eq(parsed["time"], (10, 30), "una hora y media -> +90 minutes")
     assert_eq(parsed["title"], "recoger a david", "relative title cleanup")
 
+    evening_now = dt.datetime(2026, 6, 1, 18, 16, 0, tzinfo=ZoneInfo("America/Panama"))
+    exact = bot._parse_karen_natural_reminder_request(
+        "Val recuérdame hoy a las 9:20 prueba exacta",
+        now=evening_now,
+    )
+    assert exact is not None
+    assert_eq(exact["date"].isoformat(), "2026-06-01", "exact today date")
+    assert_eq(exact["time"], (21, 20), "past ambiguous 9:20 rolls to PM")
+    assert_eq(exact["title"], "prueba exacta", "exact time title cleanup")
+
+    night = bot._parse_karen_natural_reminder_request(
+        "Val recuérdame a las 10 de la noche prueba nocturna",
+        now=evening_now,
+    )
+    assert night is not None
+    assert_eq(night["time"], (22, 0), "10 de la noche -> 22:00")
+    assert_eq(night["title"], "prueba nocturna", "night title cleanup")
+
     pending = bot._parse_karen_pending_reminder_reply("Para las 9:20")
     assert_eq(pending["time"], (9, 20), "pending Para las 9:20")
 

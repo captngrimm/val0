@@ -43,9 +43,11 @@ def test_monday_reminder_parser_covers_live_variants() -> None:
     for token in ("recuerdame", "registrar un recordatorio", "proximo", "lunes", "junio"):
         assert_contains(parser, token, f"parser covers {token}")
     assert_contains(parser, "lo puedes hacer", "parser removes voice-style filler")
-    assert_contains(parser, "a\\s+las?", "parser looks for natural hour")
+    time_parser = function_body("_parse_karen_time_phrase")
+    assert_contains(time_parser, "a\\s+las?", "time parser looks for natural hour")
     assert_contains(parser, "title = re.sub", "parser cleans title with regex substitution")
-    assert_contains(parser, r"\ba\s+las?", "parser strips trailing natural time from title")
+    title_cleaner = function_body("_karen_strip_time_phrase_from_title")
+    assert_contains(title_cleaner, "a\\s+las?", "title cleaner strips natural time phrases")
     assert_contains(handler, "insert_reminder", "clear reminder creates Val reminder")
     assert_contains(handler, "¿A qué hora lo pongo?", "date/title without hour asks hour")
     assert_contains(handler, "¿Qué quieres que te recuerde?", "date without title asks title")

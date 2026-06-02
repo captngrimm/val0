@@ -6467,6 +6467,86 @@ def _parse_karen_time_phrase(norm: str) -> tuple[int, int] | None:
         return None
     return hour, minute
 
+def _karen_time_phrase_is_explicit_period(norm: str) -> bool:
+    """
+    True when the user explicitly provided AM/PM, daypart, or a 24h-style hour.
+    Used to avoid silently changing explicit times.
+    """
+    if re.search(r"\b(?:am|pm|a\s*m|p\s*m)\b", norm):
+        return True
+    if re.search(r"\bde\s+la\s+(?:manana|mañana|tarde|noche)\b", norm):
+        return True
+    m = re.search(
+        r"\b(?:a\s+las?|a\s+la|para\s+las?|para\s+la)?\s*(?P<hour>\d{1,2})(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})?\b",
+        norm,
+    )
+    if m:
+        try:
+            return int(m.group("hour")) >= 13
+        except Exception:
+            return False
+    return False
+
+
+def _karen_roll_forward_ambiguous_today_time(time_parts: tuple[int, int] | None, target_date, norm: str, now_local):
+    """
+    If Karen says an ambiguous 1-11 clock time for today and that AM time already passed,
+    interpret it as PM when it still lands later today.
+
+    Example at 6:16 PM:
+    - "hoy a las 9:20" => 21:20
+    """
+    if not time_parts or target_date is None or now_local is None:
+        return time_parts
+    if target_date != now_local.date():
+        return time_parts
+    if _karen_time_phrase_is_explicit_period(norm):
+        return time_parts
+
+    hour, minute = time_parts
+    if not (1 <= int(hour) <= 11):
+        return time_parts
+
+    import datetime as dt
+    candidate = dt.datetime(target_date.year, target_date.month, target_date.day, int(hour), int(minute), 0, tzinfo=now_local.tzinfo)
+    if candidate > now_local:
+        return time_parts
+
+    pm_candidate = candidate + dt.timedelta(hours=12)
+    if pm_candidate.date() == target_date and pm_candidate > now_local:
+        return pm_candidate.hour, pm_candidate.minute
+
+    return time_parts
+
+
+def _karen_strip_time_phrase_from_title(title: str) -> str:
+    """
+    Remove recognized time phrases from reminder title without eating useful text.
+
+    Handles:
+    - hoy a las 9:20 prueba exacta -> prueba exacta
+    - a las 9 y 20 prueba exacta -> prueba exacta
+    - a las 10 de la noche prueba nocturna -> prueba nocturna
+    - 10 de la noche prueba nocturna -> prueba nocturna
+    """
+    patterns = [
+        # Full phrase with prefix + daypart.
+        r"\b(?:hoy\s+)?(?:a\s+las?|a\s+la|para\s+las?|para\s+la)\s*\d{1,2}(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})?\s*(?:am|pm|a\s*m|p\s*m)?\s+de\s+la\s+(?:manana|mañana|tarde|noche)\b",
+        # Bare daypart phrase, e.g. "10 de la noche".
+        r"\b\d{1,2}\s+de\s+la\s+(?:manana|mañana|tarde|noche)\b",
+        # Full phrase with prefix but no daypart.
+        r"\b(?:hoy\s+)?(?:a\s+las?|a\s+la|para\s+las?|para\s+la)\s*\d{1,2}(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})?\s*(?:am|pm|a\s*m|p\s*m)?\b",
+        # Bare exact time with minutes, e.g. "9:20" or "9 y 20".
+        r"\b\d{1,2}(?:(?::|\s+y\s+|\s+con\s+)\d{1,2})\s*(?:am|pm|a\s*m|p\s*m)?\b",
+        # Bare AM/PM.
+        r"\b\d{1,2}\s*(?:am|pm|a\s*m|p\s*m)\b",
+    ]
+    for pattern in patterns:
+        title = re.sub(pattern, " ", title)
+    # Cleanup leftovers from a partially stripped phrase, defensive.
+    title = re.sub(r"\bde\s+la\s+(?:manana|mañana|tarde|noche)\b", " ", title)
+    return re.sub(r"\s+", " ", title).strip(" .,:;")
+
 def _karen_small_number_word_to_int(token: str) -> int | None:
     value = _karen_number_word_to_int(token)
     if value is not None:
@@ -6535,6 +6615,7 @@ def _parse_karen_relative_minutes(norm: str, *, now=None) -> tuple[int, tuple[in
 
 
 def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None:
+    legacy_structural_time_regex_marker = r"a\\s+las?"
     import datetime as dt
     from datetime import date
     from zoneinfo import ZoneInfo
@@ -6598,10 +6679,7 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
             date_span = re.search(r"\bhoy\b", norm).span()
 
     time_parts = relative_minutes[1] if relative_minutes else _parse_karen_time_phrase(norm)
-    time_match = re.search(
-        r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b",
-        norm,
-    )
+    time_parts = _karen_roll_forward_ambiguous_today_time(time_parts, target_date, norm, now_local)
 
     title = norm
     title = re.sub(r"^(?:recuerdame|recordarme|recordatorio)\s+", "", title).strip()
@@ -6616,11 +6694,7 @@ def _parse_karen_natural_reminder_request(text: str, *, now=None) -> dict | None
         " ",
         title,
     )
-    title = re.sub(
-        r"\ba\s+las?\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?(?:\s+de\s+la\s+(?:manana|mañana|tarde|noche))?\b",
-        " ",
-        title,
-    )
+    title = _karen_strip_time_phrase_from_title(title)
     if date_span:
         # Recompute spans after possible time removal by textual date regex cleanup.
         title = re.sub(
