@@ -26,13 +26,14 @@ Alpha marker:
 | A-001 | Calendar fixture follow-up coverage v1 | n/a | pre-Alpha | 2026-06-03 12:57 | n/a | `79422f5` | PASS | Added calendar fixture coverage and pending_state fixture runner support. |
 | A-002 | Calendar create follow-up bridge v1 | n/a | pre-Alpha | 2026-06-03 13:11 | n/a | `69361c0` | PASS | Missing-time follow-up bridge. Interpreter parses follow-up time; deterministic confirmation still executes write. |
 | A-003 | Interpreter task_delete support v1 | 30-60 min | post-Alpha | 2026-06-03 13:18 | pending calibration | `b9ea395` | PASS | Closed task_delete fixture XFAIL; client fixtures now 18/18 PASS. |
+| A-004 | Karen Conversationality v1 | 2-4 h | 2026-06-03 13:24 | 2026-06-03 13:34 | ~10 min implementation/verify window after Codex handoff | `e84db63` | PASS | Added Karen-scoped deterministic conversational openings for agenda/reminders/tasks; smokes PASS; no write logic changed. |
 
 ## Planned Next Milestones
 
 | # | Milestone | Estimate | Status | Notes |
 |---:|---|---:|---|---|
-| 1 | Karen Conversationality v1 | 2-4 h | NEXT | Reduce canned Telegram-bot feel while keeping deterministic rails safe. |
-| 2 | Karen Personality Polish v1 | 2-3 h | Planned | Tany consistency, warmer/sarcastic style, less corporate/legal dryness. |
+| 1 | Karen Conversationality v1 | 2-4 h | DONE | Reduce canned Telegram-bot feel while keeping deterministic rails safe. Completed as A-004 v1. |
+| 2 | Karen Personality Polish v1 | 2-3 h | NEXT | Tany consistency, warmer/sarcastic style, less corporate/legal dryness. |
 | 3 | Calendar Follow-up v2 | 2-4 h | Planned | Missing-date follow-up bridge. |
 | 4 | Fixture Migration v2 | 3-5 h | Planned | Move more one-off Karen smokes into client fixtures. |
 | 5 | M45 Router Coverage Closeout | 2-4 h | Planned | Recalculate/close router observation items. |
