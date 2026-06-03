@@ -78,6 +78,7 @@ from core.time_intelligence import (
     infer_today_when_future,
     parse_spanish_clock_time,
     parse_spanish_relative_minutes,
+    render_spanish_date_for_display,
     roll_forward_ambiguous_today_time,
     spanish_time_phrase_is_explicit_period,
     strip_spanish_time_phrase_from_title,
@@ -5403,7 +5404,7 @@ def build_unified_pending_dashboard(chat_id: int) -> str:
 
             if raw:
                 if due:
-                    tasks.append(f"- {raw} ({due[:10]})")
+                    tasks.append(f"- {raw} ({_format_karen_due_local_label(due[:16])})")
                 else:
                     tasks.append(f"- {raw}")
     except Exception as e:
@@ -5441,7 +5442,7 @@ def build_unified_pending_dashboard(chat_id: int) -> str:
                 if due_dt.date() == now_local.date():
                     label = "hoy " + due_dt.strftime("%H:%M")
                 else:
-                    label = due_dt.strftime("%Y-%m-%d %H:%M")
+                    label = render_spanish_date_for_display(due_dt, include_time=True)
             except Exception:
                 pass
 
@@ -5486,9 +5487,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
     tomorrow_dt = datetime.now(tz) + timedelta(days=1)
     tomorrow_date = tomorrow_dt.date().isoformat()
 
-    weekday = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][tomorrow_dt.weekday()]
-    month = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][tomorrow_dt.month]
-    pretty = f"{weekday} {tomorrow_dt.day} {month}"
+    pretty = render_spanish_date_for_display(tomorrow_dt)
 
     start_local = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day, 0, 0, 0, tzinfo=tz)
     end_local = datetime(tomorrow_dt.year, tomorrow_dt.month, tomorrow_dt.day, 23, 59, 59, tzinfo=tz)
@@ -5848,7 +5847,7 @@ def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
         for idx, row in enumerate(rows, start=1):
             due = str(row.get("due_local") or "").strip()
             text_value = str(row.get("text") or "").strip()
-            time_label = due[11:16] if when == "tomorrow" and len(due) >= 16 else due
+            time_label = _format_karen_due_local_label(due, time_only=(when == "tomorrow"))
             lines.append(f"{idx}. {time_label} · {text_value}{row.get('time_note') or ''}")
     if when in {"all", "active"} and _karen_past_reminder_count(chat_id):
         lines.extend(["", "Hay recordatorios vencidos ocultos. Puedes pedir: “Val, recordatorios vencidos”."])
@@ -5879,7 +5878,7 @@ def _render_karen_reminder_updated_list(chat_id: int, *, when: str) -> str:
     for idx, row in enumerate(rows, start=1):
         due = str(row.get("due_local") or "").strip()
         text_value = str(row.get("text") or "").strip()
-        lines.append(f"{idx}. {due} · {text_value}{row.get('time_note') or ''}")
+        lines.append(f"{idx}. {_format_karen_due_local_label(due)} · {text_value}{row.get('time_note') or ''}")
     return "\n".join(lines)
 
 
@@ -6161,12 +6160,35 @@ def _format_client_gcal_event_time(raw_start: str, tz_name: str = "America/Panam
             dt = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
             if dt.tzinfo is not None:
                 dt = dt.astimezone(ZoneInfo(tz_name))
-            label = dt.strftime("%a %d/%m %I:%M %p").replace(" 0", " ")
+            label = render_spanish_date_for_display(dt, include_time=True, timezone_name=tz_name)
         elif raw_start:
             label = raw_start
     except Exception:
         pass
     return label
+
+
+def _format_karen_due_local_label(raw_value: str, *, time_only: bool = False, tz_name: str = "America/Panama") -> str:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    raw = str(raw_value or "").strip()
+    if not raw:
+        return ""
+    if time_only and len(raw) >= 16:
+        return raw[11:16]
+    try:
+        if "T" in raw:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        elif len(raw) >= 16:
+            parsed = datetime.strptime(raw[:16], "%Y-%m-%d %H:%M")
+        else:
+            parsed = datetime.strptime(raw[:10], "%Y-%m-%d")
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=ZoneInfo(tz_name))
+        return render_spanish_date_for_display(parsed, include_time=len(raw) >= 16, timezone_name=tz_name)
+    except Exception:
+        return raw
 
 
 def _format_client_gcal_events_section(client_id: str, start_local, end_local, tz_name: str = "America/Panama", limit: int = 10, chat_id: int | None = None) -> str:
@@ -6413,9 +6435,7 @@ def build_client_weekday_agenda_dashboard(client_id: str, chat_id: int, target_d
     tz = ZoneInfo(tz_name)
     start_local = datetime(target_date.year, target_date.month, target_date.day, 0, 0, 0, tzinfo=tz)
     end_local = start_local + timedelta(days=1)
-    weekday = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"][target_date.weekday()]
-    month_name = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"][target_date.month]
-    title = f"🗓️ Agenda para {weekday} {target_date.day} de {month_name}"
+    title = f"🗓️ Agenda para {render_spanish_date_for_display(target_date)}"
     gcal = _format_client_gcal_events_section(
         client_id=client_id,
         start_local=start_local,

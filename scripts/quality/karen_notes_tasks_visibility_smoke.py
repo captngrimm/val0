@@ -111,7 +111,7 @@ def test_tasks_route_and_render() -> None:
     ])
     assert_contains(rendered, "Tareas pendientes", "tasks heading")
     assert_contains(rendered, "escribirle al topógrafo", "task with date appears")
-    assert_contains(rendered, "2026-05-26 08:00", "task date appears")
+    assert_contains(rendered, "martes 26 de mayo, 8:00 AM", "task date appears in Spanish")
     assert_contains(rendered, "sin fecha", "task without date is labelled")
     assert_not_contains(rendered, "convencer a Guillermo", "tasks view does not invent strategy")
     assert_not_contains(rendered, "Siguiente acción sugerida", "tasks view is not Daily Operator")

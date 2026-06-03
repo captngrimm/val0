@@ -9,6 +9,22 @@ from zoneinfo import ZoneInfo
 
 
 DEFAULT_TIMEZONE = "America/Panama"
+SPANISH_WEEKDAYS = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+SPANISH_MONTHS = (
+    "",
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
+)
 
 
 class TimeDisplayPreference(str, Enum):
@@ -289,3 +305,35 @@ def render_time_for_display(value: dt.datetime, preference: TimeDisplayPreferenc
     elif hour >= 18:
         suffix = "de la noche"
     return f"{base} ({suffix})"
+
+
+def render_spanish_date_for_display(
+    value: dt.date | dt.datetime,
+    *,
+    current_year: int | None = None,
+    include_time: bool = False,
+    timezone_name: str = DEFAULT_TIMEZONE,
+) -> str:
+    """Render a user-facing Spanish date label without changing stored values."""
+    tz = ZoneInfo(timezone_name)
+    if isinstance(value, dt.datetime):
+        local_value = value
+        if local_value.tzinfo is not None:
+            local_value = local_value.astimezone(tz)
+        date_value = local_value.date()
+    else:
+        local_value = None
+        date_value = value
+
+    if current_year is None:
+        current_year = dt.datetime.now(tz).year
+
+    weekday = SPANISH_WEEKDAYS[date_value.weekday()]
+    month = SPANISH_MONTHS[date_value.month]
+    label = f"{weekday} {date_value.day} de {month}"
+    if date_value.year != int(current_year):
+        label = f"{label} de {date_value.year}"
+
+    if include_time and local_value is not None:
+        label = f"{label}, {local_value.strftime('%I:%M %p').lstrip('0')}"
+    return label

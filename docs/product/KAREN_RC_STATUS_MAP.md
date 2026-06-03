@@ -36,6 +36,7 @@ python3 scripts/quality/karen_rc_full_smoke.py --keep-going
 - Google Calendar read/write is authorized and working.
 - Google Calendar event create works with confirmation.
 - Google Calendar event delete works with confirmation.
+- Agenda, event, reminder, and task date display should be Spanish-first, for example `martes 2 de junio, 10:00 AM`.
 - Stale Google Calendar delete guard prevents deleting from an old numbered list.
 - Relative reminders such as `recuérdame en 10 minutos...` create Val reminders.
 - Monday reminder parsing creates the right Val reminder and agenda view.
@@ -51,6 +52,8 @@ python3 scripts/quality/karen_rc_full_smoke.py --keep-going
 - OCR is first-pass only and currently limited to the first pages for MVP responsiveness.
 - OCR may still need manual review or a cleaner copy for poor scans, handwriting, stamps, or rotated pages.
 - Voice normalization is still tactical and incomplete.
+- Calendar creation works best when Karen gives the full event in one message, for example: `Val, agenda para mañana a la 1:30 PM cita con la bróker y mi mamá`.
+- Do not claim multi-turn voice follow-up for calendar creation is stable yet; keep treating it as WATCH until more live observation passes.
 - Intent Router v2 is needed after RC to replace accumulated hard gates with a cleaner priority model.
 - Multi-client hardcoded cleanup remains future work before broad expansion.
 

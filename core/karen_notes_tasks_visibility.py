@@ -4,6 +4,8 @@ import re
 import unicodedata
 from typing import Any, Iterable
 
+from core.time_intelligence import render_spanish_date_for_display
+
 
 CASE_KEY = "KAREN-LAND-001"
 
@@ -170,6 +172,27 @@ def _task_text(row: Any) -> str:
 
 def _task_due(row: Any) -> str:
     return str(_row_value(row, "due_date", 4, "") or "").strip()
+
+
+def _format_karen_task_due_label(due: str) -> str:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    raw = str(due or "").strip()
+    if not raw:
+        return "sin fecha"
+    try:
+        if "T" in raw:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        elif len(raw) >= 16:
+            parsed = datetime.strptime(raw[:16], "%Y-%m-%d %H:%M")
+        else:
+            parsed = datetime.strptime(raw[:10], "%Y-%m-%d")
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=ZoneInfo("America/Panama"))
+        return render_spanish_date_for_display(parsed, include_time=len(raw) >= 16)
+    except Exception:
+        return raw
 
 
 def _task_source(row: Any) -> str:
@@ -556,7 +579,7 @@ def render_karen_case_pendientes_view(
         for idx, row in enumerate(task_rows, start=1):
             raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
             due = _task_due(row)
-            due_label = due[:16].replace("T", " ") if due else "sin fecha"
+            due_label = _format_karen_task_due_label(due)
             lines.append(f"{idx}. {raw} — {due_label}")
     else:
         lines.append("- No encontré tareas abiertas.")
@@ -627,7 +650,7 @@ def render_karen_tasks_view(
     for idx, row in enumerate(rows[: max(1, int(limit or 10))], start=1):
         raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
         due = _task_due(row)
-        due_label = due[:16].replace("T", " ") if due else "sin fecha"
+        due_label = _format_karen_task_due_label(due)
         marker = " · Posible recordatorio guardado como tarea" if looks_like_reminder_command_task(raw) else ""
         lines.append(f"{idx}. {raw} — {due_label}{marker}")
 
