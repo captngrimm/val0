@@ -6149,7 +6149,7 @@ async def maybe_handle_karen_task_creation(update: Update, context: ContextTypes
         return True
 
 
-def _format_client_gcal_event_time(raw_start: str, tz_name: str = "America/Panama") -> str:
+def _format_client_gcal_event_time(raw_start: str, tz_name: str = "America/Panama", *, single_day: bool = False) -> str:
     from datetime import datetime
     from zoneinfo import ZoneInfo
 
@@ -6160,9 +6160,9 @@ def _format_client_gcal_event_time(raw_start: str, tz_name: str = "America/Panam
             dt = datetime.fromisoformat(raw_start.replace("Z", "+00:00"))
             if dt.tzinfo is not None:
                 dt = dt.astimezone(ZoneInfo(tz_name))
-            label = render_spanish_date_for_display(dt, include_time=True, timezone_name=tz_name)
+            label = dt.strftime("%I:%M %p").lstrip("0") if single_day else render_spanish_date_for_display(dt, include_time=True, timezone_name=tz_name)
         elif raw_start:
-            label = raw_start
+            label = "Todo el día" if single_day else render_spanish_date_for_display(datetime.strptime(raw_start[:10], "%Y-%m-%d"), timezone_name=tz_name)
     except Exception:
         pass
     return label
@@ -6203,6 +6203,11 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
     """
     try:
         from core.client_gcal_read import get_client_events_between
+        from datetime import timedelta
+
+        single_day = bool(
+            getattr(start_local, "date", lambda: None)() == (end_local - timedelta(seconds=1)).date()
+        )
 
         if chat_id is not None:
             _KAREN_GCAL_EVENT_LIST_CONTEXT[int(chat_id)] = {
@@ -6238,7 +6243,7 @@ def _format_client_gcal_events_section(client_id: str, start_local, end_local, t
         for idx, ev in enumerate(result.events, start=1):
             raw_start = str(ev.get("start") or "").strip()
             title = str(ev.get("summary") or "(sin título)").strip()
-            label = _format_client_gcal_event_time(raw_start, tz_name=tz_name)
+            label = _format_client_gcal_event_time(raw_start, tz_name=tz_name, single_day=single_day)
 
             lines.append(f"{idx}. {label} · {title}")
             visible_events.append({
@@ -6919,7 +6924,7 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
         target = now + timedelta(days=1)
         start_local = datetime(target.year, target.month, target.day, 0, 0, 0, tzinfo=tz)
         end_local = start_local + timedelta(days=1)
-        title = "🗓️ Agenda de mañana"
+        title = f"🗓️ Agenda de mañana — {render_spanish_date_for_display(start_local)}"
         try:
             internal = build_unified_tomorrow_dashboard(int(chat_id))
         except Exception as e:
@@ -6937,7 +6942,7 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
     else:
         start_local = datetime(now.year, now.month, now.day, 0, 0, 0, tzinfo=tz)
         end_local = start_local + timedelta(days=1)
-        title = "🗓️ Agenda de hoy"
+        title = f"🗓️ Agenda de hoy — {render_spanish_date_for_display(start_local)}"
         try:
             internal = _build_val_agenda_for_date(int(chat_id), start_local.date())
         except Exception as e:
