@@ -5617,13 +5617,13 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
 
     action_lines = ["", "Acciones útiles:"]
     if reminders:
-        action_lines.append("- elimina el recordatorio 1")
+        action_lines.append("- Elimina el recordatorio 1")
         edit_number = 2 if len(reminders) >= 2 else 1
-        action_lines.append(f"- cambia el recordatorio {edit_number} para las 11")
+        action_lines.append(f"- Cambia el recordatorio {edit_number} para las 11")
     if tasks or reminder_like_tasks:
         action_lines.extend([
-            "- marca la tarea 1 como hecha",
-            "- elimina la tarea 1",
+            "- Marca la tarea 1 como hecha",
+            "- Elimina la tarea 1",
         ])
     if len(action_lines) > 2:
         lines.extend(action_lines)

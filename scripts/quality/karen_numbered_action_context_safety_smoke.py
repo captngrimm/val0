@@ -72,8 +72,8 @@ def test_action_copy_uses_visible_numbers_only() -> None:
     tomorrow = _function_body(_bot_source(), "build_unified_tomorrow_dashboard")
     assert_contains(tomorrow, "if reminders:", "reminder actions require visible reminders")
     assert_contains(tomorrow, "edit_number = 2 if len(reminders) >= 2 else 1", "edit hint stays within visible reminder count")
-    assert_contains(tomorrow, "cambia el recordatorio {edit_number}", "edit hint uses calculated visible number")
-    assert_not_contains(tomorrow, '"- cambia el recordatorio 2 para las 11"', "no hardcoded recordatorio 2")
+    assert_contains(tomorrow, "Cambia el recordatorio {edit_number}", "edit hint uses calculated visible number")
+    assert_not_contains(tomorrow, '"- Cambia el recordatorio 2 para las 11"', "no hardcoded recordatorio 2")
 
 
 def test_no_fake_edit_success_and_context_cleared() -> None:
