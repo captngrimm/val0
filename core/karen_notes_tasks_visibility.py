@@ -60,7 +60,11 @@ def looks_like_karen_tasks_query(text: str) -> bool:
     norm = normalize_visibility_prompt(text)
     if re.fullmatch(r"que\s+tareas?\s+tengo\s+activas?", norm):
         return True
+    if re.fullmatch(r"que\s+tareas?\s+activas?\s+tengo\s+pendientes?", norm):
+        return True
     if re.fullmatch(r"que\s+tareas?\s+activas?\s+tengo", norm):
+        return True
+    if re.fullmatch(r"que\s+tareas?\s+pendientes?\s+tengo", norm):
         return True
     if re.fullmatch(r"que\s+tareas?\s+tengo", norm):
         return True
@@ -71,6 +75,7 @@ def looks_like_karen_tasks_query(text: str) -> bool:
         "que tarea tengo activa",
         "que tareas tengo activa",
         "que tareas activas tengo",
+        "que tareas activas tengo pendientes",
         "que tareas pendientes tengo",
         "cuales son mis tareas registradas",
         "cuáles son mis tareas registradas",

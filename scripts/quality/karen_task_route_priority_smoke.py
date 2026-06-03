@@ -2,10 +2,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 BOT = (ROOT / "bot.py").read_text(encoding="utf-8")
+
+from core.intent_interpreter import interpret_user_intent  # noqa: E402
+from core.intent_router_v2 import classify_intent_shadow  # noqa: E402
+from core.karen_notes_tasks_visibility import looks_like_karen_tasks_query  # noqa: E402
 
 
 def assert_true(value, label: str) -> None:
@@ -46,8 +52,17 @@ def test_task_query_beats_case_routes() -> None:
         "Val, ¿qué tareas tengo activa?",
         "Vale. ¿Qué tareas tengo activas?",
         "val que tareas tengo activas?",
+        "Val, qué tareas activas tengo pendientes?",
+        "Qué tareas activas tengo pendientes?",
+        "Val, qué tareas pendientes tengo?",
     ):
         assert_true("tareas" in phrase.lower(), f"live phrase covered: {phrase}")
+        assert_true(looks_like_karen_tasks_query(phrase), f"hard matcher catches task list: {phrase}")
+        interpreted = interpret_user_intent(phrase, client_id="client-zero")
+        assert_true(interpreted["intent"] == "task_list", f"interpreter task_list: {phrase}")
+        assert_true(interpreted["confidence"] >= 0.90, f"interpreter high confidence: {phrase}")
+        shadow = classify_intent_shadow(phrase, client_id="client-zero")
+        assert_true(shadow.selected_intent == "task_query", f"shadow router task_query: {phrase}")
     assert_contains(hard_gate, "looks_like_karen_tasks_query", "hard gate uses task query matcher")
     assert_contains(hard_gate, "render_karen_tasks_view", "hard gate renders accepted task view")
     assert_contains(hard_gate, "fetch_open_commitments", "hard gate reads tasks only")
@@ -78,6 +93,8 @@ def test_task_query_beats_case_routes() -> None:
         "que\\s+tareas?\\s+tengo\\s+activas?",
         "que tarea tengo",
         "que tareas tengo activa",
+        "que\\s+tareas?\\s+activas?\\s+tengo\\s+pendientes?",
+        "que tareas activas tengo pendientes",
         "va\\s+el",
         "pal",
     ):
