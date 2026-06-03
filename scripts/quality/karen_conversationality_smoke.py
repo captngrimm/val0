@@ -37,8 +37,18 @@ def _read(path: str) -> str:
 def main() -> int:
     opening = render_karen_safe_opening("karen", surface="agenda_today")
     assert_contains(opening, "Tany", "safe opening keeps Karen vocative")
+    assert_contains(opening, "agenda", "agenda opening names the surface")
+    assert_true(any(word in opening.lower() for word in ("sancocho", "novela")), "agenda opening has controlled warmth")
     assert_true(opening == render_karen_safe_opening("karen", surface="agenda_today"), "safe opening is deterministic")
     assert_true(render_karen_safe_opening("other-client", surface="agenda_today") == "", "safe opening is Karen-scoped")
+
+    task_opening = render_karen_safe_opening("karen", surface="tasks_list")
+    reminder_opening = render_karen_safe_opening("karen", surface="reminders_all")
+    assert_contains(task_opening, "Tany", "task opening keeps Tany")
+    assert_contains(reminder_opening, "Tany", "reminder opening keeps Tany")
+    assert_true(any(word in task_opening.lower() for word in ("despachar", "fila")), "task opening has controlled personality")
+    assert_true(any(word in reminder_opening.lower() for word in ("circo", "drama")), "reminder opening has controlled personality")
+    assert_true(opening != task_opening != reminder_opening, "safe surfaces do not all sound copy-pasted")
 
     wrapped = add_karen_safe_opening("🗓️ Agenda de hoy\n\n⏰ Recordatorios de Val", "karen", surface="agenda_today")
     assert_contains(wrapped, "Tany", "wrapped agenda includes Tany")
@@ -48,6 +58,13 @@ def main() -> int:
     for banned in KAREN_BANNED_CONVERSATIONALITY_LEAKS:
         assert_not_contains(wrapped.lower(), banned, f"wrapped agenda avoids stale contamination: {banned}")
         assert_not_contains(opening.lower(), banned, f"opening avoids stale contamination: {banned}")
+        assert_not_contains(task_opening.lower(), banned, f"task opening avoids stale contamination: {banned}")
+        assert_not_contains(reminder_opening.lower(), banned, f"reminder opening avoids stale contamination: {banned}")
+
+    for unsafe_authority in ("soy tu abogada", "asesoría legal", "dictamen legal"):
+        assert_not_contains(opening.lower(), unsafe_authority, f"opening avoids fake legal authority: {unsafe_authority}")
+        assert_not_contains(task_opening.lower(), unsafe_authority, f"task opening avoids fake legal authority: {unsafe_authority}")
+        assert_not_contains(reminder_opening.lower(), unsafe_authority, f"reminder opening avoids fake legal authority: {unsafe_authority}")
 
     bot = _read("bot.py")
     tasks = _read("core/karen_notes_tasks_visibility.py")

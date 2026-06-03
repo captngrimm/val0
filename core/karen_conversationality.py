@@ -14,16 +14,16 @@ KAREN_BANNED_CONVERSATIONALITY_LEAKS = (
 
 _SAFE_OPENINGS: dict[str, tuple[str, ...]] = {
     "agenda": (
-        "Tany, te dejo la agenda ordenada.",
-        "Tany, aquí va la agenda, sin mezclar peras con expedientes.",
+        "Tany, aquí va tu agenda, separada por fuente para que no se arme el sancocho.",
+        "Tany, te dejo la agenda ordenada: calendario por un lado, Val por el otro, cero novela.",
     ),
     "tasks": (
-        "Tany, aquí van tus tareas pendientes.",
-        "Tany, te separo lo accionable para que no se vuelva sopa.",
+        "Tany, aquí van tus tareas pendientes. Las dejo numeradas para que puedas despachar sin pelear con el sistema.",
+        "Tany, te separo lo accionable; lo demás que haga fila y no moleste.",
     ),
     "reminders": (
-        "Tany, estos son los recordatorios que tengo vivos.",
-        "Tany, aquí van tus recordatorios, limpios y numerados.",
+        "Tany, estos son tus recordatorios activos. Claritos, porque la memoria humana ya tiene suficiente circo.",
+        "Tany, aquí van tus recordatorios, limpios y numerados; sin comandos raros ni drama.",
     ),
 }
 
