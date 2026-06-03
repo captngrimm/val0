@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 from core.case_workspace import (  # noqa: E402
     CASO_FINCA_WORKSPACE,
+    load_caso_finca_workspace_source_labeled,
     looks_like_caso_finca_workspace_request,
     maybe_handle_case_workspace_status,
     render_workspace_status,
@@ -77,15 +78,19 @@ def test_phrase_detection() -> None:
 
 
 def test_renderer_shape_and_safety() -> None:
-    reply = render_workspace_status(CASO_FINCA_WORKSPACE, client_id=KAREN_CLIENT_ID)
+    case = load_caso_finca_workspace_source_labeled()
+    reply = render_workspace_status(case, client_id=KAREN_CLIENT_ID)
     assert_contains(reply, "Tany", "warm Tany opening")
     assert_contains(reply, "Caso Finca", "case title")
-    assert_contains(reply, "Lo importante", "what we know section")
-    assert_contains(reply, "Que falta confirmar", "confirmation section")
+    assert_contains(reply, "Lo que sabemos", "what we know section")
+    assert_contains(reply, "Qué falta confirmar", "confirmation section")
     assert_contains(reply, "Documentos relacionados", "related documents section")
+    assert_contains(reply, "Línea de tiempo / eventos", "timeline section")
     assert_contains(reply, "Preguntas para Nora", "Nora questions section")
     assert_contains(reply, "Pendientes", "pending items section")
-    assert_contains(reply, "Que sigue", "next step section")
+    assert_contains(reply, "Próximo paso sugerido", "next step section")
+    assert_contains(reply, "source_type=", "source type labels")
+    assert_contains(reply, "confidence=", "confidence labels")
     assert_contains(reply, "Nora/la abogada confirma el efecto legal", "legal boundary")
     assert_contains(reply, "lectura y organizacion; no voy a mover nada", "read-only copy")
     for phrase in STALE_PHRASES:

@@ -1,0 +1,142 @@
+{
+  "cases": [],
+  "workspace_case": {
+  "case_id": "CASE:KAREN-LAND-001",
+  "client_id": "client-zero",
+  "title": "Caso Finca",
+  "aliases": [
+    "caso finca",
+    "caso del terreno",
+    "finca",
+    "terreno familiar"
+  ],
+  "source_label": "fixture/source-labeled v1",
+  "source_type": "fixture",
+  "source_name": "A-013 safe Caso Finca workspace fixture",
+  "confidence": "medium",
+  "status": "test-safe",
+  "observed_at": "2026-06-03",
+  "what_we_know": [
+    {
+      "text": "Es un caso familiar relacionado con una finca/terreno y documentos registrales o judiciales por ordenar.",
+      "source_type": "fixture",
+      "source_name": "A-013 safe workspace seed",
+      "confidence": "medium",
+      "status": "needs legal review",
+      "observed_at": "2026-06-03"
+    },
+    {
+      "text": "Hay documentos registrados en Val0/VFMS, algunos con OCR o resumen disponible.",
+      "source_type": "repo_fixture",
+      "source_name": "document workflow summary",
+      "confidence": "medium",
+      "status": "observed",
+      "observed_at": "2026-06-03"
+    }
+  ],
+  "needs_confirmation": [
+    {
+      "text": "Estado registral actual de la finca en Registro Publico.",
+      "source_type": "fixture",
+      "source_name": "A-013 confirmation queue",
+      "confidence": "low",
+      "status": "confirm with Nora",
+      "observed_at": "2026-06-03"
+    },
+    {
+      "text": "Que fechas, autos u oficios tienen efecto legal vigente.",
+      "source_type": "fixture",
+      "source_name": "A-013 confirmation queue",
+      "confidence": "low",
+      "status": "confirm with lawyer",
+      "observed_at": "2026-06-03"
+    }
+  ],
+  "documents": [
+    {
+      "title": "Documentos de Registro Publico / juzgado",
+      "document_status": "registrados; algunos requieren OCR o revision visual",
+      "source_label": "VFMS/OCR",
+      "source_type": "document_index",
+      "source_name": "Val0 document index",
+      "confidence": "medium",
+      "source_status": "observed",
+      "observed_at": "2026-06-03"
+    },
+    {
+      "title": "Resumenes de documentos",
+      "document_status": "disponibles cuando el texto extraido u OCR es usable",
+      "source_label": "generated_summary",
+      "source_type": "summary_index",
+      "source_name": "Karen document summaries",
+      "confidence": "medium",
+      "source_status": "review before relying",
+      "observed_at": "2026-06-03"
+    }
+  ],
+  "timeline_events": [
+    {
+      "text": "Documentos registrales/judiciales detectados como parte del caso; ordenar por fecha antes de concluir.",
+      "source_type": "fixture",
+      "source_name": "A-013 timeline seed",
+      "confidence": "medium",
+      "status": "needs ordering",
+      "observed_at": "2026-06-03"
+    }
+  ],
+  "questions_for_lawyer": [
+    {
+      "text": "Que documento prueba mejor el estado actual de la finca?",
+      "source_type": "fixture",
+      "source_name": "A-013 Nora prep",
+      "confidence": "medium",
+      "status": "question draft",
+      "observed_at": "2026-06-03"
+    },
+    {
+      "text": "Que falta pedir al juzgado o Registro Publico?",
+      "source_type": "fixture",
+      "source_name": "A-013 Nora prep",
+      "confidence": "medium",
+      "status": "question draft",
+      "observed_at": "2026-06-03"
+    }
+  ],
+  "pending_items": [
+    {
+      "text": "Revisar documentos con OCR pendiente o lectura visual incompleta.",
+      "source_type": "fixture",
+      "source_name": "A-013 pending seed",
+      "confidence": "medium",
+      "status": "open",
+      "observed_at": "2026-06-03"
+    },
+    {
+      "text": "Separar hechos confirmados de datos mencionados pero no verificados.",
+      "source_type": "fixture",
+      "source_name": "A-013 pending seed",
+      "confidence": "medium",
+      "status": "open",
+      "observed_at": "2026-06-03"
+    }
+  ],
+  "next_actions": [
+    {
+      "text": "Pedir: Val, resume con OCR el ultimo documento, si el PDF tiene marca de agua.",
+      "source_type": "fixture",
+      "source_name": "A-013 next action seed",
+      "confidence": "medium",
+      "status": "suggested",
+      "observed_at": "2026-06-03"
+    },
+    {
+      "text": "Pedir: Val, preparame el paquete para Nora, cuando quieras llevarlo ordenado.",
+      "source_type": "fixture",
+      "source_name": "A-013 next action seed",
+      "confidence": "medium",
+      "status": "suggested",
+      "observed_at": "2026-06-03"
+    }
+  ]
+  }
+}

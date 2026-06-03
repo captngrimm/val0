@@ -34,6 +34,7 @@ Alpha marker:
 | A-010 | Caso Finca / Carpeta Clara Design v1 | 1-2 h | 2026-06-03 | 2026-06-03 | same-day design lane | `8f99aa1` | PASS | Design-only lane for the first clear workspace/case model around Karen's Caso Finca. |
 | A-011 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | 2026-06-03 17:04 | 2026-06-03 17:11 | ~7 min verify/push window after Codex handoff | `f82f33d` | PASS | Added fixture/static read-only Caso Finca workspace status view with route smoke; no live data mutation. |
 | A-012 | Benchmark Auto-Update Helper v1 | 1-2 h | 2026-06-03 17:14 | 2026-06-03 17:18 | ~4 min verify/push window after Codex handoff | `c4609eb` | PASS | Added helper to close Alpha benchmark lanes safely with duplicate protection, replace mode, dry-run, tactical notes, and planned-status updates. |
+| A-013 | Caso Finca Source-Labeled Data Read-Only v1 | 2-4 h | 2026-06-03 17:21 | 2026-06-03 17:26 | ~5 min verify/implementation window after Codex handoff | `this commit` | PASS | Connected read-only Caso Finca workspace to safe source-labeled fixture records; no live data mutation. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -165,10 +166,10 @@ Remaining gap / watch item:
 | 6 | Fixture Migration v2 | 3-5 h | Planned | Move more one-off Karen smokes into client fixtures. |
 | 7 | M45 Router Coverage Closeout | 2-4 h | Planned | Recalculate/close router observation items. |
 | 8 | Conversation State / Pending-State Map | 4-6 h | Planned | Map multi-turn continuation across calendar/tasks/reminders/docs. |
-| 9 | Folders/Cases Runtime v1 | 4-8 h | Planned | Connect Caso Finca / carpetas / topics model to stored source-labeled data. |
+| 9 | Folders/Cases Runtime v1 | 4-8 h | WATCH | Connect Caso Finca / carpetas / topics model to stored source-labeled data. |
 | 10 | Caso Finca MVP v1 | 1-2 d | Planned | First usable workspace for notes, docs, events, and timeline questions. |
 | 11 | Val0 Client-Generalization Pass | 1-2 d | Planned | Separate Karen-specific logic from reusable client platform logic. |
 | 12 | Founder Demo Readiness v1 | 1-2 d | Planned | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-012 is sealed. Recommended next: connect Caso Finca workspace renderer to stored source-labeled notes/documents/timeline, or run a consolidation lane if the cockpit feels heavy.
+A-013 is sealed. Recommended next: observe live Caso Finca copy with Karen, then decide whether A-014 should add source-linked notes/documents from trusted storage or run a consolidation lane first.
