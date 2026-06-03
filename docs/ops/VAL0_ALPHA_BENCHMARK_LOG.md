@@ -30,6 +30,7 @@ Alpha marker:
 | A-005 | Karen Personality Polish v1 | 2-3 h | 2026-06-03 13:37 | 2026-06-03 13:40 | ~3 min verify/push window after Codex handoff | `cdae51b` | PASS | Warmed/sassed Karen read/list openings; reinforced Tany consistency, contamination guards, and no fake legal authority. |
 | A-006 | Calendar Follow-up v2 — Missing Date Bridge | 2-4 h | 2026-06-03 13:41 | 2026-06-03 13:46 | ~5 min verify/push window after Codex handoff | `859b3f7` | PASS | Added missing-date follow-up bridge for calendar drafts; fixtures now 21/21 PASS; GCal write still requires explicit confirmation. |
 | A-007 | Karen Legal/Document Summary Warmth v1 | 3-6 h | 2026-06-03 13:47 | 2026-06-03 14:00 | ~13 min verify/push window after Codex handoff | `322ef22` | PASS | Warmed Karen document/legal summaries with Nora-oriented consultative sections; OCR/watermark/legal guards PASS. |
+| A-008 | Source-of-Truth/Roadmap Harness v1 | 1-2 h | 2026-06-03 14:02 | 2026-06-03 16:32 | elapsed includes pause/wait | `d67cd42` | PASS | Added Alpha brief command that summarizes repo state, Alpha lanes, next milestones, live-data warnings, and validation commands. |
 
 ## Planned Next Milestones
 
@@ -47,4 +48,4 @@ Alpha marker:
 | 10 | Founder Demo Readiness v1 | 1-2 d | Planned | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-007 is sealed. Recommended next: Source-of-Truth/Roadmap Harness v1 before more feature work, so Codex/cockpits automatically ingest the benchmark, source-of-truth docs, live-data warnings, and next milestone instead of relying on prompt memory.
+A-008 is sealed. Recommended next: Milestone Human Outcome Summaries v1, so each lane records what we were trying to achieve, what Val can do now, examples, and remaining gaps in plain language for Boss.
