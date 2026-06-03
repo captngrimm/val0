@@ -38,5 +38,44 @@
     "expected_contains": ["13:30"],
     "expected_not_contains": ["Draft follow-up", "caso del terreno"],
     "notes": "Interpreter shadow follow-up for missing calendar time"
+  },
+  {
+    "id": "karen_calendar_create_followup_date_tomorrow_shadow",
+    "input": "mañana",
+    "pending_state": {
+      "intent": "calendar_create",
+      "missing_fields": ["date"]
+    },
+    "expected_intent": "calendar_create_followup",
+    "expected_route_hint": "gcal_create_followup",
+    "expected_contains": ["manana"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Interpreter shadow follow-up for missing calendar date"
+  },
+  {
+    "id": "karen_calendar_create_followup_date_weekday_shadow",
+    "input": "el viernes",
+    "pending_state": {
+      "intent": "calendar_create",
+      "missing_fields": ["date"]
+    },
+    "expected_intent": "calendar_create_followup",
+    "expected_route_hint": "gcal_create_followup",
+    "expected_contains": ["viernes"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Interpreter shadow follow-up for weekday date"
+  },
+  {
+    "id": "karen_calendar_create_followup_date_explicit_shadow",
+    "input": "el 10 de junio",
+    "pending_state": {
+      "intent": "calendar_create",
+      "missing_fields": ["date"]
+    },
+    "expected_intent": "calendar_create_followup",
+    "expected_route_hint": "gcal_create_followup",
+    "expected_contains": ["10 de junio"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Interpreter shadow follow-up for explicit date"
   }
 ]

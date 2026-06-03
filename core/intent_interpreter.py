@@ -293,6 +293,19 @@ def interpret_user_intent(text, client_id, pending_state=None) -> dict[str, Any]
             requires_confirmation=True,
         )
 
+    if "calendar_create" in pending_type and "date" in missing:
+        date_value = _extract_date(str(text or ""))
+        fields = {"date": date_value} if date_value else {}
+        return _result(
+            "calendar_create_followup",
+            confidence=0.90 if date_value else 0.55,
+            fields=fields,
+            missing_fields=[] if date_value else ["date"],
+            normalized_user_text=normalized,
+            route_hint="gcal_create_followup",
+            requires_confirmation=True,
+        )
+
     if _looks_like_calendar_create(normalized):
         fields, missing_fields = _calendar_fields(str(text or ""))
         return _result(

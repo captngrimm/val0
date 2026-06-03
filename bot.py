@@ -12963,6 +12963,103 @@ def _store_gcal_create_missing_time_pending(
     )
 
 
+def _store_gcal_create_missing_date_pending(
+    *,
+    chat_id: int,
+    client_id: str,
+    title: str,
+    hour: int,
+    minute: int,
+    duration_minutes: int = 60,
+) -> PendingAction:
+    payload = {
+        "title": title,
+        "time_hour": int(hour),
+        "time_minute": int(minute),
+        "pretty_time": f"{int(hour):02d}:{int(minute):02d}",
+        "duration_minutes": int(duration_minutes or 60),
+        "description": "Evento creado por Val0 desde flujo natural de cita con confirmación explícita.",
+        "missing_fields": ["date"],
+        "source_phrase_category": "natural_gcal_event_create_missing_date",
+    }
+    _clear_existing_gcal_pending(chat_id, client_id, GCAL_CREATE_ACTION_TYPE)
+    return create_pending_action(
+        PendingAction(
+            action_id=_gcal_action_id(GCAL_CREATE_ACTION_TYPE, chat_id),
+            chat_id=int(chat_id),
+            client_id=client_id,
+            action_type=GCAL_CREATE_ACTION_TYPE,
+            display_summary=f"fecha pendiente · {payload['pretty_time']} · {title}",
+            confirm_words=(),
+            cancel_words=GCAL_CREATE_CANCEL_WORDS,
+            expires_at=_gcal_pending_expires_at(),
+            payload=payload,
+            audit_metadata={"source": "natural_appointment_missing_date", "source_phrase_category": "natural_gcal_event_create"},
+        )
+    )
+
+
+def _resolve_karen_gcal_followup_date(date_value: str, *, now):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    raw = str(date_value or "").strip().lower()
+    norm = _norm_gcal_confirm_text(raw)
+    tz = ZoneInfo("America/Panama")
+
+    if norm == "hoy":
+        return now
+    if norm == "manana":
+        return now + timedelta(days=1)
+    if norm == "pasado manana":
+        return now + timedelta(days=2)
+
+    weekday_names = {
+        "lunes": 0,
+        "martes": 1,
+        "miercoles": 2,
+        "jueves": 3,
+        "viernes": 4,
+        "sabado": 5,
+        "domingo": 6,
+    }
+    weekday_match = re.search(r"\b(?:proximo\s+)?(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b", norm)
+    if weekday_match:
+        weekday_idx = weekday_names[weekday_match.group(1)]
+        days_ahead = (weekday_idx - now.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        return now + timedelta(days=days_ahead)
+
+    months = {
+        "enero": 1, "ene": 1,
+        "febrero": 2, "feb": 2,
+        "marzo": 3, "mar": 3,
+        "abril": 4, "abr": 4,
+        "mayo": 5, "may": 5,
+        "junio": 6, "jun": 6,
+        "julio": 7, "jul": 7,
+        "agosto": 8, "ago": 8,
+        "septiembre": 9, "setiembre": 9, "sep": 9, "sept": 9,
+        "octubre": 10, "oct": 10,
+        "noviembre": 11, "nov": 11,
+        "diciembre": 12, "dic": 12,
+    }
+    explicit = re.search(r"\b(?P<day>[0-3]?\d)\s+de\s+(?P<month>[a-z]+)\b", norm)
+    if explicit:
+        day = int(explicit.group("day"))
+        month = months.get(explicit.group("month"))
+        if not month:
+            return None
+        year = now.year
+        candidate = datetime(year, month, day, 0, 0, 0, tzinfo=tz)
+        if candidate.date() < now.date():
+            candidate = datetime(year + 1, month, day, 0, 0, 0, tzinfo=tz)
+        return candidate
+
+    return None
+
+
 async def maybe_handle_pending_gcal_create_followup(update, chat_id, text) -> bool:
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
@@ -12980,7 +13077,7 @@ async def maybe_handle_pending_gcal_create_followup(update, chat_id, text) -> bo
 
     pending = action.payload or {}
     missing_fields = pending.get("missing_fields") or []
-    if "time" not in missing_fields:
+    if not any(field in missing_fields for field in ("time", "date")):
         return False
 
     now_utc = datetime.now(timezone.utc)
@@ -12999,42 +13096,71 @@ async def maybe_handle_pending_gcal_create_followup(update, chat_id, text) -> bo
         )
         return True
 
-    interpreted = interpret_user_intent(
-        text or "",
-        client_id=client_id,
-        pending_state={"intent": "calendar_create", "missing_fields": ["time"]},
-    )
-    time_value = str((interpreted.get("fields") or {}).get("time") or "")
-    if interpreted.get("intent") != "calendar_create_followup" or not time_value or interpreted.get("confidence", 0) < 0.80:
-        return False
+    if "time" in missing_fields:
+        interpreted = interpret_user_intent(
+            text or "",
+            client_id=client_id,
+            pending_state={"intent": "calendar_create", "missing_fields": ["time"]},
+        )
+        time_value = str((interpreted.get("fields") or {}).get("time") or "")
+        if interpreted.get("intent") != "calendar_create_followup" or not time_value or interpreted.get("confidence", 0) < 0.80:
+            return False
 
-    try:
-        hour_text, minute_text = time_value.split(":", 1)
-        hour = int(hour_text)
-        minute = int(minute_text)
+        try:
+            hour_text, minute_text = time_value.split(":", 1)
+            hour = int(hour_text)
+            minute = int(minute_text)
+            due_local = datetime(
+                int(pending["date_year"]),
+                int(pending["date_month"]),
+                int(pending["date_day"]),
+                hour,
+                minute,
+                0,
+                tzinfo=ZoneInfo("America/Panama"),
+            )
+        except Exception as e:
+            logger.exception(f"[KAREN_GCAL_CREATE_FOLLOWUP] failed to build datetime: {e}")
+            await update.message.reply_text(
+                "Esa hora no me cuadra. Dímela como “a la 1:30 PM” o “a las 13:30”."
+            )
+            return True
+        source_phrase_category = "natural_gcal_event_create_followup_time"
+        source = "natural_appointment_followup_time"
+    else:
+        interpreted = interpret_user_intent(
+            text or "",
+            client_id=client_id,
+            pending_state={"intent": "calendar_create", "missing_fields": ["date"]},
+        )
+        date_value = str((interpreted.get("fields") or {}).get("date") or "")
+        if interpreted.get("intent") != "calendar_create_followup" or not date_value or interpreted.get("confidence", 0) < 0.80:
+            return False
+        date_dt = _resolve_karen_gcal_followup_date(date_value, now=datetime.now(ZoneInfo("America/Panama")))
+        if not date_dt:
+            await update.message.reply_text(
+                "Esa fecha no me cuadra. Dímela como “mañana”, “el viernes” o “el 10 de junio”."
+            )
+            return True
         due_local = datetime(
-            int(pending["date_year"]),
-            int(pending["date_month"]),
-            int(pending["date_day"]),
-            hour,
-            minute,
+            date_dt.year,
+            date_dt.month,
+            date_dt.day,
+            int(pending["time_hour"]),
+            int(pending["time_minute"]),
             0,
             tzinfo=ZoneInfo("America/Panama"),
         )
-    except Exception as e:
-        logger.exception(f"[KAREN_GCAL_CREATE_FOLLOWUP] failed to build datetime: {e}")
-        await update.message.reply_text(
-            "Esa hora no me cuadra. Dímela como “a la 1:30 PM” o “a las 13:30”."
-        )
-        return True
+        source_phrase_category = "natural_gcal_event_create_followup_date"
+        source = "natural_appointment_followup_date"
 
     payload = _gcal_complete_create_payload(
         title=str(pending.get("title") or "Cita"),
         due_local=due_local,
         duration_minutes=int(pending.get("duration_minutes") or 60),
-        source_phrase_category="natural_gcal_event_create_followup_time",
+        source_phrase_category=source_phrase_category,
     )
-    _store_gcal_create_confirmation_pending(chat_id, client_id, payload, source="natural_appointment_followup_time")
+    _store_gcal_create_confirmation_pending(chat_id, client_id, payload, source=source)
 
     await update.message.reply_text(
         _render_gcal_create_confirmation_prompt(vocative=client_vocative(client_id), payload=payload)
@@ -13588,7 +13714,33 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         month = weekday_date_dt.month
         year = weekday_date_dt.year
 
+    # Time can be present even when date is missing; store a partial draft so
+    # short replies like "mañana" can complete the calendar create safely.
+    tm = re.search(r"\b(?:a\s+las|a\s+la)\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?\b", t)
+
     if not day or not month:
+        if tm:
+            hour = int(tm.group("hour"))
+            minute = int(tm.group("minute") or "0")
+            ampm = tm.group("ampm")
+            if ampm == "pm" and hour < 12:
+                hour += 12
+            elif ampm == "am" and hour == 12:
+                hour = 0
+            elif ampm is None and 1 <= hour <= 7:
+                hour += 12
+            interpreted = interpret_user_intent(raw, client_id=client_id)
+            interpreted_fields = interpreted.get("fields") or {}
+            draft_title = _normalize_karen_gcal_event_title(str(interpreted_fields.get("title") or ""))
+            if draft_title and draft_title.lower() not in {"cita", "evento", "reunion", "reunión"}:
+                _store_gcal_create_missing_date_pending(
+                    chat_id=chat_id,
+                    client_id=client_id,
+                    title=draft_title,
+                    hour=hour,
+                    minute=minute,
+                    duration_minutes=60,
+                )
         await update.message.reply_text(
             f"Sí puedo crear el evento en Google Calendar{vocative} 📅\n\n"
             "Pero necesito la fecha. ¿Para qué fecha lo agendo?"
@@ -13596,7 +13748,6 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
         return True
 
     # Time: "a las 3pm", "a la 1", "a las 15:30"
-    tm = re.search(r"\b(?:a\s+las|a\s+la)\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?\b", t)
     if not tm:
         interpreted = interpret_user_intent(raw, client_id=client_id)
         interpreted_fields = interpreted.get("fields") or {}

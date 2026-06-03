@@ -295,6 +295,76 @@ print("PASS runtime bridge")
     assert_contains(result.stdout, "PASS runtime bridge", "runtime bridge subprocess passed")
 
 
+def test_missing_date_followup_runtime_bridge() -> None:
+    code = r'''
+import asyncio
+import bot
+from core.pending_actions import clear_pending_action
+
+def check(value, label):
+    if not value:
+        raise AssertionError(label)
+
+class FakeMessage:
+    def __init__(self):
+        self.replies = []
+    async def reply_text(self, text):
+        self.replies.append(text)
+
+class FakeUpdate:
+    def __init__(self):
+        self.message = FakeMessage()
+
+async def run_case():
+    chat_id = bot.KAREN_CHAT_ID
+    client_id = bot.resolve_client_id(chat_id)
+    existing = bot._get_gcal_pending_action_any_state(chat_id, client_id)
+    if existing:
+        clear_pending_action(existing.action_id)
+
+    first = FakeUpdate()
+    handled = await bot.try_appointment_save_natural(first, chat_id, "Val, agenda cita con la bróker y mi mamá a la 1:30 PM")
+    check(handled, "missing-date calendar create handled")
+    check(first.message.replies and "¿Para qué fecha lo agendo?" in first.message.replies[-1], "missing-date asks for date")
+
+    partial = bot._get_gcal_pending_action_any_state(chat_id, client_id)
+    check(partial is not None, "partial gcal pending stored")
+    check("date" in (partial.payload.get("missing_fields") or []), "partial pending marks missing date")
+    check("start_iso" not in partial.payload, "partial pending does not pretend complete event")
+    check(partial.payload.get("time_hour") == 13 and partial.payload.get("time_minute") == 30, "partial pending stores parsed time")
+
+    second = FakeUpdate()
+    followup_handled = await bot.maybe_handle_pending_gcal_create_followup(second, chat_id, "mañana")
+    check(followup_handled, "date follow-up handled")
+    reply = second.message.replies[-1] if second.message.replies else ""
+    check("¿Confirmas que la cree en Google Calendar?" in reply, "follow-up shows confirmation preview")
+    check("1:30 PM" in reply, "follow-up confirmation includes retained time")
+    check("Cita con la broker y mi mama" in reply, "follow-up confirmation keeps title")
+
+    complete = bot._get_gcal_pending_action_any_state(chat_id, client_id)
+    try:
+        check(complete is not None, "complete gcal pending stored")
+        check("missing_fields" not in complete.payload, "complete pending no longer missing date")
+        check("T13:30:00" in (complete.payload.get("start_iso") or ""), "complete pending stores retained time")
+        check(bool(complete.confirm_words), "complete pending requires explicit confirmation before write")
+    finally:
+        if complete:
+            clear_pending_action(complete.action_id)
+
+asyncio.run(run_case())
+print("PASS missing-date runtime bridge")
+'''
+    result = subprocess.run(
+        ["./scripts/val0py", "-c", code],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert_true(result.returncode == 0, f"missing-date runtime bridge subprocess failed: stdout={result.stdout!r} stderr={result.stderr!r}")
+    assert_contains(result.stdout, "PASS missing-date runtime bridge", "missing-date runtime bridge subprocess passed")
+
+
 def test_pending_expiration_datetime_collision_regression() -> None:
     helper = _function_body(_bot_source(), "_gcal_pending_expires_at")
     assert_not_contains(helper, "datetime.datetime.now", "pending expiration avoids datetime.datetime collision")
@@ -342,6 +412,7 @@ def main() -> int:
     test_gcal_pending_action_classifier_is_isolated()
     test_missing_fields_are_asked_before_creation()
     test_missing_time_followup_runtime_bridge()
+    test_missing_date_followup_runtime_bridge()
     test_pending_expiration_datetime_collision_regression()
     test_no_val_reminder_created_for_gcal_event()
     test_success_and_failure_copy_are_honest()
