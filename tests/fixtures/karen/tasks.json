@@ -34,11 +34,27 @@
     "notes": "No-prefix task list query"
   },
   {
-    "id": "karen_task_delete_interpreter_todo",
+    "id": "karen_task_delete_number_prefixed",
     "input": "Val elimina la tarea 1",
     "expected_intent": "task_delete",
     "expected_route_hint": "task_delete",
-    "xfail": true,
-    "notes": "TODO: classify numbered task delete in interpreter v2; deterministic runtime already handles explicit task delete"
+    "expected_contains": ["\"number\": 1"],
+    "notes": "Interpreter classifies explicit numbered task delete; deterministic runtime executes"
+  },
+  {
+    "id": "karen_task_delete_borra_number",
+    "input": "borra la tarea 2",
+    "expected_intent": "task_delete",
+    "expected_route_hint": "task_delete",
+    "expected_contains": ["\"number\": 2"],
+    "notes": "Interpreter handles delete verb variant"
+  },
+  {
+    "id": "karen_task_delete_quita_word_number",
+    "input": "quita tarea uno",
+    "expected_intent": "task_delete",
+    "expected_route_hint": "task_delete",
+    "expected_contains": ["\"number\": 1"],
+    "notes": "Interpreter handles missing article and word number"
   }
 ]

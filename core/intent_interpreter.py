@@ -13,6 +13,7 @@ SUPPORTED_INTENTS = {
     "reminder_create",
     "task_list",
     "task_create",
+    "task_delete",
     "calendar_create",
     "calendar_create_followup",
     "document_list",
@@ -106,6 +107,29 @@ def _word_number_hour(token: str) -> int | None:
     }.get(token)
 
 
+def _word_number_to_int(token: str) -> int | None:
+    value = (token or "").strip().lower()
+    if value.isdigit():
+        return int(value)
+    return {
+        "una": 1,
+        "uno": 1,
+        "primer": 1,
+        "primero": 1,
+        "dos": 2,
+        "segundo": 2,
+        "tres": 3,
+        "tercero": 3,
+        "cuatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "siete": 7,
+        "ocho": 8,
+        "nueve": 9,
+        "diez": 10,
+    }.get(value)
+
+
 def _parse_followup_time(text: str) -> str | None:
     parsed = parse_spanish_clock_time(text)
     if parsed:
@@ -193,6 +217,17 @@ def _extract_task_title(text: str) -> str:
         if match:
             return re.sub(r"\s+", " ", (match.group(1) or "")).strip()
     return ""
+
+
+def _extract_task_delete_number(norm: str) -> int | None:
+    match = re.search(
+        r"\b(?:elimina|eliminar|borra|borrar|quita|quitar)\s+(?:la\s+)?tarea\s+"
+        r"(?P<number>\d{1,2}|uno|una|primer|primero|dos|segundo|tres|tercero|cuatro|cinco|seis|siete|ocho|nueve|diez)\b",
+        norm,
+    )
+    if not match:
+        return None
+    return _word_number_to_int(match.group("number"))
 
 
 def _extract_duration_minutes(text: str) -> int:
@@ -285,6 +320,17 @@ def interpret_user_intent(text, client_id, pending_state=None) -> dict[str, Any]
 
     if _has_any(normalized, ("que tareas", "tareas activas", "tareas pendientes", "tareas registrada", "tarea activa", "tareas activa")):
         return _result("task_list", confidence=0.94, normalized_user_text=normalized, route_hint="task_query")
+
+    task_delete_number = _extract_task_delete_number(normalized)
+    if task_delete_number is not None:
+        return _result(
+            "task_delete",
+            confidence=0.92,
+            fields={"number": task_delete_number},
+            normalized_user_text=normalized,
+            route_hint="task_delete",
+            requires_confirmation=False,
+        )
 
     task_title = _extract_task_title(str(text or ""))
     if task_title or re.search(r"\b(registra|registrar|agrega|agregar|guarda|guardar|anota|anotar|crea|crear)\s+(?:una\s+)?tarea\b", normalized):
