@@ -745,6 +745,22 @@ def _doc_summary(filename: str, ingest_id: str, caption: str, state: str, text: 
 
 
 SUMMARY_LIMIT_LINE = "Límite: resumo información registrada; no sustituye revisión legal o profesional."
+KAREN_DOCUMENT_WARM_INTRO = (
+    "Tany, te lo traduzco a útil: esto es una lectura organizada del documento, "
+    "no una decisión legal."
+)
+KAREN_DOCUMENT_MEANING_LINE = (
+    "- Observación: estos puntos ayudan a ubicar el documento, pero el efecto legal exacto "
+    "lo debe confirmar Nora/la abogada."
+)
+KAREN_DOCUMENT_CONFIRM_LINE = (
+    "- Dato a confirmar: revisar el documento original y cualquier certificación o expediente actualizado."
+)
+KAREN_DOCUMENT_NORA_LINE = (
+    "- Pregunta para Nora: ¿qué efecto tiene este documento y qué falta pedir o verificar antes de decidir?"
+)
+KAREN_DOCUMENT_NEXT_STEP_LINE = "- Llevar este resumen como guía de conversación y pedir confirmación punto por punto."
+KAREN_DOCUMENT_BANNED_LEAKS = ("bajar de peso", "task_high", "memoria pura")
 OCR_WORKING_MESSAGE = (
     "⏳ Estoy leyendo visualmente el PDF con OCR. "
     "Esto puede tardar un momento si el documento es escaneado o tiene marca de agua."
@@ -758,7 +774,13 @@ OCR_CACHED_MESSAGE = "📄 Ya tenía una lectura OCR guardada de este documento.
 
 def _render_clean_specific_doc_summary_body(text: str) -> str:
     bullets = _pick_grounded_bullets(text)
-    lines = ["📋 Resumen claro"]
+    lines = [
+        KAREN_DOCUMENT_WARM_INTRO,
+        "",
+        "📋 Resumen claro",
+        "",
+        "Lo importante",
+    ]
     if bullets:
         for bullet in bullets:
             lines.append(f"- {bullet}")
@@ -767,6 +789,18 @@ def _render_clean_specific_doc_summary_body(text: str) -> str:
 
     lines.extend([
         "",
+        "Qué puede significar",
+        KAREN_DOCUMENT_MEANING_LINE,
+        "",
+        "Qué falta confirmar",
+        KAREN_DOCUMENT_CONFIRM_LINE,
+        "",
+        "Preguntas para Nora",
+        KAREN_DOCUMENT_NORA_LINE,
+        "",
+        "Próximo paso sugerido",
+        KAREN_DOCUMENT_NEXT_STEP_LINE,
+        "",
         "Siguientes acciones útiles:",
         "- extraer fechas importantes",
         "- preparar preguntas para Nora",
@@ -774,7 +808,56 @@ def _render_clean_specific_doc_summary_body(text: str) -> str:
         "",
         SUMMARY_LIMIT_LINE,
     ])
-    return "\n".join(lines).strip()
+    return _strip_banned_document_leaks("\n".join(lines).strip())
+
+
+def _strip_banned_document_leaks(text: str) -> str:
+    cleaned = str(text or "")
+    for banned in KAREN_DOCUMENT_BANNED_LEAKS:
+        cleaned = re.sub(re.escape(banned), "", cleaned, flags=re.I)
+    return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+
+
+def _ensure_karen_document_warmth(summary_text: str) -> str:
+    """
+    Add Karen-facing document warmth without changing grounded bullets.
+
+    This intentionally does not infer new facts. It only adds framing and
+    consultation-oriented section labels around already generated/saved text.
+    """
+    body = _strip_banned_document_leaks(summary_text)
+    lines = body.splitlines()
+
+    if not any(line.strip() == KAREN_DOCUMENT_WARM_INTRO for line in lines):
+        lines.insert(0, "")
+        lines.insert(0, KAREN_DOCUMENT_WARM_INTRO)
+
+    if not any(line.strip() == "Lo importante" for line in lines):
+        for idx, line in enumerate(lines):
+            if line.strip() == "📋 Resumen claro":
+                lines.insert(idx + 1, "")
+                lines.insert(idx + 2, "Lo importante")
+                break
+
+    def insert_section_before_actions(section_lines: list[str]) -> None:
+        section_title = section_lines[0]
+        if any(line.strip() == section_title for line in lines):
+            return
+        try:
+            insert_at = next(i for i, line in enumerate(lines) if line.strip() == "Siguientes acciones útiles:")
+        except StopIteration:
+            insert_at = len(lines)
+        block = [""] + section_lines
+        lines[insert_at:insert_at] = block
+
+    insert_section_before_actions(["Qué puede significar", KAREN_DOCUMENT_MEANING_LINE])
+    insert_section_before_actions(["Qué falta confirmar", KAREN_DOCUMENT_CONFIRM_LINE])
+    insert_section_before_actions(["Preguntas para Nora", KAREN_DOCUMENT_NORA_LINE])
+    insert_section_before_actions(["Próximo paso sugerido", KAREN_DOCUMENT_NEXT_STEP_LINE])
+
+    warmed = "\n".join(lines).strip()
+    warmed = re.sub(r"\n{3,}", "\n\n", warmed)
+    return _strip_banned_document_leaks(warmed)
 
 
 def _clean_specific_doc_summary_body_for_reply(summary_text: str) -> str:
@@ -843,7 +926,7 @@ def _clean_specific_doc_summary_body_for_reply(summary_text: str) -> str:
 
     cleaned = "\n".join(lines).strip()
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    return cleaned
+    return _ensure_karen_document_warmth(cleaned)
 
 
 def _looks_like_format_preview_request(text: str) -> bool:
@@ -915,7 +998,7 @@ def _render_combined_legal_documents_summary(case_id: str, docs: list[dict]) -> 
     lines = [
         f"⚖️📚 Resumen legal organizado para CASE:{case_id}",
         "",
-        "Insanity, aquí va ordenado para hablar con la abogada sin tener que nadar en papeles como si esto fuera novela de 40 temporadas. 😌",
+        "Tany, te lo traduzco a útil para hablar con Nora sin convertir la mesa en una montaña de papeles con personalidad propia. 😌",
         "Ojo: esto está basado solo en texto extraído/VFMS. No reemplaza criterio legal y no inventa certezas donde el documento no las da.",
         "",
     ]
@@ -931,7 +1014,7 @@ def _render_combined_legal_documents_summary(case_id: str, docs: list[dict]) -> 
         ])
         return "\n".join(lines).strip()
 
-    lines.append("1. Resumen ejecutivo")
+    lines.append("1. Lo importante")
     lines.append("- Hay documentos registrados del caso del terreno familiar.")
     lines.append("- Algunos documentos tienen texto extraído y permiten organizar hechos, fechas, datos registrales y puntos para consulta.")
     if pending_docs:
@@ -993,7 +1076,7 @@ def _render_combined_legal_documents_summary(case_id: str, docs: list[dict]) -> 
         lines.append("- No detecté fechas suficientes en el texto extraído para una cronología confiable.")
     lines.append("")
 
-    lines.append("4. Datos clave para llevar a Nora")
+    lines.append("4. Qué falta confirmar")
     if all_registry:
         seen = set()
         for point in all_registry:
@@ -1007,28 +1090,28 @@ def _render_combined_legal_documents_summary(case_id: str, docs: list[dict]) -> 
     lines.append("- Confirmar con Nora el efecto exacto de cada auto, oficio o actuación mencionada.")
     lines.append("")
 
-    lines.append("5. Observaciones")
+    lines.append("5. Qué puede significar")
     lines.append("- Lo más útil ahora no es sacar conclusiones legales aquí, sino ordenar documentos, fechas y preguntas.")
     lines.append("- Cuando el documento diga que algo fue cancelado, archivado, revocado o tenido como no presentado, Nora debe confirmar el efecto procesal y registral exacto.")
     if pending_docs:
         lines.append("- Las fotos/documentos sin texto extraído están guardados, pero necesitan OCR o revisión manual antes de resumirse con confianza.")
     lines.append("")
 
-    lines.append("6. Recomendaciones para hablar con la abogada")
+    lines.append("6. Preguntas para Nora")
     lines.append("- Preguntar qué documento prueba mejor el estado actual de la finca y del proceso.")
     lines.append("- Preguntar si la cancelación de inscripción provisional ya aparece reflejada en Registro Público.")
     lines.append("- Preguntar qué falta pedir: certificación registral actualizada, copia íntegra del expediente, autos/oficios específicos o documentos notariales.")
     lines.append("- Pedirle a Nora que priorice próximos pasos por urgencia: Registro Público, juzgado, herederos/documentos familiares, o corrección de información faltante.")
     lines.append("")
 
-    lines.append("7. Pendiente manual / OCR")
+    lines.append("7. Próximo paso sugerido")
     if pending_docs:
         for doc in pending_docs[:5]:
             lines.append(f"- { _clean_filename(doc.get('filename', 'documento')) }: registrado, pero sin texto extraído suficiente para resumir.")
     else:
         lines.append("- No veo documentos pendientes sin texto dentro de los últimos documentos revisados.")
 
-    return "\n".join(lines).strip()
+    return _strip_banned_document_leaks("\n".join(lines).strip())
 
 
 
@@ -2290,16 +2373,30 @@ def _build_ocr_summary_reply(doc_meta: dict, ocr_text: str, *, pages: int = 0) -
     lines.extend([
         "Estado: resumen generado con OCR",
         "",
+        KAREN_DOCUMENT_WARM_INTRO,
+        "",
         "Resumen generado con OCR/lectura visual del PDF. Es una primera pasada sobre el documento escaneado.",
     ])
     page_count = int(pages or DEFAULT_MAX_PAGES)
     lines.append(f"Nota: por ahora revisé hasta las primeras {page_count} páginas.")
-    lines.extend(["", "📋 Resumen claro"])
+    lines.extend(["", "📋 Resumen claro", "", "Lo importante"])
     if bullets:
         lines.extend(f"- {bullet}" for bullet in bullets)
     else:
         lines.append("- No hay texto OCR suficiente para resumir este documento con confianza.")
     lines.extend([
+        "",
+        "Qué puede significar",
+        KAREN_DOCUMENT_MEANING_LINE,
+        "",
+        "Qué falta confirmar",
+        KAREN_DOCUMENT_CONFIRM_LINE,
+        "",
+        "Preguntas para Nora",
+        KAREN_DOCUMENT_NORA_LINE,
+        "",
+        "Próximo paso sugerido",
+        KAREN_DOCUMENT_NEXT_STEP_LINE,
         "",
         "Siguientes acciones útiles:",
         "- extraer fechas importantes",
@@ -2309,7 +2406,7 @@ def _build_ocr_summary_reply(doc_meta: dict, ocr_text: str, *, pages: int = 0) -
         "",
         OCR_SUMMARY_LIMIT_LINE,
     ])
-    return "\n".join(lines).strip()
+    return _strip_banned_document_leaks("\n".join(lines).strip())
 
 
 def _with_cached_ocr_notice(reply: str) -> str:
