@@ -101,7 +101,7 @@ def test_tomorrow_agenda_and_document_inventory_stay_clean() -> None:
     assert_contains(dashboard, "Google Calendar", "agenda keeps Google Calendar section")
     assert_contains(tomorrow, "⏰ Recordatorios", "agenda keeps reminders section")
     assert_contains(tomorrow, "📌 Tareas", "agenda keeps tasks section")
-    assert_contains(tomorrow, "No tienes tareas con fecha para mañana", "agenda keeps dated-task copy")
+    assert_contains(tomorrow, "No tienes tareas.", "agenda uses short empty task copy")
     assert_not_contains(dashboard, "Agenda interna de Val", "agenda avoids confusing internal label")
 
     inventory = render_document_inventory_compact([

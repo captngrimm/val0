@@ -5587,7 +5587,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
             else:
                 lines.append(f"- {item}")
     else:
-        lines.append("- No tienes recordatorios para mañana.")
+        lines.append("- No tienes recordatorios.")
 
     lines.append("")
     lines.append("📌 Tareas de Val")
@@ -5601,7 +5601,7 @@ def build_unified_tomorrow_dashboard(chat_id: int) -> str:
             else:
                 lines.append(f"- {item}")
     else:
-        lines.append("- No tienes tareas con fecha para mañana.")
+        lines.append("- No tienes tareas.")
 
     if reminder_like_tasks:
         lines.extend(["", "⚠️ Posible recordatorio guardado como tarea"])

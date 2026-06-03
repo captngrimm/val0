@@ -59,7 +59,7 @@ def test_tomorrow_agenda_copy() -> None:
     assert_not_contains(dashboard, "Agenda interna de Val", "agenda removes confusing internal label")
     assert_contains(tomorrow, "⏰ Recordatorios de Val", "tomorrow keeps Val reminders section")
     assert_contains(tomorrow, "📌 Tareas de Val", "tomorrow keeps Val tasks section")
-    assert_contains(tomorrow, "No tienes tareas con fecha para mañana", "tomorrow clarifies dated tasks only")
+    assert_contains(tomorrow, "No tienes tareas.", "tomorrow agenda uses short empty task copy")
     route = classify_karen_day0_route("Val, qué tengo mañana?")
     assert_true(route.name == ROUTE_AGENDA_TOMORROW, "tomorrow route still recognized")
 
