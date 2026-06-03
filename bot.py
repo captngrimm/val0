@@ -7087,6 +7087,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[GCAL_CONFIRM_ROUTE_PIPELINE] failed: {e}")
 
     try:
+        if await maybe_handle_pending_gcal_create_followup(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_pending_gcal_create_followup", chat_id=chat_id, message_id=shadow_message_id, text=text)
+            return
+    except Exception as e:
+        logger.exception(f"[GCAL_CREATE_FOLLOWUP_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_karen_pending_reminder_context(update, chat_id, client_id, text):
             _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_karen_pending_reminder_context", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
@@ -12781,6 +12788,23 @@ def _cleanup_karen_gcal_event_title(title: str) -> str:
     return value
 
 
+def _normalize_karen_gcal_event_title(title: str) -> str:
+    value = _cleanup_karen_gcal_event_title(str(title or ""))
+    value = re.sub(r"^(para\s+el\s+)+", "", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"^(para\s+la\s+)+", "", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"^(para\s+)", "", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"^(tengo\s+cita\s+con\s+)", "cita con ", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"^(tengo\s+reunion\s+con\s+|tengo\s+reunión\s+con\s+)", "cita con ", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"^(cita\s+para\s+el\s+)", "cita ", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"^(cita\s+para\s+la\s+)", "cita ", value, flags=re.IGNORECASE).strip()
+    value = re.sub(r"^cita\s+para\s+", "Cita para ", value, flags=re.IGNORECASE)
+    value = re.sub(r"^cita\s+con\s+", "Cita con ", value, flags=re.IGNORECASE)
+    value = re.sub(r"^cita\s+", "Cita ", value, flags=re.IGNORECASE)
+    if value and not value.lower().startswith("cita"):
+        value = "Cita: " + value
+    return value.strip()
+
+
 def _looks_like_karen_gcal_event_create_request(text: str) -> bool:
     norm = _norm_gcal_confirm_text(text)
     if not norm:
@@ -12823,6 +12847,186 @@ def _looks_like_karen_gcal_event_create_request(text: str) -> bool:
     ))
     has_time = bool(re.search(r"\b(?:a\s+las|a\s+la)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b", norm))
     return norm.startswith("agenda ") and has_date and has_time
+
+
+def _gcal_pretty_labels(due_local) -> tuple[str, str, str]:
+    weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][due_local.weekday()]
+    month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][due_local.month]
+    pretty_date = f"{weekday} {due_local.day} de {month_name}"
+    pretty_short = f"{weekday} {due_local.day:02d}/{due_local.month:02d}"
+    pretty_time = due_local.strftime("%I:%M %p").lstrip("0")
+    return pretty_date, pretty_short, pretty_time
+
+
+def _gcal_complete_create_payload(*, title: str, due_local, duration_minutes: int = 60, source_phrase_category: str = "natural_gcal_event_create") -> dict:
+    pretty_date, pretty_short, pretty_time = _gcal_pretty_labels(due_local)
+    return {
+        "title": title,
+        "start_iso": due_local.isoformat(),
+        "duration_minutes": int(duration_minutes or 60),
+        "description": "Evento creado por Val0 desde flujo natural de cita con confirmación explícita.",
+        "pretty_date": pretty_date,
+        "pretty_short": pretty_short,
+        "pretty_time": pretty_time,
+        "source_phrase_category": source_phrase_category,
+    }
+
+
+def _store_gcal_create_confirmation_pending(chat_id: int, client_id: str, payload: dict, *, source: str) -> PendingAction:
+    _clear_existing_gcal_pending(chat_id, client_id, GCAL_CREATE_ACTION_TYPE)
+    return create_pending_action(
+        PendingAction(
+            action_id=_gcal_action_id(GCAL_CREATE_ACTION_TYPE, chat_id),
+            chat_id=int(chat_id),
+            client_id=client_id,
+            action_type=GCAL_CREATE_ACTION_TYPE,
+            display_summary=f"{payload['pretty_date']} · {payload['pretty_time']} · {payload['title']}",
+            confirm_words=GCAL_CREATE_CONFIRM_WORDS,
+            cancel_words=GCAL_CREATE_CANCEL_WORDS,
+            expires_at=_gcal_pending_expires_at(),
+            payload=payload,
+            audit_metadata={"source": source, "source_phrase_category": payload.get("source_phrase_category") or "natural_gcal_event_create"},
+        )
+    )
+
+
+def _render_gcal_create_confirmation_prompt(*, vocative: str, payload: dict) -> str:
+    duration = int(payload.get("duration_minutes") or 60)
+    if duration == 60:
+        duration_label = "1 hora"
+    elif duration % 60 == 0:
+        duration_label = f"{duration // 60} horas"
+    else:
+        duration_label = f"{duration} minutos"
+    return (
+        f"📅 Puedo crear esta cita en tu Google Calendar{vocative}.\n\n"
+        "Revísala antes de confirmarla:\n\n"
+        f"• {payload['pretty_date']}\n"
+        f"• {payload['pretty_time']}\n"
+        f"• {payload['title']}\n"
+        f"• Duración: {duration_label}\n\n"
+        "¿Confirmas que la cree en Google Calendar?\n"
+        "Respóndeme: “sí”, “dale” o “cancelar”.\n\n"
+        "Google Calendar se encargará de sus notificaciones según tu configuración."
+    )
+
+
+def _store_gcal_create_missing_time_pending(
+    *,
+    chat_id: int,
+    client_id: str,
+    title: str,
+    year: int,
+    month: int,
+    day: int,
+    pretty_date: str,
+    duration_minutes: int = 60,
+) -> PendingAction:
+    payload = {
+        "title": title,
+        "date_year": int(year),
+        "date_month": int(month),
+        "date_day": int(day),
+        "pretty_date": pretty_date,
+        "duration_minutes": int(duration_minutes or 60),
+        "description": "Evento creado por Val0 desde flujo natural de cita con confirmación explícita.",
+        "missing_fields": ["time"],
+        "source_phrase_category": "natural_gcal_event_create_missing_time",
+    }
+    _clear_existing_gcal_pending(chat_id, client_id, GCAL_CREATE_ACTION_TYPE)
+    return create_pending_action(
+        PendingAction(
+            action_id=_gcal_action_id(GCAL_CREATE_ACTION_TYPE, chat_id),
+            chat_id=int(chat_id),
+            client_id=client_id,
+            action_type=GCAL_CREATE_ACTION_TYPE,
+            display_summary=f"{pretty_date} · hora pendiente · {title}",
+            confirm_words=(),
+            cancel_words=GCAL_CREATE_CANCEL_WORDS,
+            expires_at=_gcal_pending_expires_at(),
+            payload=payload,
+            audit_metadata={"source": "natural_appointment_missing_time", "source_phrase_category": "natural_gcal_event_create"},
+        )
+    )
+
+
+async def maybe_handle_pending_gcal_create_followup(update, chat_id, text) -> bool:
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    if not update or not getattr(update, "message", None):
+        return False
+
+    client_id = resolve_client_id(chat_id)
+    if not client_id:
+        return False
+
+    action = _get_gcal_pending_action_any_state(chat_id, client_id)
+    if not action:
+        return False
+
+    pending = action.payload or {}
+    missing_fields = pending.get("missing_fields") or []
+    if "time" not in missing_fields:
+        return False
+
+    now_utc = datetime.now(timezone.utc)
+    if action.expires_at <= now_utc:
+        clear_pending_action(action.action_id)
+        await update.message.reply_text(
+            "Esa confirmación ya venció. Vuelve a pedirme que agende la cita."
+        )
+        return True
+
+    decision = classify_confirmation_reply(text, action)
+    if decision == ConfirmationDecision.CANCEL:
+        clear_pending_action(action.action_id)
+        await update.message.reply_text(
+            "Listo, no creé el evento en Google Calendar."
+        )
+        return True
+
+    interpreted = interpret_user_intent(
+        text or "",
+        client_id=client_id,
+        pending_state={"intent": "calendar_create", "missing_fields": ["time"]},
+    )
+    time_value = str((interpreted.get("fields") or {}).get("time") or "")
+    if interpreted.get("intent") != "calendar_create_followup" or not time_value or interpreted.get("confidence", 0) < 0.80:
+        return False
+
+    try:
+        hour_text, minute_text = time_value.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+        due_local = datetime(
+            int(pending["date_year"]),
+            int(pending["date_month"]),
+            int(pending["date_day"]),
+            hour,
+            minute,
+            0,
+            tzinfo=ZoneInfo("America/Panama"),
+        )
+    except Exception as e:
+        logger.exception(f"[KAREN_GCAL_CREATE_FOLLOWUP] failed to build datetime: {e}")
+        await update.message.reply_text(
+            "Esa hora no me cuadra. Dímela como “a la 1:30 PM” o “a las 13:30”."
+        )
+        return True
+
+    payload = _gcal_complete_create_payload(
+        title=str(pending.get("title") or "Cita"),
+        due_local=due_local,
+        duration_minutes=int(pending.get("duration_minutes") or 60),
+        source_phrase_category="natural_gcal_event_create_followup_time",
+    )
+    _store_gcal_create_confirmation_pending(chat_id, client_id, payload, source="natural_appointment_followup_time")
+
+    await update.message.reply_text(
+        _render_gcal_create_confirmation_prompt(vocative=client_vocative(client_id), payload=payload)
+    )
+    return True
 
 
 async def maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text) -> bool:
@@ -13381,6 +13585,21 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
     # Time: "a las 3pm", "a la 1", "a las 15:30"
     tm = re.search(r"\b(?:a\s+las|a\s+la)\s+(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<ampm>am|pm)?\b", t)
     if not tm:
+        interpreted = interpret_user_intent(raw, client_id=client_id)
+        interpreted_fields = interpreted.get("fields") or {}
+        draft_title = _normalize_karen_gcal_event_title(str(interpreted_fields.get("title") or ""))
+        if draft_title and draft_title.lower() not in {"cita", "evento", "reunion", "reunión"}:
+            pretty_date, _, _ = _gcal_pretty_labels(datetime(year, month, day, 0, 0, 0, tzinfo=tz))
+            _store_gcal_create_missing_time_pending(
+                chat_id=chat_id,
+                client_id=client_id,
+                title=draft_title,
+                year=year,
+                month=month,
+                day=day,
+                pretty_date=pretty_date,
+                duration_minutes=60,
+            )
         if relative_date_label:
             await update.message.reply_text(
                 f"Sí puedo crear el evento en Google Calendar{vocative} 📅\n\n"
@@ -13473,50 +13692,16 @@ async def try_appointment_save_natural(update, chat_id, text) -> bool:
 
     reminder_text = f"{title}."
 
-    weekday = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"][due_local.weekday()]
-    month_name = ["","enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"][due_local.month]
-    pretty_date = f"{weekday} {due_local.day} de {month_name}"
-    pretty_short = f"{weekday} {due_local.day:02d}/{due_local.month:02d}"
-    pretty_time = due_local.strftime("%I:%M %p").lstrip("0")
-
     # Google Calendar write is now available for Karen, but must stay behind confirmation.
-    appointment_payload = {
-        "title": title,
-        "start_iso": due_local.isoformat(),
-        "duration_minutes": 60,
-        "description": "Evento creado por Val0 desde flujo natural de cita con confirmación explícita.",
-        "pretty_date": pretty_date,
-        "pretty_short": pretty_short,
-        "pretty_time": pretty_time,
-        "source_phrase_category": "natural_gcal_event_create",
-    }
-    _clear_existing_gcal_pending(chat_id, client_id, GCAL_CREATE_ACTION_TYPE)
-    create_pending_action(
-        PendingAction(
-            action_id=_gcal_action_id(GCAL_CREATE_ACTION_TYPE, chat_id),
-            chat_id=int(chat_id),
-            client_id=client_id,
-            action_type=GCAL_CREATE_ACTION_TYPE,
-            display_summary=f"{pretty_date} · {pretty_time} · {title}",
-            confirm_words=GCAL_CREATE_CONFIRM_WORDS,
-            cancel_words=GCAL_CREATE_CANCEL_WORDS,
-            expires_at=_gcal_pending_expires_at(),
-            payload=appointment_payload,
-            audit_metadata={"source": "natural_appointment_confirmation", "source_phrase_category": "natural_gcal_event_create"},
-        )
+    appointment_payload = _gcal_complete_create_payload(
+        title=title,
+        due_local=due_local,
+        duration_minutes=60,
+        source_phrase_category="natural_gcal_event_create",
     )
+    _store_gcal_create_confirmation_pending(chat_id, client_id, appointment_payload, source="natural_appointment_confirmation")
 
-    msg = (
-        f"📅 Puedo crear esta cita en tu Google Calendar{vocative}.\n\n"
-        "Revísala antes de confirmarla:\n\n"
-        f"• {pretty_date}\n"
-        f"• {pretty_time}\n"
-        f"• {title}\n"
-        "• Duración: 1 hora\n\n"
-        "¿Confirmas que la cree en Google Calendar?\n"
-        "Respóndeme: “sí”, “dale” o “cancelar”.\n\n"
-        "Google Calendar se encargará de sus notificaciones según tu configuración."
-    )
+    msg = _render_gcal_create_confirmation_prompt(vocative=vocative, payload=appointment_payload)
     await update.message.reply_text(msg)
     return True
 
@@ -16211,6 +16396,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[GCAL_CONFIRM_ROUTE_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_pending_gcal_create_followup(update, chat_id, text):
+            _maybe_log_intent_router_v2_actual("pending_action_reply", "maybe_handle_pending_gcal_create_followup", chat_id=chat_id, message_id=tg_msg_id, text=text)
+            return
+    except Exception as e:
+        logger.exception(f"[GCAL_CREATE_FOLLOWUP_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_pending_reminder_context(update, chat_id, client_id, text):

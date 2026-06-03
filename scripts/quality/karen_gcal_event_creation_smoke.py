@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -67,8 +68,9 @@ def test_natural_calendar_phrases_route_to_gcal_creation() -> None:
         assert_contains(handler, phrase, f"handler recognizes {phrase}")
         assert_contains(handle_text, phrase, f"route recognizes {phrase}")
 
-    assert_contains(handler, "create_pending_action", "uses pending confirmation framework")
-    assert_contains(handler, "GCAL_CREATE_ACTION_TYPE", "creates gcal pending action")
+    assert_contains(source, "create_pending_action", "uses pending confirmation framework")
+    assert_contains(source, "GCAL_CREATE_ACTION_TYPE", "creates gcal pending action")
+    assert_contains(handler, "_store_gcal_create_confirmation_pending", "handler stores gcal pending through helper")
     assert_contains(handler, "weekday_names", "weekday date parser present")
     assert_contains(handler, "America/Panama", "uses Panama timezone")
     assert_contains(intent_helper, 'norm.startswith("agenda ") and has_date and has_time', "agenda date/time create intent supported")
@@ -115,7 +117,9 @@ def test_gcal_creation_priority_beats_draft_followup() -> None:
     assert_true(handle_early_idx >= 0 and pipeline_call_idx >= 0 and handle_early_idx < pipeline_call_idx, "handle_text gcal create beats pipeline fallback")
 
     assert_not_contains(handle_text.split("KAREN_GCAL_CREATE_EARLY_PIPELINE", 1)[0], "Draft follow-up", "no draft copy before gcal create gate")
-    assert_contains(handler := _function_body(source, "try_appointment_save_natural"), "Google Calendar se encargará de sus notificaciones", "create route notification copy")
+    handler = _function_body(source, "try_appointment_save_natural")
+    prompt_helper = _function_body(source, "_render_gcal_create_confirmation_prompt")
+    assert_contains(prompt_helper, "Google Calendar se encargará de sus notificaciones", "create route notification copy")
 
     assert_true(_source_contains_order(source, "_looks_like_karen_gcal_event_create_request", "operator_route == \"draft_followup\""), "intent helper appears before draft router")
 
@@ -219,6 +223,76 @@ def test_missing_fields_are_asked_before_creation() -> None:
     assert_contains(handler, "¿Para qué fecha lo agendo?", "missing date asks date")
     assert_contains(handler, "¿A qué hora lo agendo?", "missing time asks time")
     assert_contains(handler, "¿Qué título le pongo al evento?", "missing title asks title")
+    assert_contains(handler, "_store_gcal_create_missing_time_pending", "missing time stores calendar draft for follow-up")
+
+
+def test_missing_time_followup_runtime_bridge() -> None:
+    code = r'''
+import asyncio
+import bot
+from core.pending_actions import clear_pending_action
+
+def check(value, label):
+    if not value:
+        raise AssertionError(label)
+
+class FakeMessage:
+    def __init__(self):
+        self.replies = []
+    async def reply_text(self, text):
+        self.replies.append(text)
+
+class FakeUpdate:
+    def __init__(self):
+        self.message = FakeMessage()
+
+async def run_case():
+    chat_id = bot.KAREN_CHAT_ID
+    client_id = bot.resolve_client_id(chat_id)
+    existing = bot._get_gcal_pending_action_any_state(chat_id, client_id)
+    if existing:
+        clear_pending_action(existing.action_id)
+
+    first = FakeUpdate()
+    handled = await bot.try_appointment_save_natural(first, chat_id, "Val, agenda para mañana cita con la bróker y mi mamá")
+    check(handled, "missing-time calendar create handled")
+    check(first.message.replies and "¿A qué hora lo agendo?" in first.message.replies[-1], "missing-time asks for hour")
+
+    partial = bot._get_gcal_pending_action_any_state(chat_id, client_id)
+    check(partial is not None, "partial gcal pending stored")
+    check("time" in (partial.payload.get("missing_fields") or []), "partial pending marks missing time")
+    check("start_iso" not in partial.payload, "partial pending does not pretend complete event")
+
+    second = FakeUpdate()
+    followup_handled = await bot.maybe_handle_pending_gcal_create_followup(second, chat_id, "a la 1:30 PM")
+    check(followup_handled, "time follow-up handled")
+    reply = second.message.replies[-1] if second.message.replies else ""
+    check("¿Confirmas que la cree en Google Calendar?" in reply, "follow-up shows confirmation preview")
+    check("1:30 PM" in reply, "follow-up confirmation includes parsed time")
+    check("Cita con la broker y mi mama" in reply, "follow-up confirmation keeps title")
+
+    complete = bot._get_gcal_pending_action_any_state(chat_id, client_id)
+    try:
+        check(complete is not None, "complete gcal pending stored")
+        check("missing_fields" not in complete.payload, "complete pending no longer missing time")
+        check("T13:30:00" in (complete.payload.get("start_iso") or ""), "complete pending stores parsed time")
+        check(bool(complete.confirm_words), "complete pending requires explicit confirmation before write")
+    finally:
+        if complete:
+            clear_pending_action(complete.action_id)
+
+asyncio.run(run_case())
+print("PASS runtime bridge")
+'''
+    result = subprocess.run(
+        ["./scripts/val0py", "-c", code],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert_true(result.returncode == 0, f"runtime bridge subprocess failed: stdout={result.stdout!r} stderr={result.stderr!r}")
+    assert_contains(result.stdout, "PASS runtime bridge", "runtime bridge subprocess passed")
 
 
 def test_pending_expiration_datetime_collision_regression() -> None:
@@ -244,10 +318,10 @@ def test_no_val_reminder_created_for_gcal_event() -> None:
 
 def test_success_and_failure_copy_are_honest() -> None:
     pending_confirm = _function_body(_bot_source(), "maybe_handle_pending_gcal_appointment_confirmation")
-    handler = _function_body(_bot_source(), "try_appointment_save_natural")
+    prompt_helper = _function_body(_bot_source(), "_render_gcal_create_confirmation_prompt")
     assert_contains(pending_confirm, "Agregué al Google Calendar", "success copy says gcal event added")
     assert_contains(pending_confirm, "Google Calendar se encargará de sus notificaciones", "success mentions gcal notifications")
-    assert_contains(handler, "Google Calendar se encargará de sus notificaciones", "confirmation preview mentions notifications")
+    assert_contains(prompt_helper, "Google Calendar se encargará de sus notificaciones", "confirmation preview mentions notifications")
     assert_contains(pending_confirm, "No lo marqué como creado", "failure does not fake success")
     assert_contains(pending_confirm, "clear_pending_action(action.action_id)", "terminal confirmation paths clear gcal pending")
     assert_contains(pending_confirm, "create_client_event", "uses real client-scoped gcal writer")
@@ -267,6 +341,7 @@ def main() -> int:
     test_gcal_confirmation_priority_beats_stale_pending_actions()
     test_gcal_pending_action_classifier_is_isolated()
     test_missing_fields_are_asked_before_creation()
+    test_missing_time_followup_runtime_bridge()
     test_pending_expiration_datetime_collision_regression()
     test_no_val_reminder_created_for_gcal_event()
     test_success_and_failure_copy_are_honest()
