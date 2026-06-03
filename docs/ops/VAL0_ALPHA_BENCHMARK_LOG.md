@@ -32,6 +32,7 @@ Alpha marker:
 | A-007 | Karen Legal/Document Summary Warmth v1 | 3-6 h | 2026-06-03 13:47 | 2026-06-03 14:00 | ~13 min verify/push window after Codex handoff | `322ef22` | PASS | Warmed Karen document/legal summaries with Nora-oriented consultative sections; OCR/watermark/legal guards PASS. |
 | A-008 | Source-of-Truth/Roadmap Harness v1 | 1-2 h | 2026-06-03 14:02 | 2026-06-03 16:32 | elapsed includes pause/wait | `d67cd42` | PASS | Added Alpha brief command that summarizes repo state, Alpha lanes, next milestones, live-data warnings, and validation commands. |
 | A-010 | Caso Finca / Carpeta Clara Design v1 | 1-2 h | 2026-06-03 | 2026-06-03 | same-day design lane | `8f99aa1` | PASS | Design-only lane for the first clear workspace/case model around Karen's Caso Finca. |
+| A-011 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | 2026-06-03 17:04 | 2026-06-03 17:11 | ~7 min verify/push window after Codex handoff | `f82f33d` | PASS | Added fixture/static read-only Caso Finca workspace status view with route smoke; no live data mutation. |
 | A-011 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | 2026-06-03 | 2026-06-03 | same-day implementation lane | this commit | PASS | Added fixture/static read-only Caso Finca workspace status view with route smoke; no live data mutation. |
 
 ## Human Outcome Summaries
@@ -161,7 +162,7 @@ Remaining gap / watch item:
 | 2 | Karen Personality Polish v1 | 2-3 h | DONE | Tany consistency, warmer/sarcastic style, less corporate/legal dryness. Completed as A-005 v1. |
 | 3 | Calendar Follow-up v2 | 2-4 h | DONE | Missing-date follow-up bridge. Completed as A-006. |
 | 4 | Caso Finca / Carpeta Clara Design v1 | 1-2 h | DONE | Design-only workspace model before implementation. |
-| 5 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | DONE | First fixture/static read-only workspace dashboard. |
+| 5 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | DONE | First fixture/static read-only workspace dashboard. Completed as A-011. |
 | 6 | Fixture Migration v2 | 3-5 h | Planned | Move more one-off Karen smokes into client fixtures. |
 | 7 | M45 Router Coverage Closeout | 2-4 h | Planned | Recalculate/close router observation items. |
 | 8 | Conversation State / Pending-State Map | 4-6 h | Planned | Map multi-turn continuation across calendar/tasks/reminders/docs. |
@@ -171,4 +172,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | Planned | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-011 is sealed as a fixture/static read-only workspace. Recommended next: connect the workspace renderer to stored source-labeled notes/documents/timeline, or pause for fixture migration / router coverage closeout if the cockpit needs consolidation first.
+A-011 is sealed as a fixture/static read-only workspace. Recommended next: A-012 Benchmark Auto-Update Helper v1 so lane closeout updates the Alpha benchmark without Boss having to remember markdown edits.
