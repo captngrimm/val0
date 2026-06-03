@@ -4,6 +4,7 @@ import re
 import unicodedata
 from typing import Any, Iterable
 
+from core.karen_conversationality import add_karen_safe_opening
 from core.time_intelligence import render_spanish_date_for_display
 
 
@@ -629,6 +630,7 @@ def render_karen_tasks_view(
     actual_reminders: Iterable[Any] | None = None,
     completed_tasks: Iterable[Any] | None = None,
     limit: int = 10,
+    client_id: str | None = "karen",
 ) -> str:
     merged_rows = merge_karen_task_items(tasks, auxiliary_tasks)
     reminder_keys = _actual_reminder_keys(actual_reminders)
@@ -645,7 +647,7 @@ def render_karen_tasks_view(
             "",
             "Puedes crear una con: “Val, tengo que ...”.",
         ])
-        return "\n".join(lines)
+        return add_karen_safe_opening("\n".join(lines), client_id, surface="tasks_empty")
 
     for idx, row in enumerate(rows[: max(1, int(limit or 10))], start=1):
         raw = _clean_line(_task_text(row), limit=96) or "tarea sin título"
@@ -662,4 +664,4 @@ def render_karen_tasks_view(
         lines.append("Algunas tareas sin fecha pueden necesitar que las convierta a tarea formal antes de cerrarlas.")
     if hidden_count:
         lines.append("Oculté posibles recordatorios antiguos guardados como tarea.")
-    return "\n".join(lines)
+    return add_karen_safe_opening("\n".join(lines), client_id, surface="tasks_list")

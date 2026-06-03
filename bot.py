@@ -74,6 +74,7 @@ from core.intent_router_v2_observer import (
     record_predicted_intent,
     render_intent_observation,
 )
+from core.karen_conversationality import add_karen_safe_opening
 from core.time_intelligence import (
     infer_today_when_future,
     parse_spanish_clock_time,
@@ -5860,7 +5861,11 @@ def _render_karen_reminder_list(chat_id: int, *, when: str = "all") -> str:
             ])
         else:
             lines.append("Puedes decir: “elimina el recordatorio 1” o “cambia el recordatorio 1 para las 10”.")
-    return "\n".join(lines)
+    return add_karen_safe_opening(
+        "\n".join(lines),
+        resolve_client_id(chat_id),
+        surface=f"reminders_{when}",
+    )
 
 
 def _render_karen_reminder_updated_list(chat_id: int, *, when: str) -> str:
@@ -6450,7 +6455,11 @@ def build_client_weekday_agenda_dashboard(client_id: str, chat_id: int, target_d
         chat_id=chat_id,
     )
     internal = _build_val_agenda_for_date(chat_id, target_date)
-    return "\n\n".join([title, gcal, internal])
+    return add_karen_safe_opening(
+        "\n\n".join([title, gcal, internal]),
+        client_id,
+        surface="agenda_weekday",
+    )
 
 
 async def maybe_handle_karen_weekday_agenda_query(update, chat_id: int, client_id: str, text: str) -> bool:
@@ -6972,7 +6981,11 @@ def build_client_agenda_dashboard(client_id: str, chat_id: int, window: str) -> 
     blocks = [title, gcal]
     if internal_block:
         blocks.append(internal_block)
-    return "\n\n".join(blocks)
+    return add_karen_safe_opening(
+        "\n\n".join(blocks),
+        client_id,
+        surface=f"agenda_{window}",
+    )
 
 
 async def maybe_handle_karen_explicit_case_note(update, chat_id: int, client_id: str, text: str) -> bool:
