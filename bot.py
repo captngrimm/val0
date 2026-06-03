@@ -32,6 +32,7 @@ SOURCE OF TRUTH:
 import time
 import shutil
 import asyncio
+import json
 
 # === MODE HANDLER (must ALWAYS exist if referenced later) ===
 from core.mode import try_set_mode
@@ -66,6 +67,7 @@ from core.founder_intro import (
     render_founder_intro_response,
 )
 from core.conversation_router import classify_deterministic_intent, normalize_message
+from core.intent_interpreter import interpret_user_intent
 from core.intent_router_v2 import classify_intent_shadow
 from core.intent_router_v2_observer import (
     record_actual_intent,
@@ -399,6 +401,77 @@ def _intent_router_v2_shadow_enabled() -> bool:
     return os.getenv("VAL0_INTENT_ROUTER_V2_SHADOW", "").strip().lower() == "true"
 
 
+_INTENT_INTERPRETER_V1_OBSERVATIONS: dict[tuple[str, str], dict] = {}
+
+
+def _intent_interpreter_v1_shadow_enabled() -> bool:
+    return os.getenv("VAL0_INTENT_INTERPRETER_V1_SHADOW", "").strip().lower() == "true"
+
+
+def _intent_interpreter_v1_key(chat_id, message_id) -> tuple[str, str]:
+    return (str(chat_id or "unknown"), str(message_id or "unknown"))
+
+
+def _intent_interpreter_v1_actual_to_interpreted(actual_intent: str) -> str:
+    return {
+        "agenda_query": "agenda_query",
+        "reminder_query": "reminder_list",
+        "reminder_create": "reminder_create",
+        "task_query": "task_list",
+        "task_create": "task_create",
+        "gcal_create": "calendar_create",
+        "case_status": "case_status",
+    }.get(str(actual_intent or ""), str(actual_intent or ""))
+
+
+def _maybe_log_intent_interpreter_v1_shadow(text: str, *, chat_id: int | None = None, client_id: str | None = None, message_id=None, pending_state=None) -> None:
+    if not _intent_interpreter_v1_shadow_enabled():
+        return
+    try:
+        if pending_state is None:
+            pending_state = _intent_router_v2_pending_state_for_shadow(chat_id)
+        decision = interpret_user_intent(text or "", client_id=client_id, pending_state=pending_state)
+        key = _intent_interpreter_v1_key(chat_id, message_id)
+        _INTENT_INTERPRETER_V1_OBSERVATIONS[key] = {
+            "intent": str(decision.get("intent") or ""),
+            "confidence": float(decision.get("confidence") or 0.0),
+            "route_hint": str(decision.get("route_hint") or ""),
+        }
+        preview = re.sub(r"\s+", " ", str(text or "")).strip()[:160]
+        logger.info(
+            "[INTENT_INTERPRETER_V1_SHADOW] client=%s output=%s text=\"%s\"",
+            client_id or "unknown",
+            json.dumps(decision, ensure_ascii=False, sort_keys=True)[:900],
+            preview,
+        )
+    except Exception as e:
+        logger.exception(f"[INTENT_INTERPRETER_V1_SHADOW] failed: {e}")
+
+
+def _maybe_log_intent_interpreter_v1_actual(actual_intent: str, handler_name: str, *, chat_id: int | None = None, message_id=None, text: str = "") -> None:
+    if not _intent_interpreter_v1_shadow_enabled():
+        return
+    try:
+        key = _intent_interpreter_v1_key(chat_id, message_id)
+        predicted = _INTENT_INTERPRETER_V1_OBSERVATIONS.get(key) or {}
+        if not predicted:
+            return
+        interpreted_actual = _intent_interpreter_v1_actual_to_interpreted(actual_intent)
+        predicted_intent = str(predicted.get("intent") or "")
+        preview = re.sub(r"\s+", " ", str(text or "")).strip()[:160]
+        logger.info(
+            '[INTENT_INTERPRETER_V1_COMPARE] interpreted=%s actual=%s match=%s confidence=%.2f handler=%s text="%s"',
+            predicted_intent or "-",
+            interpreted_actual or "-",
+            bool(predicted_intent and predicted_intent == interpreted_actual),
+            float(predicted.get("confidence") or 0.0),
+            handler_name,
+            preview,
+        )
+    except Exception as e:
+        logger.exception(f"[INTENT_INTERPRETER_V1_COMPARE] failed: {e}")
+
+
 def _intent_router_v2_pending_state_for_shadow(chat_id: int | None):
     if chat_id is None:
         return None
@@ -438,6 +511,7 @@ def _maybe_log_intent_router_v2_shadow(text: str, *, chat_id: int | None = None,
 
 
 def _maybe_log_intent_router_v2_actual(actual_intent: str, handler_name: str, *, chat_id: int | None = None, message_id=None, text: str = "", reason: str = "") -> None:
+    _maybe_log_intent_interpreter_v1_actual(actual_intent, handler_name, chat_id=chat_id, message_id=message_id, text=text)
     if not _intent_router_v2_shadow_enabled():
         return
     try:
@@ -6962,6 +7036,7 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
     client_id = resolve_client_id(chat_id)
     shadow_message_id = getattr(update.message, "message_id", None)
     _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id, message_id=shadow_message_id)
+    _maybe_log_intent_interpreter_v1_shadow(text, chat_id=chat_id, client_id=client_id, message_id=shadow_message_id)
 
     try:
         if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):
@@ -16024,6 +16099,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     client_id = resolve_client_id(chat_id)
     tg_msg_id = getattr(update.message, "message_id", None)
     _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id, message_id=tg_msg_id)
+    _maybe_log_intent_interpreter_v1_shadow(text, chat_id=chat_id, client_id=client_id, message_id=tg_msg_id)
 
     try:
         if await maybe_handle_karen_name_language_guard(update, chat_id, client_id, text):
