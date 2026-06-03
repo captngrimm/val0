@@ -32,6 +32,93 @@ Alpha marker:
 | A-007 | Karen Legal/Document Summary Warmth v1 | 3-6 h | 2026-06-03 13:47 | 2026-06-03 14:00 | ~13 min verify/push window after Codex handoff | `322ef22` | PASS | Warmed Karen document/legal summaries with Nora-oriented consultative sections; OCR/watermark/legal guards PASS. |
 | A-008 | Source-of-Truth/Roadmap Harness v1 | 1-2 h | 2026-06-03 14:02 | 2026-06-03 16:32 | elapsed includes pause/wait | `d67cd42` | PASS | Added Alpha brief command that summarizes repo state, Alpha lanes, next milestones, live-data warnings, and validation commands. |
 
+## Human Outcome Summaries
+
+### A-002 / A-006 — Calendar follow-up
+
+Plain-English goal:
+- Let Karen create Google Calendar events naturally, even when she gives part of the event in one message and completes it in the next.
+
+Now Val can:
+- Start a calendar draft when the title/date/time are not all present.
+- Ask for the missing date or time.
+- Continue the same draft when Karen replies.
+- Show a confirmation preview before any Google Calendar write.
+
+Example interaction:
+- Karen: "Val, agenda cita con la bróker y mi mamá a la 1:30 PM"
+- Val: asks what date.
+- Karen: "mañana"
+- Val: shows the Google Calendar confirmation preview.
+
+Remaining gap / watch item:
+- Multi-turn calendar is v1/v2 bridge behavior, not a broad router refactor. Keep watching voice follow-ups and ambiguous dates.
+
+### A-003 — Task delete interpreter support
+
+Plain-English goal:
+- Stop treating direct numbered task delete phrases as vague chat.
+
+Now Val can:
+- Interpret "elimina la tarea 1", "borra la tarea 2", and "quita tarea uno" as task_delete in diagnostics/fixtures.
+- Keep deterministic runtime responsible for the actual task action.
+
+Example interaction:
+- Karen: "Val elimina la tarea 1"
+- Val/routing: understands this as a task delete/list-removal command, not a case or Google Calendar request.
+
+Remaining gap / watch item:
+- Interpreter classification is not the executor. Runtime safety and task history rules still decide what happens.
+
+### A-004 / A-005 — Karen conversationality/personality
+
+Plain-English goal:
+- Make Val feel less like a canned Telegram bot in safe read/list responses.
+
+Now Val can:
+- Add Karen-scoped Tany openings to agenda, reminders, and tasks.
+- Keep the tone warmer and lightly sassy without weakening write/delete safety.
+- Avoid stale contamination phrases and fake legal authority.
+
+Example interaction:
+- Karen: "Val, qué tareas activas tengo?"
+- Val: answers with a warmer Tany-facing task list instead of dry bot copy.
+
+Remaining gap / watch item:
+- This is deterministic copy polish only. Broader personality memory and sarcasm consistency are still future work.
+
+### A-007 — Legal/document summary warmth
+
+Plain-English goal:
+- Turn document summaries into useful Nora-oriented review packets without pretending Val is a lawyer.
+
+Now Val can:
+- Present grounded document facts with "Lo importante", "Qué puede significar", "Qué falta confirmar", "Preguntas para Nora", and "Próximo paso sugerido".
+- Keep OCR/watermark boundaries intact.
+- Explain that the summary is a reading aid, not a legal decision.
+
+Example interaction:
+- Karen: "Val, resume con OCR el último documento"
+- Val: returns a first-pass OCR summary with facts, questions for Nora, and legal review boundaries.
+
+Remaining gap / watch item:
+- Val still does not provide legal conclusions. OCR can be noisy, and Nora/the abogada must confirm legal effect.
+
+### A-008 — Source-of-truth/Roadmap Harness
+
+Plain-English goal:
+- Give any cockpit/Codex a one-command briefing for where Val0 is, what changed, what comes next, and what live data must not be touched.
+
+Now Val can:
+- Print the current branch, git status, recent commits, Alpha lanes, planned milestones, tactical note, live-data warning, and validation commands.
+
+Example interaction:
+- Operator runs: `python3 scripts/diagnostics/val0_alpha_brief.py`
+- Val0 prints the Alpha brief and flags `clients/karen/CLIENT_GROCERY.md` as live user data.
+
+Remaining gap / watch item:
+- The brief depends on this benchmark log staying current after each lane closes.
+
 ## Planned Next Milestones
 
 | # | Milestone | Estimate | Status | Notes |

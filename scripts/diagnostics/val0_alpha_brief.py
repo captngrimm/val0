@@ -76,6 +76,16 @@ def _planned_milestones(text: str) -> list[list[str]]:
     return _table_rows(_section(text, "Planned Next Milestones"))
 
 
+def _human_outcome_summaries(text: str) -> str:
+    section = _section(text, "Human Outcome Summaries")
+    if not section:
+        return "(no human outcome summaries found)"
+    lines = section.splitlines()
+    if lines and lines[0].strip() == "## Human Outcome Summaries":
+        lines = lines[1:]
+    return "\n".join(line.rstrip() for line in lines).strip() or "(no human outcome summaries found)"
+
+
 def _current_tactical_note(text: str) -> str:
     section = _section(text, "Current Tactical Note")
     lines = [line.strip() for line in section.splitlines() if line.strip()]
@@ -158,6 +168,10 @@ def build_alpha_brief() -> str:
     ])
     lines.extend(_format_lanes(lanes))
     lines.extend([
+        "",
+        "Human outcome summaries",
+        "-----------------------",
+        _human_outcome_summaries(benchmark_text),
         "",
         "Planned next milestones",
         "-----------------------",
