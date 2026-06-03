@@ -181,6 +181,20 @@ def _cleanup_calendar_title(text: str) -> str:
     return title[:1].lower() + title[1:] if title else ""
 
 
+def _extract_task_title(text: str) -> str:
+    norm = _normalize(text)
+    patterns = (
+        r"^(?:registra|registrar|agrega|agregar|guarda|guardar|anota|anotar|crea|crear)\s+(?:una\s+)?tarea\s*:?\s+(.+)$",
+        r"^(?:tengo\s+que|debo|hay\s+que)\s+(.+)$",
+        r"^tarea\s*:?\s+(.+)$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, norm)
+        if match:
+            return re.sub(r"\s+", " ", (match.group(1) or "")).strip()
+    return ""
+
+
 def _extract_duration_minutes(text: str) -> int:
     norm = _normalize(text)
     match = re.search(r"\b(?:por|durante)\s+(?P<num>\d{1,3})\s+minutos?\b", norm)
@@ -272,8 +286,18 @@ def interpret_user_intent(text, client_id, pending_state=None) -> dict[str, Any]
     if _has_any(normalized, ("que tareas", "tareas activas", "tareas pendientes", "tareas registrada", "tarea activa", "tareas activa")):
         return _result("task_list", confidence=0.94, normalized_user_text=normalized, route_hint="task_query")
 
-    if re.search(r"\b(registra|registrar|agrega|agregar|guarda|guardar|anota|anotar)\s+(?:una\s+)?tarea\b", normalized) or normalized.startswith("tarea "):
-        return _result("task_create", confidence=0.90, normalized_user_text=normalized, route_hint="task_create")
+    task_title = _extract_task_title(str(text or ""))
+    if task_title or re.search(r"\b(registra|registrar|agrega|agregar|guarda|guardar|anota|anotar|crea|crear)\s+(?:una\s+)?tarea\b", normalized):
+        fields = {"title": task_title, "action": task_title} if task_title else {}
+        missing_fields = [] if task_title else ["title"]
+        return _result(
+            "task_create",
+            confidence=0.92 if task_title else 0.70,
+            fields=fields,
+            missing_fields=missing_fields,
+            normalized_user_text=normalized,
+            route_hint="task_create",
+        )
 
     if _has_any(normalized, ("que documentos tengo", "documentos tengo", "lista documentos", "inventario de documentos")):
         return _result("document_list", confidence=0.92, normalized_user_text=normalized, route_hint="document_inventory")

@@ -88,6 +88,21 @@ def test_calendar_followup_time() -> None:
     assert_true(result["requires_confirmation"] is True, "follow-up remains confirmation path")
 
 
+def test_task_create_variants_extract_title_without_executing() -> None:
+    cases = (
+        "Val crea tarea comprar baterías para David y la pesa",
+        "Val registra tarea comprar baterías para David y la pesa",
+        "Val tengo que comprar baterías para David y la pesa",
+    )
+    for phrase in cases:
+        result = _interpret(phrase)
+        assert_equal(result["intent"], "task_create", phrase)
+        assert_equal(result["missing_fields"], [], f"task title present: {phrase}")
+        assert_true("comprar baterias para david y la pesa" in result["fields"].get("title", ""), f"title extracted: {phrase}")
+        assert_equal(result["fields"].get("action"), result["fields"].get("title"), f"action mirrors title: {phrase}")
+        assert_true(result["should_execute"] is False, f"interpreter does not create task: {phrase}")
+
+
 def test_shadow_hook_is_default_off_and_non_routing() -> None:
     assert_true(os.getenv("VAL0_INTENT_INTERPRETER_V1_SHADOW") != "true", "interpreter shadow defaults off")
     bot = _read("bot.py")
@@ -130,6 +145,7 @@ def main() -> int:
     test_intent_examples()
     test_calendar_create_missing_time()
     test_calendar_followup_time()
+    test_task_create_variants_extract_title_without_executing()
     test_shadow_hook_is_default_off_and_non_routing()
     test_module_has_no_execution_imports()
     print("PASS: Intent Interpreter v1 smoke cases passed.")

@@ -6106,7 +6106,8 @@ def _extract_karen_task_creation_text(text: str) -> str:
     if norm.startswith("recuerdame") or norm.startswith("recordatorio"):
         return ""
     patterns = (
-        r"^(?:registra|agrega|anota)\s+(?:una\s+)?tarea\s*:?\s+(.+)$",
+        r"^(?:registra|agrega|anota|crea|crear)\s+(?:una\s+)?tarea\s*:?\s+(.+)$",
+        r"^(?:tengo\s+que|debo|hay\s+que)\s+(.+)$",
         r"^tarea\s*:?\s+(.+)$",
     )
     for pattern in patterns:
