@@ -35,6 +35,7 @@ Alpha marker:
 | A-011 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | 2026-06-03 17:04 | 2026-06-03 17:11 | ~7 min verify/push window after Codex handoff | `f82f33d` | PASS | Added fixture/static read-only Caso Finca workspace status view with route smoke; no live data mutation. |
 | A-012 | Benchmark Auto-Update Helper v1 | 1-2 h | 2026-06-03 17:14 | 2026-06-03 17:18 | ~4 min verify/push window after Codex handoff | `c4609eb` | PASS | Added helper to close Alpha benchmark lanes safely with duplicate protection, replace mode, dry-run, tactical notes, and planned-status updates. |
 | A-013 | Caso Finca Source-Labeled Data Read-Only v1 | 2-4 h | 2026-06-03 17:21 | 2026-06-03 17:26 | ~5 min verify/implementation window after Codex handoff | `this commit` | PASS | Connected read-only Caso Finca workspace to safe source-labeled fixture records; no live data mutation. |
+| A-014 | Existing Document Inventory / Case Attachment Audit | 1-2 h | 2026-06-03 17:30 | 2026-06-03 17:36 | ~6 min implementation/verify window after Codex handoff | `this commit` | PASS | Added metadata-only Karen document inventory audit for existing uploads, OCR status, summary status, and Caso Finca relevance; no document body dump or live mutation. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -172,4 +173,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | Planned | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-013 is sealed. Recommended next: observe live Caso Finca copy with Karen, then decide whether A-014 should add source-linked notes/documents from trusted storage or run a consolidation lane first.
+A-014 is sealed. Recommended next: use the audit output to choose a small, trusted set of source-labeled document attachments for Caso Finca, still read-only.
