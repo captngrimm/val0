@@ -33,7 +33,6 @@ Alpha marker:
 | A-008 | Source-of-Truth/Roadmap Harness v1 | 1-2 h | 2026-06-03 14:02 | 2026-06-03 16:32 | elapsed includes pause/wait | `d67cd42` | PASS | Added Alpha brief command that summarizes repo state, Alpha lanes, next milestones, live-data warnings, and validation commands. |
 | A-010 | Caso Finca / Carpeta Clara Design v1 | 1-2 h | 2026-06-03 | 2026-06-03 | same-day design lane | `8f99aa1` | PASS | Design-only lane for the first clear workspace/case model around Karen's Caso Finca. |
 | A-011 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | 2026-06-03 17:04 | 2026-06-03 17:11 | ~7 min verify/push window after Codex handoff | `f82f33d` | PASS | Added fixture/static read-only Caso Finca workspace status view with route smoke; no live data mutation. |
-| A-011 | Caso Finca Read-Only Workspace Status v1 | 2-4 h | 2026-06-03 | 2026-06-03 | same-day implementation lane | this commit | PASS | Added fixture/static read-only Caso Finca workspace status view with route smoke; no live data mutation. |
 
 ## Human Outcome Summaries
 
