@@ -64,7 +64,7 @@ def _check_case(case: dict[str, Any], *, client_id: str) -> tuple[str, str]:
     expected_not_contains = [str(item).lower() for item in case.get("expected_not_contains") or []]
     xfail = bool(case.get("xfail"))
 
-    result = interpret_user_intent(text, client_id=client_id)
+    result = interpret_user_intent(text, client_id=client_id, pending_state=case.get("pending_state"))
     fields_blob = _result_fields_blob(result)
     failures: list[str] = []
 

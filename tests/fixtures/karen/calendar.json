@@ -1,0 +1,42 @@
+[
+  {
+    "id": "karen_calendar_create_full_tomorrow_broker_mama",
+    "input": "Val, agenda para mañana a la 1:30 PM cita con la bróker y mi mamá",
+    "expected_intent": "calendar_create",
+    "expected_route_hint": "gcal_create",
+    "expected_contains": ["manana", "13:30", "cita con la broker y mi mama"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Safe advised full one-message phrase for calendar creation"
+  },
+  {
+    "id": "karen_calendar_create_missing_time",
+    "input": "Val, agenda para mañana cita con la bróker y mi mamá",
+    "expected_intent": "calendar_create",
+    "expected_route_hint": "gcal_create",
+    "expected_contains": ["manana", "cita con la broker y mi mama"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Calendar create with missing time should remain calendar_create and report missing time"
+  },
+  {
+    "id": "karen_calendar_create_missing_date",
+    "input": "Val, agenda cita con la bróker y mi mamá a la 1:30 PM",
+    "expected_intent": "calendar_create",
+    "expected_route_hint": "gcal_create",
+    "expected_contains": ["13:30", "cita con la broker y mi mama"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Calendar create with missing date should remain calendar_create and report missing date"
+  },
+  {
+    "id": "karen_calendar_create_followup_time_shadow",
+    "input": "a la 1:30 PM",
+    "pending_state": {
+      "intent": "calendar_create",
+      "missing_fields": ["time"]
+    },
+    "expected_intent": "calendar_create_followup",
+    "expected_route_hint": "gcal_create_followup",
+    "expected_contains": ["13:30"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Interpreter shadow follow-up for missing calendar time"
+  }
+]
