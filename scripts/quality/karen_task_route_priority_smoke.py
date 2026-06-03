@@ -104,8 +104,23 @@ def test_task_query_beats_case_routes() -> None:
 def test_task_delete_clarification_does_not_route_to_gcal() -> None:
     followup = function_body("maybe_handle_karen_task_delete_followup")
     parser = function_body("_looks_like_karen_task_delete_followup")
+    request_parser = function_body("_parse_karen_task_delete_request")
+    request_handler = function_body("maybe_handle_karen_task_delete_request")
+    completion = function_body("maybe_handle_karen_task_completion")
     handle = function_body("handle_text")
     pipeline = function_body("_process_text_pipeline")
+
+    for marker in ("borra|borrar|elimina|eliminar|quita|quitar", "_karen_extract_number_after"):
+        assert_contains(request_parser, marker, f"task delete request parser supports {marker}")
+    for phrase in ("Val elimina la tarea 1", "Elimina la tarea 1", "borra la tarea 1", "quita la tarea 1"):
+        shadow = classify_intent_shadow(phrase, client_id="client-zero")
+        assert_true(shadow.selected_intent == "task_delete", f"shadow router task_delete: {phrase}")
+    done_shadow = classify_intent_shadow("marca la tarea 1 como hecha", client_id="client-zero")
+    assert_true(done_shadow.selected_intent == "task_complete", "mark-done stays task_complete")
+    assert_contains(request_handler, "status='deleted'", "explicit task delete marks status deleted")
+    assert_contains(request_handler, "Listo. Quité esta tarea del listado activo", "explicit task delete removes from active list")
+    assert_not_contains(request_handler, "DELETE FROM commitments", "explicit task delete does not hard-delete DB rows")
+    assert_contains(completion, "status='done'", "mark-done route still marks done")
 
     for marker in ("eliminarla del listado", "eliminarla", "borrala", "quitarla", "sacala del listado"):
         assert_contains(parser, marker, f"delete follow-up supports {marker}")
@@ -116,10 +131,15 @@ def test_task_delete_clarification_does_not_route_to_gcal() -> None:
     assert_not_contains(followup, "delete_client_event", "task delete follow-up never calls Google Calendar")
 
     for body, label in ((handle, "handle_text"), (pipeline, "pipeline")):
+        direct_delete_idx = body.find("maybe_handle_karen_task_delete_request")
         followup_idx = body.find("maybe_handle_karen_task_delete_followup")
         gcal_idx = body.find("maybe_handle_karen_gcal_event_number_delete")
+        case_status_idx = body.find("maybe_handle_karen_case_status")
+        assert_true(direct_delete_idx >= 0, f"{label} has direct task delete")
         assert_true(followup_idx >= 0, f"{label} has task delete follow-up")
+        assert_true(gcal_idx < 0 or direct_delete_idx < gcal_idx, f"{label} direct task delete beats gcal numbered delete")
         assert_true(gcal_idx < 0 or followup_idx < gcal_idx, f"{label} task delete follow-up beats gcal numbered delete")
+        assert_true(case_status_idx < 0 or direct_delete_idx < case_status_idx, f"{label} direct task delete beats case/finca")
 
 
 def main() -> int:

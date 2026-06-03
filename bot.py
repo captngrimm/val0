@@ -7096,6 +7096,13 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
         logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_PIPELINE] failed: {e}")
 
     try:
+        if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_delete", "maybe_handle_karen_task_delete_request", chat_id=chat_id, message_id=shadow_message_id, text=text)
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_DIRECT_PIPELINE] failed: {e}")
+
+    try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
             _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_pending_gcal_delete_confirmation", chat_id=chat_id, message_id=shadow_message_id, text=text)
             return
@@ -15390,7 +15397,7 @@ def _normalize_task_completion_request(text: str) -> tuple[Optional[int], str]:
 
 def _parse_karen_task_delete_request(text: str) -> int | None:
     norm = _normalize_daily_operator_query(text)
-    if not re.search(r"\b(borra|elimina|cancela)\s+(?:la\s+)?tarea\b", norm):
+    if not re.search(r"\b(borra|borrar|elimina|eliminar|quita|quitar|cancela|cancelar)\s+(?:la\s+)?tarea\b", norm):
         return None
     number = _karen_extract_number_after("tarea", text)
     return number or 0
@@ -15542,13 +15549,49 @@ async def maybe_handle_karen_task_delete_request(update: Update, context: Contex
     if rows and 1 <= int(number) <= len(rows):
         selected = _karen_task_row_dict(rows[int(number) - 1])
         task_text = str(selected.get("raw_input") or selected.get("action") or f"tarea {number}").strip()
-        _KAREN_PENDING_TASK_DELETE_CONTEXT[int(chat_id)] = {
-            "task_id": selected.get("id") if not is_auxiliary_task_row(selected) else None,
-            "task_text": task_text,
-            "is_auxiliary": bool(is_auxiliary_task_row(selected)),
-            "number": int(number),
-            "ts": time.time(),
-        }
+        task_id = selected.get("id") if not is_auxiliary_task_row(selected) else None
+        if not task_id:
+            _KAREN_PENDING_TASK_DELETE_CONTEXT[int(chat_id)] = {
+                "task_id": None,
+                "task_text": task_text,
+                "is_auxiliary": bool(is_auxiliary_task_row(selected)),
+                "number": int(number),
+                "ts": time.time(),
+            }
+            await update.message.reply_text(
+                "Todavía no elimino tareas del historial; puedo marcarla como hecha para quitarla de pendientes. "
+                "¿Quieres que la marque como hecha?"
+            )
+            return True
+        try:
+            conn = _get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE commitments
+                SET status='deleted',
+                    completed_at=CURRENT_TIMESTAMP
+                WHERE id=? AND chat_id=? AND status='open'
+                """,
+                (int(task_id), int(chat_id)),
+            )
+            changed = cur.rowcount
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.exception(f"[KAREN_TASK_DELETE_DIRECT] failed: {e}")
+            await update.message.reply_text(
+                "Todavía no elimino tareas del historial; puedo marcarla como hecha para quitarla de pendientes. "
+                "¿Quieres que la marque como hecha?"
+            )
+            return True
+        _KAREN_PENDING_TASK_DELETE_CONTEXT.pop(int(chat_id), None)
+        _mark_karen_numbered_action_dirty(chat_id, "task")
+        if not changed:
+            await update.message.reply_text("Esa tarea ya no aparece abierta. Pide “Val, qué tareas tengo” para verificar.")
+            return True
+        await update.message.reply_text(f"Listo. Quité esta tarea del listado activo: {task_text}.")
+        return True
     else:
         _KAREN_PENDING_TASK_DELETE_CONTEXT[int(chat_id)] = {"task_id": None, "task_text": f"tarea {number}", "is_auxiliary": False, "number": int(number), "ts": time.time()}
     await update.message.reply_text(
@@ -16157,6 +16200,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_DELETE_FOLLOWUP_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_karen_task_delete_request(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("task_delete", "maybe_handle_karen_task_delete_request", chat_id=chat_id, message_id=tg_msg_id, text=text)
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_TASK_DELETE_DIRECT_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_pending_gcal_delete_confirmation(update, chat_id, text):
