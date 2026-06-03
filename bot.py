@@ -12199,7 +12199,6 @@ def _generate_morning_brief_det(chat_id: int, date: str) -> str:
     """
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
-    from core.case_mvp import _render_due_grouped
 
     tz = ZoneInfo("America/Panama")
 
@@ -12212,7 +12211,8 @@ def _generate_morning_brief_det(chat_id: int, date: str) -> str:
     conn = _get_conn()
     cur = conn.cursor()
 
-    items = []
+    reminder_items = []
+    case_items = []
 
     cur.execute(
         """
@@ -12232,7 +12232,7 @@ def _generate_morning_brief_det(chat_id: int, date: str) -> str:
         expediente = r["expediente"] if hasattr(r, "keys") else r[0]
         event_text = r["event_text"] if hasattr(r, "keys") else r[1]
 
-        items.append(
+        case_items.append(
             {
                 "due_ts": due_ts,
                 "title": (event_text or "(evento)").strip(),
@@ -12280,7 +12280,7 @@ def _generate_morning_brief_det(chat_id: int, date: str) -> str:
         except Exception:
             due_ts = 0
 
-        items.append(
+        reminder_items.append(
             {
                 "due_ts": due_ts,
                 "title": txt,
@@ -12290,14 +12290,34 @@ def _generate_morning_brief_det(chat_id: int, date: str) -> str:
             }
         )
 
-    if not items:
+    if not reminder_items and not case_items:
         return ""
 
-    return _render_due_grouped(
-        header=f"📋 Hoy ({date}):",
-        items=items,
-        tz=tz,
-    )
+    def _time_label(due_ts: int) -> str:
+        try:
+            return datetime.fromtimestamp(int(due_ts), tz).strftime("%I:%M %p").lstrip("0")
+        except Exception:
+            return "--:--"
+
+    def _clean_title(value: str, fallback: str) -> str:
+        cleaned = re.sub(r"\s{2,}", " ", (value or "").strip()).strip(" :-|")
+        return cleaned or fallback
+
+    lines = [f"🗓️ Agenda de hoy — {render_spanish_date_for_display(start_local)}"]
+
+    if reminder_items:
+        lines.extend(["", "⏰ Recordatorios de Val"])
+        for idx, item in enumerate(sorted(reminder_items, key=lambda it: (int(it.get("due_ts") or 0), str(it.get("title") or ""))), start=1):
+            title = _clean_title(str(item.get("title") or ""), "(sin texto)")
+            lines.append(f"{idx}. {_time_label(int(item.get('due_ts') or 0))} · {title}")
+
+    if case_items:
+        lines.extend(["", "⚖️ Caso / términos"])
+        for idx, item in enumerate(sorted(case_items, key=lambda it: (int(it.get("due_ts") or 0), str(it.get("title") or ""))), start=1):
+            title = _clean_title(str(item.get("title") or ""), "(evento)")
+            lines.append(f"{idx}. {_time_label(int(item.get('due_ts') or 0))} · {title}")
+
+    return "\n".join(lines)
 
 def _generate_week_horizon(chat_id: int, days: int = 7) -> str:
     """
@@ -14313,7 +14333,7 @@ async def morning_daily_tick(context):
             if not summary:
                 continue
 
-            msg = f"📋 Daily ({date})\n\n{summary}"
+            msg = summary
             try:
                 await context.bot.send_message(chat_id=chat_id, text=msg)
             except Exception as e:
