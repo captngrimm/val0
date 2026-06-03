@@ -31,6 +31,7 @@ Alpha marker:
 | A-006 | Calendar Follow-up v2 — Missing Date Bridge | 2-4 h | 2026-06-03 13:41 | 2026-06-03 13:46 | ~5 min verify/push window after Codex handoff | `859b3f7` | PASS | Added missing-date follow-up bridge for calendar drafts; fixtures now 21/21 PASS; GCal write still requires explicit confirmation. |
 | A-007 | Karen Legal/Document Summary Warmth v1 | 3-6 h | 2026-06-03 13:47 | 2026-06-03 14:00 | ~13 min verify/push window after Codex handoff | `322ef22` | PASS | Warmed Karen document/legal summaries with Nora-oriented consultative sections; OCR/watermark/legal guards PASS. |
 | A-008 | Source-of-Truth/Roadmap Harness v1 | 1-2 h | 2026-06-03 14:02 | 2026-06-03 16:32 | elapsed includes pause/wait | `d67cd42` | PASS | Added Alpha brief command that summarizes repo state, Alpha lanes, next milestones, live-data warnings, and validation commands. |
+| A-010 | Caso Finca / Carpeta Clara Design v1 | 1-2 h | 2026-06-03 | in progress | pending | pending | DESIGN | Design-only lane for the first clear workspace/case model around Karen's Caso Finca. |
 
 ## Human Outcome Summaries
 
@@ -119,6 +120,21 @@ Example interaction:
 Remaining gap / watch item:
 - The brief depends on this benchmark log staying current after each lane closes.
 
+### A-010 — Caso Finca / Carpeta Clara Design
+
+Plain-English goal:
+- Design the first clear workspace/case model so Karen can open Caso Finca as a living folder instead of remembering scattered commands.
+
+Now Val can:
+- Not implemented yet; this lane defines the workspace model, phases, safety boundaries, test strategy, and next implementation milestone.
+
+Example interaction:
+- Future: "Val, abre mi Caso Finca"
+- Future Val: shows what is known, what is uncertain, documents, timeline/events, questions for Nora, pending items, and next actions.
+
+Remaining gap / watch item:
+- Runtime implementation is still future. First safe next step is read-only case/workspace status with fixture data and no live data mutation.
+
 ## Planned Next Milestones
 
 | # | Milestone | Estimate | Status | Notes |
@@ -126,13 +142,14 @@ Remaining gap / watch item:
 | 1 | Karen Conversationality v1 | 2-4 h | DONE | Reduce canned Telegram-bot feel while keeping deterministic rails safe. Completed as A-004 v1. |
 | 2 | Karen Personality Polish v1 | 2-3 h | DONE | Tany consistency, warmer/sarcastic style, less corporate/legal dryness. Completed as A-005 v1. |
 | 3 | Calendar Follow-up v2 | 2-4 h | DONE | Missing-date follow-up bridge. Completed as A-006. |
-| 4 | Fixture Migration v2 | 3-5 h | Planned | Move more one-off Karen smokes into client fixtures. |
-| 5 | M45 Router Coverage Closeout | 2-4 h | Planned | Recalculate/close router observation items. |
-| 6 | Conversation State / Pending-State Map | 4-6 h | Planned | Map multi-turn continuation across calendar/tasks/reminders/docs. |
-| 7 | Folders/Cases Design v1 | 4-8 h | Planned | Caso Finca / carpetas / topics model. |
-| 8 | Caso Finca MVP v1 | 1-2 d | Planned | First usable workspace for notes, docs, events, and timeline questions. |
-| 9 | Val0 Client-Generalization Pass | 1-2 d | Planned | Separate Karen-specific logic from reusable client platform logic. |
-| 10 | Founder Demo Readiness v1 | 1-2 d | Planned | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
+| 4 | Caso Finca / Carpeta Clara Design v1 | 1-2 h | DESIGN | Design-only workspace model before implementation. |
+| 5 | Fixture Migration v2 | 3-5 h | Planned | Move more one-off Karen smokes into client fixtures. |
+| 6 | M45 Router Coverage Closeout | 2-4 h | Planned | Recalculate/close router observation items. |
+| 7 | Conversation State / Pending-State Map | 4-6 h | Planned | Map multi-turn continuation across calendar/tasks/reminders/docs. |
+| 8 | Folders/Cases Runtime v1 | 4-8 h | Planned | Implement Caso Finca / carpetas / topics model after design and smokes. |
+| 9 | Caso Finca MVP v1 | 1-2 d | Planned | First usable workspace for notes, docs, events, and timeline questions. |
+| 10 | Val0 Client-Generalization Pass | 1-2 d | Planned | Separate Karen-specific logic from reusable client platform logic. |
+| 11 | Founder Demo Readiness v1 | 1-2 d | Planned | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-008 is sealed. Recommended next: Milestone Human Outcome Summaries v1, so each lane records what we were trying to achieve, what Val can do now, examples, and remaining gaps in plain language for Boss.
+A-010 is the current design lane. Recommended next after this closes: A-011 Caso Finca Read-Only Workspace Status v1, using fixture data first and no live data mutation.

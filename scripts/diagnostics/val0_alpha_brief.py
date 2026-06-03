@@ -99,7 +99,7 @@ def _recommended_next_action(text: str) -> str:
     if "Recommended next:" in note:
         return note.split("Recommended next:", 1)[1].strip()
     for row in _planned_milestones(text):
-        if len(row) >= 4 and row[3].strip().upper() in {"NEXT", "ACTIVE"}:
+        if len(row) >= 4 and row[3].strip().upper() in {"NEXT", "ACTIVE", "DESIGN"}:
             return f"{row[1]} ({row[3]})"
     for row in _planned_milestones(text):
         if len(row) >= 4 and row[3].strip().lower() == "planned":
