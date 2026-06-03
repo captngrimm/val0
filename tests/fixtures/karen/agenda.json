@@ -1,0 +1,34 @@
+[
+  {
+    "id": "karen_agenda_today_basic",
+    "input": "Val, qué tengo hoy?",
+    "expected_intent": "agenda_query",
+    "expected_route_hint": "agenda_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Real Karen phrase regression"
+  },
+  {
+    "id": "karen_agenda_today_repeated_voice_style",
+    "input": "Val que tengo, que tengo para hoy",
+    "expected_intent": "agenda_query",
+    "expected_route_hint": "agenda_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Voice-style repeated agenda query"
+  },
+  {
+    "id": "karen_agenda_today_no_prefix",
+    "input": "qué tengo para hoy?",
+    "expected_intent": "agenda_query",
+    "expected_route_hint": "agenda_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "No assistant prefix"
+  },
+  {
+    "id": "karen_agenda_tomorrow_basic",
+    "input": "Val, qué tengo mañana?",
+    "expected_intent": "agenda_query",
+    "expected_route_hint": "agenda_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Tomorrow agenda query"
+  }
+]

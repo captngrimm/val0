@@ -1,0 +1,28 @@
+[
+  {
+    "id": "karen_reminder_list_active",
+    "input": "Val, qué recordatorios activos tengo?",
+    "expected_intent": "reminder_list",
+    "expected_route_hint": "reminder_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Active reminder list"
+  },
+  {
+    "id": "karen_reminder_create_relative_media_hora",
+    "input": "Val recuérdame en media hora revisar documentos",
+    "expected_intent": "reminder_create",
+    "expected_route_hint": "reminder_create",
+    "expected_contains": ["+30m"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Relative reminder creation"
+  },
+  {
+    "id": "karen_reminder_create_tomorrow_clock",
+    "input": "Val recuérdame mañana a las 9 llamar a Nora",
+    "expected_intent": "reminder_create",
+    "expected_route_hint": "reminder_create",
+    "expected_contains": ["09:00"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Natural reminder with date and explicit time"
+  }
+]

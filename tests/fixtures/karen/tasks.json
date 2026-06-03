@@ -1,0 +1,44 @@
+[
+  {
+    "id": "karen_task_create_crea",
+    "input": "Val crea tarea comprar baterías para David y la pesa",
+    "expected_intent": "task_create",
+    "expected_route_hint": "task_create",
+    "expected_contains": ["comprar baterias para david y la pesa"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Live regression: crea tarea must not route to draft follow-up"
+  },
+  {
+    "id": "karen_task_create_registra",
+    "input": "Val registra tarea comprar baterías para David y la pesa",
+    "expected_intent": "task_create",
+    "expected_route_hint": "task_create",
+    "expected_contains": ["comprar baterias para david y la pesa"],
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Known good task creation phrasing"
+  },
+  {
+    "id": "karen_task_list_activas_pendientes_prefixed",
+    "input": "Val, qué tareas activas tengo pendientes?",
+    "expected_intent": "task_list",
+    "expected_route_hint": "task_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Task list must beat case/finca summary"
+  },
+  {
+    "id": "karen_task_list_activas_pendientes_no_prefix",
+    "input": "Qué tareas activas tengo pendientes?",
+    "expected_intent": "task_list",
+    "expected_route_hint": "task_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "No-prefix task list query"
+  },
+  {
+    "id": "karen_task_delete_interpreter_todo",
+    "input": "Val elimina la tarea 1",
+    "expected_intent": "task_delete",
+    "expected_route_hint": "task_delete",
+    "xfail": true,
+    "notes": "TODO: classify numbered task delete in interpreter v2; deterministic runtime already handles explicit task delete"
+  }
+]
