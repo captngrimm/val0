@@ -318,7 +318,19 @@ def interpret_user_intent(text, client_id, pending_state=None) -> dict[str, Any]
             requires_confirmation=True,
         )
 
-    if _has_any(normalized, ("que tengo hoy", "que tengo manana", "que tengo para", "que tengo el lunes", "agenda de", "que hay en mi calendario")):
+    if _has_any(
+        normalized,
+        (
+            "que tengo hoy",
+            "que tengo manana",
+            "que tengo para",
+            "que tengo pendiente para manana",
+            "que tengo pendientes para manana",
+            "que tengo el lunes",
+            "agenda de",
+            "que hay en mi calendario",
+        ),
+    ):
         return _result("agenda_query", confidence=0.94, normalized_user_text=normalized, route_hint="agenda_query")
 
     if _has_any(normalized, ("que recordatorios", "recordatorios activos", "mis recordatorios", "recordatorios vencidos")):

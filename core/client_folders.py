@@ -225,6 +225,9 @@ def _extract_folder_note(text: str) -> tuple[str, str]:
 
 def _extract_folder_contents_name(text: str) -> str:
     raw = re.sub(r"^\s*(?:valeria|vale|val|va\s+el|bal|pal)[,\s]+", "", str(text or ""), flags=re.I).strip()
+    match = re.search(r"(?:que|qué)\s+(?:ideas|notas)\s+tengo\s+en\s+(.+?)(?:\?|$)", raw, flags=re.I)
+    if match:
+        return _titleize_folder(match.group(1))
     match = re.search(r"(?:que|qué)\s+tengo\s+en\s+(.+?)(?:\?|$)", raw, flags=re.I)
     return _titleize_folder(match.group(1)) if match else ""
 

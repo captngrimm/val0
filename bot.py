@@ -7304,6 +7304,10 @@ async def _process_text_pipeline(update: Update, context: ContextTypes.DEFAULT_T
             "que tengo mañana": "tomorrow",
             "que tengo para mañana": "tomorrow",
             "tengo para mañana": "tomorrow",
+            "que tengo pendiente para manana": "tomorrow",
+            "que tengo pendiente para mañana": "tomorrow",
+            "que tengo pendientes para manana": "tomorrow",
+            "que tengo pendientes para mañana": "tomorrow",
             "que hay manana": "tomorrow",
             "que hay para manana": "tomorrow",
             "que hay mañana": "tomorrow",
@@ -8661,6 +8665,14 @@ Classifier confidence: {confidence}
             "que hay mañana",
             "qué hay manana",
             "qué hay mañana",
+            "que tengo pendiente para manana",
+            "qué tengo pendiente para manana",
+            "que tengo pendiente para mañana",
+            "qué tengo pendiente para mañana",
+            "que tengo pendientes para manana",
+            "qué tengo pendientes para manana",
+            "que tengo pendientes para mañana",
+            "qué tengo pendientes para mañana",
         )
 
         if text_norm_greet in tomorrow_dashboard_markers:

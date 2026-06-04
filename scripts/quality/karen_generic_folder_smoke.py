@@ -94,6 +94,7 @@ def test_classifier() -> None:
         "Val, abre carpeta Libro": ("open", "Libro"),
         "Val, guarda esta idea en Libro: una escena de apertura": ("save_note", "Libro"),
         "Val, qué tengo en Libro?": ("contents", "Libro"),
+        "Val, qué ideas tengo en mi libro?": ("contents", "Libro"),
     }
     for text, (expected_action, expected_folder) in cases.items():
         action, fields = classify_folder_command(text)
@@ -149,6 +150,12 @@ def test_runtime_with_temp_store() -> None:
         assert_contains(reply, "esto tengo en 📁 **Libro** 📚", "contents header has book label")
         assert_contains(reply, "1. Primera escena con lluvia", "contents include capitalized note")
         assert_true("1. primera escena con lluvia" not in reply, "contents avoid lowercase note")
+
+        handled, reply = asyncio.run(_send("Val, qué ideas tengo en mi libro?", store_path))
+        assert_true(handled, "natural book ideas alias handled")
+        assert_contains(reply, "esto tengo en 📁 **Libro** 📚", "natural ideas alias opens Libro contents")
+        assert_contains(reply, "1. Primera escena con lluvia", "natural ideas alias lists saved note")
+        assert_not_contains(reply, "CLIENT_IDEAS", "natural ideas alias avoids roadmap backlog")
 
         handled, reply = asyncio.run(_send("Val, crea carpeta Ideas", store_path, client_id="other-client"))
         assert_true(not handled, "non-Karen client unaffected")

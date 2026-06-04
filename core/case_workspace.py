@@ -237,6 +237,8 @@ def _number_word_to_int(value: str) -> int:
     if normalized.isdigit():
         return int(normalized)
     mapping = {
+        "primer": 1,
+        "primero": 1,
         "uno": 1,
         "una": 1,
         "dos": 2,
@@ -256,12 +258,16 @@ def extract_case_workspace_document_summary_number(text: str) -> int:
     norm = normalize_workspace_text(text)
     if not norm:
         return 0
-    if not re.search(r"\b(?:resume|resumen|resumeme|resumir)\b", norm):
+    if not re.search(r"\b(?:resume|resumen|resumeme|resumir|lee|leeme|dime\s+que\s+dice|que\s+dice|dice)\b", norm):
         return 0
     match = re.search(r"\b(?:documento|doc)\s+(\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
-    if not match:
-        return 0
-    return _number_word_to_int(match.group(1))
+    if match:
+        return _number_word_to_int(match.group(1))
+    match = re.search(
+        r"\b(\d{1,2}|primer|primero|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(?:documento|doc)\b",
+        norm,
+    )
+    return _number_word_to_int(match.group(1)) if match else 0
 
 
 def detect_case_workspace_view(text: str) -> str | None:
@@ -285,10 +291,12 @@ def detect_case_workspace_view(text: str) -> str | None:
     if any(marker in norm for marker in full_markers):
         return "full"
 
-    if has_case_context and "document" in norm and any(marker in norm for marker in ("detalle", "detalles", "tecnico", "tecnicos")):
+    doc_context = "document" in norm or "papel" in norm or "papeles" in norm
+
+    if has_case_context and doc_context and any(marker in norm for marker in ("detalle", "detalles", "tecnico", "tecnicos")):
         return "document_details"
 
-    if has_case_context and "document" in norm and any(marker in norm for marker in ("muestrame", "mostrar", "ver", "lista")):
+    if has_case_context and doc_context and any(marker in norm for marker in ("muestrame", "mostrar", "ver", "lista", "ensename")):
         return "documents"
 
     if ("nora" in norm and any(marker in norm for marker in ("muestrame", "mostrar", "preguntas", "que le pregunto"))) or (
@@ -308,6 +316,8 @@ def detect_case_workspace_view(text: str) -> str | None:
         "abrir caso finca",
         "abre la carpeta finca",
         "abre carpeta finca",
+        "abre lo de la finca",
+        "abre lo de finca",
         "carpeta clara caso finca",
         "carpeta caso finca",
     )

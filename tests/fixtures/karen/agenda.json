@@ -30,5 +30,13 @@
     "expected_route_hint": "agenda_query",
     "expected_not_contains": ["Draft follow-up", "caso del terreno"],
     "notes": "Tomorrow agenda query"
+  },
+  {
+    "id": "karen_agenda_tomorrow_pending_alias",
+    "input": "Val, qué tengo pendiente para mañana?",
+    "expected_intent": "agenda_query",
+    "expected_route_hint": "agenda_query",
+    "expected_not_contains": ["Draft follow-up", "caso del terreno"],
+    "notes": "Demo rehearsal phrase should route to tomorrow agenda/pending dashboard"
   }
 ]

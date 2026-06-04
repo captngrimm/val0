@@ -65,22 +65,27 @@ class FakeUpdate:
 def test_phrase_detection() -> None:
     positive = (
         "Val, abre mi Caso Finca",
+        "Val, abre lo de la finca",
         "Val, qué sabemos del Caso Finca?",
         "Val, qué falta confirmar del caso?",
         "Val, qué le pregunto a Nora?",
         "Val, qué sigue con la finca?",
         "Val, muéstrame documentos del Caso Finca",
+        "Val, enséñame los papeles de la finca",
         "Val, muéstrame preguntas para Nora",
         "Val, muéstrame pendientes del Caso Finca",
         "Val, muéstrame todo el Caso Finca",
         "Val, muéstrame detalles técnicos de los documentos del Caso Finca",
         "Val, resume el documento 1",
+        "Val, dime qué dice el primer documento",
         "resume documento 3",
     )
     for phrase in positive:
         assert_true(looks_like_caso_finca_workspace_request(phrase), f"workspace phrase detected: {phrase}")
     assert_true(detect_case_workspace_view("Val, abre mi Caso Finca") == "compact", "open phrase selects compact view")
+    assert_true(detect_case_workspace_view("Val, abre lo de la finca") == "compact", "natural finca open alias selects compact view")
     assert_true(detect_case_workspace_view("Val, muéstrame documentos del Caso Finca") == "documents", "documents view selected")
+    assert_true(detect_case_workspace_view("Val, enséñame los papeles de la finca") == "documents", "natural papeles alias selects documents")
     assert_true(
         detect_case_workspace_view("Val, muéstrame detalles técnicos de los documentos del Caso Finca") == "document_details",
         "document technical details view selected",
@@ -89,7 +94,9 @@ def test_phrase_detection() -> None:
     assert_true(detect_case_workspace_view("Val, muéstrame pendientes del Caso Finca") == "pending", "pending view selected")
     assert_true(detect_case_workspace_view("Val, muéstrame todo el Caso Finca") == "full", "full view selected")
     assert_true(detect_case_workspace_view("Val, resume el documento 1") == "document_summary", "document number summary selected")
+    assert_true(detect_case_workspace_view("Val, dime qué dice el primer documento") == "document_summary", "natural first document summary selected")
     assert_true(extract_case_workspace_document_summary_number("Val, resume el documento 1") == 1, "extract document number 1")
+    assert_true(extract_case_workspace_document_summary_number("Val, dime qué dice el primer documento") == 1, "extract first document natural alias")
     assert_true(extract_case_workspace_document_summary_number("resume documento 3") == 3, "extract document number 3")
     assert_true(extract_case_workspace_document_summary_number("Val, resume el documento dos") == 2, "extract document number word")
 
@@ -193,6 +200,19 @@ def test_async_route_and_no_live_file_mutation() -> None:
     assert_not_contains(update.message.replies[0], "ID técnico del documento", "default route avoids technical details")
     assert_true(before == after, "CLIENT_GROCERY.md untouched by workspace route")
 
+    alias_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            alias_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, abre lo de la finca",
+        )
+    )
+    assert_true(handled, "natural finca alias route handled")
+    assert_contains(alias_update.message.replies[0], "Tany, abrí tu Caso Finca", "natural finca alias opens compact workspace")
+
     section_update = FakeUpdate()
     handled = asyncio.run(
         maybe_handle_case_workspace_status(
@@ -211,6 +231,19 @@ def test_async_route_and_no_live_file_mutation() -> None:
     assert_contains(section_update.message.replies[0], "detalles técnicos", "documents section points to technical details")
     assert_not_contains(section_update.message.replies[0], "ID técnico del documento", "default documents section hides technical ids")
     assert_not_contains(section_update.message.replies[0], "Fuente: auditoría de documentos", "default documents section hides source metadata")
+
+    papers_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            papers_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, enséñame los papeles de la finca",
+        )
+    )
+    assert_true(handled, "natural papeles alias route handled")
+    assert_contains(papers_update.message.replies[0], "📄 Documentos del Caso Finca", "papeles alias renders document list")
 
     details_update = FakeUpdate()
     handled = asyncio.run(
@@ -242,6 +275,20 @@ def test_async_route_and_no_live_file_mutation() -> None:
     assert_contains(doc_summary_update.message.replies[0], "Lo importante:", "route returns OCR-backed safe summary")
     assert_contains(doc_summary_update.message.replies[0], "Preguntas para Nora:", "route returns Nora questions")
     assert_not_contains(doc_summary_update.message.replies[0], "JUZGADO PRIMERO DE CIRCUITO", "route avoids raw private body")
+
+    first_doc_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            first_doc_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, dime qué dice el primer documento",
+        )
+    )
+    assert_true(handled, "natural first document summary route handled")
+    assert_contains(first_doc_update.message.replies[0], "documento 1 de Caso Finca", "first document alias maps to document 1")
+    assert_contains(first_doc_update.message.replies[0], "Lo importante:", "first document alias returns safe summary")
 
     doc_summary_update_2 = FakeUpdate()
     handled = asyncio.run(

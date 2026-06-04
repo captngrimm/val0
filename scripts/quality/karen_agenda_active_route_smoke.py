@@ -44,6 +44,7 @@ def main() -> int:
     assert_not_contains(internal, "status IN ('pending', 'sending', 'sent')", "agenda no longer mixes sent reminders as active")
     assert_contains(reminder_query, "recordatorios activos", "active reminders wording routes to reminders")
     assert_contains(reminder_query, "recordatorios pendientes", "pending reminders wording routes to reminders")
+    assert_contains(BOT, '"que tengo pendiente para mañana": "tomorrow"', "natural pending-for-tomorrow alias routes to tomorrow agenda")
     assert_contains(BOT, "va\\s+el", "voice/STT wake-prefix normalization covers 'va el'")
     print("PASS: Karen agenda active route smoke passed.")
     return 0
