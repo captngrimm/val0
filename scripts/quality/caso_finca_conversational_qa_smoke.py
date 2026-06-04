@@ -12,10 +12,13 @@ sys.path.insert(0, str(ROOT))
 
 from core.case_workspace_qa import (  # noqa: E402
     build_case_qa_packet,
+    case_qa_context_active,
     classify_case_qa_question,
+    mark_case_qa_context,
     maybe_handle_case_workspace_qa,
     render_case_qa_answer,
 )
+from core.founder_intro import INTENT_LIMITATIONS, normalize_founder_intro_intent, render_founder_intro_response  # noqa: E402
 
 
 KAREN_CLIENT_ID = "kar" + "en"
@@ -54,6 +57,11 @@ class FakeUpdate:
         self.message = FakeMessage()
 
 
+class FakeContext:
+    def __init__(self) -> None:
+        self.chat_data: dict[str, object] = {}
+
+
 def _git_cached_live_files() -> str:
     proc = subprocess.run(
         [
@@ -89,22 +97,34 @@ def _assert_safe_answer(reply: str, *, label: str, expect_ocr: bool = False) -> 
 
 
 def test_question_classification_and_renderer() -> None:
-    cases = {
+    explicit_cases = {
         "Val, qué sabes del caso?": "case_overview",
-        "Val, qué falta revisar?": "needs_review",
-        "Val, qué sabemos seguro y qué falta confirmar?": "known_vs_uncertain",
         "Val, qué le pregunto a Nora?": "nora_questions",
-        "Val, cuál documento debería revisar primero?": "document_priority",
         "Val, explícame lo de la finca en palabras simples.": "plain_language_explanation",
         "Val, ese primer documento, por qué importa?": "document_explanation",
         "Val, qué hago antes de hablar con la abogada?": "next_action",
     }
-    for phrase, expected in cases.items():
+    contextual_cases = {
+        "Val, qué falta revisar?": "needs_review",
+        "Val, qué sabemos seguro y qué falta confirmar?": "known_vs_uncertain",
+        "Val, cuál documento debería revisar primero?": "document_priority",
+    }
+    for phrase, expected in explicit_cases.items():
         assert_true(classify_case_qa_question(phrase) == expected, f"classifies {phrase!r} as {expected}")
         packet = build_case_qa_packet(phrase, client_id=KAREN_CLIENT_ID)
         assert_true(packet is not None, f"packet built for {phrase!r}")
         reply = render_case_qa_answer(packet)
         _assert_safe_answer(reply, label=expected, expect_ocr=(expected == "document_explanation"))
+    for phrase, expected in contextual_cases.items():
+        assert_true(classify_case_qa_question(phrase) is None, f"contextless phrase does not globally route: {phrase!r}")
+        assert_true(
+            classify_case_qa_question(phrase, case_context=True) == expected,
+            f"contextual phrase classifies {phrase!r} as {expected}",
+        )
+        packet = build_case_qa_packet(phrase, client_id=KAREN_CLIENT_ID, case_context=True)
+        assert_true(packet is not None, f"contextual packet built for {phrase!r}")
+        reply = render_case_qa_answer(packet)
+        _assert_safe_answer(reply, label=expected)
 
     doc_packet = build_case_qa_packet("Val, ese primer documento, por qué importa?", client_id=KAREN_CLIENT_ID)
     assert_true(doc_packet is not None and doc_packet.selected_document_number == 1, "first document maps to document 1")
@@ -113,7 +133,7 @@ def test_question_classification_and_renderer() -> None:
     assert_contains(doc_reply, "Lo que sé", "document answer has grounded section")
     assert_contains(doc_reply, "Lo que falta confirmar", "document answer has confirmation section")
 
-    priority_packet = build_case_qa_packet("Val, cuál documento debería revisar primero?", client_id=KAREN_CLIENT_ID)
+    priority_packet = build_case_qa_packet("Val, cuál documento debería revisar primero?", client_id=KAREN_CLIENT_ID, case_context=True)
     priority_reply = render_case_qa_answer(priority_packet)
     assert_contains(priority_reply, "Documento recomendado", "priority answer recommends a document")
     assert_contains(priority_reply, '"Val, resume el documento 1"', "priority answer gives safe next command")
@@ -124,18 +144,21 @@ def test_async_route_and_no_live_mutation() -> None:
     before_folders = LIVE_FOLDERS.read_text(encoding="utf-8") if LIVE_FOLDERS.exists() else None
 
     update = FakeUpdate()
+    context = FakeContext()
+    mark_case_qa_context(context, source="smoke_case_context")
+    assert_true(case_qa_context_active(context), "case context active in smoke")
     handled = asyncio.run(
         maybe_handle_case_workspace_qa(
             update,
-            context=None,
+            context=context,
             chat_id=123,
             client_id=KAREN_CLIENT_ID,
-            text="Val, qué sabes del caso?",
+            text="Val, qué falta revisar?",
         )
     )
-    assert_true(handled, "Q&A route handles overview")
+    assert_true(handled, "Q&A route handles context-only needs-review phrase")
     assert_true(len(update.message.replies) == 1, "Q&A route sends one compact answer")
-    _assert_safe_answer(update.message.replies[0], label="async overview")
+    _assert_safe_answer(update.message.replies[0], label="async contextual needs-review")
 
     non_karen = FakeUpdate()
     handled = asyncio.run(
@@ -157,16 +180,51 @@ def test_async_route_and_no_live_mutation() -> None:
     assert_true(_git_cached_live_files() == "", "live client files are not staged")
 
 
+def test_live_failure_phrases_are_protected() -> None:
+    for phrase, expected, required in (
+        ("Val, qué falta revisar?", "needs_review", "Lo que falta confirmar"),
+        ("Val, qué sabemos seguro y qué falta confirmar?", "known_vs_uncertain", "Lo que sé"),
+    ):
+        assert_true(build_case_qa_packet(phrase, client_id=KAREN_CLIENT_ID) is None, f"general phrase requires case context: {phrase}")
+        packet = build_case_qa_packet(phrase, client_id=KAREN_CLIENT_ID, case_context=True)
+        assert_true(packet is not None and packet.question_type == expected, f"packet protects live phrase: {phrase}")
+        reply = render_case_qa_answer(packet)
+        _assert_safe_answer(reply, label=f"live phrase {expected}")
+        assert_contains(reply, required, f"live phrase {expected} has expected section")
+        assert_not_contains(reply, "memoria mágica", f"live phrase {expected} avoids founder limitations")
+        assert_not_contains(reply, "no debe prometer", f"live phrase {expected} avoids founder limitations")
+
+
+def test_founder_limitations_still_available() -> None:
+    general = (
+        "Val, qué no puedes hacer todavía?",
+        "Val, cuáles son tus límites?",
+        "Qué falta desarrollar en Val?",
+    )
+    for phrase in general:
+        assert_true(classify_case_qa_question(phrase) is None, f"general limitations phrase not classified as case Q&A: {phrase}")
+        assert_true(normalize_founder_intro_intent(phrase) == INTENT_LIMITATIONS, f"founder limitations still recognizes: {phrase}")
+    limitations = render_founder_intro_response(INTENT_LIMITATIONS)
+    assert_contains(limitations, "no debe prometer", "founder limitations copy remains available")
+
+
 def test_bot_route_order() -> None:
     source = (ROOT / "bot.py").read_text(encoding="utf-8")
     folder_idx = source.find("KAREN_GENERIC_FOLDER_GATE")
+    founder_idx = source.find("maybe_handle_founder_intro_query(update, text, context)")
     qa_idx = source.find("KAREN_CASE_WORKSPACE_QA_GATE")
     workspace_idx = source.find("KAREN_CASE_WORKSPACE_STATUS_GATE")
     old_status_idx = source.find("KAREN_CASE_STATUS_GATE")
+    founder_exclusion_idx = source.find("classify_case_qa_question(text, case_context=case_qa_context_active(context))")
+    founder_intent_idx = source.find("intent = normalize_founder_intro_intent(text)")
     assert_true(folder_idx >= 0, "bot has generic folder gate")
+    assert_true(founder_idx >= 0, "bot has founder intro gate")
     assert_true(qa_idx >= 0, "bot has Q&A gate")
     assert_true(workspace_idx >= 0, "bot has workspace gate")
+    assert_true(founder_exclusion_idx >= 0, "founder intro excludes contextual Caso Finca Q&A")
+    assert_true(founder_exclusion_idx < founder_intent_idx, "Q&A exclusion runs before founder intent classifier")
     assert_true(folder_idx < qa_idx, "folder gate beats Q&A")
+    assert_true(founder_idx < qa_idx, "founder gate is earlier, so exclusion is required")
     assert_true(qa_idx < workspace_idx, "Q&A beats workspace fallback for natural questions")
     assert_true(old_status_idx < 0 or qa_idx < old_status_idx, "Q&A beats legacy case status")
 
@@ -174,6 +232,8 @@ def test_bot_route_order() -> None:
 def main() -> int:
     test_question_classification_and_renderer()
     test_async_route_and_no_live_mutation()
+    test_live_failure_phrases_are_protected()
+    test_founder_limitations_still_available()
     test_bot_route_order()
     print("PASS: Caso Finca conversational Q&A smoke passed.")
     return 0

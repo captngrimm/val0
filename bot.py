@@ -137,7 +137,7 @@ from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
 from core.case_workspace import maybe_handle_case_workspace_status
-from core.case_workspace_qa import maybe_handle_case_workspace_qa
+from core.case_workspace_qa import case_qa_context_active, classify_case_qa_question, mark_case_qa_context, maybe_handle_case_workspace_qa
 from core.client_folders import maybe_handle_client_folder_query
 from core.karen_meeting_prep import looks_like_karen_meeting_prep_request, render_karen_meeting_prep_checklist
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
@@ -16411,12 +16411,15 @@ async def maybe_guard_unknown_client_protected_workflow(update: Update, chat_id:
     return False
 
 
-def _looks_like_founder_intro_excluded_route(text: str) -> bool:
+def _looks_like_founder_intro_excluded_route(text: str, context: Any | None = None) -> bool:
     norm = _norm_text(text or "")
     if not norm:
         return True
 
     if looks_like_technical_paste(text):
+        return True
+
+    if classify_case_qa_question(text, case_context=case_qa_context_active(context)):
         return True
 
     protected_checks = (
@@ -16475,10 +16478,10 @@ def _looks_like_founder_intro_excluded_route(text: str) -> bool:
     return any(marker in norm for marker in route_markers)
 
 
-async def maybe_handle_founder_intro_query(update: Update, text: str) -> bool:
+async def maybe_handle_founder_intro_query(update: Update, text: str, context: Any | None = None) -> bool:
     if not update.message:
         return False
-    if _looks_like_founder_intro_excluded_route(text):
+    if _looks_like_founder_intro_excluded_route(text, context):
         return False
 
     intent = normalize_founder_intro_intent(text)
@@ -16797,7 +16800,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[KAREN_DAILY_OPERATOR_ROUTE] failed: {e}")
 
     try:
-        if await maybe_handle_founder_intro_query(update, text):
+        if await maybe_handle_founder_intro_query(update, text, context):
             return
     except Exception as e:
         logger.exception(f"[FOUNDER_INTRO_ROUTE] failed: {e}")
@@ -17297,6 +17300,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --------------------------------------------------
     try:
         if await maybe_handle_case_workspace_status(update, context, chat_id, client_id, text):
+            mark_case_qa_context(context, source="case_workspace_status")
             _maybe_log_intent_router_v2_actual("case_status", "maybe_handle_case_workspace_status", chat_id=chat_id, message_id=tg_msg_id, text=text)
             return
     except Exception as e:

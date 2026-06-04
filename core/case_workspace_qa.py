@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from core.case_workspace import (
@@ -24,6 +25,8 @@ FORBIDDEN_LEGAL_CERTAINTY = (
     "conclusión legal definitiva",
 )
 STALE_CONTAMINATION_PHRASES = ("bajar de peso", "task_high", "memoria pura")
+CASE_QA_CONTEXT_KEY = "karen_active_case_workspace"
+CASE_QA_CONTEXT_TTL_MINUTES = 30
 
 
 @dataclass(frozen=True)
@@ -105,19 +108,42 @@ def extract_case_qa_document_number(text: str) -> int:
     return _word_number_to_int(match.group(1) or match.group(2) or "")
 
 
-def classify_case_qa_question(text: str) -> str | None:
+def case_qa_context_active(context: Any) -> bool:
+    chat_data = getattr(context, "chat_data", None) if context is not None else None
+    if not isinstance(chat_data, dict):
+        return False
+    state = chat_data.get(CASE_QA_CONTEXT_KEY)
+    if not isinstance(state, dict):
+        return False
+    if str(state.get("workspace") or "").strip().lower() != "caso finca":
+        return False
+    marked_at = str(state.get("marked_at") or "")
+    try:
+        created = datetime.fromisoformat(marked_at)
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - created > timedelta(minutes=CASE_QA_CONTEXT_TTL_MINUTES):
+            return False
+    except Exception:
+        return False
+    return True
+
+
+def mark_case_qa_context(context: Any, *, source: str = "case_workspace_qa") -> None:
+    chat_data = getattr(context, "chat_data", None) if context is not None else None
+    if not isinstance(chat_data, dict):
+        return
+    chat_data[CASE_QA_CONTEXT_KEY] = {
+        "workspace": "Caso Finca",
+        "source": str(source or "case_workspace_qa"),
+        "marked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
+def classify_case_qa_question(text: str, *, case_context: bool = False) -> str | None:
     norm = normalize_case_qa_text(text)
-    contextless_demo_markers = (
-        "que falta revisar",
-        "que sabemos seguro y que falta confirmar",
-        "cual documento deberia revisar primero",
-        "que documento deberia revisar primero",
-        "hay algo raro",
-        "hay algo contradictorio",
-    )
-    if not norm or not _case_context(norm):
-        if not any(marker in norm for marker in contextless_demo_markers):
-            return None
+    if not norm or (not _case_context(norm) and not case_context):
+        return None
 
     if _has_any(norm, ("abre ", "muestrame documentos", "mostrar documentos", "ensename los papeles", "resume el documento")):
         return None
@@ -160,8 +186,9 @@ def build_case_qa_packet(
     *,
     client_id: str = "karen",
     case: WorkspaceCase | None = None,
+    case_context: bool = False,
 ) -> CasoFincaQAPacket | None:
-    question_type = classify_case_qa_question(text)
+    question_type = classify_case_qa_question(text, case_context=case_context)
     if not question_type:
         return None
     workspace = case or load_caso_finca_workspace_source_labeled()
@@ -414,8 +441,9 @@ async def maybe_handle_case_workspace_qa(update: Any, context: Any, chat_id: int
         return False
     if not update or not getattr(update, "message", None):
         return False
-    packet = build_case_qa_packet(text, client_id=client_id)
+    packet = build_case_qa_packet(text, client_id=client_id, case_context=case_qa_context_active(context))
     if not packet:
         return False
     await update.message.reply_text(render_case_qa_answer(packet))
+    mark_case_qa_context(context, source=f"case_workspace_qa:{packet.question_type}")
     return True
