@@ -91,20 +91,39 @@ def test_loader_and_renderer_source_labels() -> None:
     ):
         assert_contains(reply, section, f"section present: {section}")
 
-    for label in ("source_type=", "source_name=", "confidence=", "status=", "observed_at="):
-        assert_contains(reply, label, f"source label present: {label}")
-
     assert_contains(reply, "Tany", "Tany-facing opening")
     assert_contains(reply, "Nora", "Nora prep preserved")
-    assert_contains(reply, "Nora/la abogada confirma el efecto legal", "legal boundary")
+    assert_contains(reply, "Nora/la abogada confirma efecto legal", "legal boundary")
     assert_contains(reply, "lectura y organizacion; no voy a mover nada", "read-only boundary")
+    assert_contains(reply, "Fuente del tablero: datos registrados y auditoría de documentos", "friendly board source")
+    assert_contains(reply, "Fuente: auditoría de documentos", "friendly document source")
+    assert_contains(reply, "Confianza: alta", "friendly confidence rendered")
+    assert_contains(reply, "Estado: requiere revisión legal", "friendly legal-review status rendered")
     assert_contains(reply, "vfms:20260531_000001", "trusted OCR-ready document id")
+    assert_contains(reply, "ID técnico del documento: vfms:20260531_000001", "technical document id labeled clearly")
     assert_contains(reply, "12_ESPECIAL_RESUMEN_CASO_FINAL_JUNC", "trusted extracted summary candidate")
-    assert_contains(reply, "OCR status: available", "OCR status rendered")
-    assert_contains(reply, "summary status: unknown", "summary status rendered")
-    assert_contains(reply, "relevance: high", "relevance rendered")
-    assert_contains(reply, "safe next action:", "safe next action rendered")
-    assert_contains(reply, "uncertain candidate", "uncertain candidates marked")
+    assert_contains(reply, "OCR: disponible", "OCR status rendered in Spanish")
+    assert_contains(reply, "Resumen: desconocido", "summary status rendered in Spanish")
+    assert_contains(reply, "Relevancia para Caso Finca: alta", "relevance rendered in Spanish")
+    assert_contains(reply, "Siguiente paso seguro:", "safe next action rendered in Spanish")
+    assert_contains(reply, 'Pedir: "Val, resume con OCR el último documento"', "quoted OCR command example")
+    assert_contains(reply, 'Pedir: "Val, prepárame el paquete para Nora"', "quoted Nora command example")
+    assert_contains(reply, "candidato pendiente de confirmar", "uncertain candidates softened")
+    for label in (
+        "fixture/source-labeled v1",
+        "source_type=",
+        "source_name=",
+        "confidence=",
+        "status=",
+        "observed_at=",
+        "document_id:",
+        "source/path category:",
+        "OCR status:",
+        "summary status:",
+        "relevance:",
+        "safe next action:",
+    ):
+        assert_not_contains(reply, label, f"raw/internal label absent: {label}")
     for phrase in STALE_PHRASES:
         assert_not_contains(reply, phrase, f"stale phrase absent: {phrase}")
     for phrase in PRIVATE_BODY_PHRASES:
@@ -131,8 +150,9 @@ def test_route_uses_source_labeled_workspace_without_mutation() -> None:
     assert_true(len(update.message.replies) >= 2, "workspace route replies in chunks")
     reply = "\n".join(update.message.replies)
     assert_contains(update.message.replies[0], "[1/", "first chunk has chunk prefix")
-    assert_contains(reply, "fixture/source-labeled v1", "route uses source-labeled fixture")
-    assert_contains(reply, "source_type=", "route reply includes source labels")
+    assert_contains(reply, "Fuente: auditoría de documentos", "route reply includes friendly source labels")
+    assert_not_contains(reply, "fixture/source-labeled v1", "route hides fixture label")
+    assert_not_contains(reply, "source_type=", "route hides raw source labels")
     assert_contains(reply, "vfms:20260531_000001", "route reply includes trusted document attachment")
     assert_true(before == after, "CLIENT_GROCERY.md content untouched")
     assert_true(_git_cached_client_grocery() == "", "CLIENT_GROCERY.md is not staged")

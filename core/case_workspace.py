@@ -275,18 +275,122 @@ def _numbered(items: tuple[str, ...]) -> list[str]:
     return [f"{idx}. {item}" for idx, item in enumerate(items, start=1)]
 
 
+def _friendly_source_label(source: SourceLabel) -> str:
+    source_type = _strip_accents(source.source_type).lower().strip()
+    source_name = _strip_accents(source.source_name).lower().strip()
+    status = _strip_accents(source.status).lower().strip()
+
+    if "karen_document_inventory_audit" in source_name or "vfms" in source_type:
+        return "auditoría de documentos"
+    if any(marker in source_type for marker in ("document", "summary", "repo_fixture")):
+        return "documento registrado"
+    if "candidate" in status or "confirm" in status or "uncertain" in status:
+        return "pendiente de confirmar"
+    if source_type == "fixture":
+        return "nota de trabajo"
+    return "documento registrado"
+
+
+def _friendly_confidence(value: str) -> str:
+    normalized = _strip_accents(value).lower().strip()
+    mapping = {
+        "high": "alta",
+        "alta": "alta",
+        "medium": "media",
+        "media": "media",
+        "low": "baja",
+        "baja": "baja",
+        "unknown": "por confirmar",
+        "": "por confirmar",
+    }
+    return mapping.get(normalized, value.strip() or "por confirmar")
+
+
+def _friendly_status(value: str) -> str:
+    normalized = _strip_accents(value).lower().strip()
+    if not normalized:
+        return "por revisar"
+    if "trusted metadata" in normalized and "legal review" in normalized:
+        return "requiere revisión legal"
+    if "needs legal review" in normalized:
+        return "requiere revisión legal"
+    if "candidate" in normalized and "human review" in normalized:
+        return "candidato; requiere revisión humana"
+    if "uncertain candidate" in normalized:
+        return "candidato pendiente de confirmar"
+    if "confirm with nora" in normalized:
+        return "confirmar con Nora"
+    if "confirm with lawyer" in normalized:
+        return "confirmar con la abogada"
+    if "observed" in normalized:
+        return "observado"
+    if "open" in normalized:
+        return "abierto"
+    if "suggested" in normalized:
+        return "sugerido"
+    if "needs ordering" in normalized:
+        return "requiere orden por fecha"
+    if "question draft" in normalized:
+        return "pregunta borrador"
+    if "test-safe" in normalized:
+        return "solo lectura"
+    return value.strip()
+
+
+def _friendly_path_category(value: str) -> str:
+    normalized = _strip_accents(value).lower().strip()
+    if not normalized:
+        return ""
+    if normalized in {"vfms_raw", "vfms raw"}:
+        return "documento registrado en VFMS"
+    return value.strip()
+
+
+def _friendly_ocr_status(value: str) -> str:
+    normalized = _strip_accents(value).lower().strip()
+    mapping = {
+        "available": "disponible",
+        "missing": "pendiente",
+        "unknown": "desconocido",
+        "failed": "falló",
+        "low_quality": "baja calidad",
+    }
+    return mapping.get(normalized, value.strip())
+
+
+def _friendly_summary_status(value: str) -> str:
+    normalized = _strip_accents(value).lower().strip()
+    mapping = {
+        "available": "disponible",
+        "missing": "pendiente",
+        "unknown": "desconocido",
+        "none": "pendiente",
+    }
+    return mapping.get(normalized, value.strip())
+
+
+def _friendly_relevance(value: str) -> str:
+    normalized = _strip_accents(value).lower().strip()
+    mapping = {
+        "high": "alta",
+        "medium": "media",
+        "low": "baja",
+        "unknown": "por confirmar",
+    }
+    return mapping.get(normalized, value.strip())
+
+
 def _source_suffix(source: SourceLabel) -> str:
     pieces = [
-        f"source_type={source.source_type}",
-        f"source_name={source.source_name}",
-        f"confidence={source.confidence}",
-        f"status={source.status}",
+        f"Fuente: {_friendly_source_label(source)}",
+        f"Confianza: {_friendly_confidence(source.confidence)}",
+        f"Estado: {_friendly_status(source.status)}",
     ]
     if source.observed_at:
-        pieces.append(f"observed_at={source.observed_at}")
+        pieces.append(f"Observado: {source.observed_at}")
     if source.created_at:
-        pieces.append(f"created_at={source.created_at}")
-    return " [" + "; ".join(pieces) + "]"
+        pieces.append(f"Creado: {source.created_at}")
+    return " (" + "; ".join(pieces) + ")"
 
 
 def _records_or_plain(records: tuple[WorkspaceRecord, ...], plain: tuple[str, ...]) -> tuple[WorkspaceRecord, ...]:
@@ -304,17 +408,20 @@ def _append_record_lines(lines: list[str], records: tuple[WorkspaceRecord, ...],
 def _document_metadata_lines(doc: WorkspaceDocument) -> list[str]:
     details: list[str] = []
     if doc.document_id:
-        details.append(f"document_id: {doc.document_id}")
+        details.append(f"ID técnico del documento: {doc.document_id}")
+    details.append(f"Fuente: {_friendly_source_label(doc.source)}")
+    details.append(f"Confianza: {_friendly_confidence(doc.source.confidence)}")
+    details.append(f"Estado: {_friendly_status(doc.source.status)}")
     if doc.path_category:
-        details.append(f"source/path category: {doc.path_category}")
+        details.append(f"Categoría: {_friendly_path_category(doc.path_category)}")
     if doc.ocr_status:
-        details.append(f"OCR status: {doc.ocr_status}")
+        details.append(f"OCR: {_friendly_ocr_status(doc.ocr_status)}")
     if doc.summary_status:
-        details.append(f"summary status: {doc.summary_status}")
+        details.append(f"Resumen: {_friendly_summary_status(doc.summary_status)}")
     if doc.relevance:
-        details.append(f"relevance: {doc.relevance}")
+        details.append(f"Relevancia para Caso Finca: {_friendly_relevance(doc.relevance)}")
     if doc.safe_next_action:
-        details.append(f"safe next action: {doc.safe_next_action}")
+        details.append(f"Siguiente paso seguro: {doc.safe_next_action}")
     return details
 
 
@@ -324,7 +431,7 @@ def render_workspace_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, clien
         "",
         f"📁 {case.title}",
         f"ID de workspace: {case.case_id}",
-        f"Fuente: {case.source_label}",
+        "Fuente del tablero: datos registrados y auditoría de documentos (solo lectura).",
         "",
         "Lo que sabemos",
     ]
@@ -336,7 +443,7 @@ def render_workspace_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, clien
     lines.extend(["", "Documentos relacionados"])
     for idx, doc in enumerate(case.documents, start=1):
         status = f" — {doc.status}" if doc.status else ""
-        lines.append(f"{idx}. {doc.title}{status}. Fuente: {doc.source_label}.{_source_suffix(doc.source)}")
+        lines.append(f"{idx}. {doc.title}{status}.{_source_suffix(doc.source)}")
         for detail in _document_metadata_lines(doc):
             lines.append(f"   - {detail}")
 
@@ -357,7 +464,7 @@ def render_workspace_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, clien
 
     lines.extend([
         "",
-        "Limite legal: Val organiza y resume informacion registrada. Nora/la abogada confirma el efecto legal.",
+        "Límite legal: Val organiza y resume; Nora/la abogada confirma efecto legal.",
     ])
     return _clean_output("\n".join(lines))
 

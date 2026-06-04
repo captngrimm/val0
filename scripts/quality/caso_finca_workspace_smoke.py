@@ -89,12 +89,28 @@ def test_renderer_shape_and_safety() -> None:
     assert_contains(reply, "Preguntas para Nora", "Nora questions section")
     assert_contains(reply, "Pendientes", "pending items section")
     assert_contains(reply, "Próximo paso sugerido", "next step section")
-    assert_contains(reply, "source_type=", "source type labels")
-    assert_contains(reply, "confidence=", "confidence labels")
+    assert_contains(reply, "Fuente del tablero: datos registrados y auditoría de documentos", "friendly board source")
+    assert_contains(reply, "Fuente: auditoría de documentos", "friendly source labels")
+    assert_contains(reply, "Confianza: alta", "friendly confidence labels")
+    assert_contains(reply, "Estado: requiere revisión legal", "friendly status labels")
     assert_contains(reply, "vfms:20260531_000001", "trusted document id")
-    assert_contains(reply, "OCR status: available", "trusted OCR status")
-    assert_contains(reply, "Nora/la abogada confirma el efecto legal", "legal boundary")
+    assert_contains(reply, "ID técnico del documento: vfms:20260531_000001", "trusted document id label")
+    assert_contains(reply, "OCR: disponible", "trusted OCR status")
+    assert_contains(reply, "Siguiente paso seguro:", "safe next action in Spanish")
+    assert_contains(reply, 'Pedir: "Val, resume con OCR el último documento"', "quoted OCR command example")
+    assert_contains(reply, "Nora/la abogada confirma efecto legal", "legal boundary")
     assert_contains(reply, "lectura y organizacion; no voy a mover nada", "read-only copy")
+    for label in (
+        "fixture/source-labeled v1",
+        "source_type=",
+        "source_name=",
+        "confidence=",
+        "status=",
+        "document_id:",
+        "OCR status:",
+        "safe next action:",
+    ):
+        assert_not_contains(reply, label, f"no raw/internal label: {label}")
     for phrase in STALE_PHRASES:
         assert_not_contains(reply, phrase, f"no stale contamination: {phrase}")
     assert_not_contains(reply, "conclusion legal definitiva", "no fake legal conclusion")

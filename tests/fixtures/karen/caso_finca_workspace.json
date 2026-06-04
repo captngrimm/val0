@@ -166,7 +166,7 @@
   ],
   "next_actions": [
     {
-      "text": "Pedir: Val, resume con OCR el ultimo documento, si el PDF tiene marca de agua.",
+      "text": "Pedir: \"Val, resume con OCR el último documento\", si el PDF tiene marca de agua.",
       "source_type": "fixture",
       "source_name": "A-013 next action seed",
       "confidence": "medium",
@@ -174,7 +174,7 @@
       "observed_at": "2026-06-03"
     },
     {
-      "text": "Pedir: Val, preparame el paquete para Nora, cuando quieras llevarlo ordenado.",
+      "text": "Pedir: \"Val, prepárame el paquete para Nora\", cuando quieras llevarlo ordenado.",
       "source_type": "fixture",
       "source_name": "A-013 next action seed",
       "confidence": "medium",
