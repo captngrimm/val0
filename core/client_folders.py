@@ -90,8 +90,8 @@ def render_folder_label(folder_or_title: dict[str, Any] | str) -> str:
     title = str(folder_or_title.get("title") if isinstance(folder_or_title, dict) else folder_or_title or "Carpeta").strip()
     type_icon = folder_type_emoji(title)
     if type_icon:
-        return f"{type_icon} **{title}** 📁"
-    return f"**{title}** 📁"
+        return f"📁 **{title}** {type_icon}"
+    return f"📁 **{title}**"
 
 
 def client_folder_store_path(client_id: str, *, root: Path | None = None) -> Path:

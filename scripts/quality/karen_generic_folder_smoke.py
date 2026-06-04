@@ -103,10 +103,10 @@ def test_classifier() -> None:
 
 
 def test_folder_labels() -> None:
-    assert_true(render_folder_label("Libro") == "📚 **Libro** 📁", "book folder label")
-    assert_true(render_folder_label("Supermercado") == "🛒 **Supermercado** 📁", "shopping folder label")
-    assert_true(render_folder_label("Ideas") == "💡 **Ideas** 📁", "ideas folder label")
-    assert_true(render_folder_label("Pendientes") == "**Pendientes** 📁", "default folder label")
+    assert_true(render_folder_label("Libro") == "📁 **Libro** 📚", "book folder label")
+    assert_true(render_folder_label("Supermercado") == "📁 **Supermercado** 🛒", "shopping folder label")
+    assert_true(render_folder_label("Ideas") == "📁 **Ideas** 💡", "ideas folder label")
+    assert_true(render_folder_label("Pendientes") == "📁 **Pendientes**", "default folder label")
 
 
 def test_runtime_with_temp_store() -> None:
@@ -118,35 +118,35 @@ def test_runtime_with_temp_store() -> None:
 
         handled, reply = asyncio.run(_send("Val, crea carpeta Libro", store_path))
         assert_true(handled, "create folder handled")
-        assert_contains(reply, "Creé la carpeta 📚 **Libro** 📁", "create reply has book label")
+        assert_contains(reply, "Creé la carpeta 📁 **Libro** 📚", "create reply has book label")
 
         handled, reply = asyncio.run(_send("Val, crea una carpeta para mi libro", store_path))
         assert_true(handled, "duplicate folder handled")
-        assert_contains(reply, "ya tenía la carpeta 📚 **Libro** 📁", "duplicate reply has book label")
+        assert_contains(reply, "ya tenía la carpeta 📁 **Libro** 📚", "duplicate reply has book label")
 
         handled, reply = asyncio.run(_send("Val, crea carpeta Pendientes", store_path))
         assert_true(handled, "create generic folder handled")
-        assert_contains(reply, "Creé la carpeta **Pendientes** 📁", "generic folder uses default label")
+        assert_contains(reply, "Creé la carpeta 📁 **Pendientes**", "generic folder uses default label")
 
         handled, reply = asyncio.run(_send("Val, lista mis carpetas", store_path))
         assert_true(handled, "list folders handled")
-        assert_contains(reply, "📚 **Libro** 📁", "list includes book label")
-        assert_contains(reply, "**Pendientes** 📁", "list includes default label")
+        assert_contains(reply, "📁 **Libro** 📚", "list includes book label")
+        assert_contains(reply, "📁 **Pendientes**", "list includes default label")
 
         handled, reply = asyncio.run(_send("Val, abre carpeta Libro", store_path))
         assert_true(handled, "open folder handled")
-        assert_contains(reply, "abrí tu carpeta 📚 **Libro** 📁", "open reply has book label")
+        assert_contains(reply, "abrí tu carpeta 📁 **Libro** 📚", "open reply has book label")
         assert_contains(reply, "Text-only por ahora", "text-only safety")
         assert_not_contains(reply, "Caso Finca", "generic folder does not become case workspace")
 
         handled, reply = asyncio.run(_send("Val, guarda esta idea en Libro: primera escena con lluvia", store_path))
         assert_true(handled, "save note handled")
-        assert_contains(reply, "guardé esa idea en 📚 **Libro** 📁", "save reply has book label")
+        assert_contains(reply, "guardé esa idea en 📁 **Libro** 📚", "save reply has book label")
         assert_contains(reply, "Primera escena con lluvia", "saved note echoed with display capitalization")
 
         handled, reply = asyncio.run(_send("Val, qué tengo en Libro?", store_path))
         assert_true(handled, "folder contents handled")
-        assert_contains(reply, "esto tengo en 📚 **Libro** 📁", "contents header has book label")
+        assert_contains(reply, "esto tengo en 📁 **Libro** 📚", "contents header has book label")
         assert_contains(reply, "1. Primera escena con lluvia", "contents include capitalized note")
         assert_true("1. primera escena con lluvia" not in reply, "contents avoid lowercase note")
 
