@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -12,8 +14,10 @@ from core.bounded_voice_renderer import (  # noqa: E402
     OCR_CAVEAT,
     build_voice_packet_from_case_qa,
     build_voice_renderer_prompt,
+    generate_and_observe_shadow_voice_candidate,
     generate_shadow_voice_candidate,
     render_with_bounded_voice,
+    write_shadow_observation,
     validate_voice_render_output,
 )
 from core.case_workspace_qa import (  # noqa: E402
@@ -191,11 +195,81 @@ def test_ocr_caveat_required() -> None:
     assert_equal(result.user_facing_answer, deterministic, "OCR missing caveat deterministic-facing")
 
 
+def _read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def test_shadow_observation_records() -> None:
+    packet = _base_packet()
+    deterministic = packet.deterministic_answer
+    safe = (
+        "Tany, va en limpio: Caso Finca tiene piezas útiles y varias cosas por confirmar.\n\n"
+        f"{LEGAL_BOUNDARY}"
+    )
+    with tempfile.TemporaryDirectory(prefix="voice_shadow_smoke_") as tmp:
+        log_path = Path(tmp) / "observations.jsonl"
+        safe_result, safe_observation = generate_and_observe_shadow_voice_candidate(
+            packet,
+            renderer=lambda _packet: safe,
+            path=log_path,
+            context_label="smoke_safe",
+        )
+        assert_equal(safe_result.validation_status, "accepted_shadow_only", "safe observation status")
+        assert_equal(safe_result.user_facing_answer, deterministic, "safe observation deterministic-facing")
+        assert_equal(safe_observation.record["candidate_status"], "accepted_shadow_only", "safe observation record status")
+        assert_true(safe_observation.record["legal_boundary_present"], "safe observation legal boundary")
+        assert_true(safe_observation.record["user_facing_is_deterministic"], "safe observation deterministic flag")
+
+        unsafe_result = generate_shadow_voice_candidate(
+            packet,
+            renderer=lambda _packet: f"Documento vfms:20260531_000001 prueba definitivamente el caso.\n\n{LEGAL_BOUNDARY}",
+        )
+        unsafe_observation = write_shadow_observation(
+            packet,
+            unsafe_result,
+            path=log_path,
+            context_label="smoke_internal_leak",
+        )
+        assert_equal(unsafe_observation.record["candidate_status"], "rejected", "unsafe observation rejected")
+        assert_contains(unsafe_observation.record["rejection_reason"] or "", "internal_leak", "unsafe observation reason")
+        assert_contains(" ".join(unsafe_observation.record["safety_flags_triggered"]), "internal_leak", "unsafe observation flags")
+        assert_true("vfms:" not in unsafe_observation.record["candidate_excerpt"].lower(), "internal ID redacted")
+        assert_true("20260531_000001" not in unsafe_observation.record["candidate_excerpt"], "raw internal number redacted")
+
+        rows = _read_jsonl(log_path)
+        assert_equal(str(len(rows)), "2", "jsonl row count")
+        assert_true(all(row["user_facing_is_deterministic"] for row in rows), "all records deterministic-facing")
+
+
+def test_shadow_observation_rejection_flags() -> None:
+    with tempfile.TemporaryDirectory(prefix="voice_shadow_flags_") as tmp:
+        log_path = Path(tmp) / "observations.jsonl"
+        packet = _base_packet()
+        missing_boundary = generate_shadow_voice_candidate(packet, renderer=lambda _packet: "Tany, te lo resumo.")
+        obs = write_shadow_observation(packet, missing_boundary, path=log_path)
+        assert_equal(obs.record["candidate_status"], "rejected", "missing boundary observation rejected")
+        assert_true(not obs.record["legal_boundary_present"], "missing boundary flag false")
+        assert_contains(" ".join(obs.record["safety_flags_triggered"]), "missing_required_boundary", "missing boundary safety flag")
+
+        ocr_packet = _ocr_packet()
+        missing_ocr = generate_shadow_voice_candidate(
+            ocr_packet,
+            renderer=lambda _packet: f"Tany, documento con lectura visual.\n\n{LEGAL_BOUNDARY}",
+        )
+        ocr_obs = write_shadow_observation(ocr_packet, missing_ocr, path=log_path)
+        assert_equal(ocr_obs.record["candidate_status"], "rejected", "missing OCR observation rejected")
+        assert_true(ocr_obs.record["ocr_caveat_required"], "OCR caveat required recorded")
+        assert_true(not ocr_obs.record["ocr_caveat_present"], "OCR caveat present false")
+        assert_contains(" ".join(ocr_obs.record["safety_flags_triggered"]), "missing_ocr_caveat", "OCR safety flag")
+
+
 def main() -> int:
     test_prompt_contract()
     test_validation_and_fallbacks()
     test_shadow_candidate_generation()
     test_ocr_caveat_required()
+    test_shadow_observation_records()
+    test_shadow_observation_rejection_flags()
     print("PASS: bounded voice renderer smoke passed.")
     return 0
 
