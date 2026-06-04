@@ -40,6 +40,7 @@ Alpha marker:
 | A-019 | Caso Finca Document OCR Bridge v1 | 1-2 h | 2026-06-03 22:25 | 2026-06-03 22:39 | Added read-only OCR-backed summaries for Caso Finca numbered attachments when saved OCR exists. | `5a4395f` | PASS | Document 1 now summarizes saved OCR safely; documents without OCR keep graceful metadata fallback. |
 | A-020 | Generic Folder Create v1 | 2-4 h | 2026-06-04 10:30 | 2026-06-04 10:42 | Added Karen-scoped text-only generic folders with JSON storage, create/list/open/save/list routes, and temp-file smoke coverage. | `03ef297` | PASS | Generic folders like Libro now work without moving documents or touching CLIENT_GROCERY.md. |
 | A-021 | Folder UX Polish v1 | 1-2 h | 2026-06-04 10:55 | 2026-06-04 11:01 | Added folder type labels, default folder icons, and display capitalization for folder notes. | `3c6eefe` | PASS | Folder replies now render labels like 📚 📁 **Libro** and capitalize listed notes without mutating live folder data. |
+| A-022 | Founder Demo Readiness v1 | 1-2 d | 2026-06-04 11:23 | 2026-06-04 11:31 | 0.2 h | `67d370f` | PASS | Added canonical founder-demo readiness doc with current demo path: agenda, tasks, calendar confirmation, Caso Finca, document summary, and generic folder Libro. Runtime untouched; live client data not staged. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -174,7 +175,7 @@ Remaining gap / watch item:
 | 9 | Folders/Cases Runtime v1 | 4-8 h | WATCH | Connect Caso Finca / carpetas / topics model to stored source-labeled data. |
 | 10 | Caso Finca MVP v1 | 1-2 d | Planned | First usable workspace for notes, docs, events, and timeline questions. |
 | 11 | Val0 Client-Generalization Pass | 1-2 d | Planned | Separate Karen-specific logic from reusable client platform logic. |
-| 12 | Founder Demo Readiness v1 | 1-2 d | Planned | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
+| 12 | Founder Demo Readiness v1 | 1-2 d | DONE | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-015 is sealed. Recommended next: live-review Caso Finca attachment copy with Karen, then consider a read-only attachment selector or source-linked notes lane.
+Founder Demo Readiness v1 doc is sealed. Recommended next: run a controlled operator rehearsal from docs/product/FOUNDER_DEMO_READINESS_V1.md, then choose Folder Rename/Delete Guarded v1 or M45 Router Coverage Closeout.
