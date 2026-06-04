@@ -41,6 +41,7 @@ Alpha marker:
 | A-020 | Generic Folder Create v1 | 2-4 h | 2026-06-04 10:30 | 2026-06-04 10:42 | Added Karen-scoped text-only generic folders with JSON storage, create/list/open/save/list routes, and temp-file smoke coverage. | `03ef297` | PASS | Generic folders like Libro now work without moving documents or touching CLIENT_GROCERY.md. |
 | A-021 | Folder UX Polish v1 | 1-2 h | 2026-06-04 10:55 | 2026-06-04 11:01 | Added folder type labels, default folder icons, and display capitalization for folder notes. | `3c6eefe` | PASS | Folder replies now render labels like 📚 📁 **Libro** and capitalize listed notes without mutating live folder data. |
 | A-022 | Founder Demo Readiness v1 | 1-2 d | 2026-06-04 11:23 | 2026-06-04 11:31 | 0.2 h | `67d370f` | PASS | Added canonical founder-demo readiness doc with current demo path: agenda, tasks, calendar confirmation, Caso Finca, document summary, and generic folder Libro. Runtime untouched; live client data not staged. |
+| A-023 | Demo Natural Alias Routing v1 | 1-2 h | 2026-06-04 11:58 | 2026-06-04 12:47 | 0.8 h | `3a145c3` | PASS | Fixed messy founder-demo aliases: tomorrow pending routes to agenda, finca aliases route to Caso Finca workspace/documents, first-document phrase routes to document 1 summary, and ideas in Libro route to generic folder contents instead of roadmap backlog. Runtime restarted and live Telegram retest passed. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -178,4 +179,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | DONE | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-Founder Demo Readiness v1 doc is sealed. Recommended next: run a controlled operator rehearsal from docs/product/FOUNDER_DEMO_READINESS_V1.md, then choose Folder Rename/Delete Guarded v1 or M45 Router Coverage Closeout.
+A-023 is live-green. Recommended next: start A-024 Caso Finca Conversational Q&A v1 design-first, bounded to Caso Finca and grounded in stored case context, documents, OCR, pending items, and Nora/legal boundary.
