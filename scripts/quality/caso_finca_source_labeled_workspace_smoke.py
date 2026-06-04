@@ -178,6 +178,39 @@ def test_route_uses_source_labeled_workspace_without_mutation() -> None:
     assert_contains(full_update.message.replies[0], "[1/", "first full chunk has chunk prefix")
     assert_contains(full_reply, "Fuente: auditoría de documentos", "full route reply includes friendly source labels")
     assert_contains(full_reply, "vfms:20260531_000001", "full route reply includes trusted document attachment")
+
+    docs_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            docs_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame documentos del Caso Finca",
+        )
+    )
+    docs_reply = "\n".join(docs_update.message.replies)
+    assert_true(handled, "compact document list route handled")
+    assert_contains(docs_reply, "Estado simple:", "compact document cards include simple status")
+    assert_contains(docs_reply, "Lectura:", "compact document cards include reading status")
+    assert_contains(docs_reply, "Siguiente paso:", "compact document cards include next command")
+    assert_not_contains(docs_reply, "ID técnico del documento", "compact document list hides technical ids")
+    assert_not_contains(docs_reply, "Confianza:", "compact document list hides confidence metadata")
+
+    details_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            details_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame detalles técnicos de los documentos del Caso Finca",
+        )
+    )
+    details_reply = "\n".join(details_update.message.replies)
+    assert_true(handled, "technical document details route handled")
+    assert_contains(details_reply, "ID técnico del documento", "technical document details include ids")
+    assert_contains(details_reply, "Confianza:", "technical document details include confidence")
     assert_true(before == after, "CLIENT_GROCERY.md content untouched")
     assert_true(_git_cached_client_grocery() == "", "CLIENT_GROCERY.md is not staged")
 

@@ -248,6 +248,9 @@ def detect_case_workspace_view(text: str) -> str | None:
     if any(marker in norm for marker in full_markers):
         return "full"
 
+    if has_case_context and "document" in norm and any(marker in norm for marker in ("detalle", "detalles", "tecnico", "tecnicos")):
+        return "document_details"
+
     if has_case_context and "document" in norm and any(marker in norm for marker in ("muestrame", "mostrar", "ver", "lista")):
         return "documents"
 
@@ -458,6 +461,33 @@ def _document_metadata_lines(doc: WorkspaceDocument) -> list[str]:
     return details
 
 
+def _document_review_label(doc: WorkspaceDocument) -> str:
+    status = _strip_accents(f"{doc.status} {doc.source.status}").lower()
+    confidence = _friendly_confidence(doc.source.confidence)
+    if "trusted metadata" in status or confidence == "alta":
+        return "confiable como referencia inicial; efecto legal por confirmar"
+    if any(marker in status for marker in ("candidate", "candidato", "uncertain")):
+        return "parece relevante, pero falta confirmarlo"
+    return "registrado para revisión"
+
+
+def _document_availability_label(doc: WorkspaceDocument) -> str:
+    ocr = _friendly_ocr_status(doc.ocr_status)
+    summary = _friendly_summary_status(doc.summary_status)
+    bits: list[str] = []
+    if ocr:
+        bits.append(f"OCR: {ocr}")
+    if summary:
+        bits.append(f"resumen: {summary}")
+    return "; ".join(bits) if bits else "lectura pendiente"
+
+
+def _document_compact_next_command(doc: WorkspaceDocument, idx: int) -> str:
+    if _strip_accents(doc.ocr_status).lower().strip() == "available":
+        return 'Pedir: "Val, resume con OCR el último documento", si quieres leerlo visualmente.'
+    return f'Pedir: "Val, resume el documento {idx}", si quieres revisar este archivo.'
+
+
 def _count_ocr_available(case: WorkspaceCase) -> int:
     return sum(1 for doc in case.documents if _strip_accents(doc.ocr_status).lower().strip() == "available")
 
@@ -513,9 +543,30 @@ def render_workspace_compact_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, 
 
 def render_workspace_documents_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
     lines = [
-        f"Tany, estos son los documentos que tengo relacionados con {case.title}. No estoy moviendo ni cambiando nada.",
+        f"Tany, estos son los documentos que tengo a la vista para {case.title}. Te los pongo en limpio primero.",
         "",
         "📄 Documentos del Caso Finca",
+    ]
+    if not case.documents:
+        lines.append("1. No veo documentos relacionados todavía.")
+    for idx, doc in enumerate(case.documents, start=1):
+        lines.append(f"{idx}. {doc.title}")
+        lines.append(f"   - Estado simple: {_document_review_label(doc)}.")
+        lines.append(f"   - Lectura: {_document_availability_label(doc)}.")
+        lines.append(f"   - Siguiente paso: {_document_compact_next_command(doc, idx)}")
+    lines.extend([
+        "",
+        'Para ver IDs y fuentes internas, pide: "Val, muéstrame detalles técnicos de los documentos del Caso Finca".',
+        "Límite legal: Val organiza y resume; Nora/la abogada confirma efecto legal.",
+    ])
+    return _clean_output("\n".join(lines))
+
+
+def render_workspace_document_details_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
+    lines = [
+        f"Tany, estos son los detalles técnicos de los documentos de {case.title}. No estoy moviendo ni cambiando nada.",
+        "",
+        "📄 Detalles técnicos de documentos",
     ]
     if not case.documents:
         lines.append("1. No veo documentos relacionados todavía.")
@@ -557,6 +608,8 @@ def render_workspace_pending_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE,
 def render_workspace_view(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None, view: str = "compact") -> str:
     if view == "full":
         return render_workspace_status(case, client_id=client_id)
+    if view == "document_details":
+        return render_workspace_document_details_section(case, client_id=client_id)
     if view == "documents":
         return render_workspace_documents_section(case, client_id=client_id)
     if view == "questions":

@@ -70,11 +70,16 @@ def test_phrase_detection() -> None:
         "Val, muéstrame preguntas para Nora",
         "Val, muéstrame pendientes del Caso Finca",
         "Val, muéstrame todo el Caso Finca",
+        "Val, muéstrame detalles técnicos de los documentos del Caso Finca",
     )
     for phrase in positive:
         assert_true(looks_like_caso_finca_workspace_request(phrase), f"workspace phrase detected: {phrase}")
     assert_true(detect_case_workspace_view("Val, abre mi Caso Finca") == "compact", "open phrase selects compact view")
     assert_true(detect_case_workspace_view("Val, muéstrame documentos del Caso Finca") == "documents", "documents view selected")
+    assert_true(
+        detect_case_workspace_view("Val, muéstrame detalles técnicos de los documentos del Caso Finca") == "document_details",
+        "document technical details view selected",
+    )
     assert_true(detect_case_workspace_view("Val, muéstrame preguntas para Nora") == "questions", "questions view selected")
     assert_true(detect_case_workspace_view("Val, muéstrame pendientes del Caso Finca") == "pending", "pending view selected")
     assert_true(detect_case_workspace_view("Val, muéstrame todo el Caso Finca") == "full", "full view selected")
@@ -172,7 +177,27 @@ def test_async_route_and_no_live_file_mutation() -> None:
     )
     assert_true(handled, "documents section route handled")
     assert_contains(section_update.message.replies[0], "📄 Documentos del Caso Finca", "documents section rendered")
-    assert_contains(section_update.message.replies[0], "ID técnico del documento", "documents section keeps useful debug id")
+    assert_contains(section_update.message.replies[0], "Estado simple:", "documents section uses compact cards")
+    assert_contains(section_update.message.replies[0], "Lectura:", "documents section shows plain reading availability")
+    assert_contains(section_update.message.replies[0], "Siguiente paso:", "documents section gives one command")
+    assert_contains(section_update.message.replies[0], "detalles técnicos", "documents section points to technical details")
+    assert_not_contains(section_update.message.replies[0], "ID técnico del documento", "default documents section hides technical ids")
+    assert_not_contains(section_update.message.replies[0], "Fuente: auditoría de documentos", "default documents section hides source metadata")
+
+    details_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            details_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame detalles técnicos de los documentos del Caso Finca",
+        )
+    )
+    assert_true(handled, "document technical details route handled")
+    assert_contains(details_update.message.replies[0], "📄 Detalles técnicos de documentos", "technical details section rendered")
+    assert_contains(details_update.message.replies[0], "ID técnico del documento", "technical details include document id")
+    assert_contains(details_update.message.replies[0], "Fuente: auditoría de documentos", "technical details include friendly source")
 
     questions_update = FakeUpdate()
     handled = asyncio.run(
