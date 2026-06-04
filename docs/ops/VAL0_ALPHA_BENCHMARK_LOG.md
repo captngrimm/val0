@@ -44,6 +44,7 @@ Alpha marker:
 | A-023 | Demo Natural Alias Routing v1 | 1-2 h | 2026-06-04 11:58 | 2026-06-04 12:47 | 0.8 h | `3a145c3` | PASS | Fixed messy founder-demo aliases: tomorrow pending routes to agenda, finca aliases route to Caso Finca workspace/documents, first-document phrase routes to document 1 summary, and ideas in Libro route to generic folder contents instead of roadmap backlog. Runtime restarted and live Telegram retest passed. |
 | A-024 | Caso Finca Conversational Q&A Design v1 | 1-2 h | 2026-06-04 13:04 | 2026-06-04 13:12 | 0.2 h | `8a2dcdf` | PASS | Added design-first bounded Caso Finca conversational Q&A layer. Defines source-grounded case Q&A goals, non-goals, retrieval packet, legal/OCR boundaries, deterministic vs LLM responsibilities, test plan, and next lane A-024B. |
 | A-024B | Caso Finca Deterministic Q&A Packet + Read-Only Renderer v1 | 2-4 h | 2026-06-04 13:15 | 2026-06-04 14:02 | 0.8 h | `e778bdb` | PASS | Implemented bounded deterministic Caso Finca Q&A with read-only packet/renderer, context-aware routing for ambiguous follow-up questions, legal/OCR boundaries, and live Telegram validation. No LLM renderer yet; no writes or live data mutation. |
+| A-025 | Bounded LLM Voice Renderer Design v1 | 1-2 h | 2026-06-04 14:06 | 2026-06-04 14:08 | 0.1 h | `4939f66` | PASS | Added design-first bounded LLM voice renderer plan for Caso Finca Q&A packets. Defines packet contract, LLM prompt contract, safety guardrails, validation/post-checks, fallback behavior, tone profiles, examples, and next lane A-025B. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -181,4 +182,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | DONE | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-024B is live-green. Recommended next: A-025 Bounded LLM Voice Renderer v1 for Caso Finca Q&A packets, or pause for Night Runner v0 Dry-Run design if High Command prioritizes overnight automation.
+A-025 design is sealed. Recommended next: A-025B Bounded LLM Voice Renderer Skeleton + Validation Smokes, unless High Command pauses for Night Runner v0 Dry-Run design.
