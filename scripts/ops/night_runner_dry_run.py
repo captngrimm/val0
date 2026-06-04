@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +48,24 @@ PROMPT_FORBIDDEN_PATTERNS = (
     r"\brm\s+-",
     r"\bbroad refactor\b",
 )
+UNSAFE_COMMAND_PATTERNS = (
+    r"[;&|`$<>]",
+    r"\bgit\s+commit\b",
+    r"\bgit\s+push\b",
+    r"\bgit\s+reset\b",
+    r"\bgit\s+clean\b",
+    r"\bsystemctl\b",
+    r"\brm\b",
+    r"\bcurl\b",
+    r"\bwget\b",
+    r"\boauth\b",
+    r"\btoken\b",
+    r"\bsecret\b",
+    r"\.env\b",
+    r"/etc/val0",
+    r"\bgoogle\s+calendar\s+(write|delete)\b",
+    r"\bgcal\s+(write|delete|create|delete)\b",
+)
 
 
 @dataclass(frozen=True)
@@ -62,6 +81,17 @@ class DryRunResult:
     reasons: tuple[str, ...]
     report: str
     report_written: bool
+    test_results: tuple["TestCommandResult", ...] = ()
+
+
+@dataclass(frozen=True)
+class TestCommandResult:
+    command: str
+    allowed: bool
+    exit_code: int | None
+    status: str
+    output_excerpt: str
+    reason: str = ""
 
 
 def _run_git(args: list[str]) -> str:
@@ -255,7 +285,104 @@ def _validate_packet(packet: dict[str, Any], git: GitSnapshot) -> tuple[str, ...
     return tuple(dict.fromkeys(reasons))
 
 
-def build_report(packet: dict[str, Any], git: GitSnapshot, reasons: tuple[str, ...]) -> str:
+def _command_excerpt(text: str, *, limit: int = 1800) -> str:
+    compact = str(text or "").strip()
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit].rstrip() + "\n... [truncated]"
+
+
+def _is_allowed_py_compile(parts: list[str]) -> tuple[bool, str]:
+    if len(parts) < 4:
+        return False, "py_compile command must include at least one file"
+    if parts[:3] != ["./scripts/val0py", "-m", "py_compile"]:
+        return False, "not a val0py py_compile command"
+    for target in parts[3:]:
+        if target.startswith("-"):
+            return False, f"py_compile target is not a file: {target}"
+        if target in BROAD_ALLOWED_FILES or target.startswith("/"):
+            return False, f"py_compile target is unsafe: {target}"
+    return True, ""
+
+
+def validate_test_command(command: str) -> tuple[bool, str, list[str]]:
+    raw = str(command or "").strip()
+    if not raw:
+        return False, "empty command", []
+    lowered = raw.casefold()
+    for pattern in UNSAFE_COMMAND_PATTERNS:
+        if re.search(pattern, lowered):
+            return False, f"unsafe command pattern: {pattern}", []
+    try:
+        parts = shlex.split(raw)
+    except ValueError as exc:
+        return False, f"could not parse command: {exc}", []
+    if not parts:
+        return False, "empty parsed command", []
+
+    if parts == ["git", "diff", "--check"]:
+        return True, "", parts
+    if parts == ["python3", "scripts/diagnostics/val0_milestone_radar.py"]:
+        return True, "", parts
+    if parts == ["python3", "scripts/diagnostics/val0_alpha_brief.py"]:
+        return True, "", parts
+    if (
+        len(parts) == 2
+        and parts[0] == "python3"
+        and parts[1].startswith("scripts/quality/")
+        and parts[1].endswith(".py")
+        and ".." not in parts[1]
+    ):
+        return True, "", parts
+    ok, reason = _is_allowed_py_compile(parts)
+    if ok:
+        return True, "", parts
+    return False, reason or "command is outside allowed categories", parts
+
+
+def run_test_commands(commands: list[str]) -> tuple[TestCommandResult, ...]:
+    results: list[TestCommandResult] = []
+    for command in commands:
+        allowed, reason, parts = validate_test_command(command)
+        if not allowed:
+            results.append(
+                TestCommandResult(
+                    command=command,
+                    allowed=False,
+                    exit_code=None,
+                    status="REJECTED",
+                    output_excerpt="",
+                    reason=reason,
+                )
+            )
+            continue
+        proc = subprocess.run(
+            parts,
+            cwd=REPO_ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        output = _command_excerpt(proc.stdout or "")
+        results.append(
+            TestCommandResult(
+                command=command,
+                allowed=True,
+                exit_code=proc.returncode,
+                status="PASS" if proc.returncode == 0 else "FAIL",
+                output_excerpt=output,
+            )
+        )
+    return tuple(results)
+
+
+def build_report(
+    packet: dict[str, Any],
+    git: GitSnapshot,
+    reasons: tuple[str, ...],
+    test_results: tuple[TestCommandResult, ...] = (),
+) -> str:
     decision = "REFUSED" if reasons else "PASS_DRY_RUN"
     allowed_files = _as_list(packet.get("allowed_files"))
     forbidden_files = list(
@@ -293,6 +420,32 @@ def build_report(packet: dict[str, Any], git: GitSnapshot, reasons: tuple[str, .
     lines.extend(f"- {item}" for item in forbidden_files)
     lines.extend(["", "Tests it would run:"])
     lines.extend(f"- {item}" for item in (tests or ["(none)"]))
+    if test_results:
+        passed = sum(1 for result in test_results if result.status == "PASS")
+        failed = sum(1 for result in test_results if result.status == "FAIL")
+        rejected = sum(1 for result in test_results if result.status == "REJECTED")
+        lines.extend(
+            [
+                "",
+                "Tests run:",
+                f"- total: {len(test_results)}",
+                f"- pass: {passed}",
+                f"- fail: {failed}",
+                f"- rejected: {rejected}",
+                "",
+                "Command results:",
+            ]
+        )
+        for result in test_results:
+            lines.append(f"- {result.status}: {result.command}")
+            if result.exit_code is not None:
+                lines.append(f"  exit_code: {result.exit_code}")
+            if result.reason:
+                lines.append(f"  reason: {result.reason}")
+            if result.output_excerpt:
+                lines.append("  output:")
+                for output_line in result.output_excerpt.splitlines()[:40]:
+                    lines.append(f"    {output_line}")
     lines.extend(
         [
             "",
@@ -303,6 +456,10 @@ def build_report(packet: dict[str, Any], git: GitSnapshot, reasons: tuple[str, .
     )
     if reasons:
         lines.append("Review refusal reasons, fix the lane packet or repo state, then rerun dry-run.")
+    elif test_results and all(result.status == "PASS" for result in test_results):
+        lines.append("Review passing morning report, then decide whether a human should start the lane.")
+    elif test_results:
+        lines.append("Review failed/rejected command results before any implementation work.")
     else:
         lines.append("Human may review this PASS_DRY_RUN report and decide whether a later lane should implement work.")
     return "\n".join(lines).rstrip() + "\n"
@@ -323,15 +480,19 @@ def _write_report_if_safe(packet: dict[str, Any], report: str) -> bool:
     return True
 
 
-def evaluate_packet(packet: dict[str, Any], git: GitSnapshot) -> DryRunResult:
+def evaluate_packet(packet: dict[str, Any], git: GitSnapshot, *, run_tests: bool = False) -> DryRunResult:
     reasons = _validate_packet(packet, git)
-    report = build_report(packet, git, reasons)
+    test_results: tuple[TestCommandResult, ...] = ()
+    if run_tests and not reasons:
+        test_results = run_test_commands(_as_list(packet.get("tests_to_run")))
+    report = build_report(packet, git, reasons, test_results)
     written = _write_report_if_safe(packet, report)
     return DryRunResult(
         decision="REFUSED" if reasons else "PASS_DRY_RUN",
         reasons=reasons,
         report=report,
         report_written=written,
+        test_results=test_results,
     )
 
 
@@ -340,6 +501,11 @@ def main() -> int:
         description="Validate a Night Runner lane packet without executing work."
     )
     parser.add_argument("packet", nargs="?", type=Path, help="Path to JSON or simple YAML lane packet.")
+    parser.add_argument(
+        "--run-tests",
+        action="store_true",
+        help="After PASS_DRY_RUN validation, run only tests_to_run commands that match the safe allow-list.",
+    )
     args = parser.parse_args()
     if args.packet is None:
         parser.print_help()
@@ -356,10 +522,14 @@ def main() -> int:
         print(f"Refusal reasons:\n- could not load lane packet: {exc}")
         return 2
 
-    result = evaluate_packet(packet, current_git_snapshot())
+    result = evaluate_packet(packet, current_git_snapshot(), run_tests=args.run_tests)
     print(result.report, end="")
     print(f"Report written: {'yes' if result.report_written else 'no'}")
-    return 0 if result.decision == "PASS_DRY_RUN" else 2
+    if result.decision != "PASS_DRY_RUN":
+        return 2
+    if result.test_results and any(result.status != "PASS" for result in result.test_results):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

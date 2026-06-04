@@ -15,6 +15,7 @@ from scripts.ops.night_runner_dry_run import (  # noqa: E402
     GitSnapshot,
     evaluate_packet,
     load_lane_packet,
+    validate_test_command,
 )
 
 
@@ -77,6 +78,22 @@ def test_valid_minimal_passes(tmpdir: Path) -> None:
     assert_contains(result.report, "Tests it would run", "report lists tests")
 
 
+def test_run_tests_allowed_commands(tmpdir: Path) -> None:
+    packet = _packet(
+        tmpdir,
+        tests_to_run=[
+            "python3 scripts/diagnostics/val0_milestone_radar.py",
+            "git diff --check",
+        ],
+    )
+    result = evaluate_packet(packet, _git(), run_tests=True)
+    assert_equal(result.decision, "PASS_DRY_RUN", "run-tests safe packet decision")
+    assert_equal(len(result.test_results), 2, "run-tests result count")
+    assert_true(all(item.status == "PASS" for item in result.test_results), "allowed commands pass")
+    assert_contains(result.report, "Tests run:", "run-tests report section")
+    assert_contains(result.report, "pass: 2", "run-tests pass summary")
+
+
 def test_dirty_live_data_refuses(tmpdir: Path) -> None:
     status = (
         f"## {BRANCH}\n"
@@ -86,6 +103,14 @@ def test_dirty_live_data_refuses(tmpdir: Path) -> None:
     result = _run(_packet(tmpdir), _git(status))
     assert_equal(result.decision, "REFUSED", "dirty live data refuses")
     assert_contains(result.report, "forbidden file is dirty/staged", "dirty live reason")
+
+
+def test_refused_packet_runs_no_tests(tmpdir: Path) -> None:
+    status = f"## {BRANCH}\n M clients/karen/CLIENT_GROCERY.md\n"
+    result = evaluate_packet(_packet(tmpdir), _git(status), run_tests=True)
+    assert_equal(result.decision, "REFUSED", "refused run-tests decision")
+    assert_equal(len(result.test_results), 0, "refused packet does not run tests")
+    assert_true((tmpdir / "morning_report.md").exists(), "refused packet still writes report")
 
 
 def test_branch_mismatch_refuses(tmpdir: Path) -> None:
@@ -121,6 +146,12 @@ def test_staged_changes_refuse(tmpdir: Path) -> None:
     assert_contains(result.report, "staged changes exist", "staged reason")
 
 
+def test_report_path_safety_refuses(tmpdir: Path) -> None:
+    result = _run(_packet(tmpdir, report_path="clients/karen/CLIENT_GROCERY.md"))
+    assert_equal(result.decision, "REFUSED", "forbidden report path refuses")
+    assert_contains(result.report, "report_path targets forbidden file", "report path reason")
+
+
 def test_missing_required_fields_refuse(tmpdir: Path) -> None:
     packet = _packet(tmpdir)
     del packet["lane_id"]
@@ -133,6 +164,34 @@ def test_prompt_forbidden_requests_refuse(tmpdir: Path) -> None:
     result = _run(_packet(tmpdir, task_prompt="Please commit and restart production."))
     assert_equal(result.decision, "REFUSED", "forbidden prompt refuses")
     assert_contains(result.report, "task_prompt contains forbidden request", "prompt reason")
+
+
+def test_unsafe_test_command_rejected(tmpdir: Path) -> None:
+    packet = _packet(tmpdir, tests_to_run=["git commit -m nope"])
+    result = evaluate_packet(packet, _git(), run_tests=True)
+    assert_equal(result.decision, "PASS_DRY_RUN", "unsafe command packet validation passes")
+    assert_equal(len(result.test_results), 1, "unsafe command result count")
+    assert_equal(result.test_results[0].status, "REJECTED", "unsafe command rejected")
+    assert_contains(result.report, "REJECTED: git commit -m nope", "unsafe command report")
+
+
+def test_failing_test_command_recorded(tmpdir: Path) -> None:
+    packet = _packet(tmpdir, tests_to_run=["python3 scripts/quality/__missing_smoke.py"])
+    result = evaluate_packet(packet, _git(), run_tests=True)
+    assert_equal(result.decision, "PASS_DRY_RUN", "failing command packet validation passes")
+    assert_equal(len(result.test_results), 1, "failing command result count")
+    assert_equal(result.test_results[0].status, "FAIL", "failing command recorded")
+    assert_true((result.test_results[0].exit_code or 0) != 0, "failing command exit code")
+
+
+def test_command_allow_list() -> None:
+    allowed, _reason, _parts = validate_test_command("python3 scripts/quality/night_runner_dry_run_smoke.py")
+    assert_true(allowed, "quality smoke command allowed")
+    allowed, _reason, _parts = validate_test_command("./scripts/val0py -m py_compile scripts/ops/night_runner_dry_run.py")
+    assert_true(allowed, "py_compile command allowed")
+    allowed, reason, _parts = validate_test_command("python3 scripts/quality/a.py && git status")
+    assert_true(not allowed, "shell chaining rejected")
+    assert_contains(reason, "unsafe command pattern", "shell chaining reason")
 
 
 def test_packet_loaders(tmpdir: Path) -> None:
@@ -182,13 +241,19 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="night_runner_smoke_") as tmp:
         tmpdir = Path(tmp)
         test_valid_minimal_passes(tmpdir)
+        test_run_tests_allowed_commands(tmpdir)
         test_dirty_live_data_refuses(tmpdir)
+        test_refused_packet_runs_no_tests(tmpdir)
         test_branch_mismatch_refuses(tmpdir)
         test_boolean_guards_refuse(tmpdir)
         test_broad_and_forbidden_allowed_files_refuse(tmpdir)
         test_staged_changes_refuse(tmpdir)
+        test_report_path_safety_refuses(tmpdir)
         test_missing_required_fields_refuse(tmpdir)
         test_prompt_forbidden_requests_refuse(tmpdir)
+        test_unsafe_test_command_rejected(tmpdir)
+        test_failing_test_command_recorded(tmpdir)
+        test_command_allow_list()
         test_packet_loaders(tmpdir)
         test_help_runs()
     print("PASS: Night Runner dry-run smoke passed.")
