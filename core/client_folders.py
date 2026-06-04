@@ -65,6 +65,35 @@ def _titleize_folder(value: str) -> str:
     return " ".join(words)
 
 
+def _capitalize_first_visible(text: str) -> str:
+    value = str(text or "")
+    for idx, ch in enumerate(value):
+        if ch.isalpha():
+            return value[:idx] + ch.upper() + value[idx + 1:]
+    return value
+
+
+def folder_type_emoji(title: str) -> str:
+    normalized = _strip_accents(title).lower()
+    if any(marker in normalized for marker in ("libro", "book", "escritura", "escribir", "novela")):
+        return "📚"
+    if any(marker in normalized for marker in ("supermercado", "compras", "mercado", "mandado")):
+        return "🛒"
+    if "idea" in normalized:
+        return "💡"
+    if any(marker in normalized for marker in ("legal", "abogada", "nora")):
+        return "⚖️"
+    return ""
+
+
+def render_folder_label(folder_or_title: dict[str, Any] | str) -> str:
+    title = str(folder_or_title.get("title") if isinstance(folder_or_title, dict) else folder_or_title or "Carpeta").strip()
+    type_icon = folder_type_emoji(title)
+    if type_icon:
+        return f"{type_icon} 📁 **{title}**"
+    return f"📁 **{title}**"
+
+
 def client_folder_store_path(client_id: str, *, root: Path | None = None) -> Path:
     base = Path(root) if root else ROOT
     return base / "clients" / str(client_id or "").strip().lower() / FOLDER_STORE_FILENAME
@@ -231,15 +260,16 @@ def render_folder_list(client_id: str, *, path: Path | None = None) -> str:
     lines = ["Tany, estas son tus carpetas:", ""]
     for idx, folder in enumerate(folders, start=1):
         notes = folder.get("notes") if isinstance(folder.get("notes"), list) else []
-        lines.append(f"{idx}. {folder.get('title', 'Carpeta')} · {len(notes)} nota(s)")
+        lines.append(f"{idx}. {render_folder_label(folder)} · {len(notes)} nota(s)")
     return "\n".join(lines)
 
 
 def render_folder_view(folder: dict[str, Any]) -> str:
     notes = folder.get("notes") if isinstance(folder.get("notes"), list) else []
     title = str(folder.get("title") or "Carpeta")
+    label = render_folder_label(folder)
     lines = [
-        f"Tany, abrí tu carpeta {title}.",
+        f"Tany, abrí tu carpeta {label}.",
         "",
         "📁 Estado rápido",
         f"- {len(notes)} nota(s) guardada(s).",
@@ -254,13 +284,14 @@ def render_folder_view(folder: dict[str, Any]) -> str:
 
 def render_folder_contents(folder: dict[str, Any]) -> str:
     title = str(folder.get("title") or "Carpeta")
+    label = render_folder_label(folder)
     notes = folder.get("notes") if isinstance(folder.get("notes"), list) else []
-    lines = [f"Tany, esto tengo en {title}:", ""]
+    lines = [f"Tany, esto tengo en {label}:", ""]
     if not notes:
         lines.append("1. Todavía no hay notas guardadas.")
     else:
         for idx, note in enumerate(notes, start=1):
-            lines.append(f"{idx}. {note.get('text', '').strip()}")
+            lines.append(f"{idx}. {_capitalize_first_visible(note.get('text', '').strip())}")
     return "\n".join(lines).strip()
 
 
@@ -275,10 +306,11 @@ async def maybe_handle_client_folder_query(update: Any, context: Any, chat_id: i
     runtime_client_id = KAREN_CLIENT_ID if str(client_id or "").strip().lower() == "client-zero" else str(client_id).strip().lower()
     if action == "create":
         folder, created = create_folder(runtime_client_id, fields["folder"], path=store_path)
+        label = render_folder_label(folder)
         if created:
-            await update.message.reply_text(f"Tany, listo. Creé la carpeta {folder['title']}.")
+            await update.message.reply_text(f"Tany, listo. Creé la carpeta {label}.")
         else:
-            await update.message.reply_text(f"Tany, ya tenía la carpeta {folder['title']}. La dejé como estaba.")
+            await update.message.reply_text(f"Tany, ya tenía la carpeta {label}. La dejé como estaba.")
         return True
     if action == "list":
         await update.message.reply_text(render_folder_list(runtime_client_id, path=store_path))
@@ -295,7 +327,7 @@ async def maybe_handle_client_folder_query(update: Any, context: Any, chat_id: i
         return True
     if action == "save_note":
         folder, note = add_folder_note(runtime_client_id, fields["folder"], fields["text"], path=store_path)
-        await update.message.reply_text(f"Tany, guardé esa idea en {folder['title']}: {note['text']}")
+        await update.message.reply_text(f"Tany, guardé esa idea en {render_folder_label(folder)}: {_capitalize_first_visible(note['text'])}")
         return True
     if action == "contents":
         folder = get_folder(runtime_client_id, fields["folder"], path=store_path)

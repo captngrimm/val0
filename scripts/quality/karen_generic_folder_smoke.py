@@ -16,6 +16,7 @@ from core.client_folders import (  # noqa: E402
     classify_folder_command,
     client_folder_store_path,
     maybe_handle_client_folder_query,
+    render_folder_label,
 )
 
 
@@ -101,6 +102,13 @@ def test_classifier() -> None:
             assert_true(fields.get("folder") == expected_folder, f"extracts folder {expected_folder}")
 
 
+def test_folder_labels() -> None:
+    assert_true(render_folder_label("Libro") == "📚 📁 **Libro**", "book folder label")
+    assert_true(render_folder_label("Supermercado") == "🛒 📁 **Supermercado**", "shopping folder label")
+    assert_true(render_folder_label("Ideas") == "💡 📁 **Ideas**", "ideas folder label")
+    assert_true(render_folder_label("Pendientes") == "📁 **Pendientes**", "default folder label")
+
+
 def test_runtime_with_temp_store() -> None:
     before_grocery = LIVE_GROCERY.read_text(encoding="utf-8") if LIVE_GROCERY.exists() else None
     before_folders = LIVE_FOLDERS.read_text(encoding="utf-8") if LIVE_FOLDERS.exists() else None
@@ -110,30 +118,37 @@ def test_runtime_with_temp_store() -> None:
 
         handled, reply = asyncio.run(_send("Val, crea carpeta Libro", store_path))
         assert_true(handled, "create folder handled")
-        assert_contains(reply, "Creé la carpeta Libro", "create reply")
+        assert_contains(reply, "Creé la carpeta 📚 📁 **Libro**", "create reply has book label")
 
         handled, reply = asyncio.run(_send("Val, crea una carpeta para mi libro", store_path))
         assert_true(handled, "duplicate folder handled")
-        assert_contains(reply, "ya tenía la carpeta Libro", "duplicate reply")
+        assert_contains(reply, "ya tenía la carpeta 📚 📁 **Libro**", "duplicate reply has book label")
+
+        handled, reply = asyncio.run(_send("Val, crea carpeta Pendientes", store_path))
+        assert_true(handled, "create generic folder handled")
+        assert_contains(reply, "Creé la carpeta 📁 **Pendientes**", "generic folder uses default label")
 
         handled, reply = asyncio.run(_send("Val, lista mis carpetas", store_path))
         assert_true(handled, "list folders handled")
-        assert_contains(reply, "Libro", "list includes folder")
+        assert_contains(reply, "📚 📁 **Libro**", "list includes book label")
+        assert_contains(reply, "📁 **Pendientes**", "list includes default label")
 
         handled, reply = asyncio.run(_send("Val, abre carpeta Libro", store_path))
         assert_true(handled, "open folder handled")
-        assert_contains(reply, "abrí tu carpeta Libro", "open reply")
+        assert_contains(reply, "abrí tu carpeta 📚 📁 **Libro**", "open reply has book label")
         assert_contains(reply, "Text-only por ahora", "text-only safety")
         assert_not_contains(reply, "Caso Finca", "generic folder does not become case workspace")
 
         handled, reply = asyncio.run(_send("Val, guarda esta idea en Libro: primera escena con lluvia", store_path))
         assert_true(handled, "save note handled")
-        assert_contains(reply, "guardé esa idea en Libro", "save reply")
-        assert_contains(reply, "primera escena con lluvia", "saved note echoed")
+        assert_contains(reply, "guardé esa idea en 📚 📁 **Libro**", "save reply has book label")
+        assert_contains(reply, "Primera escena con lluvia", "saved note echoed with display capitalization")
 
         handled, reply = asyncio.run(_send("Val, qué tengo en Libro?", store_path))
         assert_true(handled, "folder contents handled")
-        assert_contains(reply, "primera escena con lluvia", "contents include note")
+        assert_contains(reply, "esto tengo en 📚 📁 **Libro**", "contents header has book label")
+        assert_contains(reply, "1. Primera escena con lluvia", "contents include capitalized note")
+        assert_true("1. primera escena con lluvia" not in reply, "contents avoid lowercase note")
 
         handled, reply = asyncio.run(_send("Val, crea carpeta Ideas", store_path, client_id="other-client"))
         assert_true(not handled, "non-Karen client unaffected")
@@ -157,6 +172,7 @@ def test_live_store_path_and_guard() -> None:
 
 def main() -> int:
     test_classifier()
+    test_folder_labels()
     test_runtime_with_temp_store()
     test_live_store_path_and_guard()
     print("PASS: Karen generic folder smoke passed.")
