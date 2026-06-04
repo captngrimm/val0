@@ -50,6 +50,7 @@ Alpha marker:
 | A-027 | Night Runner v0 Dry-Run Design | 30-60 min | 2026-06-04 15:04 | 2026-06-04 15:08 | 0.1 h | `38d2e0b` | PASS | Added design-only Night Runner v0 dry-run plan. Defines branch-only/report-only behavior, lane packet format, forbidden live-data guard, git status guard, allowed/forbidden command categories, report format, stop conditions, future phases, and next lane NIGHT-RUNNER-01 dry-run validator script. |
 | NIGHT-RUNNER-01 | Night Runner Dry-Run Validator Script | 1-2 h | 2026-06-04 17:05 | 2026-06-04 17:19 | 0.25 h | `6559581` | PASS | Added refusal-first Night Runner dry-run validator. Supports JSON/simple YAML lane packets, branch/git/forbidden-file checks, unsafe flag rejection, broad allowed-file rejection, unsafe prompt detection, safe report-path validation, and dry-run report writing. No tests executed by runner yet, no commits/restarts/live data mutation. |
 | NIGHT-RUNNER-02 | Night Runner Morning Report/Test Runner Layer | 1-2 h | 2026-06-04 17:24 | 2026-06-04 17:30 | 0.1 h | `e175e9b` | PASS | Added --run-tests to Night Runner. It validates lane packets first, refuses unsafe work, runs only allow-listed diagnostics/tests from tests_to_run, captures output/exit codes, and writes a report. Still no commits, restarts, production actions, live data mutation, or autonomous editing. |
+| NIGHT-RUNNER-03 | Night Runner Bedtime Packet + Launchpad Morning Report Workflow | 30-60 min | 2026-06-04 17:42 | 2026-06-04 17:51 | 0.15 h | `83b8dca` | PASS | Added canonical Night Runner bedtime workflow doc and packet. Operator can run one safe bedtime command using night_runner_dry_run.py with --run-tests, generating tmp/night_runner/morning_report.md. Current behavior correctly refuses when protected live Karen files are dirty. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -187,4 +188,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | DONE | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-NIGHT-RUNNER-02 is sealed. Recommended next: NIGHT-RUNNER-03 Bedtime Packet + Launchpad Morning Report workflow, so the operator can run one safe command before sleep and pull a clear report in the morning.
+NIGHT-RUNNER-03 is sealed. Recommended next: BENCH-01 Global Milestone Benchmark/ROI Radar to compare estimate vs actual, before/after value, and whether Night Runner/infrastructure lanes are worth continued investment.
