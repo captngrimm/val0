@@ -141,7 +141,12 @@ def _candidate_lanes(
         candidates.append(
             "A-025C shadow-only voice candidate generation for Caso Finca Q&A"
         )
-    if re.search(r"Night Runner", tactical_note, flags=re.IGNORECASE):
+    if re.search(r"NIGHT-RUNNER-01", tactical_note, flags=re.IGNORECASE):
+        candidates.append("NIGHT-RUNNER-01 Dry-Run Validator Script")
+    elif (
+        re.search(r"Night Runner", tactical_note, flags=re.IGNORECASE)
+        and sealed_id != "A-027"
+    ):
         candidates.append("Night Runner v0 Dry-Run design")
     if "A-025D" in tactical_note:
         candidates.append("A-025D shadow logging/observation")
@@ -163,6 +168,8 @@ def _stage(tactical_note: str, status_short: str) -> str:
         or "recommended next: choose" in note
     ):
         return "decision point"
+    if "night-runner-01" in note:
+        return "implementation"
     if "design" in note and "implementation" not in note:
         return "design"
     if "verify" in note or "smoke" in note:
@@ -190,6 +197,8 @@ def _eta_lines(candidates: list[str], lanes: list[Lane]) -> list[str]:
             eta = "1-2 focused sessions"
         elif "a-025d" in lowered:
             eta = "1-2 h shadow logging/observation pass"
+        elif "night-runner-01" in lowered:
+            eta = "1-2 h refusal-first validator skeleton"
         elif "night runner" in lowered:
             eta = "30-60 min design, then 1-2 h skeleton"
         elif "fixture" in lowered:
@@ -247,6 +256,8 @@ def _exact_next_action(tactical_note: str, candidates: list[str]) -> str:
             "overnight automation, or A-025D shadow logging/observation if "
             "continuing voice renderer instrumentation."
         )
+    if "night-runner-01" in note:
+        return "Start NIGHT-RUNNER-01 Dry-Run Validator Script."
     if "decide between" in note and len(candidates) >= 2:
         return (
             "Ask High Command to choose one lane. Default to A-025C if continuing "
