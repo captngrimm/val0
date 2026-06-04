@@ -46,6 +46,7 @@ Alpha marker:
 | A-024B | Caso Finca Deterministic Q&A Packet + Read-Only Renderer v1 | 2-4 h | 2026-06-04 13:15 | 2026-06-04 14:02 | 0.8 h | `e778bdb` | PASS | Implemented bounded deterministic Caso Finca Q&A with read-only packet/renderer, context-aware routing for ambiguous follow-up questions, legal/OCR boundaries, and live Telegram validation. No LLM renderer yet; no writes or live data mutation. |
 | A-025 | Bounded LLM Voice Renderer Design v1 | 1-2 h | 2026-06-04 14:06 | 2026-06-04 14:08 | 0.1 h | `4939f66` | PASS | Added design-first bounded LLM voice renderer plan for Caso Finca Q&A packets. Defines packet contract, LLM prompt contract, safety guardrails, validation/post-checks, fallback behavior, tone profiles, examples, and next lane A-025B. |
 | A-025B | Bounded LLM Voice Renderer Skeleton + Validation Smokes | 1-2 h | 2026-06-04 14:13 | 2026-06-04 14:21 | 0.2 h | `fa4c2fa` | PASS | Added test-only bounded voice renderer skeleton with packet adapter, prompt builder, fail-closed validation, deterministic fallback, and smokes for boundary, OCR caveat, forbidden legal claims, internal leakage, action claims, and max length. No runtime behavior changed and no real API calls. |
+| A-025C | Bounded Voice Renderer Shadow Candidate Generation v1 | 1-2 h | 2026-06-04 14:36 | 2026-06-04 14:49 | 0.2 h | `c63c1ea` | PASS | Added shadow-only voice candidate generation for bounded Caso Finca Q&A packets. Candidate validation records safe/unsafe results while user-facing answer remains deterministic. No runtime Telegram behavior changed, no real API calls, no writes or mutations. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -183,4 +184,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | DONE | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-A-025B skeleton is sealed. Recommended next: decide between A-025C shadow-only candidate generation for Caso Finca Q&A or Night Runner v0 Dry-Run design.
+A-025C is sealed. Recommended next: choose Night Runner v0 Dry-Run design if prioritizing overnight automation, or A-025D shadow logging/observation if continuing voice renderer instrumentation.
