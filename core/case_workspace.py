@@ -13,6 +13,8 @@ CASE_WORKSPACE_FIXTURE_CLIENT = "kar" + "en"
 DEFAULT_CASO_FINCA_FIXTURE_PATH = (
     Path(__file__).resolve().parents[1] / "tests" / "fixtures" / CASE_WORKSPACE_FIXTURE_CLIENT / "caso_finca_workspace.json"
 )
+VFMS_EXTRACTED_DIR = Path("/opt/val0/vfms_data/extracted")
+VFMS_OCR_RUNTIME_DIR = Path("/opt/val0/vfms_data/ocr_runtime")
 
 
 @dataclass(frozen=True)
@@ -523,6 +525,128 @@ def _document_compact_next_command(doc: WorkspaceDocument, idx: int) -> str:
     return f'Pedir: "Val, resume el documento {idx}", si quieres revisar este archivo.'
 
 
+def _document_ingest_id(doc: WorkspaceDocument) -> str:
+    raw = str(doc.document_id or "").strip()
+    if raw.startswith("vfms:"):
+        raw = raw.split(":", 1)[1]
+    match = re.search(r"\b(20\d{6}_\d{6})\b", raw)
+    return match.group(1) if match else raw
+
+
+def _read_saved_workspace_document_text(doc: WorkspaceDocument) -> tuple[str, str]:
+    if _strip_accents(doc.ocr_status).lower().strip() != "available":
+        return "", ""
+    ingest_id = _document_ingest_id(doc)
+    if not ingest_id:
+        return "", ""
+
+    candidates = [
+        (VFMS_OCR_RUNTIME_DIR / f"{ingest_id}__ocr_runtime.txt", "OCR guardado"),
+        (VFMS_EXTRACTED_DIR / f"{ingest_id}.txt", "texto extraído"),
+    ]
+    for path, label in candidates:
+        try:
+            if path.exists() and path.is_file():
+                text = path.read_text(encoding="utf-8", errors="replace").strip()
+                if _saved_document_text_usable(text):
+                    return text, label
+        except Exception:
+            continue
+    return "", ""
+
+
+def _saved_document_text_usable(text: str) -> bool:
+    normalized = _strip_accents(text).lower()
+    if len(normalized.strip()) < 500:
+        return False
+    watermark_count = normalized.count("copia para propositos informativos solamente")
+    markers = (
+        "juzgado",
+        "auto",
+        "oficio",
+        "finca",
+        "registro",
+        "demanda",
+        "secuestro",
+        "embargo",
+        "medidas cautelares",
+        "prescripcion",
+    )
+    marker_hits = sum(1 for marker in markers if marker in normalized)
+    return marker_hits >= 3 and watermark_count <= max(2, marker_hits)
+
+
+def _has_text_marker(text: str, *markers: str) -> bool:
+    normalized = _strip_accents(text).lower()
+    return any(_strip_accents(marker).lower() in normalized for marker in markers)
+
+
+def _case_document_ocr_summary_bullets(text: str) -> tuple[list[str], list[str], list[str]]:
+    important: list[str] = []
+    confirm: list[str] = []
+    questions: list[str] = []
+
+    if _has_text_marker(text, "juzgado", "oficio"):
+        important.append("La lectura menciona un documento/oficio judicial relacionado con el juzgado.")
+        confirm.append("Confirmar qué efecto tiene ese oficio dentro del expediente actual.")
+        questions.append("¿Qué efecto práctico tiene este oficio para el estado actual del caso?")
+    if _has_text_marker(text, "registro publico", "registro público"):
+        important.append("Aparece una actuación o comunicación vinculada al Registro Público.")
+        confirm.append("Verificar si lo indicado ya aparece reflejado en una certificación registral actualizada.")
+        questions.append("¿Conviene pedir una certificación actualizada del Registro Público?")
+    if _has_text_marker(text, "finca", "folio real", "10082", "codigo de ubicacion", "código de ubicación"):
+        important.append("La lectura contiene datos registrales de la finca o folio real.")
+        confirm.append("Confirmar que esos datos coinciden con la finca correcta y con el estado registral actual.")
+        questions.append("¿Estos datos registrales son suficientes para identificar la finca sin ambigüedad?")
+    if _has_text_marker(text, "demanda", "prescripcion adquisitiva", "prescripción adquisitiva"):
+        important.append("Se menciona una demanda o proceso de prescripción adquisitiva.")
+        confirm.append("Confirmar si esa demanda sigue vigente, fue modificada, inscrita, cancelada o quedó sin efecto.")
+        questions.append("¿La demanda mencionada sigue teniendo algún efecto legal o registral?")
+    if _has_text_marker(text, "auto no", "auto n", "auto"):
+        important.append("La lectura menciona uno o más autos judiciales.")
+        confirm.append("Revisar con Nora qué ordena exactamente cada auto y si está vigente.")
+        questions.append("¿Cuál auto es el más importante para explicar el estado actual?")
+    if _has_text_marker(text, "secuestro", "embargo", "medidas cautelares"):
+        important.append("Aparecen palabras asociadas a medidas cautelares, secuestro o embargo.")
+        confirm.append("Confirmar si esas medidas están vigentes, canceladas o solo mencionadas en el documento.")
+        questions.append("¿Hay alguna medida cautelar vigente que afecte la finca?")
+
+    if not important:
+        important.append("Hay lectura guardada, pero necesito revisión humana para clasificar los puntos principales con confianza.")
+    if not confirm:
+        confirm.append("Confirmar con Nora el efecto legal exacto antes de depender del documento.")
+    if not questions:
+        questions.append("¿Qué dato de este documento debo usar como punto central del caso?")
+
+    return important[:5], confirm[:4], questions[:4]
+
+
+def _render_ocr_backed_document_summary(doc: WorkspaceDocument, *, number: int, text: str, text_source: str) -> str:
+    important, confirm, questions = _case_document_ocr_summary_bullets(text)
+    lines = [
+        f"Tany, revisé la lectura disponible del documento {number} de Caso Finca.",
+        "",
+        f"📄 {doc.title}",
+        f"ID técnico del documento: {doc.document_id or 'sin ID técnico registrado'}",
+        f"Fuente de lectura: {text_source}.",
+        "",
+        "Lo importante:",
+    ]
+    lines.extend(f"- {item}" for item in important)
+    lines.extend(["", "Qué falta confirmar:"])
+    lines.extend(f"- {item}" for item in confirm)
+    lines.extend(["", "Preguntas para Nora:"])
+    lines.extend(f"- {item}" for item in questions)
+    lines.extend(
+        [
+            "",
+            "Límite legal:",
+            "Val organiza y resume; Nora/la abogada confirma efecto legal.",
+        ]
+    )
+    return _clean_output("\n".join(lines))
+
+
 def get_workspace_document_by_number(case: WorkspaceCase, number: int) -> WorkspaceDocument | None:
     idx = int(number or 0) - 1
     if idx < 0 or idx >= len(case.documents):
@@ -552,6 +676,10 @@ def render_workspace_document_number_summary(
 
     availability = _document_availability_label(doc)
     review = _document_review_label(doc)
+    saved_text, text_source = _read_saved_workspace_document_text(doc)
+    if saved_text:
+        return _render_ocr_backed_document_summary(doc, number=number, text=saved_text, text_source=text_source)
+
     lines = [
         f"Tany, el documento {number} de {case.title} es:",
         f"📄 {doc.title}",

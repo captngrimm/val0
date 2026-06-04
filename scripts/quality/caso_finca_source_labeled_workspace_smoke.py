@@ -91,7 +91,8 @@ def test_loader_and_renderer_source_labels() -> None:
     assert_true(doc1 is not None and doc1.document_id == "vfms:20260531_000001", "document 1 attachment mapping")
     assert_true(doc2 is not None and doc2.document_id == "vfms:20260511_000012", "document 2 attachment mapping")
     doc1_summary = render_workspace_document_number_summary(case, number=1, client_id=KAREN_CLIENT_ID)
-    assert_contains(doc1_summary, "Resumen seguro v1", "document number summary available")
+    assert_contains(doc1_summary, "Lo importante:", "document number summary uses OCR-backed path")
+    assert_contains(doc1_summary, "Qué falta confirmar:", "document number summary includes confirmation section")
     assert_contains(doc1_summary, "vfms:20260531_000001", "document number summary maps id")
     assert_not_contains(doc1_summary, "JUZGADO PRIMERO DE CIRCUITO", "document number summary avoids raw body")
 
