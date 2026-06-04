@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 from core.case_workspace import (  # noqa: E402
     DEFAULT_CASO_FINCA_FIXTURE_PATH,
+    _split_telegram_text,
     load_caso_finca_workspace_source_labeled,
     maybe_handle_case_workspace_status,
     render_workspace_status,
@@ -108,6 +109,9 @@ def test_loader_and_renderer_source_labels() -> None:
         assert_not_contains(reply, phrase, f"stale phrase absent: {phrase}")
     for phrase in PRIVATE_BODY_PHRASES:
         assert_not_contains(reply, phrase, f"raw body phrase absent: {phrase}")
+    chunks = _split_telegram_text(reply, limit=3600)
+    assert_true(len(chunks) >= 2, "current workspace reply is split into Telegram-safe chunks")
+    assert_true(all(len(chunk) <= 3600 for chunk in chunks), "workspace chunks stay under Telegram-safe limit")
 
 
 def test_route_uses_source_labeled_workspace_without_mutation() -> None:
@@ -124,8 +128,9 @@ def test_route_uses_source_labeled_workspace_without_mutation() -> None:
     )
     after = LIVE_FILE.read_text(encoding="utf-8") if LIVE_FILE.exists() else None
     assert_true(handled, "workspace route handled open phrase")
-    assert_true(bool(update.message.replies), "workspace route replied")
-    reply = update.message.replies[0]
+    assert_true(len(update.message.replies) >= 2, "workspace route replies in chunks")
+    reply = "\n".join(update.message.replies)
+    assert_contains(update.message.replies[0], "[1/", "first chunk has chunk prefix")
     assert_contains(reply, "fixture/source-labeled v1", "route uses source-labeled fixture")
     assert_contains(reply, "source_type=", "route reply includes source labels")
     assert_contains(reply, "vfms:20260531_000001", "route reply includes trusted document attachment")

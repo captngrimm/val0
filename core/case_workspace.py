@@ -362,6 +362,50 @@ def render_workspace_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, clien
     return _clean_output("\n".join(lines))
 
 
+def _split_telegram_text(text: str, *, limit: int = 3600) -> list[str]:
+    body = str(text or "").strip()
+    if not body:
+        return []
+    if len(body) <= limit:
+        return [body]
+
+    chunks: list[str] = []
+    current = ""
+    for block in body.split("\n\n"):
+        candidate = block if not current else current + "\n\n" + block
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current.strip())
+            current = ""
+        if len(block) <= limit:
+            current = block
+            continue
+        start = 0
+        while start < len(block):
+            chunks.append(block[start:start + limit].strip())
+            start += limit
+    if current:
+        chunks.append(current.strip())
+    return [chunk for chunk in chunks if chunk]
+
+
+async def _reply_text_chunked(update: Any, text: str, *, limit: int = 3600) -> list[Any]:
+    if not update or not getattr(update, "message", None):
+        return []
+    chunks = _split_telegram_text(text, limit=limit)
+    if not chunks:
+        return []
+    if len(chunks) == 1:
+        return [await update.message.reply_text(chunks[0])]
+    sent = []
+    total = len(chunks)
+    for idx, chunk in enumerate(chunks, start=1):
+        sent.append(await update.message.reply_text(f"[{idx}/{total}]\n{chunk}"))
+    return sent
+
+
 async def maybe_handle_case_workspace_status(
     update: Any,
     context: Any,
@@ -375,5 +419,5 @@ async def maybe_handle_case_workspace_status(
         return False
     if not looks_like_caso_finca_workspace_request(text):
         return False
-    await update.message.reply_text(render_workspace_status(load_caso_finca_workspace_source_labeled(), client_id=client_id))
+    await _reply_text_chunked(update, render_workspace_status(load_caso_finca_workspace_source_labeled(), client_id=client_id))
     return True
