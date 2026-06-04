@@ -137,6 +137,7 @@ from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
 from core.case_workspace import maybe_handle_case_workspace_status
+from core.client_folders import maybe_handle_client_folder_query
 from core.karen_meeting_prep import looks_like_karen_meeting_prep_request, render_karen_meeting_prep_checklist
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
 from core.document_inventory_queries import maybe_handle_document_query
@@ -17252,6 +17253,17 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.exception(f"[KAREN_REMINDER_AGENDA_SHIELD] failed: {e}")
+
+    # --------------------------------------------------
+    # Karen generic folder/workspace v1.
+    # Text-only folders must beat older document/case handlers, but this
+    # stays deterministic and does not move documents or mutate other lanes.
+    # --------------------------------------------------
+    try:
+        if await maybe_handle_client_folder_query(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_GENERIC_FOLDER_GATE] failed: {e}")
 
     # --------------------------------------------------
     # Karen Caso Finca / Carpeta Clara read-only workspace gate.
