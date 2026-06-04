@@ -11,9 +11,11 @@ sys.path.insert(0, str(ROOT))
 
 from core.case_workspace import (  # noqa: E402
     CASO_FINCA_WORKSPACE,
+    detect_case_workspace_view,
     load_caso_finca_workspace_source_labeled,
     looks_like_caso_finca_workspace_request,
     maybe_handle_case_workspace_status,
+    render_workspace_compact_status,
     render_workspace_status,
 )
 
@@ -64,9 +66,18 @@ def test_phrase_detection() -> None:
         "Val, qué falta confirmar del caso?",
         "Val, qué le pregunto a Nora?",
         "Val, qué sigue con la finca?",
+        "Val, muéstrame documentos del Caso Finca",
+        "Val, muéstrame preguntas para Nora",
+        "Val, muéstrame pendientes del Caso Finca",
+        "Val, muéstrame todo el Caso Finca",
     )
     for phrase in positive:
         assert_true(looks_like_caso_finca_workspace_request(phrase), f"workspace phrase detected: {phrase}")
+    assert_true(detect_case_workspace_view("Val, abre mi Caso Finca") == "compact", "open phrase selects compact view")
+    assert_true(detect_case_workspace_view("Val, muéstrame documentos del Caso Finca") == "documents", "documents view selected")
+    assert_true(detect_case_workspace_view("Val, muéstrame preguntas para Nora") == "questions", "questions view selected")
+    assert_true(detect_case_workspace_view("Val, muéstrame pendientes del Caso Finca") == "pending", "pending view selected")
+    assert_true(detect_case_workspace_view("Val, muéstrame todo el Caso Finca") == "full", "full view selected")
 
     negative = (
         "Val, qué tareas activas tengo?",
@@ -79,6 +90,17 @@ def test_phrase_detection() -> None:
 
 def test_renderer_shape_and_safety() -> None:
     case = load_caso_finca_workspace_source_labeled()
+    compact = render_workspace_compact_status(case, client_id=KAREN_CLIENT_ID)
+    assert_contains(compact, "Tany, abrí tu Caso Finca", "compact warm opening")
+    assert_contains(compact, "📁 Estado rápido", "compact status header")
+    assert_contains(compact, "Uno ya tiene lectura OCR disponible", "compact OCR explanation")
+    assert_contains(compact, "Nora/la abogada confirma el efecto legal", "compact legal boundary")
+    assert_contains(compact, '"Val, muéstrame documentos del Caso Finca"', "compact documents command")
+    assert_contains(compact, '"Val, muéstrame todo el Caso Finca"', "compact full command")
+    assert_not_contains(compact, "ID técnico del documento", "compact avoids technical document IDs")
+    assert_not_contains(compact, "Fuente:", "compact avoids detailed source labels")
+    assert_not_contains(compact, "candidato pendiente", "compact avoids dense candidate labels")
+
     reply = render_workspace_status(case, client_id=KAREN_CLIENT_ID)
     assert_contains(reply, "Tany", "warm Tany opening")
     assert_contains(reply, "Caso Finca", "case title")
@@ -131,8 +153,66 @@ def test_async_route_and_no_live_file_mutation() -> None:
     after = LIVE_FILE.read_text(encoding="utf-8") if LIVE_FILE.exists() else None
     assert_true(handled, "workspace route handles phrase")
     assert_true(bool(update.message.replies), "workspace route replies")
+    assert_true(len(update.message.replies) == 1, "default workspace route is compact, not chunked")
     assert_contains(update.message.replies[0], "Caso Finca", "route reply contains workspace")
+    assert_contains(update.message.replies[0], "📁 Estado rápido", "default route returns compact first screen")
+    assert_not_contains(update.message.replies[0], "Documentos relacionados", "default route does not dump full workspace")
+    assert_not_contains(update.message.replies[0], "ID técnico del documento", "default route avoids technical details")
     assert_true(before == after, "CLIENT_GROCERY.md untouched by workspace route")
+
+    section_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            section_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame documentos del Caso Finca",
+        )
+    )
+    assert_true(handled, "documents section route handled")
+    assert_contains(section_update.message.replies[0], "📄 Documentos del Caso Finca", "documents section rendered")
+    assert_contains(section_update.message.replies[0], "ID técnico del documento", "documents section keeps useful debug id")
+
+    questions_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            questions_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame preguntas para Nora",
+        )
+    )
+    assert_true(handled, "questions section route handled")
+    assert_contains(questions_update.message.replies[0], "❓ Preguntas para Nora", "questions section rendered")
+
+    pending_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            pending_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame pendientes del Caso Finca",
+        )
+    )
+    assert_true(handled, "pending section route handled")
+    assert_contains(pending_update.message.replies[0], "📌 Pendientes del Caso Finca", "pending section rendered")
+
+    full_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            full_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame todo el Caso Finca",
+        )
+    )
+    assert_true(handled, "full route handled")
+    assert_true(len(full_update.message.replies) >= 2, "full route still replies in chunks")
+    assert_contains(full_update.message.replies[0], "[1/", "full route keeps chunk prefix")
 
 
 def test_bot_route_order() -> None:

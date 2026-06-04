@@ -15,6 +15,7 @@ from core.case_workspace import (  # noqa: E402
     _split_telegram_text,
     load_caso_finca_workspace_source_labeled,
     maybe_handle_case_workspace_status,
+    render_workspace_compact_status,
     render_workspace_status,
 )
 
@@ -78,6 +79,11 @@ def test_loader_and_renderer_source_labels() -> None:
     assert_true(case.timeline_events, "timeline records loaded")
     assert_true(case.documents, "documents loaded")
     assert_contains(case.source_label, "source-labeled", "case source label")
+
+    compact = render_workspace_compact_status(case, client_id=KAREN_CLIENT_ID)
+    assert_contains(compact, "📁 Estado rápido", "compact default screen exists")
+    assert_contains(compact, '"Val, muéstrame todo el Caso Finca"', "compact offers full view command")
+    assert_not_contains(compact, "ID técnico del documento", "compact avoids technical document ids")
 
     reply = render_workspace_status(case, client_id=KAREN_CLIENT_ID)
     for section in (
@@ -147,13 +153,31 @@ def test_route_uses_source_labeled_workspace_without_mutation() -> None:
     )
     after = LIVE_FILE.read_text(encoding="utf-8") if LIVE_FILE.exists() else None
     assert_true(handled, "workspace route handled open phrase")
-    assert_true(len(update.message.replies) >= 2, "workspace route replies in chunks")
+    assert_true(len(update.message.replies) == 1, "default workspace route replies compactly")
     reply = "\n".join(update.message.replies)
-    assert_contains(update.message.replies[0], "[1/", "first chunk has chunk prefix")
-    assert_contains(reply, "Fuente: auditoría de documentos", "route reply includes friendly source labels")
+    assert_contains(reply, "📁 Estado rápido", "route reply uses compact first screen")
+    assert_contains(reply, '"Val, muéstrame todo el Caso Finca"', "route offers full view command")
+    assert_not_contains(reply, "ID técnico del documento", "compact route hides technical ids")
+    assert_not_contains(reply, "Fuente: auditoría de documentos", "compact route hides detailed source labels")
     assert_not_contains(reply, "fixture/source-labeled v1", "route hides fixture label")
     assert_not_contains(reply, "source_type=", "route hides raw source labels")
-    assert_contains(reply, "vfms:20260531_000001", "route reply includes trusted document attachment")
+
+    full_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            full_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame todo el Caso Finca",
+        )
+    )
+    full_reply = "\n".join(full_update.message.replies)
+    assert_true(handled, "full workspace route handled explicit phrase")
+    assert_true(len(full_update.message.replies) >= 2, "explicit full workspace route replies in chunks")
+    assert_contains(full_update.message.replies[0], "[1/", "first full chunk has chunk prefix")
+    assert_contains(full_reply, "Fuente: auditoría de documentos", "full route reply includes friendly source labels")
+    assert_contains(full_reply, "vfms:20260531_000001", "full route reply includes trusted document attachment")
     assert_true(before == after, "CLIENT_GROCERY.md content untouched")
     assert_true(_git_cached_client_grocery() == "", "CLIENT_GROCERY.md is not staged")
 

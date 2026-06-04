@@ -226,10 +226,40 @@ def normalize_workspace_text(text: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def looks_like_caso_finca_workspace_request(text: str) -> bool:
+def _case_context_present(norm: str) -> bool:
+    return any(marker in norm for marker in ("caso finca", "caso del terreno", "con la finca", "de la finca", "del caso"))
+
+
+def detect_case_workspace_view(text: str) -> str | None:
     norm = normalize_workspace_text(text)
     if not norm:
-        return False
+        return None
+
+    has_case_context = _case_context_present(norm)
+
+    full_markers = (
+        "muestrame todo el caso finca",
+        "muestra todo el caso finca",
+        "muestrame todo caso finca",
+        "muestra todo caso finca",
+        "todo el caso finca",
+        "todo caso finca",
+    )
+    if any(marker in norm for marker in full_markers):
+        return "full"
+
+    if has_case_context and "document" in norm and any(marker in norm for marker in ("muestrame", "mostrar", "ver", "lista")):
+        return "documents"
+
+    if ("nora" in norm and any(marker in norm for marker in ("muestrame", "mostrar", "preguntas", "que le pregunto"))) or (
+        has_case_context and "preguntas" in norm
+    ):
+        return "questions"
+
+    if has_case_context and any(marker in norm for marker in ("pendientes", "pendiente", "faltantes")) and any(
+        marker in norm for marker in ("muestrame", "mostrar", "ver", "lista")
+    ):
+        return "pending"
 
     explicit_open = (
         "abre mi caso finca",
@@ -242,9 +272,8 @@ def looks_like_caso_finca_workspace_request(text: str) -> bool:
         "carpeta caso finca",
     )
     if any(marker in norm for marker in explicit_open):
-        return True
+        return "compact"
 
-    has_case_context = any(marker in norm for marker in ("caso finca", "caso del terreno", "con la finca", "de la finca", "del caso"))
     workspace_questions = (
         "que sabemos",
         "que falta confirmar",
@@ -256,12 +285,16 @@ def looks_like_caso_finca_workspace_request(text: str) -> bool:
         "siguiente paso",
     )
     if has_case_context and any(marker in norm for marker in workspace_questions):
-        return True
+        return "compact"
 
     if "nora" in norm and any(marker in norm for marker in ("que le pregunto", "preguntas")):
-        return True
+        return "questions"
 
-    return False
+    return None
+
+
+def looks_like_caso_finca_workspace_request(text: str) -> bool:
+    return detect_case_workspace_view(text) is not None
 
 
 def _clean_output(text: str) -> str:
@@ -425,6 +458,114 @@ def _document_metadata_lines(doc: WorkspaceDocument) -> list[str]:
     return details
 
 
+def _count_ocr_available(case: WorkspaceCase) -> int:
+    return sum(1 for doc in case.documents if _strip_accents(doc.ocr_status).lower().strip() == "available")
+
+
+def _count_candidate_documents(case: WorkspaceCase) -> int:
+    count = 0
+    for doc in case.documents:
+        status = _strip_accents(f"{doc.status} {doc.source.status}").lower()
+        if any(marker in status for marker in ("candidate", "candidato", "confirm", "uncertain")):
+            count += 1
+    return count
+
+
+def render_workspace_compact_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
+    document_count = len(case.documents)
+    ocr_count = _count_ocr_available(case)
+    candidate_count = _count_candidate_documents(case)
+    doc_line = (
+        f"Encontré {document_count} documentos que parecen relacionados con el caso."
+        if document_count
+        else "Todavía no tengo documentos relacionados en este tablero."
+    )
+    ocr_line = (
+        "Uno ya tiene lectura OCR disponible."
+        if ocr_count == 1
+        else f"{ocr_count} ya tienen lectura OCR disponible."
+        if ocr_count > 1
+        else "Aún no veo una lectura OCR lista en este tablero."
+    )
+    candidate_line = (
+        "Otros parecen relevantes, pero hay que confirmarlos antes de depender de ellos."
+        if candidate_count
+        else "Lo que aparezca aquí sigue siendo material para ordenar, no una conclusión legal."
+    )
+
+    lines = [
+        f"Tany, abrí tu {case.title}. Te muestro el estado en limpio, sin mover ni cambiar nada.",
+        "",
+        "📁 Estado rápido",
+        f"- {doc_line}",
+        f"- {ocr_line}",
+        f"- {candidate_line}",
+        "- Val solo está organizando la información; Nora/la abogada confirma el efecto legal.",
+        "",
+        "Puedes pedirme:",
+        '1. "Val, muéstrame documentos del Caso Finca"',
+        '2. "Val, muéstrame preguntas para Nora"',
+        '3. "Val, muéstrame pendientes del Caso Finca"',
+        '4. "Val, muéstrame todo el Caso Finca"',
+    ]
+    return _clean_output("\n".join(lines))
+
+
+def render_workspace_documents_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
+    lines = [
+        f"Tany, estos son los documentos que tengo relacionados con {case.title}. No estoy moviendo ni cambiando nada.",
+        "",
+        "📄 Documentos del Caso Finca",
+    ]
+    if not case.documents:
+        lines.append("1. No veo documentos relacionados todavía.")
+    for idx, doc in enumerate(case.documents, start=1):
+        status = f" — {doc.status}" if doc.status else ""
+        lines.append(f"{idx}. {doc.title}{status}.")
+        for detail in _document_metadata_lines(doc):
+            lines.append(f"   - {detail}")
+    lines.extend(["", "Límite legal: Val organiza y resume; Nora/la abogada confirma efecto legal."])
+    return _clean_output("\n".join(lines))
+
+
+def render_workspace_questions_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
+    lines = [
+        f"Tany, estas son preguntas útiles para llevarle a Nora sobre {case.title}.",
+        "",
+        "❓ Preguntas para Nora",
+    ]
+    _append_record_lines(lines, _records_or_plain(case.question_records, case.questions_for_lawyer), numbered=True)
+    lines.extend(["", "Límite legal: Val organiza las preguntas; Nora/la abogada confirma efecto legal."])
+    return _clean_output("\n".join(lines))
+
+
+def render_workspace_pending_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
+    lines = [
+        f"Tany, estos son los pendientes que veo para ordenar {case.title}.",
+        "",
+        "📌 Pendientes del Caso Finca",
+    ]
+    _append_record_lines(lines, _records_or_plain(case.pending_records, case.pending_items), numbered=True)
+    lines.extend([
+        "",
+        "Siguiente paso seguro: escoger uno y pedirme que lo prepare en limpio.",
+        "Límite legal: Val organiza y resume; Nora/la abogada confirma efecto legal.",
+    ])
+    return _clean_output("\n".join(lines))
+
+
+def render_workspace_view(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None, view: str = "compact") -> str:
+    if view == "full":
+        return render_workspace_status(case, client_id=client_id)
+    if view == "documents":
+        return render_workspace_documents_section(case, client_id=client_id)
+    if view == "questions":
+        return render_workspace_questions_section(case, client_id=client_id)
+    if view == "pending":
+        return render_workspace_pending_section(case, client_id=client_id)
+    return render_workspace_compact_status(case, client_id=client_id)
+
+
 def render_workspace_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
     lines: list[str] = [
         f"Tany, abro {case.title}. Esto es lectura y organizacion; no voy a mover nada.",
@@ -524,7 +665,11 @@ async def maybe_handle_case_workspace_status(
         return False
     if str(client_id or "").strip().lower() not in {"karen", "client-zero"}:
         return False
-    if not looks_like_caso_finca_workspace_request(text):
+    view = detect_case_workspace_view(text)
+    if not view:
         return False
-    await _reply_text_chunked(update, render_workspace_status(load_caso_finca_workspace_source_labeled(), client_id=client_id))
+    await _reply_text_chunked(
+        update,
+        render_workspace_view(load_caso_finca_workspace_source_labeled(), client_id=client_id, view=view),
+    )
     return True
