@@ -48,6 +48,7 @@ Alpha marker:
 | A-025B | Bounded LLM Voice Renderer Skeleton + Validation Smokes | 1-2 h | 2026-06-04 14:13 | 2026-06-04 14:21 | 0.2 h | `fa4c2fa` | PASS | Added test-only bounded voice renderer skeleton with packet adapter, prompt builder, fail-closed validation, deterministic fallback, and smokes for boundary, OCR caveat, forbidden legal claims, internal leakage, action claims, and max length. No runtime behavior changed and no real API calls. |
 | A-025C | Bounded Voice Renderer Shadow Candidate Generation v1 | 1-2 h | 2026-06-04 14:36 | 2026-06-04 14:49 | 0.2 h | `c63c1ea` | PASS | Added shadow-only voice candidate generation for bounded Caso Finca Q&A packets. Candidate validation records safe/unsafe results while user-facing answer remains deterministic. No runtime Telegram behavior changed, no real API calls, no writes or mutations. |
 | A-027 | Night Runner v0 Dry-Run Design | 30-60 min | 2026-06-04 15:04 | 2026-06-04 15:08 | 0.1 h | `38d2e0b` | PASS | Added design-only Night Runner v0 dry-run plan. Defines branch-only/report-only behavior, lane packet format, forbidden live-data guard, git status guard, allowed/forbidden command categories, report format, stop conditions, future phases, and next lane NIGHT-RUNNER-01 dry-run validator script. |
+| NIGHT-RUNNER-01 | Night Runner Dry-Run Validator Script | 1-2 h | 2026-06-04 17:05 | 2026-06-04 17:19 | 0.25 h | `6559581` | PASS | Added refusal-first Night Runner dry-run validator. Supports JSON/simple YAML lane packets, branch/git/forbidden-file checks, unsafe flag rejection, broad allowed-file rejection, unsafe prompt detection, safe report-path validation, and dry-run report writing. No tests executed by runner yet, no commits/restarts/live data mutation. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -185,4 +186,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | DONE | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-Night Runner v0 design is sealed. Recommended next: NIGHT-RUNNER-01 Dry-Run Validator Script, a refusal-first validator that checks lane packets, git status, forbidden files, and writes a dry-run report without commits, restarts, or live data mutation.
+NIGHT-RUNNER-01 is sealed. Recommended next: NIGHT-RUNNER-02 Morning Report/Test Runner layer to run approved diagnostics/tests and write a Launchpad-friendly report, still with no commits, no restarts, and no live data mutation.
