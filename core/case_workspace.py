@@ -37,6 +37,12 @@ class WorkspaceDocument:
     status: str
     source_label: str
     source: SourceLabel = field(default_factory=SourceLabel)
+    document_id: str = ""
+    path_category: str = ""
+    ocr_status: str = ""
+    summary_status: str = ""
+    relevance: str = ""
+    safe_next_action: str = ""
 
 
 @dataclass(frozen=True)
@@ -134,7 +140,20 @@ def _documents_from_values(values: Any, default_source: SourceLabel) -> tuple[Wo
             status = str(item.get("document_status") or item.get("status") or "").strip()
             source_label = str(item.get("source_label") or source.source_name or source.source_type).strip()
             if title:
-                documents.append(WorkspaceDocument(title=title, status=status, source_label=source_label, source=source))
+                documents.append(
+                    WorkspaceDocument(
+                        title=title,
+                        status=status,
+                        source_label=source_label,
+                        source=source,
+                        document_id=str(item.get("document_id") or "").strip(),
+                        path_category=str(item.get("path_category") or "").strip(),
+                        ocr_status=str(item.get("ocr_status") or "").strip(),
+                        summary_status=str(item.get("summary_status") or item.get("saved_summary_status") or "").strip(),
+                        relevance=str(item.get("relevance") or item.get("possible_caso_finca_relevance") or "").strip(),
+                        safe_next_action=str(item.get("safe_next_action") or "").strip(),
+                    )
+                )
         elif str(item or "").strip():
             documents.append(
                 WorkspaceDocument(
@@ -282,6 +301,23 @@ def _append_record_lines(lines: list[str], records: tuple[WorkspaceRecord, ...],
         lines.append(f"{prefix}{record.text}{_source_suffix(record.source)}")
 
 
+def _document_metadata_lines(doc: WorkspaceDocument) -> list[str]:
+    details: list[str] = []
+    if doc.document_id:
+        details.append(f"document_id: {doc.document_id}")
+    if doc.path_category:
+        details.append(f"source/path category: {doc.path_category}")
+    if doc.ocr_status:
+        details.append(f"OCR status: {doc.ocr_status}")
+    if doc.summary_status:
+        details.append(f"summary status: {doc.summary_status}")
+    if doc.relevance:
+        details.append(f"relevance: {doc.relevance}")
+    if doc.safe_next_action:
+        details.append(f"safe next action: {doc.safe_next_action}")
+    return details
+
+
 def render_workspace_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
     lines: list[str] = [
         f"Tany, abro {case.title}. Esto es lectura y organizacion; no voy a mover nada.",
@@ -301,6 +337,8 @@ def render_workspace_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, clien
     for idx, doc in enumerate(case.documents, start=1):
         status = f" — {doc.status}" if doc.status else ""
         lines.append(f"{idx}. {doc.title}{status}. Fuente: {doc.source_label}.{_source_suffix(doc.source)}")
+        for detail in _document_metadata_lines(doc):
+            lines.append(f"   - {detail}")
 
     lines.extend(["", "Línea de tiempo / eventos"])
     if case.timeline_events:

@@ -91,6 +91,8 @@ def test_renderer_shape_and_safety() -> None:
     assert_contains(reply, "Próximo paso sugerido", "next step section")
     assert_contains(reply, "source_type=", "source type labels")
     assert_contains(reply, "confidence=", "confidence labels")
+    assert_contains(reply, "vfms:20260531_000001", "trusted document id")
+    assert_contains(reply, "OCR status: available", "trusted OCR status")
     assert_contains(reply, "Nora/la abogada confirma el efecto legal", "legal boundary")
     assert_contains(reply, "lectura y organizacion; no voy a mover nada", "read-only copy")
     for phrase in STALE_PHRASES:

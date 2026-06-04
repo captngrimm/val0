@@ -21,6 +21,12 @@ from core.case_workspace import (  # noqa: E402
 KAREN_CLIENT_ID = "kar" + "en"
 LIVE_FILE = ROOT / "clients" / KAREN_CLIENT_ID / "CLIENT_GROCERY.md"
 STALE_PHRASES = ("bajar de peso", "task_high", "memoria pura")
+PRIVATE_BODY_PHRASES = (
+    "Copia para propósitos informativos solamente",
+    "Copia para propositos informativos solamente",
+    "JUZGADO PRIMERO DE CIRCUITO",
+    "Prescripción Adquisitiva de Dominio",
+)
 
 
 def assert_true(value, label: str) -> None:
@@ -91,8 +97,17 @@ def test_loader_and_renderer_source_labels() -> None:
     assert_contains(reply, "Nora", "Nora prep preserved")
     assert_contains(reply, "Nora/la abogada confirma el efecto legal", "legal boundary")
     assert_contains(reply, "lectura y organizacion; no voy a mover nada", "read-only boundary")
+    assert_contains(reply, "vfms:20260531_000001", "trusted OCR-ready document id")
+    assert_contains(reply, "12_ESPECIAL_RESUMEN_CASO_FINAL_JUNC", "trusted extracted summary candidate")
+    assert_contains(reply, "OCR status: available", "OCR status rendered")
+    assert_contains(reply, "summary status: unknown", "summary status rendered")
+    assert_contains(reply, "relevance: high", "relevance rendered")
+    assert_contains(reply, "safe next action:", "safe next action rendered")
+    assert_contains(reply, "uncertain candidate", "uncertain candidates marked")
     for phrase in STALE_PHRASES:
         assert_not_contains(reply, phrase, f"stale phrase absent: {phrase}")
+    for phrase in PRIVATE_BODY_PHRASES:
+        assert_not_contains(reply, phrase, f"raw body phrase absent: {phrase}")
 
 
 def test_route_uses_source_labeled_workspace_without_mutation() -> None:
@@ -113,6 +128,7 @@ def test_route_uses_source_labeled_workspace_without_mutation() -> None:
     reply = update.message.replies[0]
     assert_contains(reply, "fixture/source-labeled v1", "route uses source-labeled fixture")
     assert_contains(reply, "source_type=", "route reply includes source labels")
+    assert_contains(reply, "vfms:20260531_000001", "route reply includes trusted document attachment")
     assert_true(before == after, "CLIENT_GROCERY.md content untouched")
     assert_true(_git_cached_client_grocery() == "", "CLIENT_GROCERY.md is not staged")
 
