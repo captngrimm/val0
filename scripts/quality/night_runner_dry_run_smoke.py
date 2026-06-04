@@ -224,6 +224,24 @@ def test_packet_loaders(tmpdir: Path) -> None:
     assert_equal(load_lane_packet(yaml_path)["lane_id"], "NIGHT-RUNNER-SMOKE-002", "yaml loader")
 
 
+def test_canonical_bedtime_packet(tmpdir: Path) -> None:
+    packet_path = ROOT / "docs" / "ops" / "night_runner_bedtime_packet.yaml"
+    assert_true(packet_path.exists(), "canonical bedtime packet exists")
+    packet = load_lane_packet(packet_path)
+    assert_equal(packet["lane_id"], "NIGHT-RUNNER-BEDTIME-DEFAULT", "bedtime lane id")
+    assert_equal(packet["commit_allowed"], False, "bedtime commit disabled")
+    assert_equal(packet["restart_allowed"], False, "bedtime restart disabled")
+    assert_equal(packet["destructive_commands_allowed"], False, "bedtime destructive disabled")
+    assert_contains(packet["report_path"], "tmp/night_runner/morning_report.md", "bedtime report path")
+    assert_true("git diff --check" in packet["tests_to_run"], "bedtime includes diff check")
+
+    test_packet = dict(packet)
+    test_packet["report_path"] = str(tmpdir / "bedtime_report.md")
+    result = evaluate_packet(test_packet, _git())
+    assert_equal(result.decision, "PASS_DRY_RUN", "bedtime packet validates with clean synthetic git")
+    assert_true(result.report_written, "bedtime packet writes report in smoke temp")
+
+
 def test_help_runs() -> None:
     proc = subprocess.run(
         ["python3", "scripts/ops/night_runner_dry_run.py", "--help"],
@@ -255,6 +273,7 @@ def main() -> int:
         test_failing_test_command_recorded(tmpdir)
         test_command_allow_list()
         test_packet_loaders(tmpdir)
+        test_canonical_bedtime_packet(tmpdir)
         test_help_runs()
     print("PASS: Night Runner dry-run smoke passed.")
     return 0

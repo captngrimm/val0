@@ -141,7 +141,9 @@ def _candidate_lanes(
         candidates.append(
             "A-025C shadow-only voice candidate generation for Caso Finca Q&A"
         )
-    if re.search(r"NIGHT-RUNNER-02", tactical_note, flags=re.IGNORECASE):
+    if re.search(r"NIGHT-RUNNER-03", tactical_note, flags=re.IGNORECASE):
+        candidates.append("NIGHT-RUNNER-03 Bedtime Packet + Launchpad Morning Report workflow")
+    elif re.search(r"NIGHT-RUNNER-02", tactical_note, flags=re.IGNORECASE):
         candidates.append("NIGHT-RUNNER-02 Morning Report/Test Runner layer")
     elif re.search(r"NIGHT-RUNNER-01", tactical_note, flags=re.IGNORECASE):
         candidates.append("NIGHT-RUNNER-01 Dry-Run Validator Script")
@@ -170,7 +172,7 @@ def _stage(tactical_note: str, status_short: str) -> str:
         or "recommended next: choose" in note
     ):
         return "decision point"
-    if "night-runner-02" in note or "night-runner-01" in note:
+    if "night-runner-03" in note or "night-runner-02" in note or "night-runner-01" in note:
         return "implementation"
     if "design" in note and "implementation" not in note:
         return "design"
@@ -199,6 +201,8 @@ def _eta_lines(candidates: list[str], lanes: list[Lane]) -> list[str]:
             eta = "1-2 focused sessions"
         elif "a-025d" in lowered:
             eta = "1-2 h shadow logging/observation pass"
+        elif "night-runner-03" in lowered:
+            eta = "30-60 min workflow packet/report polish"
         elif "night-runner-02" in lowered:
             eta = "1-2 h safe test runner/report layer"
         elif "night-runner-01" in lowered:
@@ -260,6 +264,8 @@ def _exact_next_action(tactical_note: str, candidates: list[str]) -> str:
             "overnight automation, or A-025D shadow logging/observation if "
             "continuing voice renderer instrumentation."
         )
+    if "night-runner-03" in note:
+        return "Start NIGHT-RUNNER-03 Bedtime Packet + Launchpad Morning Report workflow."
     if "night-runner-02" in note:
         return "Start NIGHT-RUNNER-02 Morning Report/Test Runner layer."
     if "night-runner-01" in note:

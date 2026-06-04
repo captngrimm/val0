@@ -1,0 +1,20 @@
+lane_id: NIGHT-RUNNER-BEDTIME-DEFAULT
+branch_name: val0-post-m41-conversationality-memory-lab-2026-05-25
+task_prompt: "Run safe diagnostics and write the Night Runner morning report only."
+allowed_files:
+  - tmp/night_runner/
+forbidden_files:
+  - clients/karen/CLIENT_GROCERY.md
+  - clients/karen/CLIENT_FOLDERS.json
+  - .env
+  - /etc/val0
+tests_to_run:
+  - python3 scripts/diagnostics/val0_milestone_radar.py
+  - python3 scripts/diagnostics/val0_alpha_brief.py
+  - python3 scripts/quality/client_isolation_audit.py
+  - git diff --check
+commit_allowed: false
+restart_allowed: false
+destructive_commands_allowed: false
+report_path: tmp/night_runner/morning_report.md
+stop_if_uncertain: true
