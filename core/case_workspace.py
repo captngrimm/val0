@@ -230,10 +230,45 @@ def _case_context_present(norm: str) -> bool:
     return any(marker in norm for marker in ("caso finca", "caso del terreno", "con la finca", "de la finca", "del caso"))
 
 
+def _number_word_to_int(value: str) -> int:
+    normalized = _strip_accents(value).lower().strip()
+    if normalized.isdigit():
+        return int(normalized)
+    mapping = {
+        "uno": 1,
+        "una": 1,
+        "dos": 2,
+        "tres": 3,
+        "cuatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "siete": 7,
+        "ocho": 8,
+        "nueve": 9,
+        "diez": 10,
+    }
+    return mapping.get(normalized, 0)
+
+
+def extract_case_workspace_document_summary_number(text: str) -> int:
+    norm = normalize_workspace_text(text)
+    if not norm:
+        return 0
+    if not re.search(r"\b(?:resume|resumen|resumeme|resumir)\b", norm):
+        return 0
+    match = re.search(r"\b(?:documento|doc)\s+(\d{1,2}|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b", norm)
+    if not match:
+        return 0
+    return _number_word_to_int(match.group(1))
+
+
 def detect_case_workspace_view(text: str) -> str | None:
     norm = normalize_workspace_text(text)
     if not norm:
         return None
+
+    if extract_case_workspace_document_summary_number(text):
+        return "document_summary"
 
     has_case_context = _case_context_present(norm)
 
@@ -488,6 +523,59 @@ def _document_compact_next_command(doc: WorkspaceDocument, idx: int) -> str:
     return f'Pedir: "Val, resume el documento {idx}", si quieres revisar este archivo.'
 
 
+def get_workspace_document_by_number(case: WorkspaceCase, number: int) -> WorkspaceDocument | None:
+    idx = int(number or 0) - 1
+    if idx < 0 or idx >= len(case.documents):
+        return None
+    return case.documents[idx]
+
+
+def render_workspace_document_number_summary(
+    case: WorkspaceCase = CASO_FINCA_WORKSPACE,
+    *,
+    number: int,
+    client_id: str | None = None,
+) -> str:
+    doc = get_workspace_document_by_number(case, number)
+    if not doc:
+        total = len(case.documents)
+        suffix = f"Ahora mismo tengo {total} documento(s) numerados en {case.title}." if total else "No tengo documentos numerados en este tablero."
+        return _clean_output(
+            "\n".join(
+                [
+                    f"Tany, no encuentro el documento {int(number or 0)} dentro de {case.title}.",
+                    suffix,
+                    'Puedes pedir: "Val, muéstrame documentos del Caso Finca" para ver la lista actualizada.',
+                ]
+            )
+        )
+
+    availability = _document_availability_label(doc)
+    review = _document_review_label(doc)
+    lines = [
+        f"Tany, el documento {number} de {case.title} es:",
+        f"📄 {doc.title}",
+        "",
+        "Resumen seguro v1",
+        f"- ID técnico del documento: {doc.document_id or 'sin ID técnico registrado'}",
+        f"- Estado simple: {review}.",
+        f"- Lectura disponible: {availability}.",
+    ]
+    if _strip_accents(doc.ocr_status).lower().strip() == "available":
+        lines.append("- Puedo ayudarte a revisarlo con la lectura OCR ya guardada, sin crear ni cambiar documentos.")
+        lines.append('Siguiente paso: "Val, resume con OCR el último documento", si quieres una lectura visual más completa.')
+    else:
+        lines.append("- Ese documento está registrado, pero todavía no tengo una lectura/OCR usable para resumirlo con confianza.")
+        lines.append('Siguiente paso: "Val, muéstrame detalles técnicos de los documentos del Caso Finca" para ver qué falta.')
+    lines.extend(
+        [
+            "",
+            "Límite legal: Val organiza y resume; Nora/la abogada confirma efecto legal.",
+        ]
+    )
+    return _clean_output("\n".join(lines))
+
+
 def _count_ocr_available(case: WorkspaceCase) -> int:
     return sum(1 for doc in case.documents if _strip_accents(doc.ocr_status).lower().strip() == "available")
 
@@ -606,6 +694,12 @@ def render_workspace_pending_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE,
 
 
 def render_workspace_view(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None, view: str = "compact") -> str:
+    if view.startswith("document_summary:"):
+        try:
+            number = int(view.split(":", 1)[1])
+        except Exception:
+            number = 0
+        return render_workspace_document_number_summary(case, client_id=client_id, number=number)
     if view == "full":
         return render_workspace_status(case, client_id=client_id)
     if view == "document_details":
@@ -721,6 +815,8 @@ async def maybe_handle_case_workspace_status(
     view = detect_case_workspace_view(text)
     if not view:
         return False
+    if view == "document_summary":
+        view = f"document_summary:{extract_case_workspace_document_summary_number(text)}"
     await _reply_text_chunked(
         update,
         render_workspace_view(load_caso_finca_workspace_source_labeled(), client_id=client_id, view=view),

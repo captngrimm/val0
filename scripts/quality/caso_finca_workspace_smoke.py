@@ -12,10 +12,13 @@ sys.path.insert(0, str(ROOT))
 from core.case_workspace import (  # noqa: E402
     CASO_FINCA_WORKSPACE,
     detect_case_workspace_view,
+    extract_case_workspace_document_summary_number,
+    get_workspace_document_by_number,
     load_caso_finca_workspace_source_labeled,
     looks_like_caso_finca_workspace_request,
     maybe_handle_case_workspace_status,
     render_workspace_compact_status,
+    render_workspace_document_number_summary,
     render_workspace_status,
 )
 
@@ -71,6 +74,8 @@ def test_phrase_detection() -> None:
         "Val, muéstrame pendientes del Caso Finca",
         "Val, muéstrame todo el Caso Finca",
         "Val, muéstrame detalles técnicos de los documentos del Caso Finca",
+        "Val, resume el documento 1",
+        "resume documento 3",
     )
     for phrase in positive:
         assert_true(looks_like_caso_finca_workspace_request(phrase), f"workspace phrase detected: {phrase}")
@@ -83,6 +88,10 @@ def test_phrase_detection() -> None:
     assert_true(detect_case_workspace_view("Val, muéstrame preguntas para Nora") == "questions", "questions view selected")
     assert_true(detect_case_workspace_view("Val, muéstrame pendientes del Caso Finca") == "pending", "pending view selected")
     assert_true(detect_case_workspace_view("Val, muéstrame todo el Caso Finca") == "full", "full view selected")
+    assert_true(detect_case_workspace_view("Val, resume el documento 1") == "document_summary", "document number summary selected")
+    assert_true(extract_case_workspace_document_summary_number("Val, resume el documento 1") == 1, "extract document number 1")
+    assert_true(extract_case_workspace_document_summary_number("resume documento 3") == 3, "extract document number 3")
+    assert_true(extract_case_workspace_document_summary_number("Val, resume el documento dos") == 2, "extract document number word")
 
     negative = (
         "Val, qué tareas activas tengo?",
@@ -142,6 +151,22 @@ def test_renderer_shape_and_safety() -> None:
         assert_not_contains(reply, phrase, f"no stale contamination: {phrase}")
     assert_not_contains(reply, "conclusion legal definitiva", "no fake legal conclusion")
 
+    doc1 = get_workspace_document_by_number(case, 1)
+    doc2 = get_workspace_document_by_number(case, 2)
+    assert_true(doc1 is not None and doc1.document_id == "vfms:20260531_000001", "document 1 maps to trusted OCR attachment")
+    assert_true(doc2 is not None and doc2.document_id == "vfms:20260511_000012", "document 2 maps to trusted summary candidate")
+    doc1_reply = render_workspace_document_number_summary(case, number=1, client_id=KAREN_CLIENT_ID)
+    assert_contains(doc1_reply, "vfms:20260531_000001", "document 1 summary includes mapped id")
+    assert_contains(doc1_reply, "OCR: disponible", "document 1 summary shows OCR availability")
+    assert_contains(doc1_reply, "Resumen seguro v1", "document 1 summary is safe v1")
+    assert_contains(doc1_reply, "Nora/la abogada confirma efecto legal", "document summary legal boundary")
+    assert_not_contains(doc1_reply, "JUZGADO PRIMERO DE CIRCUITO", "document summary avoids raw private body")
+    doc2_reply = render_workspace_document_number_summary(case, number=2, client_id=KAREN_CLIENT_ID)
+    assert_contains(doc2_reply, "vfms:20260511_000012", "document 2 summary includes mapped id")
+    assert_contains(doc2_reply, "todavía no tengo una lectura/OCR usable", "document 2 unavailable summary copy")
+    missing_reply = render_workspace_document_number_summary(case, number=99, client_id=KAREN_CLIENT_ID)
+    assert_contains(missing_reply, "no encuentro el documento 99", "out-of-range graceful error")
+
 
 def test_async_route_and_no_live_file_mutation() -> None:
     before = LIVE_FILE.read_text(encoding="utf-8") if LIVE_FILE.exists() else None
@@ -198,6 +223,47 @@ def test_async_route_and_no_live_file_mutation() -> None:
     assert_contains(details_update.message.replies[0], "📄 Detalles técnicos de documentos", "technical details section rendered")
     assert_contains(details_update.message.replies[0], "ID técnico del documento", "technical details include document id")
     assert_contains(details_update.message.replies[0], "Fuente: auditoría de documentos", "technical details include friendly source")
+
+    doc_summary_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            doc_summary_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, resume el documento 1",
+        )
+    )
+    assert_true(handled, "document number summary route handled")
+    assert_contains(doc_summary_update.message.replies[0], "vfms:20260531_000001", "route maps document 1 id")
+    assert_contains(doc_summary_update.message.replies[0], "Resumen seguro v1", "route returns safe summary")
+    assert_not_contains(doc_summary_update.message.replies[0], "JUZGADO PRIMERO DE CIRCUITO", "route avoids raw private body")
+
+    doc_summary_update_2 = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            doc_summary_update_2,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="resume documento 3",
+        )
+    )
+    assert_true(handled, "document number summary route handles no-prefix phrase")
+    assert_contains(doc_summary_update_2.message.replies[0], "documento 3", "route responds for document 3")
+
+    missing_doc_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            missing_doc_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, resume el documento 99",
+        )
+    )
+    assert_true(handled, "out-of-range document number route handled")
+    assert_contains(missing_doc_update.message.replies[0], "no encuentro el documento 99", "out-of-range graceful route reply")
 
     questions_update = FakeUpdate()
     handled = asyncio.run(

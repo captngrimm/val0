@@ -13,8 +13,10 @@ sys.path.insert(0, str(ROOT))
 from core.case_workspace import (  # noqa: E402
     DEFAULT_CASO_FINCA_FIXTURE_PATH,
     _split_telegram_text,
+    get_workspace_document_by_number,
     load_caso_finca_workspace_source_labeled,
     maybe_handle_case_workspace_status,
+    render_workspace_document_number_summary,
     render_workspace_compact_status,
     render_workspace_status,
 )
@@ -84,6 +86,14 @@ def test_loader_and_renderer_source_labels() -> None:
     assert_contains(compact, "📁 Estado rápido", "compact default screen exists")
     assert_contains(compact, '"Val, muéstrame todo el Caso Finca"', "compact offers full view command")
     assert_not_contains(compact, "ID técnico del documento", "compact avoids technical document ids")
+    doc1 = get_workspace_document_by_number(case, 1)
+    doc2 = get_workspace_document_by_number(case, 2)
+    assert_true(doc1 is not None and doc1.document_id == "vfms:20260531_000001", "document 1 attachment mapping")
+    assert_true(doc2 is not None and doc2.document_id == "vfms:20260511_000012", "document 2 attachment mapping")
+    doc1_summary = render_workspace_document_number_summary(case, number=1, client_id=KAREN_CLIENT_ID)
+    assert_contains(doc1_summary, "Resumen seguro v1", "document number summary available")
+    assert_contains(doc1_summary, "vfms:20260531_000001", "document number summary maps id")
+    assert_not_contains(doc1_summary, "JUZGADO PRIMERO DE CIRCUITO", "document number summary avoids raw body")
 
     reply = render_workspace_status(case, client_id=KAREN_CLIENT_ID)
     for section in (
@@ -211,6 +221,21 @@ def test_route_uses_source_labeled_workspace_without_mutation() -> None:
     assert_true(handled, "technical document details route handled")
     assert_contains(details_reply, "ID técnico del documento", "technical document details include ids")
     assert_contains(details_reply, "Confianza:", "technical document details include confidence")
+
+    summary_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            summary_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, resume el documento 2",
+        )
+    )
+    summary_reply = "\n".join(summary_update.message.replies)
+    assert_true(handled, "document number summary route handled")
+    assert_contains(summary_reply, "vfms:20260511_000012", "document 2 route maps id")
+    assert_contains(summary_reply, "todavía no tengo una lectura/OCR usable", "document 2 route gives useful unavailable copy")
     assert_true(before == after, "CLIENT_GROCERY.md content untouched")
     assert_true(_git_cached_client_grocery() == "", "CLIENT_GROCERY.md is not staged")
 
