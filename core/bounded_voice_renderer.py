@@ -76,6 +76,15 @@ class VoiceRenderValidation:
     reasons: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class VoiceRenderShadowResult:
+    deterministic_answer: str
+    candidate_answer: str | None
+    validation_status: str
+    rejection_reason: str | None
+    user_facing_answer: str
+
+
 def _norm(text: str) -> str:
     return str(text or "").casefold()
 
@@ -208,3 +217,48 @@ def render_with_bounded_voice(
     if not validation.ok:
         return packet.deterministic_answer
     return str(candidate).strip()
+
+
+def generate_shadow_voice_candidate(
+    packet: VoiceRenderPacket,
+    *,
+    renderer: Callable[[VoiceRenderPacket], str] | None = None,
+) -> VoiceRenderShadowResult:
+    deterministic = packet.deterministic_answer
+    if renderer is None:
+        return VoiceRenderShadowResult(
+            deterministic_answer=deterministic,
+            candidate_answer=None,
+            validation_status="renderer_unavailable",
+            rejection_reason="renderer_unavailable",
+            user_facing_answer=deterministic,
+        )
+    try:
+        raw_candidate = renderer(packet)
+    except Exception as exc:
+        return VoiceRenderShadowResult(
+            deterministic_answer=deterministic,
+            candidate_answer=None,
+            validation_status="renderer_exception",
+            rejection_reason=f"renderer_exception:{type(exc).__name__}",
+            user_facing_answer=deterministic,
+        )
+
+    candidate = str(raw_candidate or "").strip()
+    validation = validate_voice_render_output(packet, candidate)
+    if not validation.ok:
+        return VoiceRenderShadowResult(
+            deterministic_answer=deterministic,
+            candidate_answer=candidate,
+            validation_status="rejected",
+            rejection_reason=", ".join(validation.reasons),
+            user_facing_answer=deterministic,
+        )
+
+    return VoiceRenderShadowResult(
+        deterministic_answer=deterministic,
+        candidate_answer=candidate,
+        validation_status="accepted_shadow_only",
+        rejection_reason=None,
+        user_facing_answer=deterministic,
+    )

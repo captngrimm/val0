@@ -12,6 +12,7 @@ from core.bounded_voice_renderer import (  # noqa: E402
     OCR_CAVEAT,
     build_voice_packet_from_case_qa,
     build_voice_renderer_prompt,
+    generate_shadow_voice_candidate,
     render_with_bounded_voice,
     validate_voice_render_output,
 )
@@ -115,6 +116,56 @@ def test_validation_and_fallbacks() -> None:
     assert_equal(render_with_bounded_voice(packet, renderer=lambda _packet: (_ for _ in ()).throw(RuntimeError("nope")), enabled=True), deterministic, "renderer exception falls back")
 
 
+def test_shadow_candidate_generation() -> None:
+    packet = _base_packet()
+    deterministic = packet.deterministic_answer
+    safe = (
+        "Tany, va en limpio y sin drama mágico: Caso Finca tiene piezas útiles, "
+        "pero hay cosas que confirmar.\n\n"
+        f"{LEGAL_BOUNDARY}"
+    )
+    result = generate_shadow_voice_candidate(packet, renderer=lambda _packet: safe)
+    assert_equal(result.validation_status, "accepted_shadow_only", "safe shadow status")
+    assert_equal(result.candidate_answer or "", safe, "safe shadow candidate recorded")
+    assert_equal(result.user_facing_answer, deterministic, "safe shadow remains deterministic-facing")
+
+    unsafe = f"Esto prueba definitivamente el caso.\n\n{LEGAL_BOUNDARY}"
+    rejected = generate_shadow_voice_candidate(packet, renderer=lambda _packet: unsafe)
+    assert_equal(rejected.validation_status, "rejected", "unsafe shadow rejected")
+    assert_contains(rejected.rejection_reason or "", "forbidden_claim", "unsafe shadow reason")
+    assert_equal(rejected.user_facing_answer, deterministic, "unsafe shadow remains deterministic-facing")
+
+    missing_boundary = generate_shadow_voice_candidate(packet, renderer=lambda _packet: "Tany, te lo resumo.")
+    assert_equal(missing_boundary.validation_status, "rejected", "missing boundary rejected")
+    assert_contains(missing_boundary.rejection_reason or "", "missing_required_boundary", "missing boundary reason")
+
+    leak = generate_shadow_voice_candidate(
+        packet,
+        renderer=lambda _packet: f"Documento vfms:20260531_000001.\n\n{LEGAL_BOUNDARY}",
+    )
+    assert_equal(leak.validation_status, "rejected", "internal leak rejected")
+    assert_contains(leak.rejection_reason or "", "internal_leak", "internal leak reason")
+
+    action = generate_shadow_voice_candidate(
+        packet,
+        renderer=lambda _packet: f"Tany, guardé el resumen y agendé la revisión.\n\n{LEGAL_BOUNDARY}",
+    )
+    assert_equal(action.validation_status, "rejected", "action claim rejected")
+    assert_contains(action.rejection_reason or "", "forbidden_action_claim", "action claim reason")
+
+    no_renderer = generate_shadow_voice_candidate(packet)
+    assert_equal(no_renderer.validation_status, "renderer_unavailable", "missing renderer status")
+    assert_equal(no_renderer.user_facing_answer, deterministic, "missing renderer deterministic-facing")
+
+    exception = generate_shadow_voice_candidate(
+        packet,
+        renderer=lambda _packet: (_ for _ in ()).throw(RuntimeError("fake renderer down")),
+    )
+    assert_equal(exception.validation_status, "renderer_exception", "renderer exception status")
+    assert_contains(exception.rejection_reason or "", "RuntimeError", "renderer exception reason")
+    assert_equal(exception.user_facing_answer, deterministic, "exception deterministic-facing")
+
+
 def test_ocr_caveat_required() -> None:
     packet = _ocr_packet()
     deterministic = packet.deterministic_answer
@@ -134,11 +185,16 @@ def test_ocr_caveat_required() -> None:
         f"{LEGAL_BOUNDARY}"
     )
     assert_true(validate_voice_render_output(packet, safe_ocr).ok, "OCR-safe output passes")
+    result = generate_shadow_voice_candidate(packet, renderer=lambda _packet: missing_ocr)
+    assert_equal(result.validation_status, "rejected", "OCR shadow missing caveat rejected")
+    assert_contains(result.rejection_reason or "", "missing_ocr_caveat", "OCR missing caveat reason")
+    assert_equal(result.user_facing_answer, deterministic, "OCR missing caveat deterministic-facing")
 
 
 def main() -> int:
     test_prompt_contract()
     test_validation_and_fallbacks()
+    test_shadow_candidate_generation()
     test_ocr_caveat_required()
     print("PASS: bounded voice renderer smoke passed.")
     return 0
