@@ -81,7 +81,7 @@ def _table_rows(section_text: str) -> list[list[str]]:
 def _parse_lanes(text: str) -> list[Lane]:
     lanes: list[Lane] = []
     for row in _table_rows(_section(text, "Lanes Since Alpha")):
-        if len(row) < 8 or not row[0].startswith("A-"):
+        if len(row) < 8 or not (row[0].startswith("A-") or row[0].startswith("NIGHT-RUNNER-")):
             continue
         lanes.append(
             Lane(
@@ -141,7 +141,9 @@ def _candidate_lanes(
         candidates.append(
             "A-025C shadow-only voice candidate generation for Caso Finca Q&A"
         )
-    if re.search(r"NIGHT-RUNNER-03", tactical_note, flags=re.IGNORECASE):
+    if re.search(r"BENCH-01", tactical_note, flags=re.IGNORECASE):
+        candidates.append("BENCH-01 Global Milestone Benchmark/ROI Radar")
+    elif re.search(r"NIGHT-RUNNER-03", tactical_note, flags=re.IGNORECASE):
         candidates.append("NIGHT-RUNNER-03 Bedtime Packet + Launchpad Morning Report workflow")
     elif re.search(r"NIGHT-RUNNER-02", tactical_note, flags=re.IGNORECASE):
         candidates.append("NIGHT-RUNNER-02 Morning Report/Test Runner layer")
@@ -172,7 +174,7 @@ def _stage(tactical_note: str, status_short: str) -> str:
         or "recommended next: choose" in note
     ):
         return "decision point"
-    if "night-runner-03" in note or "night-runner-02" in note or "night-runner-01" in note:
+    if "bench-01" in note or "night-runner-03" in note or "night-runner-02" in note or "night-runner-01" in note:
         return "implementation"
     if "design" in note and "implementation" not in note:
         return "design"
@@ -197,7 +199,9 @@ def _eta_lines(candidates: list[str], lanes: list[Lane]) -> list[str]:
     lines: list[str] = []
     for candidate in candidates[:4]:
         lowered = candidate.lower()
-        if "a-025c" in lowered:
+        if "bench-01" in lowered:
+            eta = "30-60 min read-only benchmark diagnostic"
+        elif "a-025c" in lowered:
             eta = "1-2 focused sessions"
         elif "a-025d" in lowered:
             eta = "1-2 h shadow logging/observation pass"
@@ -264,6 +268,8 @@ def _exact_next_action(tactical_note: str, candidates: list[str]) -> str:
             "overnight automation, or A-025D shadow logging/observation if "
             "continuing voice renderer instrumentation."
         )
+    if "bench-01" in note:
+        return "Start BENCH-01 Global Milestone Benchmark/ROI Radar."
     if "night-runner-03" in note:
         return "Start NIGHT-RUNNER-03 Bedtime Packet + Launchpad Morning Report workflow."
     if "night-runner-02" in note:
