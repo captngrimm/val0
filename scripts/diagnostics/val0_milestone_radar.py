@@ -129,14 +129,22 @@ def _latest_sealed_lane(lanes: list[Lane]) -> Lane | None:
     return sealed[-1] if sealed else (lanes[-1] if lanes else None)
 
 
-def _candidate_lanes(tactical_note: str, planned: list[PlannedMilestone]) -> list[str]:
+def _candidate_lanes(
+    tactical_note: str,
+    planned: list[PlannedMilestone],
+    *,
+    latest_sealed_lane_id: str | None = None,
+) -> list[str]:
     candidates: list[str] = []
-    if "A-025C" in tactical_note:
+    sealed_id = (latest_sealed_lane_id or "").strip()
+    if "A-025C" in tactical_note and sealed_id != "A-025C":
         candidates.append(
             "A-025C shadow-only voice candidate generation for Caso Finca Q&A"
         )
     if re.search(r"Night Runner", tactical_note, flags=re.IGNORECASE):
         candidates.append("Night Runner v0 Dry-Run design")
+    if "A-025D" in tactical_note:
+        candidates.append("A-025D shadow logging/observation")
     for milestone in planned:
         if milestone.status.lower() in {"next", "active", "planned", "watch"}:
             label = f"{milestone.milestone} ({milestone.estimate}, {milestone.status})"
@@ -149,7 +157,11 @@ def _candidate_lanes(tactical_note: str, planned: list[PlannedMilestone]) -> lis
 
 def _stage(tactical_note: str, status_short: str) -> str:
     note = tactical_note.lower()
-    if "decide between" in note or "recommended next: decide" in note:
+    if (
+        "decide between" in note
+        or "recommended next: decide" in note
+        or "recommended next: choose" in note
+    ):
         return "decision point"
     if "design" in note and "implementation" not in note:
         return "design"
@@ -176,6 +188,8 @@ def _eta_lines(candidates: list[str], lanes: list[Lane]) -> list[str]:
         lowered = candidate.lower()
         if "a-025c" in lowered:
             eta = "1-2 focused sessions"
+        elif "a-025d" in lowered:
+            eta = "1-2 h shadow logging/observation pass"
         elif "night runner" in lowered:
             eta = "30-60 min design, then 1-2 h skeleton"
         elif "fixture" in lowered:
@@ -226,7 +240,14 @@ def _blockers_and_risks(status_short: str, candidates: list[str]) -> list[str]:
 
 
 def _exact_next_action(tactical_note: str, candidates: list[str]) -> str:
-    if "decide between" in tactical_note.lower() and len(candidates) >= 2:
+    note = tactical_note.lower()
+    if "a-025d" in note and "night runner" in note and len(candidates) >= 2:
+        return (
+            "Choose one: Night Runner v0 Dry-Run design if prioritizing "
+            "overnight automation, or A-025D shadow logging/observation if "
+            "continuing voice renderer instrumentation."
+        )
+    if "decide between" in note and len(candidates) >= 2:
         return (
             "Ask High Command to choose one lane. Default to A-025C if continuing "
             "the Caso Finca product lane; choose Night Runner v0 only if ops automation "
@@ -253,7 +274,11 @@ def build_milestone_radar() -> str:
     planned = _parse_planned(text)
     latest = _latest_sealed_lane(lanes)
     tactical_note = _current_tactical_note(text)
-    candidates = _candidate_lanes(tactical_note, planned)
+    candidates = _candidate_lanes(
+        tactical_note,
+        planned,
+        latest_sealed_lane_id=latest.lane_id if latest else None,
+    )
     branch = _run_git(["branch", "--show-current"])
     head = _run_git(["rev-parse", "--short", "HEAD"])
     status_short = _run_git(["status", "--short"])
