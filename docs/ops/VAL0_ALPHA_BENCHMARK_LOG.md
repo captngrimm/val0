@@ -38,6 +38,7 @@ Alpha marker:
 | A-014 | Existing Document Inventory / Case Attachment Audit | 1-2 h | 2026-06-03 17:30 | 2026-06-03 17:36 | ~6 min implementation/verify window after Codex handoff | `this commit` | PASS | Added metadata-only Karen document inventory audit for existing uploads, OCR status, summary status, and Caso Finca relevance; no document body dump or live mutation. |
 | A-015 | Trusted Caso Finca Document Attachments v1 | 1-2 h | 2026-06-03 21:27 | 2026-06-03 21:31 | ~4 min implementation/verify window after Codex handoff | `this commit` | PASS | Linked trusted A-014 metadata-only document attachments into the read-only Caso Finca workspace; no OCR run, body dump, or live mutation. |
 | A-019 | Caso Finca Document OCR Bridge v1 | 1-2 h | 2026-06-03 22:25 | 2026-06-03 22:39 | Added read-only OCR-backed summaries for Caso Finca numbered attachments when saved OCR exists. | `5a4395f` | PASS | Document 1 now summarizes saved OCR safely; documents without OCR keep graceful metadata fallback. |
+| A-020 | Generic Folder Create v1 | 2-4 h | 2026-06-04 10:30 | 2026-06-04 10:42 | Added Karen-scoped text-only generic folders with JSON storage, create/list/open/save/list routes, and temp-file smoke coverage. | `03ef297` | PASS | Generic folders like Libro now work without moving documents or touching CLIENT_GROCERY.md. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
