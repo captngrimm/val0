@@ -9,7 +9,7 @@ This is the operator-friendly wrapper around Night Runner v0. It gives the human
 Run from `/opt/val0`:
 
 ```bash
-python3 scripts/ops/night_runner_dry_run.py docs/ops/night_runner_bedtime_packet.yaml --run-tests
+python3 scripts/ops/night_runner_dry_run.py docs/ops/night_runner_bedtime_packet.yaml --run-tests --allow-protected-dirty-readonly
 ```
 
 The packet is intentionally boring:
@@ -21,6 +21,7 @@ The packet is intentionally boring:
 - no live data mutation
 - no external APIs
 - only approved diagnostics/tests from `tests_to_run`
+- protected live Karen files may remain dirty only in this explicit read-only mode
 
 ## Morning Report Path
 
@@ -53,12 +54,20 @@ If an operator needs `/root/LAUNCHPAD/VAL0_output.txt`, copy the report manually
 
 ## Expected Current Behavior
 
-If these live files are dirty, Night Runner refuses before running tests:
+By default, if these live files are dirty, Night Runner refuses before running tests:
 
 - `clients/karen/CLIENT_GROCERY.md`
 - `clients/karen/CLIENT_FOLDERS.json`
 
-That refusal is correct. The report should tell the operator that live Karen data is dirty and must remain unstaged/uncommitted. Night Runner should not clean, reset, stage, or ignore those files on its own.
+That refusal is correct. For the bedtime report only, the operator may add `--allow-protected-dirty-readonly`. In that mode, Night Runner still refuses staged changes, protected files in `allowed_files`, protected files not listed in `forbidden_files`, non-protected dirty files, unsafe commands, commits, restarts, and destructive actions.
+
+When the read-only opt-in succeeds, the report must include:
+
+```text
+Protected live files are dirty and were not touched.
+```
+
+Night Runner should not clean, reset, stage, or ignore those files on its own.
 
 ## Safe Packet
 

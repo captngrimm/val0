@@ -18,6 +18,11 @@ DEFAULT_LIVE_FORBIDDEN = (
     ".env",
     "/etc/val0",
 )
+READONLY_PROTECTED_DIRTY_ALLOWED = (
+    "clients/karen/CLIENT_GROCERY.md",
+    "clients/karen/CLIENT_FOLDERS.json",
+)
+PROTECTED_DIRTY_WARNING = "Protected live files are dirty and were not touched."
 REQUIRED_FIELDS = (
     "lane_id",
     "branch_name",
@@ -82,6 +87,7 @@ class DryRunResult:
     report: str
     report_written: bool
     test_results: tuple["TestCommandResult", ...] = ()
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -202,6 +208,11 @@ def _has_staged_changes(status_short_branch: str) -> bool:
     return False
 
 
+def _is_staged_code(code: str) -> bool:
+    staged = code[0] if code else " "
+    return staged not in {" ", "?"}
+
+
 def _dirty_paths(status_short_branch: str) -> set[str]:
     return {path for _code, path in _status_entries(status_short_branch)}
 
@@ -232,7 +243,50 @@ def _safe_report_path(report_path: str, forbidden_files: list[str]) -> tuple[boo
     return True, ""
 
 
-def _validate_packet(packet: dict[str, Any], git: GitSnapshot) -> tuple[str, ...]:
+def _matches_any(path: str, patterns: list[str] | tuple[str, ...]) -> bool:
+    return any(_path_matches(path, pattern) for pattern in patterns)
+
+
+def _is_report_area_path(path: str, report_path: str) -> bool:
+    if not path or not report_path:
+        return False
+    if _path_matches(path, "tmp/night_runner"):
+        return True
+    report = str(report_path).strip()
+    if not report or Path(report).is_absolute():
+        return False
+    return path == report or _path_matches(path, str(Path(report).parent))
+
+
+def _protected_dirty_warning_entries(
+    packet: dict[str, Any],
+    git: GitSnapshot,
+    *,
+    allow_protected_dirty_readonly: bool,
+) -> tuple[str, ...]:
+    if not allow_protected_dirty_readonly:
+        return ()
+    packet_forbidden = _as_list(packet.get("forbidden_files"))
+    entries = []
+    for code, path in _status_entries(git.status_short_branch):
+        if not _matches_any(path, READONLY_PROTECTED_DIRTY_ALLOWED):
+            continue
+        if _is_staged_code(code):
+            continue
+        if not _matches_any(path, packet_forbidden):
+            continue
+        entries.append(path)
+    if not entries:
+        return ()
+    return (PROTECTED_DIRTY_WARNING + " " + ", ".join(sorted(set(entries))),)
+
+
+def _validate_packet(
+    packet: dict[str, Any],
+    git: GitSnapshot,
+    *,
+    allow_protected_dirty_readonly: bool = False,
+) -> tuple[str, ...]:
     reasons: list[str] = []
     missing = [field for field in REQUIRED_FIELDS if field not in packet]
     if missing:
@@ -266,7 +320,32 @@ def _validate_packet(packet: dict[str, Any], git: GitSnapshot) -> tuple[str, ...
     for forbidden in forbidden_files:
         for dirty_path in dirty:
             if _path_matches(dirty_path, forbidden):
-                reasons.append(f"forbidden file is dirty/staged: {dirty_path}")
+                dirty_entry = next(
+                    ((code, path) for code, path in _status_entries(git.status_short_branch) if path == dirty_path),
+                    ("", dirty_path),
+                )
+                is_readonly_allowed = (
+                    allow_protected_dirty_readonly
+                    and _matches_any(dirty_path, READONLY_PROTECTED_DIRTY_ALLOWED)
+                    and _matches_any(dirty_path, packet_forbidden)
+                    and not _is_staged_code(dirty_entry[0])
+                )
+                if not is_readonly_allowed:
+                    reasons.append(f"forbidden file is dirty/staged: {dirty_path}")
+
+    if allow_protected_dirty_readonly:
+        report_path = str(packet.get("report_path", ""))
+        for code, dirty_path in _status_entries(git.status_short_branch):
+            if _matches_any(dirty_path, READONLY_PROTECTED_DIRTY_ALLOWED):
+                if not _matches_any(dirty_path, packet_forbidden):
+                    reasons.append(f"dirty protected file is not listed in forbidden_files: {dirty_path}")
+                if _matches_any(dirty_path, allowed_files):
+                    reasons.append(f"dirty protected file cannot be in allowed_files: {dirty_path}")
+                if _is_staged_code(code):
+                    reasons.append(f"staged protected file is not allowed: {dirty_path}")
+                continue
+            if not _is_report_area_path(dirty_path, report_path):
+                reasons.append(f"non-protected dirty file is not allowed in readonly mode: {dirty_path}")
 
     if _has_staged_changes(git.status_short_branch):
         reasons.append("staged changes exist")
@@ -382,6 +461,7 @@ def build_report(
     git: GitSnapshot,
     reasons: tuple[str, ...],
     test_results: tuple[TestCommandResult, ...] = (),
+    warnings: tuple[str, ...] = (),
 ) -> str:
     decision = "REFUSED" if reasons else "PASS_DRY_RUN"
     allowed_files = _as_list(packet.get("allowed_files"))
@@ -405,6 +485,9 @@ def build_report(
         lines.extend(f"- {reason}" for reason in reasons)
     else:
         lines.append("- none")
+    if warnings:
+        lines.extend(["", "Warnings:"])
+        lines.extend(f"- {warning}" for warning in warnings)
     lines.extend(
         [
             "",
@@ -480,12 +563,27 @@ def _write_report_if_safe(packet: dict[str, Any], report: str) -> bool:
     return True
 
 
-def evaluate_packet(packet: dict[str, Any], git: GitSnapshot, *, run_tests: bool = False) -> DryRunResult:
-    reasons = _validate_packet(packet, git)
+def evaluate_packet(
+    packet: dict[str, Any],
+    git: GitSnapshot,
+    *,
+    run_tests: bool = False,
+    allow_protected_dirty_readonly: bool = False,
+) -> DryRunResult:
+    reasons = _validate_packet(
+        packet,
+        git,
+        allow_protected_dirty_readonly=allow_protected_dirty_readonly,
+    )
+    warnings = _protected_dirty_warning_entries(
+        packet,
+        git,
+        allow_protected_dirty_readonly=allow_protected_dirty_readonly,
+    )
     test_results: tuple[TestCommandResult, ...] = ()
     if run_tests and not reasons:
         test_results = run_test_commands(_as_list(packet.get("tests_to_run")))
-    report = build_report(packet, git, reasons, test_results)
+    report = build_report(packet, git, reasons, test_results, warnings)
     written = _write_report_if_safe(packet, report)
     return DryRunResult(
         decision="REFUSED" if reasons else "PASS_DRY_RUN",
@@ -493,6 +591,7 @@ def evaluate_packet(packet: dict[str, Any], git: GitSnapshot, *, run_tests: bool
         report=report,
         report_written=written,
         test_results=test_results,
+        warnings=warnings,
     )
 
 
@@ -505,6 +604,14 @@ def main() -> int:
         "--run-tests",
         action="store_true",
         help="After PASS_DRY_RUN validation, run only tests_to_run commands that match the safe allow-list.",
+    )
+    parser.add_argument(
+        "--allow-protected-dirty-readonly",
+        action="store_true",
+        help=(
+            "Allow unstaged protected Karen live files to remain dirty for a read-only report, "
+            "only when they are explicitly listed in forbidden_files."
+        ),
     )
     args = parser.parse_args()
     if args.packet is None:
@@ -522,7 +629,12 @@ def main() -> int:
         print(f"Refusal reasons:\n- could not load lane packet: {exc}")
         return 2
 
-    result = evaluate_packet(packet, current_git_snapshot(), run_tests=args.run_tests)
+    result = evaluate_packet(
+        packet,
+        current_git_snapshot(),
+        run_tests=args.run_tests,
+        allow_protected_dirty_readonly=args.allow_protected_dirty_readonly,
+    )
     print(result.report, end="")
     print(f"Report written: {'yes' if result.report_written else 'no'}")
     if result.decision != "PASS_DRY_RUN":

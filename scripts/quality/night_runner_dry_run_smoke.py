@@ -105,6 +105,61 @@ def test_dirty_live_data_refuses(tmpdir: Path) -> None:
     assert_contains(result.report, "forbidden file is dirty/staged", "dirty live reason")
 
 
+def test_allow_protected_dirty_readonly_permits_forbidden_live_files(tmpdir: Path) -> None:
+    status = (
+        f"## {BRANCH}\n"
+        " M clients/karen/CLIENT_GROCERY.md\n"
+        " M clients/karen/CLIENT_FOLDERS.json\n"
+    )
+    result = evaluate_packet(
+        _packet(tmpdir, tests_to_run=["python3 scripts/diagnostics/val0_milestone_radar.py"]),
+        _git(status),
+        run_tests=True,
+        allow_protected_dirty_readonly=True,
+    )
+    assert_equal(result.decision, "PASS_DRY_RUN", "readonly protected dirty decision")
+    assert_equal(len(result.test_results), 1, "readonly protected dirty runs safe test")
+    assert_equal(result.test_results[0].status, "PASS", "readonly protected dirty safe test passes")
+    assert_contains(result.report, "Protected live files are dirty and were not touched.", "protected dirty warning")
+
+
+def test_allow_protected_dirty_requires_forbidden_listing(tmpdir: Path) -> None:
+    status = f"## {BRANCH}\n M clients/karen/CLIENT_GROCERY.md\n"
+    packet = _packet(tmpdir, forbidden_files=["clients/karen/CLIENT_FOLDERS.json"])
+    result = evaluate_packet(packet, _git(status), allow_protected_dirty_readonly=True)
+    assert_equal(result.decision, "REFUSED", "protected dirty missing forbidden listing refuses")
+    assert_contains(result.report, "dirty protected file is not listed in forbidden_files", "missing forbidden listing reason")
+
+
+def test_allow_protected_dirty_refuses_allowed_protected(tmpdir: Path) -> None:
+    status = f"## {BRANCH}\n M clients/karen/CLIENT_GROCERY.md\n"
+    packet = _packet(tmpdir, allowed_files=[str(tmpdir), "clients/karen/CLIENT_GROCERY.md"])
+    result = evaluate_packet(packet, _git(status), allow_protected_dirty_readonly=True)
+    assert_equal(result.decision, "REFUSED", "protected dirty in allowed_files refuses")
+    assert_contains(result.report, "allowed_files includes forbidden", "protected allowed reason")
+
+
+def test_allow_protected_dirty_refuses_staged_protected(tmpdir: Path) -> None:
+    status = f"## {BRANCH}\nM  clients/karen/CLIENT_GROCERY.md\n"
+    result = evaluate_packet(_packet(tmpdir), _git(status), allow_protected_dirty_readonly=True)
+    assert_equal(result.decision, "REFUSED", "staged protected refuses")
+    assert_contains(result.report, "staged protected file is not allowed", "staged protected reason")
+
+
+def test_allow_protected_dirty_refuses_staged_changes(tmpdir: Path) -> None:
+    status = f"## {BRANCH}\nM  docs/ops/example.md\n"
+    result = evaluate_packet(_packet(tmpdir), _git(status), allow_protected_dirty_readonly=True)
+    assert_equal(result.decision, "REFUSED", "staged non-protected refuses")
+    assert_contains(result.report, "staged changes exist", "staged changes reason")
+
+
+def test_allow_protected_dirty_refuses_nonprotected_dirty(tmpdir: Path) -> None:
+    status = f"## {BRANCH}\n M scripts/ops/night_runner_dry_run.py\n"
+    result = evaluate_packet(_packet(tmpdir), _git(status), allow_protected_dirty_readonly=True)
+    assert_equal(result.decision, "REFUSED", "non-protected dirty refuses")
+    assert_contains(result.report, "non-protected dirty file is not allowed", "non-protected dirty reason")
+
+
 def test_refused_packet_runs_no_tests(tmpdir: Path) -> None:
     status = f"## {BRANCH}\n M clients/karen/CLIENT_GROCERY.md\n"
     result = evaluate_packet(_packet(tmpdir), _git(status), run_tests=True)
@@ -261,6 +316,12 @@ def main() -> int:
         test_valid_minimal_passes(tmpdir)
         test_run_tests_allowed_commands(tmpdir)
         test_dirty_live_data_refuses(tmpdir)
+        test_allow_protected_dirty_readonly_permits_forbidden_live_files(tmpdir)
+        test_allow_protected_dirty_requires_forbidden_listing(tmpdir)
+        test_allow_protected_dirty_refuses_allowed_protected(tmpdir)
+        test_allow_protected_dirty_refuses_staged_protected(tmpdir)
+        test_allow_protected_dirty_refuses_staged_changes(tmpdir)
+        test_allow_protected_dirty_refuses_nonprotected_dirty(tmpdir)
         test_refused_packet_runs_no_tests(tmpdir)
         test_branch_mismatch_refuses(tmpdir)
         test_boolean_guards_refuse(tmpdir)
