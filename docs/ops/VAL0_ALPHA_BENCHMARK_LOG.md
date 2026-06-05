@@ -52,6 +52,7 @@ Alpha marker:
 | NIGHT-RUNNER-02 | Night Runner Morning Report/Test Runner Layer | 1-2 h | 2026-06-04 17:24 | 2026-06-04 17:30 | 0.1 h | `e175e9b` | PASS | Added --run-tests to Night Runner. It validates lane packets first, refuses unsafe work, runs only allow-listed diagnostics/tests from tests_to_run, captures output/exit codes, and writes a report. Still no commits, restarts, production actions, live data mutation, or autonomous editing. |
 | NIGHT-RUNNER-03 | Night Runner Bedtime Packet + Launchpad Morning Report Workflow | 30-60 min | 2026-06-04 17:42 | 2026-06-04 17:51 | 0.15 h | `83b8dca` | PASS | Added canonical Night Runner bedtime workflow doc and packet. Operator can run one safe bedtime command using night_runner_dry_run.py with --run-tests, generating tmp/night_runner/morning_report.md. Current behavior correctly refuses when protected live Karen files are dirty. |
 | NIGHT-RUNNER-04 | Night Runner Clean Readonly Report Mode | 1-2 h | 2026-06-04 18:09 | 2026-06-04 18:16 | 0.15 h | `db49a7c` | PASS | Added opt-in protected-dirty read-only mode. Night Runner can now run safe bedtime diagnostics while CLIENT_GROCERY.md and CLIENT_FOLDERS.json are dirty, provided they are forbidden, unstaged, and untouched. Real proof run passed 4/4 commands and wrote tmp/night_runner/morning_report.md. |
+| A-025D | Bounded Voice Renderer Shadow Observation Logging v1 | 2-3 h | 2026-06-04 18:27 | 2026-06-04 18:56 | 0.5 h | `55d5e01` | PASS | Added safe shadow observation logging for bounded voice renderer candidates. Logs accepted/rejected status, rejection reason, safety flags, OCR caveat and legal-boundary presence, deterministic-answer hash/excerpt, and redacted candidate excerpt to tmp/voice_renderer_shadow/observations.jsonl. Deterministic answer remains user-facing; no Telegram/runtime behavior changed, no API calls, no live data mutation. |
 ## Human Outcome Summaries
 
 ### A-002 / A-006 — Calendar follow-up
@@ -189,4 +190,4 @@ Remaining gap / watch item:
 | 12 | Founder Demo Readiness v1 | 1-2 d | DONE | Demo flow: agenda, tasks, reminders, docs, Caso Finca, natural tone. |
 ## Current Tactical Note
 
-NIGHT-RUNNER-04 is sealed. Recommended next: stop Night Runner expansion for now and return to product work, unless choosing one small NIGHT-RUNNER-05 lane for Launchpad-output polish.
+A-025D is sealed. Recommended next: A-025E Voice Renderer Shadow Review / Operator Comparison v1, or Caso Finca Q&A v2 if prioritizing smarter case substance over renderer instrumentation.
