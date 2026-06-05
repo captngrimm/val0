@@ -1,11 +1,14 @@
-lane_id: NIGHT-RUNNER-16-SAMPLE
-task_name: Tiny non-runtime patch review
+lane_id: NIGHT-RUNNER-17-SAMPLE
+task_name: Bedtime workflow v2 packaging
 task_mode: reported_patch
 allowed_files:
   - scripts/diagnostics/night_runner_readiness_summary.py
   - scripts/quality/night_runner_readiness_summary_smoke.py
   - scripts/diagnostics/night_runner_patch_review.py
   - scripts/quality/night_runner_patch_review_smoke.py
+  - docs/ops/NIGHT_RUNNER_BEDTIME_WORKFLOW_V2.md
+  - docs/ops/night_runner_bedtime_packet_v2.yaml
+  - scripts/quality/night_runner_bedtime_packet_v2_smoke.py
   - docs/ops/night_runner_tiny_task_packet.yaml
   - docs/ops/NIGHT_RUNNER_DOCS_DIAGNOSTIC.md
 forbidden_files:
