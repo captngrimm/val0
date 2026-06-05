@@ -221,6 +221,30 @@ def test_live_failure_phrases_are_protected() -> None:
         assert_not_contains(reply, "no debe prometer", f"live phrase {expected} avoids founder limitations")
 
 
+def test_possible_contradictions_phrase_is_protected() -> None:
+    phrase = "Val, hay algo raro o contradictorio en el Caso Finca?"
+    assert_true(
+        classify_case_qa_question(phrase) == "possible_contradictions",
+        "explicit contradiction/weirdness phrase routes to bounded Q&A",
+    )
+    packet = build_case_qa_packet(phrase, client_id=KAREN_CLIENT_ID)
+    assert_true(packet is not None and packet.question_type == "possible_contradictions", "contradiction packet built")
+    reply = render_case_qa_answer(packet)
+    assert_contains(reply, "Tany", "contradiction answer uses Tany")
+    assert_contains(reply, "Nora/la abogada confirma efecto legal", "contradiction answer legal boundary")
+    assert_contains(reply, "focos para revisar", "contradiction answer frames review focus")
+    assert_contains(reply, "Posibles puntos raros para revisar", "contradiction answer has review section")
+    assert_contains(reply, "Pregunta para Nora", "contradiction answer asks Nora question")
+    assert_not_contains(reply, "ID técnico del documento", "contradiction answer hides technical IDs")
+    assert_not_contains(reply, "caso ganado", "contradiction answer avoids won/lost claim")
+    assert_not_contains(reply, "caso perdido", "contradiction answer avoids won/lost claim")
+    assert_not_contains(reply, "esto prueba definitivamente", "contradiction answer avoids legal certainty")
+    assert_not_contains(reply, "vfms:", "contradiction answer hides internal IDs")
+    assert_not_contains(reply, "JUZGADO PRIMERO DE CIRCUITO", "contradiction answer avoids raw OCR body")
+    for phrase in STALE_PHRASES:
+        assert_not_contains(reply, phrase, f"contradiction answer no stale contamination {phrase}")
+
+
 def test_founder_limitations_still_available() -> None:
     general = (
         "Val, qué no puedes hacer todavía?",
@@ -268,6 +292,7 @@ def main() -> int:
     test_question_classification_and_renderer()
     test_async_route_and_no_live_mutation()
     test_live_failure_phrases_are_protected()
+    test_possible_contradictions_phrase_is_protected()
     test_founder_limitations_still_available()
     test_generic_whatnow_stays_generic()
     test_bot_route_order()
