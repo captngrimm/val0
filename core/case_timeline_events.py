@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 import unicodedata
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+import tempfile
 from typing import Any
 
 
@@ -15,6 +17,46 @@ LEGAL_BOUNDARY = "Val organiza y resume; Nora/la abogada confirma efecto legal."
 PENDING_DRAFT_KEY = "pending_case_timeline_event_draft"
 STORE_PATH_KEY = "case_timeline_event_fixture_store_path"
 PROTECTED_LIVE_FILENAMES = {"CLIENT_GROCERY.md", "CLIENT_FOLDERS.json", "CLIENT_CASE_TIMELINE_EVENTS.json"}
+SQLITE_SCHEMA_STATEMENTS = (
+    """
+    CREATE TABLE IF NOT EXISTS case_timeline_events (
+        event_id TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        case_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        event_date TEXT,
+        event_date_precision TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        source_type TEXT NOT NULL,
+        source_ref TEXT,
+        confirmation_status TEXT NOT NULL,
+        confidence TEXT,
+        legal_effect_status TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS case_timeline_event_audit (
+        audit_id TEXT PRIMARY KEY,
+        event_id TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        case_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        before_json TEXT,
+        after_json TEXT,
+        reason TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_case_timeline_events_client_case ON case_timeline_events (client_id, case_id, deleted_at)",
+    "CREATE INDEX IF NOT EXISTS idx_case_timeline_events_date ON case_timeline_events (client_id, case_id, event_date_precision, event_date)",
+    "CREATE INDEX IF NOT EXISTS idx_case_timeline_event_audit_event ON case_timeline_event_audit (event_id, timestamp)",
+)
 
 SPANISH_MONTHS = {
     "enero": 1,
@@ -509,6 +551,23 @@ def _guard_fixture_store_path(path: Path) -> None:
         raise ValueError(f"Refusing timeline event spike store under protected live client path: {path}")
 
 
+def _guard_temp_sqlite_path(path: Path) -> None:
+    resolved = path.resolve()
+    tmp_root = Path(tempfile.gettempdir()).resolve()
+    if tmp_root not in (resolved, *resolved.parents):
+        raise ValueError(f"Refusing timeline SQLite spike store outside temp directory: {path}")
+
+
+def _require_client_case(client_id: str, case_id: str) -> tuple[str, str]:
+    clean_client = str(client_id or "").strip()
+    clean_case = str(case_id or "").strip()
+    if not clean_client:
+        raise ValueError("client_id is required for timeline event store")
+    if not clean_case:
+        raise ValueError("case_id is required for timeline event store")
+    return clean_client, clean_case
+
+
 def _event_sort_key(record: CaseTimelineEventRecord) -> tuple[int, str, int, str]:
     precision = record.event_date_precision
     if precision == "unknown" or not record.event_date:
@@ -642,3 +701,256 @@ class CaseTimelineEventJsonStore:
         payload["events"] = [asdict(item) for item in updated]
         self._write_payload(payload)
         return deleted
+
+
+class CaseTimelineEventSqliteStore:
+    """Temp-DB SQLite adapter spike for timeline event storage."""
+
+    def __init__(self, db_path: str | Path):
+        self.db_path = Path(db_path)
+        _guard_temp_sqlite_path(self.db_path)
+
+    def _connect(self) -> sqlite3.Connection:
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def initialize_schema(self) -> None:
+        with self._connect() as conn:
+            for statement in SQLITE_SCHEMA_STATEMENTS:
+                conn.execute(statement)
+            conn.commit()
+
+    def schema_tables(self) -> set[str]:
+        with self._connect() as conn:
+            rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+        return {str(row["name"]) for row in rows}
+
+    def _audit_count_for_event(self, event_id: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS count FROM case_timeline_event_audit WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()
+        return int(row["count"] if row else 0)
+
+    def audit_rows(self, *, event_id: str | None = None) -> list[dict[str, Any]]:
+        self.initialize_schema()
+        query = "SELECT * FROM case_timeline_event_audit"
+        params: tuple[Any, ...] = ()
+        if event_id:
+            query += " WHERE event_id = ?"
+            params = (event_id,)
+        query += " ORDER BY timestamp, audit_id"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(row) for row in rows]
+
+    def _insert_audit(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        event_id: str,
+        client_id: str,
+        case_id: str,
+        action: str,
+        actor: str,
+        timestamp: str,
+        before_json: str = "",
+        after_json: str = "",
+        reason: str = "",
+    ) -> None:
+        sequence = self._audit_count_for_event(event_id) + 1
+        stamp = re.sub(r"\D+", "", timestamp)[:14] or "00000000000000"
+        audit_id = f"audit:{event_id}:{stamp}-{sequence:04d}"
+        conn.execute(
+            """
+            INSERT INTO case_timeline_event_audit (
+                audit_id, event_id, client_id, case_id, action, actor, timestamp, before_json, after_json, reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (audit_id, event_id, client_id, case_id, action, actor, timestamp, before_json, after_json, reason),
+        )
+
+    def insert_from_draft(
+        self,
+        draft: CaseTimelineEventDraft,
+        *,
+        client_id: str,
+        case_id: str | None = None,
+        now: str = "",
+    ) -> CaseTimelineEventRecord:
+        clean_client, clean_case = _require_client_case(client_id, draft.case_id if case_id is None else case_id)
+        self.initialize_schema()
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM case_timeline_events").fetchone()
+            sequence = int(row["count"] if row else 0) + 1
+            record = event_record_from_draft(draft, now=now, sequence=sequence)
+            conn.execute(
+                """
+                INSERT INTO case_timeline_events (
+                    event_id, client_id, case_id, title, description, event_date, event_date_precision,
+                    recorded_at, source_type, source_ref, confirmation_status, confidence, legal_effect_status,
+                    created_by, created_at, updated_at, deleted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.event_id,
+                    clean_client,
+                    clean_case,
+                    record.title,
+                    record.description,
+                    record.event_date,
+                    record.event_date_precision,
+                    record.recorded_at,
+                    record.source_type,
+                    record.source_ref,
+                    record.confirmation_status,
+                    record.confidence,
+                    record.legal_effect_status,
+                    record.created_by,
+                    record.created_at,
+                    record.updated_at,
+                    record.deleted_at,
+                ),
+            )
+            after_json = json.dumps(asdict(record), ensure_ascii=False, sort_keys=True)
+            self._insert_audit(
+                conn,
+                event_id=record.event_id,
+                client_id=clean_client,
+                case_id=clean_case,
+                action="created_from_draft",
+                actor=record.created_by,
+                timestamp=record.created_at,
+                after_json=after_json,
+                reason="Temp DB SQLite adapter spike; no live persistence.",
+            )
+            conn.commit()
+        return record
+
+    def list_events(
+        self,
+        *,
+        client_id: str,
+        case_id: str,
+        include_deleted: bool = False,
+    ) -> list[CaseTimelineEventRecord]:
+        clean_client, clean_case = _require_client_case(client_id, case_id)
+        self.initialize_schema()
+        query = """
+            SELECT * FROM case_timeline_events
+            WHERE client_id = ? AND case_id = ?
+        """
+        params: list[Any] = [clean_client, clean_case]
+        if not include_deleted:
+            query += " AND (deleted_at IS NULL OR deleted_at = '')"
+        query += " ORDER BY created_at, event_id"
+        with self._connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [
+            CaseTimelineEventRecord(
+                event_id=str(row["event_id"] or ""),
+                case_id=str(row["case_id"] or ""),
+                title=str(row["title"] or ""),
+                description=str(row["description"] or ""),
+                event_date=str(row["event_date"] or ""),
+                event_date_precision=str(row["event_date_precision"] or "unknown"),
+                recorded_at=str(row["recorded_at"] or ""),
+                source_type=str(row["source_type"] or "user_note"),
+                source_ref=str(row["source_ref"] or ""),
+                confirmation_status=str(row["confirmation_status"] or "pending_confirmation"),
+                confidence=str(row["confidence"] or "unknown"),
+                legal_effect_status=str(row["legal_effect_status"] or "unknown"),
+                created_by=str(row["created_by"] or "user"),
+                created_at=str(row["created_at"] or ""),
+                updated_at=str(row["updated_at"] or ""),
+                deleted_at=str(row["deleted_at"] or ""),
+            )
+            for row in rows
+        ]
+
+    def list_events_sorted(
+        self,
+        *,
+        client_id: str,
+        case_id: str,
+        include_deleted: bool = False,
+    ) -> list[CaseTimelineEventRecord]:
+        records = self.list_events(client_id=client_id, case_id=case_id, include_deleted=include_deleted)
+        if include_deleted:
+            return sorted(records, key=_event_sort_key)
+        return sorted_timeline_event_records(records)
+
+    def soft_delete(
+        self,
+        event_id: str,
+        *,
+        client_id: str,
+        case_id: str,
+        actor: str = "user",
+        reason: str = "",
+        now: str = "",
+    ) -> CaseTimelineEventRecord | None:
+        clean_client, clean_case = _require_client_case(client_id, case_id)
+        deleted_at = now or _utc_now_iso()
+        self.initialize_schema()
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM case_timeline_events
+                WHERE event_id = ? AND client_id = ? AND case_id = ?
+                """,
+                (event_id, clean_client, clean_case),
+            ).fetchone()
+            if not row:
+                return None
+            before = dict(row)
+            conn.execute(
+                """
+                UPDATE case_timeline_events
+                SET deleted_at = ?, updated_at = ?
+                WHERE event_id = ? AND client_id = ? AND case_id = ?
+                """,
+                (deleted_at, deleted_at, event_id, clean_client, clean_case),
+            )
+            updated_row = conn.execute(
+                """
+                SELECT * FROM case_timeline_events
+                WHERE event_id = ? AND client_id = ? AND case_id = ?
+                """,
+                (event_id, clean_client, clean_case),
+            ).fetchone()
+            record = CaseTimelineEventRecord(
+                event_id=str(updated_row["event_id"] or ""),
+                case_id=str(updated_row["case_id"] or ""),
+                title=str(updated_row["title"] or ""),
+                description=str(updated_row["description"] or ""),
+                event_date=str(updated_row["event_date"] or ""),
+                event_date_precision=str(updated_row["event_date_precision"] or "unknown"),
+                recorded_at=str(updated_row["recorded_at"] or ""),
+                source_type=str(updated_row["source_type"] or "user_note"),
+                source_ref=str(updated_row["source_ref"] or ""),
+                confirmation_status=str(updated_row["confirmation_status"] or "pending_confirmation"),
+                confidence=str(updated_row["confidence"] or "unknown"),
+                legal_effect_status=str(updated_row["legal_effect_status"] or "unknown"),
+                created_by=str(updated_row["created_by"] or "user"),
+                created_at=str(updated_row["created_at"] or ""),
+                updated_at=str(updated_row["updated_at"] or ""),
+                deleted_at=str(updated_row["deleted_at"] or ""),
+            )
+            self._insert_audit(
+                conn,
+                event_id=event_id,
+                client_id=clean_client,
+                case_id=clean_case,
+                action="soft_deleted",
+                actor=actor,
+                timestamp=deleted_at,
+                before_json=json.dumps(before, ensure_ascii=False, sort_keys=True),
+                after_json=json.dumps(asdict(record), ensure_ascii=False, sort_keys=True),
+                reason=reason,
+            )
+            conn.commit()
+        return record
