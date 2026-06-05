@@ -41,6 +41,9 @@ class CasoFincaQAPacket:
     questions_for_nora: tuple[str, ...] = field(default_factory=tuple)
     pending_items: tuple[str, ...] = field(default_factory=tuple)
     next_actions: tuple[str, ...] = field(default_factory=tuple)
+    facts_in_val: tuple[str, ...] = field(default_factory=tuple)
+    evidence_signals: tuple[str, ...] = field(default_factory=tuple)
+    review_gaps: tuple[str, ...] = field(default_factory=tuple)
     documents: tuple[WorkspaceDocument, ...] = field(default_factory=tuple)
     selected_document_number: int = 0
     selected_document: WorkspaceDocument | None = None
@@ -181,6 +184,93 @@ def _take(values: tuple[str, ...], limit: int) -> tuple[str, ...]:
     return tuple(item for item in values if str(item).strip())[:limit]
 
 
+def _status_norm(value: str) -> str:
+    return _strip_accents(value).lower().strip()
+
+
+def _public_case_text(text: str) -> str:
+    value = str(text or "").strip()
+    value = re.sub(r"\bVal0/VFMS\b", "Val", value, flags=re.IGNORECASE)
+    value = re.sub(r"\bVFMS\b", "Val", value, flags=re.IGNORECASE)
+    return value
+
+
+def _start_sentence(text: str) -> str:
+    value = _public_case_text(text)
+    if not value:
+        return value
+    return value[:1].upper() + value[1:]
+
+
+def _document_number_title(number: int, doc: WorkspaceDocument) -> str:
+    return f"Documento {number}: {doc.title}"
+
+
+def _documents_with_status(documents: tuple[WorkspaceDocument, ...], field_name: str, expected: str) -> tuple[tuple[int, WorkspaceDocument], ...]:
+    pairs: list[tuple[int, WorkspaceDocument]] = []
+    for number, doc in enumerate(documents, start=1):
+        if _status_norm(str(getattr(doc, field_name, ""))) == expected:
+            pairs.append((number, doc))
+    return tuple(pairs)
+
+
+def _documents_containing_status(documents: tuple[WorkspaceDocument, ...], field_name: str, marker: str) -> tuple[tuple[int, WorkspaceDocument], ...]:
+    pairs: list[tuple[int, WorkspaceDocument]] = []
+    for number, doc in enumerate(documents, start=1):
+        if marker in _status_norm(str(getattr(doc, field_name, ""))):
+            pairs.append((number, doc))
+    return tuple(pairs)
+
+
+def _build_facts_in_val(workspace: WorkspaceCase) -> tuple[str, ...]:
+    documents = tuple(workspace.documents)
+    ocr_docs = _documents_with_status(documents, "ocr_status", "available")
+    high_docs = _documents_with_status(documents, "relevance", "high")
+    facts: list[str] = []
+    if documents:
+        facts.append(f"Val tiene {len(documents)} documentos relacionados o candidatos dentro de Caso Finca.")
+    if ocr_docs:
+        number, doc = ocr_docs[0]
+        facts.append(f"{_document_number_title(number, doc)} tiene lectura OCR disponible para una primera revisión.")
+    if high_docs:
+        facts.append(f"{len(high_docs)} documento(s) aparecen marcados como alta relevancia en la auditoría de documentos.")
+    facts.extend(_public_case_text(item) for item in _take(workspace.what_we_know, 2))
+    return tuple(dict.fromkeys(facts))[:5]
+
+
+def _build_evidence_signals(workspace: WorkspaceCase) -> tuple[str, ...]:
+    documents = tuple(workspace.documents)
+    ocr_docs = _documents_with_status(documents, "ocr_status", "available")
+    high_docs = _documents_with_status(documents, "relevance", "high")
+    candidate_docs = _documents_containing_status(documents, "status", "candidato")
+    signals: list[str] = []
+    if ocr_docs:
+        number, doc = ocr_docs[0]
+        signals.append(f"El primer punto fuerte de lectura es {_document_number_title(number, doc)}, porque ya tiene OCR disponible.")
+    if candidate_docs:
+        signals.append(f"{len(candidate_docs)} documento(s) son candidatos: parecen relacionados, pero falta confirmarlos antes de depender de ellos.")
+    if high_docs:
+        titles = ", ".join(_document_number_title(number, doc) for number, doc in high_docs[:2])
+        signals.append(f"Los metadatos señalan alta relevancia en {titles}.")
+    if workspace.timeline_events:
+        signals.append(_public_case_text(workspace.timeline_events[0].text))
+    return tuple(dict.fromkeys(signals))[:5]
+
+
+def _build_review_gaps(workspace: WorkspaceCase) -> tuple[str, ...]:
+    documents = tuple(workspace.documents)
+    missing_ocr = _documents_with_status(documents, "ocr_status", "missing")
+    candidate_docs = _documents_containing_status(documents, "status", "candidato")
+    gaps: list[str] = [_public_case_text(item) for item in _take(workspace.needs_confirmation, 3)]
+    if missing_ocr:
+        gaps.append(f"{len(missing_ocr)} documento(s) todavía no tienen OCR usable registrado en la carpeta.")
+    if candidate_docs:
+        gaps.append("Confirmar cuáles documentos candidatos sí pertenecen al Caso Finca y cuáles son solo parecidos por marcadores.")
+    if documents:
+        gaps.append("Ordenar documentos por fecha/actualidad antes de sacar conclusiones.")
+    return tuple(dict.fromkeys(gaps))[:6]
+
+
 def build_case_qa_packet(
     text: str,
     *,
@@ -206,6 +296,9 @@ def build_case_qa_packet(
         questions_for_nora=_take(workspace.questions_for_lawyer, 4),
         pending_items=_take(workspace.pending_items, 4),
         next_actions=_take(workspace.next_actions, 3),
+        facts_in_val=_build_facts_in_val(workspace),
+        evidence_signals=_build_evidence_signals(workspace),
+        review_gaps=_build_review_gaps(workspace),
         documents=workspace.documents,
         selected_document_number=doc_number,
         selected_document=selected_doc,
@@ -256,11 +349,15 @@ def _render_document_explanation(packet: CasoFincaQAPacket) -> str:
         "",
         f"📄 {doc.title}",
         "",
-        "Lo que sé",
-        f"1. Este documento {_document_plain_status(doc)}.",
+        "Hechos en Val",
+        f"1. Este documento está registrado como documento {number} dentro de Caso Finca.",
+        f"2. {_start_sentence(_document_plain_status(doc))}.",
+        "",
+        "Señales / indicios",
+        "1. Puede servir como primer punto de lectura porque ya está identificado en la carpeta.",
         "2. Lo uso como referencia de trabajo, no como conclusión legal.",
         "",
-        "Lo que falta confirmar",
+        "Falta confirmar",
         "1. Si lo que menciona sigue vigente o solo es antecedente.",
         "2. Si coincide con el estado registral/judicial más actualizado.",
         "",
@@ -282,11 +379,17 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
         if doc:
             body = "\n".join(
                 [
-                    "Tany, revisaría primero el documento que ya tiene mejor punto de lectura.",
+                    "Tany, revisaría primero el documento que ya tiene mejor punto de lectura en Val.",
                     "",
                     "Documento recomendado",
                     f"1. Documento {number}: {doc.title}",
-                    f"2. Motivo: {_document_plain_status(doc)}.",
+                    "",
+                    "Por qué ese primero",
+                    f"1. {_start_sentence(_document_plain_status(doc))}.",
+                    "2. Si ese documento cuadra, ayuda a ordenar qué otros papeles son apoyo y cuáles son ruido.",
+                    "",
+                    "Falta confirmar",
+                    *_numbered(packet.review_gaps[:2]),
                     "",
                     "Próximo paso sugerido",
                     f'1. "Val, resume el documento {number}"',
@@ -303,14 +406,17 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
             [
                 "Tany, te lo separo en limpio para no mezclar hechos con novela registral:",
                 "",
-                "Lo que sé",
-                *_numbered(packet.known_facts),
+                "Hechos en Val",
+                *_numbered(packet.facts_in_val),
                 "",
-                "Lo que falta confirmar",
-                *_numbered(packet.needs_confirmation),
+                "Señales / indicios",
+                *_numbered(packet.evidence_signals),
                 "",
-                "Pregunta clave para Nora",
-                '1. "Con estos documentos, cuál prueba mejor el estado actual de la finca?"',
+                "Falta confirmar",
+                *_numbered(packet.review_gaps),
+                "",
+                "Preguntas para Nora",
+                *_numbered(packet.questions_for_nora[:2] or ('"Con estos documentos, cuál prueba mejor el estado actual de la finca?"',)),
                 "",
                 packet.source_note,
                 "",
@@ -322,14 +428,20 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
             [
                 "Tany, esto es lo que falta revisar del Caso Finca:",
                 "",
-                "Lo que falta confirmar",
-                *_numbered(packet.needs_confirmation),
+                "Hechos en Val",
+                *_numbered(packet.facts_in_val[:2]),
+                "",
+                "Señales / indicios",
+                *_numbered(packet.evidence_signals[:3]),
+                "",
+                "Falta confirmar",
+                *_numbered(packet.review_gaps),
                 "",
                 "Pendientes",
                 *_numbered(packet.pending_items),
                 "",
                 "Próximo paso sugerido",
-                "1. Revisar primero el documento con OCR disponible y sacar preguntas para Nora.",
+                "1. Revisar primero el documento con OCR disponible, sacar dudas concretas y llevarlas a Nora.",
                 "",
                 packet.source_note,
                 "",
@@ -341,11 +453,14 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
             [
                 "Tany, estas son preguntas útiles para llevarle a Nora sobre Caso Finca:",
                 "",
+                "Contexto rápido para Nora",
+                *_numbered(packet.facts_in_val[:3]),
+                "",
                 "Preguntas para Nora",
                 *_numbered(packet.questions_for_nora),
                 "",
-                "Para abrir la conversación",
-                '1. "¿Qué documento prueba mejor el estado actual de la finca?"',
+                "Puntos que conviene no asumir",
+                *_numbered(packet.review_gaps[:3]),
                 "",
                 LEGAL_BOUNDARY,
             ]
@@ -355,11 +470,15 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
             [
                 "Tany, antes de hablar con la abogada sobre Caso Finca yo haría esto, en orden:",
                 "",
+                "Hechos en Val",
+                *_numbered(packet.facts_in_val[:2]),
+                "",
                 "Próximo paso sugerido",
                 *_numbered(packet.pending_items[:2] or packet.next_actions[:2]),
                 "",
                 "Para Nora",
-                "1. Llevarle la lista de documentos y pedirle que confirme efecto legal.",
+                "1. Llevarle la lista de documentos y pedirle que confirme qué tiene efecto legal vigente.",
+                "2. Preguntarle cuál documento prueba mejor el estado actual antes de depender de los demás.",
                 "",
                 LEGAL_BOUNDARY,
             ]
@@ -369,7 +488,10 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
             [
                 "Tany, no voy a declarar contradicción legal todavía, pero sí marcaría focos para revisar:",
                 "",
-                "Posibles puntos raros",
+                "Señales / indicios",
+                *_numbered(packet.evidence_signals),
+                "",
+                "Posibles puntos raros para revisar",
                 "1. Si un documento menciona una actuación y otro no la refleja, hay que confirmar cuál es más reciente.",
                 "2. Si OCR lee mal nombres, números de finca o fechas, eso puede cambiar la interpretación.",
                 "3. Si aparecen medidas cautelares, hay que confirmar si están vigentes o canceladas.",
@@ -383,15 +505,16 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
     elif qt == "plain_language_explanation":
         body = "\n".join(
             [
-                "Tany, en palabras simples: Caso Finca es tu carpeta para ordenar el tema de la finca sin que los papeles se vuelvan una torre con actitud.",
+                "Tany, en palabras simples: Caso Finca es tu carpeta para ordenar la finca sin que los papeles se vuelvan una torre con actitud.",
                 "",
-                "Lo que sé",
-                *_numbered(packet.known_facts[:3]),
+                "Hechos en Val",
+                *_numbered(packet.facts_in_val[:4]),
                 "",
-                "Lo importante",
-                "1. Hay documentos que parecen relacionados.",
-                "2. Uno ya tiene lectura OCR disponible.",
-                "3. Nora/la abogada debe confirmar qué efecto legal tiene cada cosa.",
+                "Señales / indicios",
+                *_numbered(packet.evidence_signals[:3]),
+                "",
+                "Falta confirmar",
+                *_numbered(packet.review_gaps[:3]),
                 "",
                 "Próximo paso sugerido",
                 '1. "Val, cuál documento debería revisar primero?"',
@@ -406,11 +529,14 @@ def render_case_qa_answer(packet: CasoFincaQAPacket) -> str:
             [
                 "Tany, lo que tengo del Caso Finca en limpio es esto:",
                 "",
-                "Lo que sé",
-                *_numbered(packet.known_facts),
+                "Hechos en Val",
+                *_numbered(packet.facts_in_val),
                 "",
-                "Lo que falta confirmar",
-                *_numbered(packet.needs_confirmation),
+                "Señales / indicios",
+                *_numbered(packet.evidence_signals),
+                "",
+                "Falta confirmar",
+                *_numbered(packet.review_gaps),
                 "",
                 "Preguntas para Nora",
                 *_numbered(packet.questions_for_nora[:2]),

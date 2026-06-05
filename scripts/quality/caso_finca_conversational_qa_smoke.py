@@ -87,6 +87,7 @@ def _assert_safe_answer(reply: str, *, label: str, expect_ocr: bool = False) -> 
     assert_contains(reply, "Nora/la abogada confirma efecto legal", f"{label} legal boundary")
     assert_not_contains(reply, "ID técnico del documento", f"{label} hides technical IDs")
     assert_not_contains(reply, "vfms:", f"{label} hides VFMS IDs")
+    assert_not_contains(reply, "Val0/VFMS", f"{label} hides internal storage labels")
     assert_not_contains(reply, "JUZGADO PRIMERO DE CIRCUITO", f"{label} avoids raw OCR body")
     for phrase in STALE_PHRASES:
         assert_not_contains(reply, phrase, f"{label} no stale contamination {phrase}")
@@ -130,13 +131,15 @@ def test_question_classification_and_renderer() -> None:
     assert_true(doc_packet is not None and doc_packet.selected_document_number == 1, "first document maps to document 1")
     doc_reply = render_case_qa_answer(doc_packet)
     assert_contains(doc_reply, "documento 1", "document answer references visible number")
-    assert_contains(doc_reply, "Lo que sé", "document answer has grounded section")
-    assert_contains(doc_reply, "Lo que falta confirmar", "document answer has confirmation section")
+    assert_contains(doc_reply, "Hechos en Val", "document answer has grounded section")
+    assert_contains(doc_reply, "Falta confirmar", "document answer has confirmation section")
 
     priority_packet = build_case_qa_packet("Val, cuál documento debería revisar primero?", client_id=KAREN_CLIENT_ID, case_context=True)
     priority_reply = render_case_qa_answer(priority_packet)
     assert_contains(priority_reply, "Documento recomendado", "priority answer recommends a document")
+    assert_contains(priority_reply, "Por qué ese primero", "priority answer explains grounded reason")
     assert_contains(priority_reply, '"Val, resume el documento 1"', "priority answer gives safe next command")
+    assert_not_contains(priority_reply, "vfms:", "priority answer hides internal IDs")
 
 
 def test_async_route_and_no_live_mutation() -> None:
@@ -182,8 +185,8 @@ def test_async_route_and_no_live_mutation() -> None:
 
 def test_live_failure_phrases_are_protected() -> None:
     for phrase, expected, required in (
-        ("Val, qué falta revisar?", "needs_review", "Lo que falta confirmar"),
-        ("Val, qué sabemos seguro y qué falta confirmar?", "known_vs_uncertain", "Lo que sé"),
+        ("Val, qué falta revisar?", "needs_review", "Falta confirmar"),
+        ("Val, qué sabemos seguro y qué falta confirmar?", "known_vs_uncertain", "Hechos en Val"),
     ):
         assert_true(build_case_qa_packet(phrase, client_id=KAREN_CLIENT_ID) is None, f"general phrase requires case context: {phrase}")
         packet = build_case_qa_packet(phrase, client_id=KAREN_CLIENT_ID, case_context=True)
@@ -191,6 +194,7 @@ def test_live_failure_phrases_are_protected() -> None:
         reply = render_case_qa_answer(packet)
         _assert_safe_answer(reply, label=f"live phrase {expected}")
         assert_contains(reply, required, f"live phrase {expected} has expected section")
+        assert_contains(reply, "Señales / indicios", f"live phrase {expected} has grounded signal section")
         assert_not_contains(reply, "memoria mágica", f"live phrase {expected} avoids founder limitations")
         assert_not_contains(reply, "no debe prometer", f"live phrase {expected} avoids founder limitations")
 
