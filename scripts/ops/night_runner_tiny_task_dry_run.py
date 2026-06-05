@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from dataclasses import dataclass
@@ -30,14 +31,20 @@ REQUIRED_FIELDS = (
 ALLOWED_TEST_COMMANDS = (
     "python3 scripts/quality/night_runner_readiness_summary_smoke.py",
     "python3 scripts/quality/night_runner_docs_diagnostic_smoke.py",
+    "python3 scripts/quality/night_runner_tiny_task_dry_run_smoke.py",
     "python3 scripts/quality/client_isolation_audit.py",
     "git diff --check",
+    "git status --short --branch",
 )
+VALID_TASK_MODES = {"dry_run", "safe_diagnostic", "dry_run_with_tests"}
+EXECUTION_TASK_MODES = {"safe_diagnostic", "dry_run_with_tests"}
 DECISION_PASS = "PASS_TINY_TASK_DRY_RUN_READY"
+DECISION_EXECUTION_PASS = "PASS_TINY_TASK_EXECUTION_GUARD"
 DECISION_UNSAFE = "REFUSE_UNSAFE_PACKET"
 DECISION_PROTECTED = "REFUSE_PROTECTED_FILE_RISK"
 DECISION_REPORT = "REFUSE_REPORT_PATH"
 DECISION_TEST = "REFUSE_TEST_NOT_ALLOWLISTED"
+DECISION_FAIL_TEST = "FAIL_SAFE_TEST_COMMAND"
 
 
 @dataclass(frozen=True)
@@ -49,12 +56,22 @@ class CommandResult:
 
 
 @dataclass(frozen=True)
+class SafetySnapshot:
+    head: str
+    status_short_branch: str
+    staged_files: tuple[str, ...]
+    protected_hashes: dict[str, str]
+
+
+@dataclass(frozen=True)
 class TinyTaskResult:
     decision: str
     reasons: tuple[str, ...]
     report: str
     report_written: bool
     tests_run: tuple[CommandResult, ...]
+    before: SafetySnapshot | None = None
+    after: SafetySnapshot | None = None
 
 
 def _parse_scalar(value: str) -> Any:
@@ -142,6 +159,36 @@ def current_head() -> str:
     return _git(["rev-parse", "--short", "HEAD"]) or "(unknown)"
 
 
+def current_staged_files() -> tuple[str, ...]:
+    out = _git(["diff", "--cached", "--name-only"])
+    return tuple(line.strip() for line in out.splitlines() if line.strip())
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def protected_live_hashes() -> dict[str, str]:
+    hashes: dict[str, str] = {}
+    for path in PROTECTED_LIVE_FILES:
+        target = ROOT / path
+        hashes[path] = _sha256_file(target) if target.exists() else "(missing)"
+    return hashes
+
+
+def safety_snapshot(*, status_short_branch: str | None = None, head: str | None = None) -> SafetySnapshot:
+    return SafetySnapshot(
+        head=head if head is not None else current_head(),
+        status_short_branch=status_short_branch if status_short_branch is not None else current_git_status(),
+        staged_files=current_staged_files(),
+        protected_hashes=protected_live_hashes(),
+    )
+
+
 def _status_entries(status_short_branch: str) -> list[tuple[str, str]]:
     entries: list[tuple[str, str]] = []
     for line in status_short_branch.splitlines():
@@ -183,8 +230,8 @@ def _safe_report_path(report_path: str) -> tuple[bool, str]:
 
 
 def _append_setting_guards(packet: dict[str, Any], reasons: list[str]) -> None:
-    if packet.get("task_mode") != "dry_run":
-        reasons.append("task_mode must be dry_run")
+    if packet.get("task_mode") not in VALID_TASK_MODES:
+        reasons.append("task_mode must be safe_diagnostic or dry_run_with_tests")
     for field in ("allow_file_edits", "allow_commit", "allow_restart", "allow_live_writes"):
         if packet.get(field) is not False:
             reasons.append(f"{field} must be false")
@@ -242,6 +289,8 @@ def _classify_decision(reasons: list[str]) -> str:
         return DECISION_PROTECTED
     if any("test command is not allowlisted" in reason for reason in reasons):
         return DECISION_TEST
+    if any("safe diagnostic failed" in reason or "post-run safety check failed" in reason for reason in reasons):
+        return DECISION_FAIL_TEST
     return DECISION_UNSAFE
 
 
@@ -264,6 +313,24 @@ def _run_test_command(command: str) -> CommandResult:
     )
 
 
+def _append_post_run_guards(before: SafetySnapshot, after: SafetySnapshot, reasons: list[str]) -> None:
+    if after.head != before.head:
+        reasons.append(f"post-run safety check failed: git head changed {before.head} -> {after.head}")
+    if after.staged_files:
+        reasons.append(f"post-run safety check failed: staged files exist: {', '.join(after.staged_files)}")
+    for path, before_hash in before.protected_hashes.items():
+        after_hash = after.protected_hashes.get(path)
+        if after_hash != before_hash:
+            reasons.append(f"post-run safety check failed: protected live file hash changed: {path}")
+    runtime_touched = [
+        path
+        for _code, path in _status_entries(after.status_short_branch)
+        if path == "bot.py" or path.startswith("core/")
+    ]
+    if runtime_touched:
+        reasons.append(f"post-run safety check failed: runtime file touched: {', '.join(runtime_touched)}")
+
+
 def _write_report(path: str, text: str) -> bool:
     ok, _reason = _safe_report_path(path)
     if not ok:
@@ -283,11 +350,13 @@ def render_report(
     branch: str,
     head: str,
     tests_run: tuple[CommandResult, ...],
+    before: SafetySnapshot | None = None,
+    after: SafetySnapshot | None = None,
 ) -> str:
     tests_to_run = _as_list(packet.get("tests_to_run"))
     lines = [
-        "Night Runner Tiny Task Dry-Run Report",
-        "=====================================",
+        "Night Runner Tiny Task Execution Guard Report",
+        "=============================================",
         "",
         f"Decision: {decision}",
         f"Lane: {packet.get('lane_id', '(missing)')}",
@@ -331,7 +400,7 @@ def render_report(
             lines.append(f"- {item.status}: {item.command} (exit {item.exit_code})")
     else:
         lines.append("- run: 0")
-        lines.append("- dry-run did not execute tests")
+        lines.append("- execution guard did not execute tests")
 
     lines.extend(["", "Tests requested:"])
     if tests_to_run:
@@ -342,6 +411,12 @@ def render_report(
     lines.extend(
         [
             "",
+            "Before/after safety checks:",
+            f"- git head unchanged: {_yes_no(before is not None and after is not None and before.head == after.head)}",
+            f"- staged files after run: {', '.join(after.staged_files) if after and after.staged_files else 'none'}",
+            f"- protected live hashes unchanged: {_yes_no(_protected_hashes_unchanged(before, after))}",
+            f"- runtime files touched: {_runtime_touched_summary(after)}",
+            "",
             "Git status:",
             *[f"  {line}" for line in status_short_branch.splitlines()],
             "",
@@ -350,6 +425,27 @@ def render_report(
         ]
     )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _yes_no(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def _protected_hashes_unchanged(before: SafetySnapshot | None, after: SafetySnapshot | None) -> bool:
+    if before is None or after is None:
+        return False
+    return before.protected_hashes == after.protected_hashes
+
+
+def _runtime_touched_summary(snapshot: SafetySnapshot | None) -> str:
+    if snapshot is None:
+        return "unknown"
+    paths = [
+        path
+        for _code, path in _status_entries(snapshot.status_short_branch)
+        if path == "bot.py" or path.startswith("core/")
+    ]
+    return ", ".join(paths) if paths else "none"
 
 
 def evaluate_packet(
@@ -362,6 +458,7 @@ def evaluate_packet(
     status = status_short_branch if status_short_branch is not None else current_git_status()
     actual_branch = branch if branch is not None else current_branch()
     actual_head = head if head is not None else current_head()
+    before = safety_snapshot(status_short_branch=status, head=actual_head)
     reasons: list[str] = []
 
     _append_required_field_guards(packet, reasons)
@@ -387,6 +484,21 @@ def evaluate_packet(
     tests_run: tuple[CommandResult, ...] = ()
     if decision == DECISION_PASS and run_tests:
         tests_run = tuple(_run_test_command(command) for command in tests_to_run)
+        for item in tests_run:
+            if item.status != "PASS":
+                reasons.append(f"safe diagnostic failed: {item.command} exited {item.exit_code}")
+
+    after = safety_snapshot(
+        status_short_branch=status if status_short_branch is not None else None,
+        head=actual_head if head is not None else None,
+    )
+    if decision == DECISION_PASS:
+        _append_post_run_guards(before, after, reasons)
+
+    if reasons:
+        decision = _classify_decision(reasons)
+    elif packet.get("task_mode") in EXECUTION_TASK_MODES and run_tests:
+        decision = DECISION_EXECUTION_PASS
 
     report = render_report(
         packet=packet,
@@ -396,6 +508,8 @@ def evaluate_packet(
         branch=actual_branch,
         head=actual_head,
         tests_run=tests_run,
+        before=before,
+        after=after,
     )
     report_written = _write_report(report_path, report) if ok_report else False
     return TinyTaskResult(
@@ -404,6 +518,8 @@ def evaluate_packet(
         report=report,
         report_written=report_written,
         tests_run=tests_run,
+        before=before,
+        after=after,
     )
 
 

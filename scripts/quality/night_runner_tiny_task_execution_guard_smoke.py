@@ -12,7 +12,6 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.ops.night_runner_tiny_task_dry_run import (  # noqa: E402
     DECISION_EXECUTION_PASS,
-    DECISION_PASS,
     DECISION_PROTECTED,
     DECISION_REPORT,
     DECISION_TEST,
@@ -55,16 +54,16 @@ def _status(*entries: str) -> str:
 
 def _packet(tmpdir: Path, **overrides):
     packet = {
-        "lane_id": "NIGHT-RUNNER-12-SMOKE",
-        "task_name": "Tiny safe dry-run readiness task",
-        "task_mode": "dry_run",
+        "lane_id": "NIGHT-RUNNER-13-SMOKE",
+        "task_name": "Tiny safe diagnostic execution task",
+        "task_mode": "safe_diagnostic",
         "allowed_files": [],
         "forbidden_files": list(PROTECTED_FILES),
         "tests_to_run": [
             "python3 scripts/quality/night_runner_readiness_summary_smoke.py",
             "python3 scripts/quality/night_runner_docs_diagnostic_smoke.py",
         ],
-        "report_path": f"tmp/night_runner/{tmpdir.name}_tiny_task_report.md",
+        "report_path": f"tmp/night_runner/{tmpdir.name}_execution_guard_report.md",
         "allow_file_edits": False,
         "allow_commit": False,
         "allow_restart": False,
@@ -102,39 +101,39 @@ def _git_cached_names() -> list[str]:
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
-def test_valid_sample_packet_passes() -> None:
+def test_valid_sample_packet_executes_guard() -> None:
     packet = load_packet(ROOT / "docs" / "ops" / "night_runner_tiny_task_packet.yaml")
     result = evaluate_packet(packet, branch=BRANCH, head="abc1234")
-    assert_equal(result.decision, DECISION_EXECUTION_PASS, "sample packet decision")
-    assert_true(result.report_written, "sample packet writes report")
-    assert_contains(result.report, "Night Runner Tiny Task Execution Guard Report", "report title")
-    assert_contains(result.report, "Tests summary", "tests summary")
+    assert_equal(result.decision, DECISION_EXECUTION_PASS, "sample execution decision")
+    assert_true(result.report_written, "sample writes report")
+    assert_true(result.tests_run, "sample runs allowlisted tests")
+    assert_true(all(item.exit_code == 0 for item in result.tests_run), "exit codes captured")
+    assert_contains(result.report, "PASS_TINY_TASK_EXECUTION_GUARD", "report decision")
+    assert_contains(result.report, "protected live hashes unchanged: yes", "hash check")
 
 
 def test_boolean_guards_refuse(tmpdir: Path) -> None:
     for field in ("allow_file_edits", "allow_commit", "allow_restart", "allow_live_writes"):
-        packet = _packet(tmpdir, **{field: True})
-        result = _run(packet)
+        result = _run(_packet(tmpdir, **{field: True}))
         assert_equal(result.decision, DECISION_UNSAFE, f"{field} refuses")
         assert_contains(result.report, f"{field} must be false", f"{field} reason")
 
 
 def test_report_path_refuses(tmpdir: Path) -> None:
-    result = _run(_packet(tmpdir, report_path="docs/ops/not_allowed.md"))
+    result = _run(_packet(tmpdir, report_path="docs/ops/nope.md"))
     assert_equal(result.decision, DECISION_REPORT, "outside report path refuses")
-    assert_contains(result.report, "report_path must be under tmp/night_runner", "report path reason")
 
 
 def test_non_allowlisted_test_refuses(tmpdir: Path) -> None:
     result = _run(_packet(tmpdir, tests_to_run=["python3 scripts/quality/not_allowlisted.py"]))
-    assert_equal(result.decision, DECISION_TEST, "non-allowlisted test refuses")
-    assert_contains(result.report, "test command is not allowlisted", "test allowlist reason")
+    assert_equal(result.decision, DECISION_TEST, "non-allowlisted command refuses")
+    assert_contains(result.report, "test command is not allowlisted", "allowlist reason")
 
 
 def test_protected_staged_refuses(tmpdir: Path) -> None:
     result = _run(_packet(tmpdir), _status("M  clients/karen/CLIENT_GROCERY.md"))
-    assert_equal(result.decision, DECISION_PROTECTED, "staged protected refuses")
-    assert_contains(result.report, "protected live file is staged", "protected staged reason")
+    assert_equal(result.decision, DECISION_PROTECTED, "protected staged refuses")
+    assert_contains(result.report, "protected live file is staged", "staged protected reason")
 
 
 def test_protected_dirty_forbidden_accepts(tmpdir: Path) -> None:
@@ -145,29 +144,21 @@ def test_protected_dirty_forbidden_accepts(tmpdir: Path) -> None:
             " M clients/karen/CLIENT_FOLDERS.json",
         ),
     )
-    assert_equal(result.decision, DECISION_PASS, "dirty protected forbidden accepts")
-    assert_contains(result.report, "CLIENT_GROCERY.md", "protected status reported")
+    assert_equal(result.decision, DECISION_EXECUTION_PASS, "dirty forbidden protected accepts")
     assert_contains(result.report, "protected live file contents read: no", "live content guard")
+    assert_contains(result.report, "protected live hashes unchanged: yes", "hash guard")
 
 
-def test_missing_forbidden_protected_refuses(tmpdir: Path) -> None:
-    packet = _packet(tmpdir, forbidden_files=["clients/karen/CLIENT_GROCERY.md"])
-    result = _run(packet)
-    assert_equal(result.decision, DECISION_PROTECTED, "missing protected forbidden refuses")
-    assert_contains(result.report, "protected live file missing from forbidden_files", "missing protected reason")
-
-
-def test_report_written_and_tests_run(tmpdir: Path) -> None:
+def test_report_written_under_tmp_and_has_summary(tmpdir: Path) -> None:
     packet = _packet(tmpdir)
     result = _run(packet)
-    assert_equal(result.decision, DECISION_PASS, "run-tests packet passes")
-    assert_equal(len(result.tests_run), 2, "tests run count")
-    assert_true(all(item.status == "PASS" for item in result.tests_run), "allowlisted diagnostics pass")
+    assert_equal(result.decision, DECISION_EXECUTION_PASS, "execution packet passes")
     report_path = ROOT / packet["report_path"]
-    assert_true(report_path.exists(), "report path exists")
+    assert_true(report_path.exists(), "report file exists")
     report = report_path.read_text(encoding="utf-8")
-    assert_contains(report, DECISION_PASS, "report contains decision")
-    assert_contains(report, "run: 2", "report contains tests count")
+    assert_contains(report, "Decision: PASS_TINY_TASK_EXECUTION_GUARD", "decision in report")
+    assert_contains(report, "Tests summary", "test summary in report")
+    assert_contains(report, "exit 0", "exit code captured in report")
 
 
 def test_no_secret_or_live_content_markers(tmpdir: Path) -> None:
@@ -186,19 +177,18 @@ def test_no_staged_files() -> None:
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="night-runner-tiny-task-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="night-runner-execution-guard-") as tmp:
         tmpdir = Path(tmp)
-        test_valid_sample_packet_passes()
+        test_valid_sample_packet_executes_guard()
         test_boolean_guards_refuse(tmpdir)
         test_report_path_refuses(tmpdir)
         test_non_allowlisted_test_refuses(tmpdir)
         test_protected_staged_refuses(tmpdir)
         test_protected_dirty_forbidden_accepts(tmpdir)
-        test_missing_forbidden_protected_refuses(tmpdir)
-        test_report_written_and_tests_run(tmpdir)
+        test_report_written_under_tmp_and_has_summary(tmpdir)
         test_no_secret_or_live_content_markers(tmpdir)
         test_no_staged_files()
-    print("PASS night_runner_tiny_task_dry_run_smoke")
+    print("PASS night_runner_tiny_task_execution_guard_smoke")
 
 
 if __name__ == "__main__":

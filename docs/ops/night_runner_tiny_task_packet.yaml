@@ -1,6 +1,6 @@
-lane_id: NIGHT-RUNNER-12-SAMPLE
-task_name: Tiny safe dry-run readiness task
-task_mode: dry_run
+lane_id: NIGHT-RUNNER-13-SAMPLE
+task_name: Tiny safe diagnostic execution task
+task_mode: safe_diagnostic
 allowed_files:
 forbidden_files:
   - clients/karen/CLIENT_GROCERY.md
@@ -14,7 +14,7 @@ tests_to_run:
   - python3 scripts/quality/night_runner_docs_diagnostic_smoke.py
   - python3 scripts/quality/client_isolation_audit.py
   - git diff --check
-report_path: tmp/night_runner/tiny_task_dry_run_report.md
+report_path: tmp/night_runner/tiny_task_execution_guard_report.md
 allow_file_edits: false
 allow_commit: false
 allow_restart: false
