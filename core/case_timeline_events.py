@@ -16,6 +16,7 @@ WORKSPACE_TITLE = "Caso Finca"
 LEGAL_BOUNDARY = "Val organiza y resume; Nora/la abogada confirma efecto legal."
 PENDING_DRAFT_KEY = "pending_case_timeline_event_draft"
 STORE_PATH_KEY = "case_timeline_event_fixture_store_path"
+SQLITE_STORE_PATH_KEY = "case_timeline_event_sqlite_store_path"
 PROTECTED_LIVE_FILENAMES = {"CLIENT_GROCERY.md", "CLIENT_FOLDERS.json", "CLIENT_CASE_TIMELINE_EVENTS.json"}
 SQLITE_SCHEMA_STATEMENTS = (
     """
@@ -408,6 +409,7 @@ def render_case_timeline_event_added_summary(
     record: CaseTimelineEventRecord,
     *,
     fixture_mode: bool = True,
+    storage_label: str = "fixture/test temporal",
 ) -> str:
     lines = [
         "Tany, evento guardado en la línea de tiempo de Caso Finca.",
@@ -422,7 +424,7 @@ def render_case_timeline_event_added_summary(
         lines.extend(
             [
                 "",
-                "Modo de almacenamiento: fixture/test temporal. No toqué memoria real de Karen.",
+                f"Modo de almacenamiento: {storage_label}. No toqué memoria real de Karen.",
             ]
         )
     lines.extend(["", f"Límite legal: {LEGAL_BOUNDARY}"])
@@ -461,16 +463,26 @@ async def maybe_handle_case_timeline_event_confirmation(
     if not isinstance(pending, dict):
         return False
 
-    configured_path = store_path or chat_data.get(STORE_PATH_KEY)
-    if not configured_path:
+    sqlite_path = chat_data.get(SQLITE_STORE_PATH_KEY)
+    json_path = store_path or chat_data.get(STORE_PATH_KEY)
+    if not sqlite_path and not json_path:
         await update.message.reply_text(render_case_timeline_live_persistence_refusal(), disable_web_page_preview=True)
         return True
 
     draft = _draft_from_mapping(pending)
-    store = CaseTimelineEventJsonStore(configured_path)
-    record = store.append_from_draft(draft)
+    if sqlite_path:
+        store = CaseTimelineEventSqliteStore(sqlite_path)
+        record = store.insert_from_draft(draft, client_id=str(client_id or "").strip(), case_id=draft.case_id)
+        storage_label = "fixture/test SQLite temporal"
+    else:
+        store = CaseTimelineEventJsonStore(json_path)
+        record = store.append_from_draft(draft)
+        storage_label = "fixture/test temporal"
     chat_data.pop(PENDING_DRAFT_KEY, None)
-    await update.message.reply_text(render_case_timeline_event_added_summary(record, fixture_mode=True), disable_web_page_preview=True)
+    await update.message.reply_text(
+        render_case_timeline_event_added_summary(record, fixture_mode=True, storage_label=storage_label),
+        disable_web_page_preview=True,
+    )
     return True
 
 
