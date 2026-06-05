@@ -181,7 +181,16 @@ def add_folder_note(client_id: str, folder_name: str, note_text: str, *, path: P
     if stored_folder is None:
         stored_folder = folder
         store.setdefault("folders", []).append(stored_folder)
-    stored_folder.setdefault("notes", []).append(note)
+    notes = stored_folder.setdefault("notes", [])
+    for existing in notes:
+        if not isinstance(existing, dict):
+            continue
+        existing_text = re.sub(r"\s+", " ", str(existing.get("text") or "")).strip()
+        if existing_text == note["text"]:
+            duplicate = dict(existing)
+            duplicate["_duplicate"] = True
+            return stored_folder, duplicate
+    notes.append(note)
     save_folder_store(client_id, store, path=path)
     return stored_folder, note
 
@@ -330,7 +339,13 @@ async def maybe_handle_client_folder_query(update: Any, context: Any, chat_id: i
         return True
     if action == "save_note":
         folder, note = add_folder_note(runtime_client_id, fields["folder"], fields["text"], path=store_path)
-        await update.message.reply_text(f"Tany, guardé esa idea en {render_folder_label(folder)}: {_capitalize_first_visible(note['text'])}")
+        if note.get("_duplicate"):
+            await update.message.reply_text(
+                f"Tany, esa idea ya estaba guardada en {render_folder_label(folder)}: "
+                f"{_capitalize_first_visible(note['text'])}"
+            )
+        else:
+            await update.message.reply_text(f"Tany, guardé esa idea en {render_folder_label(folder)}: {_capitalize_first_visible(note['text'])}")
         return True
     if action == "contents":
         folder = get_folder(runtime_client_id, fields["folder"], path=store_path)

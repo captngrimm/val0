@@ -18,6 +18,7 @@ from core.case_workspace_qa import (  # noqa: E402
     maybe_handle_case_workspace_qa,
     render_case_qa_answer,
 )
+from core.case_workspace import maybe_handle_case_workspace_status  # noqa: E402
 from core.founder_intro import INTENT_LIMITATIONS, normalize_founder_intro_intent, render_founder_intro_response  # noqa: E402
 
 
@@ -205,6 +206,45 @@ def test_async_route_and_no_live_mutation() -> None:
     assert_true(_git_cached_live_files() == "", "live client files are not staged")
 
 
+def test_workspace_view_marks_context_for_vague_weirdness() -> None:
+    context = FakeContext()
+    workspace_update = FakeUpdate()
+    workspace_handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            workspace_update,
+            context=context,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, abre mi Caso Finca",
+        )
+    )
+    assert_true(workspace_handled, "workspace route handles active case phrase")
+    assert_true(len(workspace_update.message.replies) == 1, "workspace route sends one reply")
+    assert_true(case_qa_context_active(context), "workspace route marks active Caso Finca Q&A context")
+
+    weird_update = FakeUpdate()
+    weird_handled = asyncio.run(
+        maybe_handle_case_workspace_qa(
+            weird_update,
+            context=context,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, ves algo raro?",
+        )
+    )
+    assert_true(weird_handled, "vague weirdness phrase routes after active workspace context")
+    assert_true(len(weird_update.message.replies) == 1, "vague weirdness route sends one reply")
+    reply = weird_update.message.replies[0]
+    assert_contains(reply, "focos para revisar", "vague weirdness answer frames review focus")
+    assert_contains(reply, "Nora/la abogada confirma efecto legal", "vague weirdness answer legal boundary")
+    assert_not_contains(reply, "ID técnico del documento", "vague weirdness answer hides technical IDs")
+    assert_not_contains(reply, "vfms:", "vague weirdness answer hides VFMS IDs")
+    assert_not_contains(reply, "caso ganado", "vague weirdness avoids won claim")
+    assert_not_contains(reply, "caso perdido", "vague weirdness avoids lost claim")
+    assert_not_contains(reply, "esto prueba definitivamente", "vague weirdness avoids certainty")
+    assert_not_contains(reply, "JUZGADO PRIMERO DE CIRCUITO", "vague weirdness avoids raw OCR")
+
+
 def test_live_failure_phrases_are_protected() -> None:
     for phrase, expected, required in (
         ("Val, qué falta revisar?", "needs_review", "Falta confirmar"),
@@ -314,6 +354,7 @@ def test_bot_route_order() -> None:
 def main() -> int:
     test_question_classification_and_renderer()
     test_async_route_and_no_live_mutation()
+    test_workspace_view_marks_context_for_vague_weirdness()
     test_live_failure_phrases_are_protected()
     test_possible_contradictions_phrase_is_protected()
     test_founder_limitations_still_available()

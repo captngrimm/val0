@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 import sys
 import tempfile
@@ -144,6 +145,18 @@ def test_runtime_with_temp_store() -> None:
         assert_true(handled, "save note handled")
         assert_contains(reply, "guardé esa idea en 📁 **Libro** 📚", "save reply has book label")
         assert_contains(reply, "Primera escena con lluvia", "saved note echoed with display capitalization")
+
+        handled, reply = asyncio.run(_send("Val, guarda esta idea en Libro: primera escena con lluvia", store_path))
+        assert_true(handled, "duplicate note save handled")
+        assert_contains(reply, "ya estaba guardada en 📁 **Libro** 📚", "duplicate note reply avoids second save")
+        store = json.loads(store_path.read_text(encoding="utf-8"))
+        libro = next(folder for folder in store["folders"] if folder["slug"] == "libro")
+        matching_notes = [
+            note
+            for note in libro.get("notes", [])
+            if note.get("text") == "primera escena con lluvia"
+        ]
+        assert_true(len(matching_notes) == 1, "exact duplicate note not appended")
 
         handled, reply = asyncio.run(_send("Val, qué tengo en Libro?", store_path))
         assert_true(handled, "folder contents handled")

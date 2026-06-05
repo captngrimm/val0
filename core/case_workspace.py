@@ -664,7 +664,6 @@ def _render_ocr_backed_document_summary(doc: WorkspaceDocument, *, number: int, 
         f"Tany, revisé la lectura disponible del documento {number} de Caso Finca.",
         "",
         f"📄 {doc.title}",
-        f"ID técnico del documento: {doc.document_id or 'sin ID técnico registrado'}",
         f"Fuente de lectura: {text_source}.",
         "",
         "Lo importante:",
@@ -722,7 +721,6 @@ def render_workspace_document_number_summary(
         f"📄 {doc.title}",
         "",
         "Resumen seguro v1",
-        f"- ID técnico del documento: {doc.document_id or 'sin ID técnico registrado'}",
         f"- Estado simple: {review}.",
         f"- Lectura disponible: {availability}.",
     ]
@@ -1057,6 +1055,17 @@ async def _reply_text_chunked(update: Any, text: str, *, limit: int = 3600) -> l
     return sent
 
 
+def _mark_case_workspace_qa_context(context: Any, *, source: str) -> None:
+    if context is None:
+        return
+    try:
+        from core.case_workspace_qa import mark_case_qa_context
+
+        mark_case_qa_context(context, source=source)
+    except Exception:
+        return
+
+
 async def maybe_handle_case_workspace_status(
     update: Any,
     context: Any,
@@ -1077,4 +1086,5 @@ async def maybe_handle_case_workspace_status(
         update,
         render_workspace_view(load_caso_finca_workspace_source_labeled(), client_id=client_id, view=view),
     )
+    _mark_case_workspace_qa_context(context, source=f"case_workspace:{view}")
     return True
