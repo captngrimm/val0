@@ -1,9 +1,11 @@
-lane_id: NIGHT-RUNNER-15-SAMPLE
-task_name: Tiny non-runtime readiness ladder patch
+lane_id: NIGHT-RUNNER-16-SAMPLE
+task_name: Tiny non-runtime patch review
 task_mode: reported_patch
 allowed_files:
   - scripts/diagnostics/night_runner_readiness_summary.py
   - scripts/quality/night_runner_readiness_summary_smoke.py
+  - scripts/diagnostics/night_runner_patch_review.py
+  - scripts/quality/night_runner_patch_review_smoke.py
   - docs/ops/night_runner_tiny_task_packet.yaml
   - docs/ops/NIGHT_RUNNER_DOCS_DIAGNOSTIC.md
 forbidden_files:

@@ -45,6 +45,8 @@ The next lane can attempt another tiny non-runtime patch under the same guard af
 
 NIGHT-RUNNER-15 uses that guard for a tiny useful readiness-summary patch, still outside runtime and client data.
 
+NIGHT-RUNNER-16 adds a patch-review diagnostic so the operator can see what the first useful non-runtime patch proved before moving toward bedtime workflow packets.
+
 ## Allowed Edit Scope
 
 Allowed for this lane:
