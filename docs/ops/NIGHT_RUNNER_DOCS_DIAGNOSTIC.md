@@ -155,3 +155,7 @@ NIGHT-RUNNER-20 adds the first manual overnight-style report path. It still allo
 ## Overnight Candidate Summary
 
 NIGHT-RUNNER-21 adds the first tiny useful non-runtime overnight candidate summary. It remains non-runtime and does not allow client data edits, restarts, live writes, commits, or Codex execution.
+
+## Tiny Useful Candidate Review
+
+NIGHT-RUNNER-22 proves the first tiny useful overnight candidate can pass through reported-patch review with a reviewable docs-only change. The review must confirm changed files are allowed, protected Karen live data stays dirty-but-unstaged and untouched, runtime files remain out of scope, diagnostics pass, and no commit is performed.
