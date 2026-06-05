@@ -147,3 +147,7 @@ NIGHT-RUNNER-10 — Branch-only Tiny Docs Patch With Smoke
 ```
 
 That lane may add one docs file plus one focused smoke if explicitly scoped, but should still avoid runtime code, client data, commits, restarts, and live persistence.
+
+## Manual Overnight Trial
+
+NIGHT-RUNNER-20 adds the first manual overnight-style report path. It still allows no runtime behavior, no client data edits, no commits, no restarts, no live writes, and no Codex execution; it only proves that the polished bedtime packet can produce both the standard bedtime report and a trial-specific morning review artifact under `tmp/night_runner/`.

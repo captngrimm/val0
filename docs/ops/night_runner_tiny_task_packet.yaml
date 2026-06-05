@@ -11,6 +11,7 @@ allowed_files:
   - scripts/quality/night_runner_bedtime_packet_v2_smoke.py
   - scripts/ops/night_runner_bedtime_trial.py
   - scripts/quality/night_runner_bedtime_trial_smoke.py
+  - scripts/quality/night_runner_manual_overnight_trial_smoke.py
   - docs/ops/night_runner_tiny_task_packet.yaml
   - docs/ops/NIGHT_RUNNER_DOCS_DIAGNOSTIC.md
 forbidden_files:

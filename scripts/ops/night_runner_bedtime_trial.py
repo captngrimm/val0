@@ -40,12 +40,15 @@ ALLOWED_COMMANDS = (
     "git status --short --branch",
 )
 DECISION_PASS = "PASS_BEDTIME_TRIAL_READY"
+DECISION_MANUAL_PASS = "PASS_MANUAL_OVERNIGHT_TRIAL"
 DECISION_UNSAFE = "REFUSE_UNSAFE_PACKET"
 DECISION_PROTECTED = "REFUSE_PROTECTED_FILE_RISK"
 DECISION_REPORT = "REFUSE_REPORT_PATH"
 DECISION_TEST = "REFUSE_TEST_NOT_ALLOWLISTED"
 DECISION_FAIL_TEST = "FAIL_BEDTIME_TEST_COMMAND"
+DECISION_OVERNIGHT_FAIL_TEST = "FAIL_OVERNIGHT_TEST_COMMAND"
 NEXT_LANE = "NIGHT-RUNNER-20 - First Real Manual Overnight Trial"
+MANUAL_NEXT_LANE = "NIGHT-RUNNER-21 - First Tiny Useful Overnight Candidate"
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,8 @@ class TrialResult:
     reasons: tuple[str, ...]
     report: str
     report_written: bool
+    trial_report_path: str | None
+    trial_report_written: bool
     tests_run: tuple[CommandResult, ...]
     before: Snapshot
     after: Snapshot
@@ -322,6 +327,12 @@ def _write_report(report_path: str, report: str) -> bool:
     return True
 
 
+def _safe_trial_report_path(trial_label: str) -> str:
+    safe_label = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in trial_label)
+    safe_label = safe_label.strip("_-") or "manual_overnight_trial"
+    return f"tmp/night_runner/{safe_label}_report.md"
+
+
 def render_report(
     packet: dict[str, Any],
     decision: str,
@@ -329,6 +340,10 @@ def render_report(
     before: Snapshot,
     after: Snapshot,
     tests: tuple[CommandResult, ...],
+    *,
+    title: str = "Night Runner Bedtime Report",
+    trial_label: str | None = None,
+    next_lane: str = NEXT_LANE,
 ) -> str:
     morning = _as_list(packet.get("morning_review"))
     changed_files = [path for _code, path in _status_entries(after.status_short_branch)]
@@ -336,13 +351,18 @@ def render_report(
     protected_touched = "no" if before.protected_hashes == after.protected_hashes else "yes"
     staged_files = ", ".join(after.staged_files) if after.staged_files else "none"
     lines = [
-        "Night Runner Bedtime Report",
-        "===========================",
+        title,
+        "=" * len(title),
         "",
         "Decision",
         "--------",
         decision,
         "",
+    ]
+    if trial_label:
+        lines.extend(["Trial Label", "-----------", trial_label, ""])
+    lines.extend(
+        [
         "Task",
         "----",
         f"- lane_id: {packet.get('lane_id', '(missing)')}",
@@ -351,7 +371,8 @@ def render_report(
         f"- report_path: {packet.get('report_path', '(missing)')}",
         "",
         "Reasons:",
-    ]
+        ]
+    )
     lines.extend(f"- {reason}" for reason in reasons) if reasons else lines.append("- none")
 
     lines.extend(["", "Tests Run", "---------"])
@@ -415,7 +436,7 @@ def render_report(
             "",
             "Recommended Next Step",
             "---------------------",
-            f"- {NEXT_LANE}",
+            f"- {next_lane}",
         ]
     )
     return "\n".join(lines).rstrip() + "\n"
@@ -433,6 +454,7 @@ def evaluate_packet(
     after_status_short_branch: str | None = None,
     head: str | None = None,
     after_head: str | None = None,
+    trial_label: str | None = None,
 ) -> TrialResult:
     status = status_short_branch if status_short_branch is not None else (_git(["status", "--short", "--branch"]) or "")
     before = snapshot(status_short_branch=status, head=head)
@@ -459,13 +481,31 @@ def evaluate_packet(
     if decision == DECISION_PASS:
         _append_post_guards(before, after, packet, reasons)
     decision = _decision(reasons)
-    report = render_report(packet, decision, reasons, before, after, tests)
+    if trial_label and decision == DECISION_PASS:
+        decision = DECISION_MANUAL_PASS
+    elif trial_label and decision == DECISION_FAIL_TEST:
+        decision = DECISION_OVERNIGHT_FAIL_TEST
+    report = render_report(
+        packet,
+        decision,
+        reasons,
+        before,
+        after,
+        tests,
+        title="Night Runner Manual Overnight Trial" if trial_label else "Night Runner Bedtime Report",
+        trial_label=trial_label,
+        next_lane=MANUAL_NEXT_LANE if trial_label else NEXT_LANE,
+    )
     report_written = _write_report(str(packet.get("report_path", "")), report) if ok_report else False
+    trial_report_path = _safe_trial_report_path(trial_label) if trial_label and ok_report else None
+    trial_report_written = _write_report(trial_report_path, report) if trial_report_path else False
     return TrialResult(
         decision=decision,
         reasons=tuple(reasons),
         report=report,
         report_written=report_written,
+        trial_report_path=trial_report_path,
+        trial_report_written=trial_report_written,
         tests_run=tests,
         before=before,
         after=after,
@@ -475,19 +515,40 @@ def evaluate_packet(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a guarded Night Runner bedtime workflow v2 trial.")
     parser.add_argument("--packet", required=True, help="Path to bedtime workflow v2 packet.")
+    parser.add_argument(
+        "--trial-label",
+        default=None,
+        help="Run as a manual overnight trial and write tmp/night_runner/<label>_report.md.",
+    )
     args = parser.parse_args(argv)
     packet = load_packet(Path(args.packet))
-    result = evaluate_packet(packet)
+    result = evaluate_packet(packet, trial_label=args.trial_label)
     print(result.report, end="")
     print("")
     print("Morning Review Summary")
     print("======================")
     print(f"decision: {result.decision}")
+    passed = sum(1 for item in result.tests_run if item.status == "PASS")
+    failed = sum(1 for item in result.tests_run if item.status != "PASS")
+    changed_files = [path for _code, path in _status_entries(result.after.status_short_branch)]
+    runtime_touched = _runtime_summary(result.after.status_short_branch)
+    protected_touched = "no" if result.before.protected_hashes == result.after.protected_hashes else "yes"
     print(f"tests run: {len(result.tests_run)}")
+    print(f"tests passed: {passed}")
+    print(f"tests failed: {failed}")
     print(f"report path: {packet.get('report_path')}")
+    if result.trial_report_path:
+        print(f"trial report path: {result.trial_report_path}")
+    print("changed files: " + (", ".join(changed_files) if changed_files else "none"))
+    print(
+        "safety status: "
+        f"runtime files touched={runtime_touched}; "
+        f"protected live files touched={protected_touched}; "
+        f"staged files={len(result.after.staged_files)}"
+    )
     print("morning review options: " + ", ".join(_as_list(packet.get("morning_review"))))
-    print(f"next suggested lane: {NEXT_LANE}")
-    return 0 if result.decision == DECISION_PASS else 1
+    print(f"next suggested lane: {MANUAL_NEXT_LANE if args.trial_label else NEXT_LANE}")
+    return 0 if result.decision in {DECISION_PASS, DECISION_MANUAL_PASS} else 1
 
 
 if __name__ == "__main__":
