@@ -35,12 +35,23 @@ DOCS_DIAGNOSTIC_FILES = (
     "scripts/quality/night_runner_docs_diagnostic_smoke.py",
 )
 
+SLEEP_MODE_LADDER = (
+    ("Codex bridge discovery", "available"),
+    ("Codex no-op invocation", "available"),
+    ("Read-only planning", "available"),
+    ("Docs-only edit guard", "available"),
+    ("Tiny task dry-run", "available"),
+    ("Tiny execution guard", "available"),
+    ("Reported patch guard", "available"),
+    ("Next", "tiny non-runtime patch attempt"),
+)
+
 PROTECTED_LIVE_FILES = (
     "clients/karen/CLIENT_GROCERY.md",
     "clients/karen/CLIENT_FOLDERS.json",
 )
 
-NEXT_LANE = "NIGHT-RUNNER-12 - Branch-only Tiny Safe Task Runner Dry-Run"
+NEXT_LANE = "NIGHT-RUNNER-16 - Branch-only Tiny Non-runtime Patch Review"
 
 
 def _git(args: list[str]) -> str:
@@ -117,6 +128,9 @@ def render_summary() -> str:
 
     lines.extend(["", "Docs diagnostic smoke:"])
     lines.extend(_presence_line(path) for path in DOCS_DIAGNOSTIC_FILES)
+
+    lines.extend(["", "Sleep Mode Ladder:"])
+    lines.extend(f"- {label}: {status}" for label, status in SLEEP_MODE_LADDER)
 
     lines.extend(
         [

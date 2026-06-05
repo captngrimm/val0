@@ -43,6 +43,8 @@ This still does not allow runtime code edits, client-data edits, commits, restar
 
 The next lane can attempt another tiny non-runtime patch under the same guard after the operator reviews the report and confirms the changed-file list matches the packet.
 
+NIGHT-RUNNER-15 uses that guard for a tiny useful readiness-summary patch, still outside runtime and client data.
+
 ## Allowed Edit Scope
 
 Allowed for this lane:

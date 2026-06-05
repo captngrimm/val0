@@ -69,9 +69,13 @@ def test_summary_output(output: str) -> None:
     assert_contains(output, "No-op invocation", "no-op invocation section")
     assert_contains(output, "Read-only planning", "read-only planning section")
     assert_contains(output, "Docs diagnostic smoke", "docs diagnostic smoke section")
+    assert_contains(output, "Sleep Mode Ladder", "sleep mode ladder section")
+    assert_contains(output, "Tiny task dry-run", "tiny task dry-run ladder item")
+    assert_contains(output, "Reported patch guard", "reported patch guard ladder item")
+    assert_contains(output, "Next", "next ladder item")
     assert_contains(output, "live client file contents read: no", "live content guard")
     assert_contains(output, "auth.json/config.toml contents printed: no", "secret content guard")
-    assert_contains(output, "NIGHT-RUNNER-12", "recommended next lane")
+    assert_contains(output, "NIGHT-RUNNER-16", "recommended next lane")
     for path in PROTECTED_FILES:
         assert_contains(output, path, f"{path} status mention")
     for marker in FORBIDDEN_OUTPUT_MARKERS:
