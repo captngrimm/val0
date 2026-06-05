@@ -184,7 +184,7 @@ def classify_case_qa_question(text: str, *, case_context: bool = False) -> str |
     if _has_any(norm, ("que hago antes de hablar", "antes de hablar con la abogada", "antes de hablar con nora")):
         return "next_action"
 
-    if _has_any(norm, ("hay algo raro", "contradictorio", "contradiccion", "contradicciones")):
+    if _has_any(norm, ("hay algo raro", "ves algo raro", "algo no cuadra", "contradictorio", "contradiccion", "contradicciones")):
         return "possible_contradictions"
 
     if _has_any(norm, ("explicame lo de la finca", "palabras simples", "que sabes del caso", "que sabes de la finca", "que sabemos del caso")):

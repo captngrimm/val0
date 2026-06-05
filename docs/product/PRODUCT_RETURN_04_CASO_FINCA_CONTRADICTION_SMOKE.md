@@ -22,23 +22,14 @@ Expected behavior:
 
 ## Remaining Gap
 
-These variants are not currently supported by the existing implementation, even with active case context:
+PRODUCT-RETURN-05 adds narrow context-aware support for these variants:
 
 - `Val, ves algo raro?`
 - `Val, algo no cuadra?`
 
-Runtime changes are forbidden in this lane, so no failing smoke was added for those variants. They remain future alias work.
+They should route to `possible_contradictions` only with active Caso Finca context. Without active/explicit case context, they should not hijack generic conversation.
 
-## Recommended Next Lane
-
-`PRODUCT-RETURN-05 — Caso Finca Contextual Weirdness Alias`
-
-Add a narrow context-aware runtime alias only if approved:
-
-- active Caso Finca context + `ves algo raro?`
-- active Caso Finca context + `algo no cuadra?`
-
-Guardrails:
+## Remaining Guardrail
 
 - do not route generic weirdness questions globally,
 - keep legal boundary,
@@ -49,4 +40,4 @@ Guardrails:
 
 ## Runtime Statement
 
-No runtime behavior changed in PRODUCT-RETURN-04.
+No runtime behavior changed in PRODUCT-RETURN-04. PRODUCT-RETURN-05 is the narrow runtime alias lane for the vague variants.

@@ -244,6 +244,29 @@ def test_possible_contradictions_phrase_is_protected() -> None:
     for phrase in STALE_PHRASES:
         assert_not_contains(reply, phrase, f"contradiction answer no stale contamination {phrase}")
 
+    for vague in ("Val, ves algo raro?", "Val, algo no cuadra?"):
+        assert_true(
+            classify_case_qa_question(vague) is None,
+            f"vague contradiction phrase does not route without case context: {vague}",
+        )
+        assert_true(
+            classify_case_qa_question(vague, case_context=True) == "possible_contradictions",
+            f"vague contradiction phrase routes with case context: {vague}",
+        )
+        vague_packet = build_case_qa_packet(vague, client_id=KAREN_CLIENT_ID, case_context=True)
+        assert_true(
+            vague_packet is not None and vague_packet.question_type == "possible_contradictions",
+            f"vague contradiction packet built with context: {vague}",
+        )
+        vague_reply = render_case_qa_answer(vague_packet)
+        assert_contains(vague_reply, "focos para revisar", f"vague contradiction answer review framing: {vague}")
+        assert_contains(vague_reply, "Nora/la abogada confirma efecto legal", f"vague contradiction answer legal boundary: {vague}")
+        assert_not_contains(vague_reply, "caso ganado", f"vague contradiction avoids won claim: {vague}")
+        assert_not_contains(vague_reply, "caso perdido", f"vague contradiction avoids lost claim: {vague}")
+        assert_not_contains(vague_reply, "esto prueba definitivamente", f"vague contradiction avoids certainty: {vague}")
+        assert_not_contains(vague_reply, "vfms:", f"vague contradiction hides internal IDs: {vague}")
+        assert_not_contains(vague_reply, "JUZGADO PRIMERO DE CIRCUITO", f"vague contradiction avoids raw OCR: {vague}")
+
 
 def test_founder_limitations_still_available() -> None:
     general = (
