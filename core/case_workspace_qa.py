@@ -82,6 +82,20 @@ def _case_context(norm: str) -> bool:
     )
 
 
+def _document_priority_alias(norm: str) -> bool:
+    return _has_any(
+        norm,
+        (
+            "cual documento deberia revisar primero",
+            "que documento deberia revisar primero",
+            "cual documento reviso primero",
+            "que documento reviso primero",
+            "documento revisar primero",
+            "documento reviso primero",
+        ),
+    )
+
+
 def _word_number_to_int(token: str) -> int:
     value = _strip_accents(token).lower().strip()
     if value.isdigit():
@@ -145,7 +159,8 @@ def mark_case_qa_context(context: Any, *, source: str = "case_workspace_qa") -> 
 
 def classify_case_qa_question(text: str, *, case_context: bool = False) -> str | None:
     norm = normalize_case_qa_text(text)
-    if not norm or (not _case_context(norm) and not case_context):
+    has_document_priority_alias = _document_priority_alias(norm)
+    if not norm or (not _case_context(norm) and not case_context and not has_document_priority_alias):
         return None
 
     if _has_any(norm, ("abre ", "muestrame documentos", "mostrar documentos", "ensename los papeles", "resume el documento")):
@@ -154,7 +169,7 @@ def classify_case_qa_question(text: str, *, case_context: bool = False) -> str |
     if extract_case_qa_document_number(text) and _has_any(norm, ("por que importa", "porque importa", "que significa", "que dice")):
         return "document_explanation"
 
-    if _has_any(norm, ("cual documento deberia revisar primero", "que documento deberia revisar primero", "documento revisar primero")):
+    if has_document_priority_alias:
         return "document_priority"
 
     if _has_any(norm, ("que sabemos seguro", "que falta confirmar", "seguro y que falta")):
