@@ -17,10 +17,21 @@ It proves a tiny branch-only docs-only edit can be made, reviewed, and verified 
 ## What This Lane Does Not Prove
 
 - It does not prove Codex can safely edit runtime code.
+- It does not prove runtime/code edits are safe.
 - It does not prove Night Runner can commit or push.
 - It does not prove Night Runner can restart production.
 - It does not prove any live database or Telegram workflow is safe to change.
 - It does not permit access to OAuth, token, systemd, `/etc/val0`, or secret contents.
+
+## Tiny Docs Patch With Smoke
+
+NIGHT-RUNNER-10 proves Codex can make a controlled docs-only edit and add a focused smoke in the same branch-only lane.
+
+The smoke verifies this document keeps the required guardrail language, including docs-only scope, no runtime behavior, protected live-file references, and the warning that this still does not prove runtime/code edits are safe.
+
+This lane still does not prove runtime/code edits are safe. It only proves that a small docs patch plus a smoke can be reviewed without touching runtime behavior, protected client data, live databases, services, or secrets.
+
+The next lane should be a tiny safe branch task only after this docs-plus-smoke pattern passes and the operator confirms no protected live files were staged or changed.
 
 ## Allowed Edit Scope
 
