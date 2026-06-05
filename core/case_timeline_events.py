@@ -603,6 +603,16 @@ def timeline_event_date_label(record: CaseTimelineEventRecord) -> str:
     return record.event_date
 
 
+def timeline_event_precision_label(record: CaseTimelineEventRecord) -> str:
+    if record.event_date_precision == "exact":
+        return "fecha exacta"
+    if record.event_date_precision == "month_only":
+        return "mes y año"
+    if record.event_date_precision == "year_only":
+        return "solo año"
+    return "fecha pendiente"
+
+
 def render_timeline_event_records_for_user(records: list[CaseTimelineEventRecord] | tuple[CaseTimelineEventRecord, ...]) -> str:
     active = sorted_timeline_event_records(records)
     known = [record for record in active if record.event_date_precision != "unknown" and record.event_date]
@@ -622,6 +632,66 @@ def render_timeline_event_records_for_user(records: list[CaseTimelineEventRecord
         lines.append("")
     lines.append(f"Límite legal: {LEGAL_BOUNDARY}")
     return "\n".join(lines).strip()
+
+
+def render_sqlite_timeline_events_for_user(
+    records: list[CaseTimelineEventRecord] | tuple[CaseTimelineEventRecord, ...],
+    *,
+    include_deleted: bool = False,
+) -> str:
+    active = sorted_timeline_event_records(records)
+    known = [record for record in active if record.event_date_precision != "unknown" and record.event_date]
+    pending = [record for record in active if record.event_date_precision == "unknown" or not record.event_date]
+    deleted = [record for record in records if include_deleted and record.deleted_at]
+    lines = [
+        "🧭 Línea de tiempo de Caso Finca",
+        "Fuente: SQLite fixture/test temporal.",
+        "",
+    ]
+
+    if known:
+        lines.append("Eventos con fecha")
+        for idx, record in enumerate(known, start=1):
+            lines.append(
+                f"{idx}. {timeline_event_date_label(record)} ({timeline_event_precision_label(record)}) · {record.title}"
+            )
+            lines.append(f"   Estado: {_status_label(record.confirmation_status)}")
+            lines.append(f"   Fuente: {_source_label_for_record(record)}")
+        lines.append("")
+
+    if pending:
+        lines.append("Fecha pendiente")
+        for idx, record in enumerate(pending, start=1):
+            lines.append(f"{idx}. {record.title} ({timeline_event_precision_label(record)})")
+            lines.append(f"   Estado: {_status_label(record.confirmation_status)}")
+            lines.append(f"   Fuente: {_source_label_for_record(record)}")
+        lines.append("")
+
+    if include_deleted and deleted:
+        lines.append("Eliminados / ocultos")
+        for idx, record in enumerate(deleted, start=1):
+            lines.append(f"{idx}. {record.title} · eliminado en {record.deleted_at or 'fecha no registrada'}")
+        lines.append("")
+
+    if not known and not pending and not deleted:
+        lines.append("Todavía no hay eventos guardados en esta línea de tiempo temporal.")
+        lines.append("")
+
+    lines.append("Efecto legal: desconocido; Nora/la abogada confirma efecto legal.")
+    lines.append(f"Límite legal: {LEGAL_BOUNDARY}")
+    return "\n".join(lines).strip()
+
+
+def render_sqlite_timeline_for_case(
+    db_path: str | Path,
+    *,
+    client_id: str,
+    case_id: str,
+    include_deleted: bool = False,
+) -> str:
+    store = CaseTimelineEventSqliteStore(db_path)
+    records = store.list_events_sorted(client_id=client_id, case_id=case_id, include_deleted=include_deleted)
+    return render_sqlite_timeline_events_for_user(records, include_deleted=include_deleted)
 
 
 class CaseTimelineEventJsonStore:
