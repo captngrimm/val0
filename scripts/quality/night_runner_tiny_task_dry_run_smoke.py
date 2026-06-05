@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.ops.night_runner_tiny_task_dry_run import (  # noqa: E402
     DECISION_EXECUTION_PASS,
+    DECISION_PATCH_PASS,
     DECISION_PASS,
     DECISION_PROTECTED,
     DECISION_REPORT,
@@ -105,7 +106,7 @@ def _git_cached_names() -> list[str]:
 def test_valid_sample_packet_passes() -> None:
     packet = load_packet(ROOT / "docs" / "ops" / "night_runner_tiny_task_packet.yaml")
     result = evaluate_packet(packet, branch=BRANCH, head="abc1234")
-    assert_equal(result.decision, DECISION_EXECUTION_PASS, "sample packet decision")
+    assert_equal(result.decision, DECISION_PATCH_PASS, "sample packet decision")
     assert_true(result.report_written, "sample packet writes report")
     assert_contains(result.report, "Night Runner Tiny Task Execution Guard Report", "report title")
     assert_contains(result.report, "Tests summary", "tests summary")

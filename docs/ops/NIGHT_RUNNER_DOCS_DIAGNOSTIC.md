@@ -33,6 +33,16 @@ This lane still does not prove runtime/code edits are safe. It only proves that 
 
 The next lane should be a tiny safe branch task only after this docs-plus-smoke pattern passes and the operator confirms no protected live files were staged or changed.
 
+## Reported Patch Guard
+
+NIGHT-RUNNER-14 proves the tiny task runner records exactly what changed during a branch-only patch lane and compares that list with the packet's `allowed_files`.
+
+The guard treats any changed forbidden file as a refusal, keeps runtime/client/live data edits out of scope, and verifies protected live files remain unstaged and hash-unchanged.
+
+This still does not allow runtime code edits, client-data edits, commits, restarts, live writes, database migrations, or secret inspection. It only proves that a tiny non-runtime patch can be reported and checked against an explicit allowlist.
+
+The next lane can attempt another tiny non-runtime patch under the same guard after the operator reviews the report and confirms the changed-file list matches the packet.
+
 ## Allowed Edit Scope
 
 Allowed for this lane:

@@ -1,7 +1,13 @@
-lane_id: NIGHT-RUNNER-13-SAMPLE
-task_name: Tiny safe diagnostic execution task
-task_mode: safe_diagnostic
+lane_id: NIGHT-RUNNER-14-SAMPLE
+task_name: Tiny reported patch guard task
+task_mode: reported_patch
 allowed_files:
+  - scripts/ops/night_runner_tiny_task_dry_run.py
+  - scripts/quality/night_runner_tiny_task_execution_guard_smoke.py
+  - scripts/quality/night_runner_tiny_task_dry_run_smoke.py
+  - scripts/quality/night_runner_reported_patch_guard_smoke.py
+  - docs/ops/night_runner_tiny_task_packet.yaml
+  - docs/ops/NIGHT_RUNNER_DOCS_DIAGNOSTIC.md
 forbidden_files:
   - clients/karen/CLIENT_GROCERY.md
   - clients/karen/CLIENT_FOLDERS.json

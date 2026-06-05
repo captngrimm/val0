@@ -36,15 +36,19 @@ ALLOWED_TEST_COMMANDS = (
     "git diff --check",
     "git status --short --branch",
 )
-VALID_TASK_MODES = {"dry_run", "safe_diagnostic", "dry_run_with_tests"}
-EXECUTION_TASK_MODES = {"safe_diagnostic", "dry_run_with_tests"}
+VALID_TASK_MODES = {"dry_run", "safe_diagnostic", "dry_run_with_tests", "reported_patch"}
+EXECUTION_TASK_MODES = {"safe_diagnostic", "dry_run_with_tests", "reported_patch"}
+PATCH_TASK_MODES = {"reported_patch"}
 DECISION_PASS = "PASS_TINY_TASK_DRY_RUN_READY"
 DECISION_EXECUTION_PASS = "PASS_TINY_TASK_EXECUTION_GUARD"
+DECISION_PATCH_PASS = "PASS_TINY_REPORTED_PATCH_GUARD"
 DECISION_UNSAFE = "REFUSE_UNSAFE_PACKET"
 DECISION_PROTECTED = "REFUSE_PROTECTED_FILE_RISK"
 DECISION_REPORT = "REFUSE_REPORT_PATH"
 DECISION_TEST = "REFUSE_TEST_NOT_ALLOWLISTED"
 DECISION_FAIL_TEST = "FAIL_SAFE_TEST_COMMAND"
+DECISION_FORBIDDEN_CHANGED = "REFUSE_CHANGED_FORBIDDEN_FILE"
+DECISION_RUNTIME_CHANGED = "REFUSE_CHANGED_RUNTIME_FILE"
 
 
 @dataclass(frozen=True)
@@ -274,6 +278,57 @@ def _append_file_scope_guards(
                 reasons.append(f"allowed_files includes forbidden file: {allowed}")
 
 
+def changed_files_from_status(status_short_branch: str) -> tuple[str, ...]:
+    return tuple(path for _code, path in _status_entries(status_short_branch))
+
+
+def _is_runtime_file(path: str) -> bool:
+    return path == "bot.py" or path.startswith("core/")
+
+
+def _is_report_path(path: str, report_path: str) -> bool:
+    if not report_path:
+        return False
+    report = Path(report_path)
+    if report.is_absolute():
+        return False
+    report_posix = report.as_posix()
+    return path == report_posix or _path_matches(path, "tmp/night_runner")
+
+
+def _path_allowed_by(path: str, allowed_files: list[str]) -> bool:
+    return any(_path_matches(path, allowed) for allowed in allowed_files)
+
+
+def _append_reported_patch_guards(
+    *,
+    after_status_short_branch: str,
+    allowed_files: list[str],
+    forbidden_files: list[str],
+    report_path: str,
+    reasons: list[str],
+) -> None:
+    for code, path in _status_entries(after_status_short_branch):
+        if _is_staged(code):
+            reasons.append(f"staged changes are not allowed: {path}")
+        if _is_report_path(path, report_path):
+            continue
+        if path in PROTECTED_LIVE_FILES:
+            if _is_staged(code):
+                reasons.append(f"protected live file is staged: {path}")
+            continue
+        if _is_runtime_file(path):
+            reasons.append(f"changed runtime file is not allowed: {path}")
+            continue
+        for forbidden in forbidden_files:
+            if _path_matches(path, forbidden):
+                reasons.append(f"changed forbidden file is not allowed: {path}")
+                break
+        else:
+            if not _path_allowed_by(path, allowed_files):
+                reasons.append(f"changed file is outside allowed_files: {path}")
+
+
 def _append_test_guards(tests_to_run: list[str], reasons: list[str]) -> None:
     for command in tests_to_run:
         if command not in ALLOWED_TEST_COMMANDS:
@@ -283,6 +338,10 @@ def _append_test_guards(tests_to_run: list[str], reasons: list[str]) -> None:
 def _classify_decision(reasons: list[str]) -> str:
     if not reasons:
         return DECISION_PASS
+    if any("changed runtime file" in reason for reason in reasons):
+        return DECISION_RUNTIME_CHANGED
+    if any("changed forbidden file" in reason or "outside allowed_files" in reason for reason in reasons):
+        return DECISION_FORBIDDEN_CHANGED
     if any("report_path" in reason for reason in reasons):
         return DECISION_REPORT
     if any("protected live file" in reason or "staged changes" in reason for reason in reasons):
@@ -354,6 +413,7 @@ def render_report(
     after: SafetySnapshot | None = None,
 ) -> str:
     tests_to_run = _as_list(packet.get("tests_to_run"))
+    changed_files = changed_files_from_status(after.status_short_branch if after else status_short_branch)
     lines = [
         "Night Runner Tiny Task Execution Guard Report",
         "=============================================",
@@ -408,6 +468,12 @@ def render_report(
     else:
         lines.append("- none")
 
+    lines.extend(["", "Changed files summary:"])
+    if changed_files:
+        lines.extend(f"- {path}" for path in changed_files)
+    else:
+        lines.append("- none")
+
     lines.extend(
         [
             "",
@@ -418,7 +484,11 @@ def render_report(
             f"- runtime files touched: {_runtime_touched_summary(after)}",
             "",
             "Git status:",
-            *[f"  {line}" for line in status_short_branch.splitlines()],
+        ]
+    )
+    lines.extend(f"  {line}" for line in status_short_branch.splitlines())
+    lines.extend(
+        [
             "",
             "Next morning action:",
             "- Review this report, confirm no protected data was touched, then choose the next branch-only lane.",
@@ -452,8 +522,10 @@ def evaluate_packet(
     packet: dict[str, Any],
     *,
     status_short_branch: str | None = None,
+    after_status_short_branch: str | None = None,
     branch: str | None = None,
     head: str | None = None,
+    after_head: str | None = None,
 ) -> TinyTaskResult:
     status = status_short_branch if status_short_branch is not None else current_git_status()
     actual_branch = branch if branch is not None else current_branch()
@@ -489,14 +561,26 @@ def evaluate_packet(
                 reasons.append(f"safe diagnostic failed: {item.command} exited {item.exit_code}")
 
     after = safety_snapshot(
-        status_short_branch=status if status_short_branch is not None else None,
-        head=actual_head if head is not None else None,
+        status_short_branch=after_status_short_branch
+        if after_status_short_branch is not None
+        else (status if status_short_branch is not None else None),
+        head=after_head if after_head is not None else (actual_head if head is not None else None),
     )
     if decision == DECISION_PASS:
         _append_post_run_guards(before, after, reasons)
+        if packet.get("task_mode") in PATCH_TASK_MODES:
+            _append_reported_patch_guards(
+                after_status_short_branch=after.status_short_branch,
+                allowed_files=allowed_files,
+                forbidden_files=forbidden_files,
+                report_path=report_path,
+                reasons=reasons,
+            )
 
     if reasons:
         decision = _classify_decision(reasons)
+    elif packet.get("task_mode") in PATCH_TASK_MODES:
+        decision = DECISION_PATCH_PASS
     elif packet.get("task_mode") in EXECUTION_TASK_MODES and run_tests:
         decision = DECISION_EXECUTION_PASS
 
@@ -530,7 +614,8 @@ def main(argv: list[str] | None = None) -> int:
     packet = load_packet(Path(args.packet))
     result = evaluate_packet(packet)
     print(result.report, end="")
-    return 0 if result.decision == DECISION_PASS else 1
+    pass_decisions = {DECISION_PASS, DECISION_EXECUTION_PASS, DECISION_PATCH_PASS}
+    return 0 if result.decision in pass_decisions else 1
 
 
 if __name__ == "__main__":
