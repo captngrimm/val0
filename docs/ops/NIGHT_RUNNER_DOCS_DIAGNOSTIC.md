@@ -163,3 +163,7 @@ NIGHT-RUNNER-22 proves the first tiny useful overnight candidate can pass throug
 ## Dedicated Report Artifact
 
 NIGHT-RUNNER-23 requires a dedicated report artifact under `tmp/night_runner/` for the tiny candidate review. The artifact should state the lane id, candidate chosen, changed files, protected live-data status from git metadata only, tests run, pass/fail result, limitations, suggested commit message, and that no commit was performed.
+
+## Controlled Codex Attempt Guard
+
+NIGHT-RUNNER-24 documents the guard conditions required before any future controlled one-lane Codex execution can be enabled. It does not execute Codex, does not weaken the current dry-run wrapper refusal, and keeps commits, restarts, runtime edits, live writes, and client data out of scope.

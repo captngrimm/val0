@@ -14,6 +14,7 @@ allowed_files:
   - scripts/quality/night_runner_manual_overnight_trial_smoke.py
   - scripts/diagnostics/night_runner_overnight_candidate_summary.py
   - scripts/quality/night_runner_overnight_candidate_summary_smoke.py
+  - docs/ops/NIGHT_RUNNER_CONTROLLED_CODEX_ATTEMPT_V1.md
   - docs/ops/night_runner_tiny_task_packet.yaml
   - docs/ops/NIGHT_RUNNER_DOCS_DIAGNOSTIC.md
 forbidden_files:
