@@ -23,9 +23,11 @@ from core.case_workspace import (  # noqa: E402
     render_workspace_timeline_gaps_section,
     render_workspace_timeline_section,
 )
+from core.founder_intro import INTENT_LIMITATIONS, normalize_founder_intro_intent, render_founder_intro_response  # noqa: E402
 
 
 STALE_PHRASES = ("bajar de peso", "task_high", "memoria pura")
+FOUNDER_LIMITATION_PHRASES = ("memoria mágica", "no debe prometer")
 LIVE_FILE = ROOT / "clients" / "karen" / "CLIENT_GROCERY.md"
 KAREN_CLIENT_ID = "kar" + "en"
 
@@ -399,6 +401,8 @@ def test_async_route_and_no_live_file_mutation() -> None:
     )
     assert_true(handled, "timeline gaps route handled")
     assert_contains(timeline_gaps_update.message.replies[0], "Huecos / falta fecha", "timeline gaps route rendered")
+    for phrase in FOUNDER_LIMITATION_PHRASES:
+        assert_not_contains(timeline_gaps_update.message.replies[0], phrase, "timeline gaps avoids founder limitations copy")
 
     full_update = FakeUpdate()
     handled = asyncio.run(
@@ -425,6 +429,15 @@ def test_bot_route_order() -> None:
     assert_true(nora_idx < 0 or workspace_idx < nora_idx, "workspace beats Nora prep gate")
     assert_true(facts_idx < 0 or workspace_idx < facts_idx, "workspace beats case facts gate")
     assert_true(status_idx < 0 or workspace_idx < status_idx, "workspace beats case status gate")
+    assert_contains(source, "falta ordenar por fecha", "founder exclusion protects timeline date-gap alias")
+    assert_contains(source, "eventos faltan confirmar", "founder exclusion protects event confirmation alias")
+
+
+def test_founder_limitations_still_available() -> None:
+    phrase = "Val, qué no puedes hacer todavía?"
+    assert_true(normalize_founder_intro_intent(phrase) == INTENT_LIMITATIONS, "generic limitations prompt still recognized")
+    reply = render_founder_intro_response(INTENT_LIMITATIONS)
+    assert_contains(reply, "no debe prometer", "founder limitations copy remains available")
 
 
 def main() -> int:
@@ -432,6 +445,7 @@ def main() -> int:
     test_renderer_shape_and_safety()
     test_async_route_and_no_live_file_mutation()
     test_bot_route_order()
+    test_founder_limitations_still_available()
     print("PASS: Caso Finca read-only workspace smoke passed.")
     return 0
 
