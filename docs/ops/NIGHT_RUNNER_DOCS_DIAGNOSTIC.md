@@ -151,3 +151,7 @@ That lane may add one docs file plus one focused smoke if explicitly scoped, but
 ## Manual Overnight Trial
 
 NIGHT-RUNNER-20 adds the first manual overnight-style report path. It still allows no runtime behavior, no client data edits, no commits, no restarts, no live writes, and no Codex execution; it only proves that the polished bedtime packet can produce both the standard bedtime report and a trial-specific morning review artifact under `tmp/night_runner/`.
+
+## Overnight Candidate Summary
+
+NIGHT-RUNNER-21 adds the first tiny useful non-runtime overnight candidate summary. It remains non-runtime and does not allow client data edits, restarts, live writes, commits, or Codex execution.
