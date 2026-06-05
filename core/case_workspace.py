@@ -291,6 +291,33 @@ def detect_case_workspace_view(text: str) -> str | None:
     if any(marker in norm for marker in full_markers):
         return "full"
 
+    timeline_markers = (
+        "linea de tiempo",
+        "línea de tiempo",
+        "eventos tengo registrados",
+        "eventos registrados",
+        "que paso primero",
+        "qué pasó primero",
+        "cronologia",
+        "cronología",
+    )
+    if has_case_context and any(marker in norm for marker in timeline_markers):
+        return "timeline"
+
+    timeline_gap_markers = (
+        "falta ordenar por fecha",
+        "falta ordenar fechas",
+        "eventos faltan confirmar",
+        "eventos falta confirmar",
+        "fechas faltan confirmar",
+        "huecos de fecha",
+        "falta fecha",
+    )
+    if has_case_context and any(marker in norm for marker in timeline_gap_markers):
+        return "timeline_gaps"
+    if "falta ordenar por fecha" in norm:
+        return "timeline_gaps"
+
     doc_context = "document" in norm or "papel" in norm or "papeles" in norm
 
     if has_case_context and doc_context and any(marker in norm for marker in ("detalle", "detalles", "tecnico", "tecnicos")):
@@ -762,7 +789,8 @@ def render_workspace_compact_status(case: WorkspaceCase = CASO_FINCA_WORKSPACE, 
         '1. "Val, muéstrame documentos del Caso Finca"',
         '2. "Val, muéstrame preguntas para Nora"',
         '3. "Val, muéstrame pendientes del Caso Finca"',
-        '4. "Val, muéstrame todo el Caso Finca"',
+        '4. "Val, muéstrame la línea de tiempo del Caso Finca"',
+        '5. "Val, muéstrame todo el Caso Finca"',
     ]
     return _clean_output("\n".join(lines))
 
@@ -831,6 +859,92 @@ def render_workspace_pending_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE,
     return _clean_output("\n".join(lines))
 
 
+def _record_event_date_label(record: WorkspaceRecord) -> str:
+    for value in (record.source.created_at, record.source.observed_at):
+        if str(value or "").strip():
+            return f"fecha pendiente; registrado en Val: {str(value).strip()}"
+    return "fecha pendiente"
+
+
+def _timeline_event_status(record: WorkspaceRecord) -> str:
+    status = _friendly_status(record.source.status)
+    confidence = _friendly_confidence(record.source.confidence)
+    return f"estado: {status}; confianza: {confidence}"
+
+
+def render_workspace_timeline_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
+    lines = [
+        f"Tany, esta es la línea de tiempo que tengo para {case.title}. Es lectura de trabajo: no estoy creando ni cambiando eventos.",
+        "",
+        "🧭 Línea de tiempo",
+        "",
+        "Eventos confirmados en Val",
+    ]
+    if case.timeline_events:
+        for idx, record in enumerate(case.timeline_events, start=1):
+            lines.append(f"{idx}. {_record_event_date_label(record)} · {record.text}")
+            lines.append(f"   - {_timeline_event_status(record)}")
+    else:
+        lines.append("1. No tengo eventos fuente-etiquetados todavía.")
+
+    lines.extend(["", "Eventos por confirmar"])
+    if case.timeline_events:
+        lines.append("1. Confirmar con Nora qué eventos/documentos tienen efecto legal vigente y cuáles son solo antecedentes.")
+    else:
+        lines.append("1. Falta convertir documentos/notas en eventos con fecha verificable.")
+
+    lines.extend(
+        [
+            "",
+            "Huecos / falta fecha",
+            "1. Ordenar documentos por fecha real del documento, fecha de presentación y fecha de inscripción si aplica.",
+            "2. Separar fecha del evento legal de la fecha en que Val detectó o registró el documento.",
+            "",
+            "Preguntas para Nora",
+            '1. "¿Cuál es el orden correcto de estos documentos y actuaciones?"',
+            '2. "¿Qué fecha manda legalmente: auto, oficio, registro o inscripción?"',
+            "",
+            "Próximo paso sugerido",
+            '1. "Val, muéstrame documentos del Caso Finca" para escoger qué documento ordenar primero.',
+            "",
+            "Límite legal: Val organiza y resume; Nora/la abogada confirma efecto legal.",
+        ]
+    )
+    return _clean_output("\n".join(lines))
+
+
+def render_workspace_timeline_gaps_section(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None) -> str:
+    lines = [
+        f"Tany, esto es lo que falta ordenar por fecha en {case.title}. Lo mantengo separado para no venderte seguridad falsa con moñito.",
+        "",
+        "Huecos / falta fecha",
+        "1. Fecha exacta de cada auto, oficio o actuación importante.",
+        "2. Fecha en que cada documento empezó a tener efecto, si tuvo alguno.",
+        "3. Qué documento es el más reciente y si cambia lo anterior.",
+        "",
+        "Eventos por confirmar",
+    ]
+    if case.timeline_events:
+        for idx, record in enumerate(case.timeline_events, start=1):
+            lines.append(f"{idx}. {record.text} ({_record_event_date_label(record)}; {_timeline_event_status(record)})")
+    else:
+        lines.append("1. No tengo eventos confirmados en Val todavía.")
+    lines.extend(
+        [
+            "",
+            "Preguntas para Nora",
+            '1. "¿Qué fecha debo usar como referencia principal para explicar el caso?"',
+            '2. "¿Hay algún documento más reciente que cambie el orden de los hechos?"',
+            "",
+            "Próximo paso sugerido",
+            '1. "Val, muéstrame la línea de tiempo del Caso Finca"',
+            "",
+            "Límite legal: Val organiza y resume; Nora/la abogada confirma efecto legal.",
+        ]
+    )
+    return _clean_output("\n".join(lines))
+
+
 def render_workspace_view(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_id: str | None = None, view: str = "compact") -> str:
     if view.startswith("document_summary:"):
         try:
@@ -848,6 +962,10 @@ def render_workspace_view(case: WorkspaceCase = CASO_FINCA_WORKSPACE, *, client_
         return render_workspace_questions_section(case, client_id=client_id)
     if view == "pending":
         return render_workspace_pending_section(case, client_id=client_id)
+    if view == "timeline":
+        return render_workspace_timeline_section(case, client_id=client_id)
+    if view == "timeline_gaps":
+        return render_workspace_timeline_gaps_section(case, client_id=client_id)
     return render_workspace_compact_status(case, client_id=client_id)
 
 

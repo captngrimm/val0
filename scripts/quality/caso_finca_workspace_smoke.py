@@ -20,6 +20,8 @@ from core.case_workspace import (  # noqa: E402
     render_workspace_compact_status,
     render_workspace_document_number_summary,
     render_workspace_status,
+    render_workspace_timeline_gaps_section,
+    render_workspace_timeline_section,
 )
 
 
@@ -74,6 +76,11 @@ def test_phrase_detection() -> None:
         "Val, enséñame los papeles de la finca",
         "Val, muéstrame preguntas para Nora",
         "Val, muéstrame pendientes del Caso Finca",
+        "Val, muéstrame la línea de tiempo del Caso Finca",
+        "Val, qué eventos tengo registrados del Caso Finca?",
+        "Val, qué pasó primero en el Caso Finca?",
+        "Val, qué falta ordenar por fecha?",
+        "Val, qué eventos faltan confirmar del Caso Finca?",
         "Val, muéstrame todo el Caso Finca",
         "Val, muéstrame detalles técnicos de los documentos del Caso Finca",
         "Val, resume el documento 1",
@@ -92,6 +99,11 @@ def test_phrase_detection() -> None:
     )
     assert_true(detect_case_workspace_view("Val, muéstrame preguntas para Nora") == "questions", "questions view selected")
     assert_true(detect_case_workspace_view("Val, muéstrame pendientes del Caso Finca") == "pending", "pending view selected")
+    assert_true(detect_case_workspace_view("Val, muéstrame la línea de tiempo del Caso Finca") == "timeline", "timeline view selected")
+    assert_true(detect_case_workspace_view("Val, qué eventos tengo registrados del Caso Finca?") == "timeline", "events view selected")
+    assert_true(detect_case_workspace_view("Val, qué pasó primero en el Caso Finca?") == "timeline", "first event view selected")
+    assert_true(detect_case_workspace_view("Val, qué falta ordenar por fecha?") == "timeline_gaps", "timeline gaps view selected")
+    assert_true(detect_case_workspace_view("Val, qué eventos faltan confirmar del Caso Finca?") == "timeline_gaps", "timeline event confirmation gaps selected")
     assert_true(detect_case_workspace_view("Val, muéstrame todo el Caso Finca") == "full", "full view selected")
     assert_true(detect_case_workspace_view("Val, resume el documento 1") == "document_summary", "document number summary selected")
     assert_true(detect_case_workspace_view("Val, dime qué dice el primer documento") == "document_summary", "natural first document summary selected")
@@ -117,6 +129,7 @@ def test_renderer_shape_and_safety() -> None:
     assert_contains(compact, "Uno ya tiene lectura OCR disponible", "compact OCR explanation")
     assert_contains(compact, "Nora/la abogada confirma el efecto legal", "compact legal boundary")
     assert_contains(compact, '"Val, muéstrame documentos del Caso Finca"', "compact documents command")
+    assert_contains(compact, '"Val, muéstrame la línea de tiempo del Caso Finca"', "compact timeline command")
     assert_contains(compact, '"Val, muéstrame todo el Caso Finca"', "compact full command")
     assert_not_contains(compact, "ID técnico del documento", "compact avoids technical document IDs")
     assert_not_contains(compact, "Fuente:", "compact avoids detailed source labels")
@@ -176,6 +189,24 @@ def test_renderer_shape_and_safety() -> None:
     assert_contains(doc2_reply, "todavía no tengo una lectura/OCR usable", "document 2 unavailable summary copy")
     missing_reply = render_workspace_document_number_summary(case, number=99, client_id=KAREN_CLIENT_ID)
     assert_contains(missing_reply, "no encuentro el documento 99", "out-of-range graceful error")
+
+    timeline = render_workspace_timeline_section(case, client_id=KAREN_CLIENT_ID)
+    assert_contains(timeline, "🧭 Línea de tiempo", "timeline header")
+    assert_contains(timeline, "Eventos confirmados en Val", "timeline confirmed section")
+    assert_contains(timeline, "Eventos por confirmar", "timeline candidate section")
+    assert_contains(timeline, "Huecos / falta fecha", "timeline gaps section")
+    assert_contains(timeline, "Preguntas para Nora", "timeline Nora questions")
+    assert_contains(timeline, "Próximo paso sugerido", "timeline next step")
+    assert_contains(timeline, "fecha pendiente", "timeline does not invent dates")
+    assert_contains(timeline, "Nora/la abogada confirma efecto legal", "timeline legal boundary")
+    assert_not_contains(timeline, "vfms:", "timeline hides internal IDs")
+    assert_not_contains(timeline, "JUZGADO PRIMERO DE CIRCUITO", "timeline avoids raw OCR body")
+
+    timeline_gaps = render_workspace_timeline_gaps_section(case, client_id=KAREN_CLIENT_ID)
+    assert_contains(timeline_gaps, "Huecos / falta fecha", "timeline gaps header")
+    assert_contains(timeline_gaps, "Eventos por confirmar", "timeline gaps candidate section")
+    assert_contains(timeline_gaps, "Qué fecha debo usar", "timeline gaps Nora question")
+    assert_contains(timeline_gaps, "Nora/la abogada confirma efecto legal", "timeline gaps legal boundary")
 
 
 def test_async_route_and_no_live_file_mutation() -> None:
@@ -341,6 +372,33 @@ def test_async_route_and_no_live_file_mutation() -> None:
     )
     assert_true(handled, "pending section route handled")
     assert_contains(pending_update.message.replies[0], "📌 Pendientes del Caso Finca", "pending section rendered")
+
+    timeline_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            timeline_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, muéstrame la línea de tiempo del Caso Finca",
+        )
+    )
+    assert_true(handled, "timeline section route handled")
+    assert_contains(timeline_update.message.replies[0], "🧭 Línea de tiempo", "timeline route rendered")
+    assert_contains(timeline_update.message.replies[0], "fecha pendiente", "timeline route labels missing dates")
+
+    timeline_gaps_update = FakeUpdate()
+    handled = asyncio.run(
+        maybe_handle_case_workspace_status(
+            timeline_gaps_update,
+            context=None,
+            chat_id=123,
+            client_id=KAREN_CLIENT_ID,
+            text="Val, qué falta ordenar por fecha?",
+        )
+    )
+    assert_true(handled, "timeline gaps route handled")
+    assert_contains(timeline_gaps_update.message.replies[0], "Huecos / falta fecha", "timeline gaps route rendered")
 
     full_update = FakeUpdate()
     handled = asyncio.run(
