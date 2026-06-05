@@ -136,7 +136,7 @@ from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle_karen_lawyer_questions
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
-from core.case_timeline_events import maybe_handle_case_timeline_event_draft
+from core.case_timeline_events import maybe_handle_case_timeline_event_confirmation, maybe_handle_case_timeline_event_draft
 from core.case_workspace import detect_case_workspace_view, maybe_handle_case_workspace_status
 from core.case_workspace_qa import case_qa_context_active, classify_case_qa_question, mark_case_qa_context, maybe_handle_case_workspace_qa
 from core.client_folders import maybe_handle_client_folder_query
@@ -16578,6 +16578,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_TASK_QUERY_HARD_GATE_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_case_timeline_event_confirmation(update, context, chat_id, client_id, text):
+            _maybe_log_intent_router_v2_actual("destructive_confirmation", "maybe_handle_case_timeline_event_confirmation", chat_id=chat_id, message_id=tg_msg_id, text=text)
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_CASE_TIMELINE_EVENT_CONFIRMATION_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_karen_gcal_create_confirmation_first(update, chat_id, text):

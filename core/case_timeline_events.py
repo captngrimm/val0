@@ -13,6 +13,7 @@ CASE_ID = "CASE:KAREN-LAND-001"
 WORKSPACE_TITLE = "Caso Finca"
 LEGAL_BOUNDARY = "Val organiza y resume; Nora/la abogada confirma efecto legal."
 PENDING_DRAFT_KEY = "pending_case_timeline_event_draft"
+STORE_PATH_KEY = "case_timeline_event_fixture_store_path"
 PROTECTED_LIVE_FILENAMES = {"CLIENT_GROCERY.md", "CLIENT_FOLDERS.json", "CLIENT_CASE_TIMELINE_EVENTS.json"}
 
 SPANISH_MONTHS = {
@@ -81,6 +82,23 @@ class CaseTimelineEventRecord:
     updated_at: str
     deleted_at: str = ""
     audit_trail: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+
+
+def _draft_from_mapping(data: dict[str, Any]) -> CaseTimelineEventDraft:
+    return CaseTimelineEventDraft(
+        case_id=str(data.get("case_id") or CASE_ID).strip(),
+        workspace_title=str(data.get("workspace_title") or WORKSPACE_TITLE).strip(),
+        title=str(data.get("title") or "Evento pendiente de describir").strip(),
+        description=str(data.get("description") or "Evento pendiente de describir").strip(),
+        event_date=str(data.get("event_date") or "").strip(),
+        event_date_precision=str(data.get("event_date_precision") or "unknown").strip(),
+        source_type=str(data.get("source_type") or "user_note").strip(),
+        source_ref=str(data.get("source_ref") or "").strip(),
+        confirmation_status=str(data.get("confirmation_status") or "pending_confirmation").strip(),
+        confidence=str(data.get("confidence") or "unknown").strip(),
+        legal_effect_status=str(data.get("legal_effect_status") or "unknown").strip(),
+        created_by=str(data.get("created_by") or "user").strip(),
+    )
 
 
 def _strip_accents(text: str) -> str:
@@ -261,6 +279,12 @@ def _source_label(draft: CaseTimelineEventDraft) -> str:
     return "nota tuya"
 
 
+def _source_label_for_record(record: CaseTimelineEventRecord) -> str:
+    if record.source_type == "document_metadata":
+        return f"referencia a {record.source_ref or 'documento registrado'}"
+    return "nota tuya"
+
+
 def render_case_timeline_event_draft_preview(draft: CaseTimelineEventDraft) -> str:
     lines = [
         "Tany, tengo este borrador de evento para Caso Finca. No lo he guardado todavía.",
@@ -314,6 +338,97 @@ async def maybe_handle_case_timeline_event_draft(
         chat_data[PENDING_DRAFT_KEY] = asdict(draft)
 
     await update.message.reply_text(render_case_timeline_event_draft_preview(draft), disable_web_page_preview=True)
+    return True
+
+
+def looks_like_timeline_event_confirmation(text: str) -> bool:
+    norm = normalize_timeline_event_text(text)
+    if not norm:
+        return False
+    confirmations = {
+        "si",
+        "si guardalo",
+        "si guardalo en caso finca",
+        "si guárdalo",
+        "si guárdalo en caso finca",
+        "dale",
+        "dale guardalo",
+        "dale guárdalo",
+        "ok",
+        "guardar",
+        "guardalo",
+        "guárdalo",
+    }
+    return norm in {normalize_timeline_event_text(item) for item in confirmations}
+
+
+def render_case_timeline_event_added_summary(
+    record: CaseTimelineEventRecord,
+    *,
+    fixture_mode: bool = True,
+) -> str:
+    lines = [
+        "Tany, evento guardado en la línea de tiempo de Caso Finca.",
+        "",
+        f"Evento guardado: {record.title}",
+        f"Fecha: {timeline_event_date_label(record)}",
+        f"Estado: {_status_label(record.confirmation_status)}",
+        f"Fuente: {_source_label_for_record(record)}",
+        "Efecto legal: desconocido; Nora/la abogada confirma.",
+    ]
+    if fixture_mode:
+        lines.extend(
+            [
+                "",
+                "Modo de almacenamiento: fixture/test temporal. No toqué memoria real de Karen.",
+            ]
+        )
+    lines.extend(["", f"Límite legal: {LEGAL_BOUNDARY}"])
+    return "\n".join(lines)
+
+
+def render_case_timeline_live_persistence_refusal() -> str:
+    return (
+        "Tany, todavía no estoy guardando eventos reales del Caso Finca.\n\n"
+        "Tengo el borrador listo, pero esta versión solo permite guardar en fixture/test temporal. "
+        "No voy a tocar memoria real de Karen todavía.\n\n"
+        f"Límite legal: {LEGAL_BOUNDARY}"
+    )
+
+
+async def maybe_handle_case_timeline_event_confirmation(
+    update: Any,
+    context: Any,
+    chat_id: int,
+    client_id: str,
+    text: str,
+    *,
+    store_path: str | Path | None = None,
+) -> bool:
+    if not update or not getattr(update, "message", None):
+        return False
+    if str(client_id or "").strip().lower() not in {"karen", "client-zero"}:
+        return False
+    if not looks_like_timeline_event_confirmation(text):
+        return False
+
+    chat_data = getattr(context, "chat_data", None)
+    if not isinstance(chat_data, dict):
+        return False
+    pending = chat_data.get(PENDING_DRAFT_KEY)
+    if not isinstance(pending, dict):
+        return False
+
+    configured_path = store_path or chat_data.get(STORE_PATH_KEY)
+    if not configured_path:
+        await update.message.reply_text(render_case_timeline_live_persistence_refusal(), disable_web_page_preview=True)
+        return True
+
+    draft = _draft_from_mapping(pending)
+    store = CaseTimelineEventJsonStore(configured_path)
+    record = store.append_from_draft(draft)
+    chat_data.pop(PENDING_DRAFT_KEY, None)
+    await update.message.reply_text(render_case_timeline_event_added_summary(record, fixture_mode=True), disable_web_page_preview=True)
     return True
 
 
