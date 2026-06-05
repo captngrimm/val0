@@ -159,3 +159,7 @@ NIGHT-RUNNER-21 adds the first tiny useful non-runtime overnight candidate summa
 ## Tiny Useful Candidate Review
 
 NIGHT-RUNNER-22 proves the first tiny useful overnight candidate can pass through reported-patch review with a reviewable docs-only change. The review must confirm changed files are allowed, protected Karen live data stays dirty-but-unstaged and untouched, runtime files remain out of scope, diagnostics pass, and no commit is performed.
+
+## Dedicated Report Artifact
+
+NIGHT-RUNNER-23 requires a dedicated report artifact under `tmp/night_runner/` for the tiny candidate review. The artifact should state the lane id, candidate chosen, changed files, protected live-data status from git metadata only, tests run, pass/fail result, limitations, suggested commit message, and that no commit was performed.
