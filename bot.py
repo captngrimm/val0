@@ -136,7 +136,7 @@ from core.karen_plan_state import karen_plan_cmd, maybe_handle_karen_plan_query
 from core.karen_lawyer_questions import karen_lawyer_questions_cmd, maybe_handle_karen_lawyer_questions
 from core.karen_case_status import karen_case_status_cmd, maybe_handle_karen_case_status
 from core.karen_lawyer_package import karen_lawyer_package_cmd, maybe_handle_karen_lawyer_package
-from core.case_workspace import maybe_handle_case_workspace_status
+from core.case_workspace import detect_case_workspace_view, maybe_handle_case_workspace_status
 from core.case_workspace_qa import case_qa_context_active, classify_case_qa_question, mark_case_qa_context, maybe_handle_case_workspace_qa
 from core.client_folders import maybe_handle_client_folder_query
 from core.karen_meeting_prep import looks_like_karen_meeting_prep_request, render_karen_meeting_prep_checklist
@@ -16804,6 +16804,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_DAILY_OPERATOR_ROUTE] failed: {e}")
+
+    try:
+        if detect_case_workspace_view(text) == "timeline_gaps":
+            if await maybe_handle_case_workspace_status(update, context, chat_id, client_id, text):
+                _maybe_log_intent_router_v2_actual("case_status", "maybe_handle_case_workspace_status:timeline_gaps", chat_id=chat_id, message_id=tg_msg_id, text=text)
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_CASE_WORKSPACE_TIMELINE_GAPS_EARLY_GATE] failed: {e}")
 
     try:
         if await maybe_handle_founder_intro_query(update, text, context):

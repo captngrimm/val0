@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -64,6 +67,52 @@ class FakeMessage:
 class FakeUpdate:
     def __init__(self) -> None:
         self.message = FakeMessage()
+
+
+def _runtime_replies(text: str) -> list[str]:
+    message_id = time.time_ns() % 1_000_000_000
+    probe = f"""
+import asyncio
+import json
+from types import SimpleNamespace
+import bot
+
+class Msg:
+    def __init__(self, text):
+        self.text = text
+        self.message_id = {message_id}
+        self.replies = []
+    async def reply_text(self, text, **_kwargs):
+        self.replies.append(text)
+        return text
+
+class Ctx:
+    def __init__(self):
+        self.chat_data = {{}}
+        self.user_data = {{}}
+
+async def main():
+    message = Msg({text!r})
+    update = SimpleNamespace(message=message, effective_chat=SimpleNamespace(id=bot.KAREN_CHAT_ID))
+    await bot.handle_text(update, Ctx())
+    print("===VAL0_RUNTIME_REPLIES===")
+    print(json.dumps(message.replies, ensure_ascii=False))
+
+asyncio.run(main())
+"""
+    proc = subprocess.run(
+        ["./scripts/val0py", "-"],
+        cwd=ROOT,
+        input=probe,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    marker = "===VAL0_RUNTIME_REPLIES==="
+    if marker not in proc.stdout:
+        raise AssertionError(f"runtime probe marker missing. stdout={proc.stdout!r} stderr={proc.stderr!r}")
+    payload = proc.stdout.split(marker, 1)[1].strip().splitlines()[0]
+    return json.loads(payload)
 
 
 def test_phrase_detection() -> None:
@@ -440,12 +489,34 @@ def test_founder_limitations_still_available() -> None:
     assert_contains(reply, "no debe prometer", "founder limitations copy remains available")
 
 
+def test_runtime_route_priority_for_date_gap_alias() -> None:
+    replies = _runtime_replies("Val, qué falta ordenar por fecha?")
+    assert_true(len(replies) == 1, "runtime date-gap route sends one reply")
+    assert_contains(replies[0], "Huecos / falta fecha", "runtime date-gap reaches timeline gaps")
+    assert_contains(replies[0], "Caso Finca", "runtime date-gap names case")
+    for phrase in FOUNDER_LIMITATION_PHRASES:
+        assert_not_contains(replies[0], phrase, "runtime date-gap avoids founder limitations")
+
+    limitation_replies = _runtime_replies("Val, qué no puedes hacer todavía?")
+    assert_true(len(limitation_replies) == 1, "runtime limitations route sends one reply")
+    assert_contains(limitation_replies[0], "no debe prometer", "runtime limitations still reaches founder copy")
+
+    limits_replies = _runtime_replies("Val, cuáles son tus límites?")
+    assert_true(len(limits_replies) == 1, "runtime limits route sends one reply")
+    assert_contains(limits_replies[0], "no debe prometer", "runtime limits still reaches founder copy")
+
+    whatnow_replies = _runtime_replies("Val, qué hago ahora?")
+    assert_true(len(whatnow_replies) == 1, "runtime whatnow route sends one reply")
+    assert_not_contains(whatnow_replies[0], "Huecos / falta fecha", "runtime whatnow avoids timeline gaps")
+
+
 def main() -> int:
     test_phrase_detection()
     test_renderer_shape_and_safety()
     test_async_route_and_no_live_file_mutation()
     test_bot_route_order()
     test_founder_limitations_still_available()
+    test_runtime_route_priority_for_date_gap_alias()
     print("PASS: Caso Finca read-only workspace smoke passed.")
     return 0
 
