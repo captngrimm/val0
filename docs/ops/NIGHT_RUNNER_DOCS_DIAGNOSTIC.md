@@ -49,6 +49,8 @@ NIGHT-RUNNER-16 adds a patch-review diagnostic so the operator can see what the 
 
 NIGHT-RUNNER-17 packages Bedtime Workflow v2 so the operator can prepare one scoped packet before sleep and review a guarded morning report without enabling runtime or live-data work.
 
+NIGHT-RUNNER-18 runs that workflow manually end to end with safe diagnostics only, producing a report while still forbidding runtime, client-data, commit, restart, and live-write actions.
+
 ## Allowed Edit Scope
 
 Allowed for this lane:

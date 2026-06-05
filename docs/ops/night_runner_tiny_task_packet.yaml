@@ -1,5 +1,5 @@
-lane_id: NIGHT-RUNNER-17-SAMPLE
-task_name: Bedtime workflow v2 packaging
+lane_id: NIGHT-RUNNER-18-SAMPLE
+task_name: Manual bedtime trial wrapper
 task_mode: reported_patch
 allowed_files:
   - scripts/diagnostics/night_runner_readiness_summary.py
@@ -9,6 +9,8 @@ allowed_files:
   - docs/ops/NIGHT_RUNNER_BEDTIME_WORKFLOW_V2.md
   - docs/ops/night_runner_bedtime_packet_v2.yaml
   - scripts/quality/night_runner_bedtime_packet_v2_smoke.py
+  - scripts/ops/night_runner_bedtime_trial.py
+  - scripts/quality/night_runner_bedtime_trial_smoke.py
   - docs/ops/night_runner_tiny_task_packet.yaml
   - docs/ops/NIGHT_RUNNER_DOCS_DIAGNOSTIC.md
 forbidden_files:
