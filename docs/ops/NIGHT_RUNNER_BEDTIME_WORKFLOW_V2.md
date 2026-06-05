@@ -63,6 +63,42 @@ Continue when the report is safe but the task needs another scoped non-runtime l
 
 Ask ValPrime when the next action is ambiguous, strategic, or touches memory/continuity decisions.
 
+## Morning Review / ValPrime Handoff
+
+Use this paste-ready shape when handing the morning report to ValPrime:
+
+```text
+Decision: approve / discard / continue / ask_valprime
+
+Lane identity:
+- lane id:
+- task name:
+- branch:
+- head:
+
+Work summary:
+- attempted:
+- files changed:
+- report artifact path:
+
+Test summary:
+- tests run:
+- pass/fail:
+- exit codes:
+
+Safety summary:
+- protected live-data status: git metadata only
+- staged files:
+- runtime/client/core touched:
+- commits allowed:
+- restarts allowed:
+- live writes allowed:
+
+Next action:
+- recommended next lane or review decision:
+- anti-drift note: after NR26, High Command must force a return-to-product decision unless explicitly approving more infrastructure.
+```
+
 ## Protected Live Files
 
 `clients/karen/CLIENT_GROCERY.md` and `clients/karen/CLIENT_FOLDERS.json` may be dirty because they are live user data. Night Runner must treat that state as protected, not as cleanup work.

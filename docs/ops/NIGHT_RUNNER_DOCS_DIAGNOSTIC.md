@@ -167,3 +167,7 @@ NIGHT-RUNNER-23 requires a dedicated report artifact under `tmp/night_runner/` f
 ## Controlled Codex Attempt Guard
 
 NIGHT-RUNNER-24 documents the guard conditions required before any future controlled one-lane Codex execution can be enabled. It does not execute Codex, does not weaken the current dry-run wrapper refusal, and keeps commits, restarts, runtime edits, live writes, and client data out of scope.
+
+## Morning Review / ValPrime Handoff
+
+NIGHT-RUNNER-25 adds a paste-ready morning handoff shape for ValPrime review. The handoff must include decision, lane identity, changed files, test results, safety status, protected live-data status from git metadata only, report artifact path, next action, and the anti-drift note that after NR26 High Command must force a return-to-product decision unless more infrastructure is explicitly approved.
