@@ -51,6 +51,8 @@ NIGHT-RUNNER-17 packages Bedtime Workflow v2 so the operator can prepare one sco
 
 NIGHT-RUNNER-18 runs that workflow manually end to end with safe diagnostics only, producing a report while still forbidding runtime, client-data, commit, restart, and live-write actions.
 
+NIGHT-RUNNER-19 polishes the bedtime report into a clearer morning-review artifact with Decision, Task, Tests Run, Changed Files, Safety Status, Protected Live Data, and Recommended Next Step sections.
+
 ## Allowed Edit Scope
 
 Allowed for this lane:

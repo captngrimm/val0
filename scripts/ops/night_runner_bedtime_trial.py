@@ -45,7 +45,7 @@ DECISION_PROTECTED = "REFUSE_PROTECTED_FILE_RISK"
 DECISION_REPORT = "REFUSE_REPORT_PATH"
 DECISION_TEST = "REFUSE_TEST_NOT_ALLOWLISTED"
 DECISION_FAIL_TEST = "FAIL_BEDTIME_TEST_COMMAND"
-NEXT_LANE = "NIGHT-RUNNER-19 - Bedtime Report Review Polish"
+NEXT_LANE = "NIGHT-RUNNER-20 - First Real Manual Overnight Trial"
 
 
 @dataclass(frozen=True)
@@ -331,27 +331,37 @@ def render_report(
     tests: tuple[CommandResult, ...],
 ) -> str:
     morning = _as_list(packet.get("morning_review"))
+    changed_files = [path for _code, path in _status_entries(after.status_short_branch)]
+    runtime_touched = _runtime_summary(after.status_short_branch)
+    protected_touched = "no" if before.protected_hashes == after.protected_hashes else "yes"
+    staged_files = ", ".join(after.staged_files) if after.staged_files else "none"
     lines = [
-        "Night Runner Bedtime Trial Report",
-        "=================================",
+        "Night Runner Bedtime Report",
+        "===========================",
         "",
-        f"Decision: {decision}",
-        f"Lane: {packet.get('lane_id', '(missing)')}",
-        f"Task: {packet.get('task_name', '(missing)')}",
-        f"Report path: {packet.get('report_path', '(missing)')}",
+        "Decision",
+        "--------",
+        decision,
         "",
-        "Safety settings:",
-        f"- allow_file_edits: {packet.get('allow_file_edits', '(missing)')}",
-        f"- allow_commit: {packet.get('allow_commit', '(missing)')}",
-        f"- allow_restart: {packet.get('allow_restart', '(missing)')}",
-        f"- allow_live_writes: {packet.get('allow_live_writes', '(missing)')}",
-        "- protected live file contents read: no",
-        "- secret contents read: no",
+        "Task",
+        "----",
+        f"- lane_id: {packet.get('lane_id', '(missing)')}",
+        f"- task_name: {packet.get('task_name', '(missing)')}",
+        f"- task_mode: {packet.get('task_mode', '(missing)')}",
+        f"- report_path: {packet.get('report_path', '(missing)')}",
         "",
         "Reasons:",
     ]
     lines.extend(f"- {reason}" for reason in reasons) if reasons else lines.append("- none")
-    lines.extend(["", "Tests:"])
+
+    lines.extend(["", "Tests Run", "---------"])
+    requested = _as_list(packet.get("tests_to_run"))
+    if requested:
+        lines.extend(f"- {command}" for command in requested)
+    else:
+        lines.append("- none")
+
+    lines.extend(["", "Test Results / Exit Codes", "-------------------------"])
     if tests:
         lines.append(f"- run: {len(tests)}")
         lines.append(f"- pass: {sum(1 for item in tests if item.status == 'PASS')}")
@@ -360,18 +370,51 @@ def render_report(
             lines.append(f"- {item.status}: {item.command} (exit {item.exit_code})")
     else:
         lines.append("- run: 0")
-    lines.extend(["", "Morning review options:"])
+
+    lines.extend(["", "Changed Files", "-------------"])
+    if changed_files:
+        lines.extend(f"- {path}" for path in changed_files)
+    else:
+        lines.append("- none")
+
+    lines.extend(
+        [
+            "",
+            "Safety Status",
+            "-------------",
+            f"- runtime files touched: {'no' if runtime_touched == 'none' else 'yes'}",
+            f"- protected live files touched: {protected_touched}",
+            f"- staged files: {'yes' if after.staged_files else 'no'} ({staged_files})",
+            f"- commits allowed: {'yes' if packet.get('allow_commit') else 'no'}",
+            f"- restarts allowed: {'yes' if packet.get('allow_restart') else 'no'}",
+            f"- live writes allowed: {'yes' if packet.get('allow_live_writes') else 'no'}",
+            "- protected live file contents read: no",
+            "- secret contents read: no",
+            "",
+            "Protected Live Data",
+            "-------------------",
+        ]
+    )
+    for path in PROTECTED_LIVE_FILES:
+        state = "clean-or-unreported"
+        for code, status_path in _status_entries(after.status_short_branch):
+            if status_path == path:
+                state = f"reported by git status ({code})"
+        lines.append(f"- {path}: {state}; contents printed: no")
+
+    lines.extend(["", "Morning Review Options", "----------------------"])
     lines.extend(f"- {item}" for item in morning)
     lines.extend(
         [
             "",
             "Before/after safety checks:",
             f"- git head unchanged: {'yes' if before.head == after.head else 'no'}",
-            f"- staged files after run: {', '.join(after.staged_files) if after.staged_files else 'none'}",
+            f"- staged files after run: {staged_files}",
             f"- protected live hashes unchanged: {'yes' if before.protected_hashes == after.protected_hashes else 'no'}",
-            f"- runtime files touched: {_runtime_summary(after.status_short_branch)}",
+            f"- runtime files touched: {runtime_touched}",
             "",
-            "Next suggested lane:",
+            "Recommended Next Step",
+            "---------------------",
             f"- {NEXT_LANE}",
         ]
     )
