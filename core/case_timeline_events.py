@@ -18,6 +18,7 @@ PENDING_DRAFT_KEY = "pending_case_timeline_event_draft"
 STORE_PATH_KEY = "case_timeline_event_fixture_store_path"
 SQLITE_STORE_PATH_KEY = "case_timeline_event_sqlite_store_path"
 PROTECTED_LIVE_FILENAMES = {"CLIENT_GROCERY.md", "CLIENT_FOLDERS.json", "CLIENT_CASE_TIMELINE_EVENTS.json"}
+CASE_TIMELINE_SQLITE_LIVE_ENABLED = False
 SQLITE_SCHEMA_STATEMENTS = (
     """
     CREATE TABLE IF NOT EXISTS case_timeline_events (
@@ -88,6 +89,11 @@ UNCERTAINTY_MARKERS = (
     "falta confirmar",
     "pendiente de confirmar",
 )
+
+
+def is_live_timeline_sqlite_enabled() -> bool:
+    """Production timeline SQLite writes stay disabled until a reviewed enablement lane."""
+    return bool(CASE_TIMELINE_SQLITE_LIVE_ENABLED)
 
 
 @dataclass(frozen=True)
