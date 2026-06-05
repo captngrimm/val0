@@ -171,3 +171,7 @@ NIGHT-RUNNER-24 documents the guard conditions required before any future contro
 ## Morning Review / ValPrime Handoff
 
 NIGHT-RUNNER-25 adds a paste-ready morning handoff shape for ValPrime review. The handoff must include decision, lane identity, changed files, test results, safety status, protected live-data status from git metadata only, report artifact path, next action, and the anti-drift note that after NR26 High Command must force a return-to-product decision unless more infrastructure is explicitly approved.
+
+## Approve / Discard / Continue Flow
+
+NIGHT-RUNNER-26 defines the morning decisions in action terms: approve means only approved tracked files may be staged/committed; discard means remove only candidate files after confirming protected live data is excluded; continue means open another narrow lane; ask_valprime means pause for strategic or memory/roadmap review. NR26 also adds the cutoff rule that it must not automatically lead to NR27: High Command must choose return to product by default or explicitly approve more infrastructure.

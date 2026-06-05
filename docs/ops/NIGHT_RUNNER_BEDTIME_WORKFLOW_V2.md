@@ -55,13 +55,32 @@ The morning report should include:
 
 ## Morning Decisions
 
-Approve when the report shows only intended non-runtime changes, all checks passed, and protected files stayed dirty-but-unstaged.
+`approve`
 
-Discard when the report shows unintended changes, failed checks, or scope drift.
+Use when the report is safe, tests passed, and changed files match scope. Next action: the operator may stage/commit only approved tracked files.
 
-Continue when the report is safe but the task needs another scoped non-runtime lane.
+`discard`
 
-Ask ValPrime when the next action is ambiguous, strategic, or touches memory/continuity decisions.
+Use when the report shows scope drift, failed checks, forbidden files, or an unwanted patch. Next action: the operator discards only the candidate files after confirming protected live data is not included.
+
+`continue`
+
+Use when the report is safe but the task needs another scoped lane. Next action: create the next narrow packet/lane.
+
+`ask_valprime`
+
+Use when the next action is strategic, ambiguous, memory/roadmap-related, or touches the return-to-product decision. Next action: paste the handoff to ValPrime before continuing.
+
+## NR26 Anti-Drift Cutoff
+
+NR26 is not allowed to automatically lead to NR27.
+
+After NR26, High Command must choose:
+
+- return to product with Night Runner assist, preferably Caso Finca Q&A fixtures/demo readiness,
+- or explicitly approve more Night Runner infrastructure.
+
+Default recommendation: return to product.
 
 ## Morning Review / ValPrime Handoff
 
