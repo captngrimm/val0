@@ -16757,6 +16757,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception(f"[CLIENT_WORKFLOW_GUARD] failed: {e}")
 
     try:
+        if await maybe_handle_client_folder_query(update, context, chat_id, client_id, text):
+            return
+    except Exception as e:
+        logger.exception(f"[KAREN_GENERIC_FOLDER_EARLY_GATE] failed: {e}")
+
+    try:
         if await maybe_handle_karen_notes_tasks_visibility(update, context, chat_id, client_id, text):
             return
     except Exception as e:
@@ -16827,6 +16833,22 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
     except Exception as e:
         logger.exception(f"[KAREN_CASE_WORKSPACE_TIMELINE_GAPS_EARLY_GATE] failed: {e}")
+
+    try:
+        if classify_case_qa_question(text, case_context=case_qa_context_active(context)) == "possible_contradictions":
+            if await maybe_handle_case_workspace_qa(update, context, chat_id, client_id, text):
+                _maybe_log_intent_router_v2_actual("case_status", "maybe_handle_case_workspace_qa:possible_contradictions", chat_id=chat_id, message_id=tg_msg_id, text=text)
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_CASE_WORKSPACE_WEIRDNESS_EARLY_GATE] failed: {e}")
+
+    try:
+        if detect_case_workspace_view(text) == "document_summary":
+            if await maybe_handle_case_workspace_status(update, context, chat_id, client_id, text):
+                _maybe_log_intent_router_v2_actual("case_status", "maybe_handle_case_workspace_status:document_summary", chat_id=chat_id, message_id=tg_msg_id, text=text)
+                return
+    except Exception as e:
+        logger.exception(f"[KAREN_CASE_WORKSPACE_DOCUMENT_SUMMARY_EARLY_GATE] failed: {e}")
 
     try:
         if await maybe_handle_founder_intro_query(update, text, context):

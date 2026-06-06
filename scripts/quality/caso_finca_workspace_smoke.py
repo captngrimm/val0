@@ -77,6 +77,9 @@ import json
 from types import SimpleNamespace
 import bot
 
+bot.mark_processed_event_once = lambda *_args, **_kwargs: True
+bot._audit = lambda *_args, **_kwargs: None
+
 class Msg:
     def __init__(self, text):
         self.text = text
@@ -111,6 +114,59 @@ asyncio.run(main())
     marker = "===VAL0_RUNTIME_REPLIES==="
     if marker not in proc.stdout:
         raise AssertionError(f"runtime probe marker missing. stdout={proc.stdout!r} stderr={proc.stderr!r}")
+    payload = proc.stdout.split(marker, 1)[1].strip().splitlines()[0]
+    return json.loads(payload)
+
+
+def _runtime_sequence_replies(texts: list[str]) -> list[list[str]]:
+    message_id = time.time_ns() % 1_000_000_000
+    probe = f"""
+import asyncio
+import json
+from types import SimpleNamespace
+import bot
+
+bot.mark_processed_event_once = lambda *_args, **_kwargs: True
+bot._audit = lambda *_args, **_kwargs: None
+
+class Msg:
+    def __init__(self, text, message_id):
+        self.text = text
+        self.message_id = message_id
+        self.replies = []
+    async def reply_text(self, text, **_kwargs):
+        self.replies.append(text)
+        return text
+
+class Ctx:
+    def __init__(self):
+        self.chat_data = {{}}
+        self.user_data = {{}}
+
+async def main():
+    ctx = Ctx()
+    all_replies = []
+    for idx, text in enumerate({texts!r}, start=0):
+        message = Msg(text, {message_id} + idx)
+        update = SimpleNamespace(message=message, effective_chat=SimpleNamespace(id=bot.KAREN_CHAT_ID))
+        await bot.handle_text(update, ctx)
+        all_replies.append(message.replies)
+    print("===VAL0_RUNTIME_SEQUENCE_REPLIES===")
+    print(json.dumps(all_replies, ensure_ascii=False))
+
+asyncio.run(main())
+"""
+    proc = subprocess.run(
+        ["./scripts/val0py", "-"],
+        cwd=ROOT,
+        input=probe,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    marker = "===VAL0_RUNTIME_SEQUENCE_REPLIES==="
+    if marker not in proc.stdout:
+        raise AssertionError(f"runtime sequence probe marker missing. stdout={proc.stdout!r} stderr={proc.stderr!r}")
     payload = proc.stdout.split(marker, 1)[1].strip().splitlines()[0]
     return json.loads(payload)
 
@@ -513,6 +569,27 @@ def test_runtime_route_priority_for_date_gap_alias() -> None:
     assert_not_contains(whatnow_replies[0], "Huecos / falta fecha", "runtime whatnow avoids timeline gaps")
 
 
+def test_runtime_live_path_for_demo_trust_killers() -> None:
+    sequence = _runtime_sequence_replies(["Val, abre mi Caso Finca", "Val, ves algo raro?"])
+    assert_true(len(sequence) == 2, "runtime sequence has two turns")
+    assert_true(len(sequence[0]) == 1, "runtime open route sends one reply")
+    assert_true(len(sequence[1]) == 1, "runtime contextual weirdness route sends one reply")
+    weird_reply = sequence[1][0]
+    assert_contains(weird_reply, "focos para revisar", "runtime weirdness reaches bounded possible contradictions")
+    assert_contains(weird_reply, "Nora/la abogada confirma efecto legal", "runtime weirdness has legal boundary")
+    assert_not_contains(weird_reply, "ID técnico del documento", "runtime weirdness hides technical IDs")
+    assert_not_contains(weird_reply, "vfms:", "runtime weirdness hides VFMS IDs")
+    assert_not_contains(weird_reply, "caso ganado", "runtime weirdness avoids won claim")
+    assert_not_contains(weird_reply, "caso perdido", "runtime weirdness avoids lost claim")
+
+    doc_replies = _runtime_replies("Val, resume el documento 1")
+    assert_true(len(doc_replies) == 1, "runtime document summary route sends one reply")
+    assert_contains(doc_replies[0], "Lo importante:", "runtime document summary reaches workspace summary")
+    assert_contains(doc_replies[0], "Nora/la abogada confirma efecto legal", "runtime document summary legal boundary")
+    assert_not_contains(doc_replies[0], "ID técnico del documento", "runtime normal document summary hides technical ID label")
+    assert_not_contains(doc_replies[0], "vfms:", "runtime normal document summary hides VFMS ID")
+
+
 def main() -> int:
     test_phrase_detection()
     test_renderer_shape_and_safety()
@@ -520,6 +597,7 @@ def main() -> int:
     test_bot_route_order()
     test_founder_limitations_still_available()
     test_runtime_route_priority_for_date_gap_alias()
+    test_runtime_live_path_for_demo_trust_killers()
     print("PASS: Caso Finca read-only workspace smoke passed.")
     return 0
 

@@ -74,6 +74,70 @@ def _git_cached_live_files() -> str:
     return proc.stdout.strip()
 
 
+def _runtime_folder_replies_with_temp_store(store_path: Path, texts: list[str]) -> tuple[list[list[str]], dict]:
+    probe = f"""
+import asyncio
+import json
+from pathlib import Path
+from types import SimpleNamespace
+import bot
+from core.client_folders import maybe_handle_client_folder_query as folder_query
+
+store_path = Path({str(store_path)!r})
+bot.mark_processed_event_once = lambda *_args, **_kwargs: True
+bot._audit = lambda *_args, **_kwargs: None
+
+async def temp_folder_query(update, context, chat_id, client_id, text):
+    return await folder_query(update, context, chat_id, client_id, text, store_path=store_path)
+
+bot.maybe_handle_client_folder_query = temp_folder_query
+
+class Msg:
+    def __init__(self, text, message_id):
+        self.text = text
+        self.message_id = message_id
+        self.replies = []
+    async def reply_text(self, text, **_kwargs):
+        self.replies.append(text)
+        return text
+
+class Ctx:
+    def __init__(self):
+        self.chat_data = {{}}
+        self.user_data = {{}}
+
+async def main():
+    ctx = Ctx()
+    all_replies = []
+    for idx, text in enumerate({texts!r}, start=0):
+        msg = Msg(text, 910000 + idx)
+        update = SimpleNamespace(message=msg, effective_chat=SimpleNamespace(id=bot.KAREN_CHAT_ID))
+        await bot.handle_text(update, ctx)
+        all_replies.append(msg.replies)
+    payload = {{
+        "replies": all_replies,
+        "store": json.loads(store_path.read_text(encoding="utf-8")) if store_path.exists() else {{}},
+    }}
+    print("===VAL0_FOLDER_RUNTIME_REPLIES===")
+    print(json.dumps(payload, ensure_ascii=False))
+
+asyncio.run(main())
+"""
+    proc = subprocess.run(
+        ["./scripts/val0py", "-"],
+        cwd=ROOT,
+        input=probe,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    marker = "===VAL0_FOLDER_RUNTIME_REPLIES==="
+    if marker not in proc.stdout:
+        raise AssertionError(f"folder runtime probe marker missing. stdout={proc.stdout!r} stderr={proc.stderr!r}")
+    payload = json.loads(proc.stdout.split(marker, 1)[1].strip().splitlines()[0])
+    return payload["replies"], payload["store"]
+
+
 async def _send(text: str, store_path: Path, *, client_id: str = KAREN_CLIENT_ID) -> tuple[bool, str]:
     update = FakeUpdate()
     handled = await maybe_handle_client_folder_query(
@@ -184,6 +248,27 @@ def test_runtime_with_temp_store() -> None:
     assert_true(_git_cached_live_files() == "", "live client files are not staged")
 
 
+def test_bot_folder_gate_reaches_duplicate_guard_with_temp_store() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        store_path = Path(tmp) / "CLIENT_FOLDERS.json"
+        replies, store = _runtime_folder_replies_with_temp_store(
+            store_path,
+            [
+                "Val, guarda esta idea en Libro: primera escena con lluvia",
+                "Val, guarda esta idea en Libro: primera escena con lluvia",
+            ],
+        )
+    assert_true(len(replies) == 2, "runtime folder probe has two turns")
+    assert_true(len(replies[0]) == 1, "runtime first folder save sends one reply")
+    assert_true(len(replies[1]) == 1, "runtime duplicate folder save sends one reply")
+    assert_contains(replies[0][0], "guardé esa idea en 📁 **Libro** 📚", "runtime first save reaches folder gate")
+    assert_contains(replies[1][0], "ya estaba guardada en 📁 **Libro** 📚", "runtime duplicate save reaches duplicate guard")
+    libro = next(folder for folder in store.get("folders", []) if folder.get("slug") == "libro")
+    matching_notes = [note for note in libro.get("notes", []) if note.get("text") == "primera escena con lluvia"]
+    assert_true(len(matching_notes) == 1, "runtime folder gate avoids duplicate append")
+    assert_true(_git_cached_live_files() == "", "live client files are not staged after runtime folder probe")
+
+
 def test_live_store_path_and_guard() -> None:
     assert_true(client_folder_store_path(KAREN_CLIENT_ID) == LIVE_FOLDERS, "Karen folder store path")
     assert_true(LIVE_FOLDERS.exists(), "initial CLIENT_FOLDERS.json exists")
@@ -194,6 +279,7 @@ def main() -> int:
     test_classifier()
     test_folder_labels()
     test_runtime_with_temp_store()
+    test_bot_folder_gate_reaches_duplicate_guard_with_temp_store()
     test_live_store_path_and_guard()
     print("PASS: Karen generic folder smoke passed.")
     return 0
