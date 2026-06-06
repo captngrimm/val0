@@ -642,9 +642,8 @@ def _get_pending_state_text(chat_id: int) -> str | None:
 # EMAIL (Resend API)
 # --------------------------------------------------
 RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-
-if not RESEND_API_KEY:
-    raise RuntimeError("Missing RESEND_API_KEY")
+RESEND_EMAIL_ENABLED = bool(RESEND_API_KEY)
+EMAIL_NOT_CONFIGURED_MESSAGE = "Email sending is not configured right now."
 VAL_EMAIL_FROM = "Val <val@holaval.com>"
 
 # --------------------------------------------------
@@ -688,6 +687,9 @@ def get_last_assistant_message(chat_id: int) -> str:
 
 
 def send_email_resend(to_email: str, subject: str, body: str) -> None:
+    if not RESEND_EMAIL_ENABLED:
+        raise RuntimeError(EMAIL_NOT_CONFIGURED_MESSAGE)
+
     url = "https://api.resend.com/emails"
 
     headers = {
@@ -9747,7 +9749,6 @@ Classifier confidence: {confidence}
                 subject = "Valeria – Resumen del caso"
             else:
                 subject = "Valeria – Documento generado"
-            send_email_resend(to_email=to_email, subject=subject, body=last_reply)
 
             try:
                 send_email_resend(to_email=to_email, subject=subject, body=last_reply)
