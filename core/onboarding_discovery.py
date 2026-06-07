@@ -7,6 +7,7 @@ from typing import Any
 
 DISCOVERY_STATE_KEY = "onboarding_discovery_state"
 _DISCOVERY_STAGE_CHOOSE_FLOW = "choose_flow"
+_DISCOVERY_STAGE_DAILY_SOURCES = "daily_sources"
 
 
 def _strip_accents(text: str) -> str:
@@ -61,6 +62,13 @@ def mark_onboarding_discovery_active(context: Any) -> None:
     chat_data[DISCOVERY_STATE_KEY] = {"stage": _DISCOVERY_STAGE_CHOOSE_FLOW}
 
 
+def mark_onboarding_daily_sources_active(context: Any) -> None:
+    chat_data = _onboarding_chat_data(context)
+    if chat_data is not getattr(context, "chat_data", None):
+        return
+    chat_data[DISCOVERY_STATE_KEY] = {"stage": _DISCOVERY_STAGE_DAILY_SOURCES, "choice": "day"}
+
+
 def clear_onboarding_discovery_active(context: Any) -> None:
     chat_data = _onboarding_chat_data(context)
     chat_data.pop(DISCOVERY_STATE_KEY, None)
@@ -69,6 +77,11 @@ def clear_onboarding_discovery_active(context: Any) -> None:
 def has_active_onboarding_discovery(context: Any) -> bool:
     state = _onboarding_chat_data(context).get(DISCOVERY_STATE_KEY)
     return isinstance(state, dict) and state.get("stage") == _DISCOVERY_STAGE_CHOOSE_FLOW
+
+
+def has_active_onboarding_daily_sources(context: Any) -> bool:
+    state = _onboarding_chat_data(context).get(DISCOVERY_STATE_KEY)
+    return isinstance(state, dict) and state.get("stage") == _DISCOVERY_STAGE_DAILY_SOURCES
 
 
 def _has_direct_discovery_choice_intent(norm: str) -> bool:
@@ -151,6 +164,66 @@ def render_onboarding_discovery_choice_reply(choice: str) -> str:
     )
 
 
+def classify_onboarding_daily_sources_answer(text: str, *, active_context: bool = False) -> str | None:
+    if not active_context:
+        return None
+    norm = normalize_onboarding_discovery_text(text)
+    if not norm:
+        return None
+
+    broad_sources = (
+        ("calendario", "calendario"),
+        ("whatsapp", "WhatsApp"),
+        ("notas", "notas"),
+        ("nota", "notas"),
+        ("papel", "papel"),
+        ("papeles", "papel"),
+        ("cabeza", "tu cabeza"),
+        ("mente", "tu cabeza"),
+    )
+    found: list[str] = []
+    for marker, label in broad_sources:
+        if marker in norm and label not in found:
+            found.append(label)
+
+    scattered_markers = (
+        "todo regado",
+        "todos lados",
+        "en todos lados",
+        "regados",
+        "regadas",
+        "por todos lados",
+        "desordenado",
+        "desordenados",
+    )
+    if any(marker in norm for marker in scattered_markers):
+        if found:
+            return ", ".join(found) + " y otros lugares"
+        return "varios lugares"
+
+    if len(found) >= 2:
+        return ", ".join(found[:-1]) + " y " + found[-1]
+    if found:
+        return found[0]
+    return None
+
+
+def render_onboarding_daily_recommendation_reply(source_summary: str) -> str:
+    return (
+        f"Perfecto. Entonces entiendo que tus pendientes están en {source_summary}. "
+        "Mi recomendación: empezamos con el flujo Organizar mi día.\n\n"
+        "Semana 1 sería simple:\n"
+        "1. Identificar dónde entran tus pendientes.\n"
+        "2. Separar agenda, tareas y recordatorios.\n"
+        "3. Armar una revisión diaria corta.\n"
+        "4. Probar recordatorios o tareas solo después de confirmarlo.\n"
+        "5. Revisar qué sí te ayudó antes de crecerlo.\n\n"
+        "Todavía no guardé nada, no configuré nada y no creé tareas, recordatorios ni eventos de calendario. "
+        "En founder beta vamos con un solo flujo primero.\n\n"
+        "¿Quieres que usemos este como tu primer flujo piloto?"
+    )
+
+
 def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
     return (
         "Puedo ayudarte como operadora personal por Telegram, pero lo útil no es tirarte un menú gigante. "
@@ -171,10 +244,21 @@ def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
 async def maybe_handle_onboarding_discovery(update: Any, context: Any, chat_id: int, client_id: str, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
+    daily_source = classify_onboarding_daily_sources_answer(
+        text,
+        active_context=has_active_onboarding_daily_sources(context),
+    )
+    if daily_source:
+        clear_onboarding_discovery_active(context)
+        await update.message.reply_text(render_onboarding_daily_recommendation_reply(daily_source))
+        return True
     active_choice_context = has_active_onboarding_discovery(context)
     choice = classify_onboarding_discovery_choice(text, active_context=active_choice_context)
     if choice:
-        clear_onboarding_discovery_active(context)
+        if choice == "day":
+            mark_onboarding_daily_sources_active(context)
+        else:
+            clear_onboarding_discovery_active(context)
         await update.message.reply_text(render_onboarding_discovery_choice_reply(choice))
         return True
     if not is_onboarding_discovery_query(text):
