@@ -16563,6 +16563,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     client_id = resolve_client_id(chat_id)
     tg_msg_id = getattr(update.message, "message_id", None)
+    event_key = f"tg_text:{chat_id}:{tg_msg_id}:{text}"
+    text_event_marked = False
+    try:
+        inserted = mark_processed_event_once(event_key, "tg_text")
+        if not inserted:
+            logger.info(f"[IDEMPOTENCY] skip duplicate text event before routing: {event_key}")
+            return
+        text_event_marked = True
+    except Exception as e:
+        logger.exception(f"[IDEMPOTENCY] early text guard failed: {e}")
     _maybe_log_intent_router_v2_shadow(text, chat_id=chat_id, client_id=client_id, message_id=tg_msg_id)
     _maybe_log_intent_interpreter_v1_shadow(text, chat_id=chat_id, client_id=client_id, message_id=tg_msg_id)
 
@@ -16696,14 +16706,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         pass
 
-    event_key = f"tg_text:{chat_id}:{tg_msg_id}:{text}"
-    try:
-        inserted = mark_processed_event_once(event_key, "tg_text")
-        if not inserted:
-            logger.info(f"[IDEMPOTENCY] skip duplicate text event: {event_key}")
-            return
-    except Exception as e:
-        logger.exception(f"[IDEMPOTENCY] text guard failed: {e}")
+    if not text_event_marked:
+        try:
+            inserted = mark_processed_event_once(event_key, "tg_text")
+            if not inserted:
+                logger.info(f"[IDEMPOTENCY] skip duplicate text event: {event_key}")
+                return
+        except Exception as e:
+            logger.exception(f"[IDEMPOTENCY] text guard failed: {e}")
 
     raw = (text or "").strip()
     normalized = re.sub(r"\s+", " ", raw).strip()
