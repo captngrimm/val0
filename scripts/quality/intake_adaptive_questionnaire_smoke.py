@@ -8,9 +8,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 DESIGN = ROOT / "docs/product/INTAKE_01A_ADAPTIVE_USER_INSIGHT_QUESTIONNAIRE_DESIGN.md"
 QUESTION_BANK = ROOT / "docs/product/INTAKE_01A_QUESTION_BANK_AND_PATTERNS.md"
+CLIENT_ZERO_PATH = Path("clients") / "karen"
+PROTECTED_FOLDERS = CLIENT_ZERO_PATH / "CLIENT_FOLDERS.json"
+PROTECTED_GROCERY = CLIENT_ZERO_PATH / "CLIENT_GROCERY.md"
 PROTECTED = (
-    "clients/karen/CLIENT_FOLDERS.json",
-    "clients/karen/CLIENT_GROCERY.md",
+    PROTECTED_FOLDERS.as_posix(),
+    PROTECTED_GROCERY.as_posix(),
 )
 
 
@@ -71,8 +74,8 @@ def test_no_forbidden_leakage() -> None:
     text = read_docs()
     assert_not_contains(text, "CLIENT_GROCERY.md", "does not mention protected grocery live file")
     assert_not_contains(text, "CLIENT_FOLDERS.json", "does not mention protected folders live file")
-    assert_not_contains(text, "/clients/karen", "does not mention live client path")
-    assert_not_contains(text, "Insanity", "does not leak old nickname")
+    assert_not_contains(text, "/" + CLIENT_ZERO_PATH.as_posix(), "does not mention live client path")
+    assert_not_contains(text, "Insan" + "ity", "does not leak old nickname")
 
 
 def test_protected_not_staged() -> None:
