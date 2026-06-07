@@ -236,7 +236,7 @@ def classify_onboarding_daily_sources_answer(text: str, *, active_context: bool 
 
 def render_onboarding_daily_recommendation_reply(source_summary: str) -> str:
     return (
-        f"Ok, eso me dice algo importante: tus pendientes están en {source_summary}. "
+        f"Perfecto, entonces tus pendientes están regados entre {source_summary}. "
         "No empezaría por documentos ni por carpetas todavía. Empezaría por Organizar mi día, "
         "porque primero necesitamos capturar lo que se te riega y convertirlo en una revisión diaria simple.\n\n"
         "Semana 1 sería sencilla:\n"
@@ -401,7 +401,7 @@ def render_onboarding_daily_review_contents_reply(keys: list[str]) -> str:
 
 def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
     return (
-        "Puedo ayudarte como operadora personal por Telegram, pero lo útil no es tirarte un menú gigante. "
+        "Por ahora puedo ayudarte como operadora personal desde Telegram, pero lo útil no es tirarte un menú gigante. "
         "Empezamos con un flujo primero: una cosa concreta que quieras ordenar ahora.\n\n"
         "Ejemplos concretos:\n"
         "1. Organizar mi día: agenda, tareas y prioridades.\n"

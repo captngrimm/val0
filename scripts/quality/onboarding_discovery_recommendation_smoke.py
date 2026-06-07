@@ -89,8 +89,9 @@ asyncio.run(main())
 
 
 def _assert_recommendation(reply: str, expected_source: str, label: str) -> None:
-    assert_contains(reply, f"tus pendientes están en {expected_source}", f"{label} summarizes source")
-    assert_contains(reply, "eso me dice algo importante", f"{label} reasoning tone")
+    assert_contains(reply, f"tus pendientes están regados entre {expected_source}", f"{label} summarizes source")
+    assert_contains(reply, "Perfecto, entonces", f"{label} natural reasoning tone")
+    assert_not_contains(reply, "eso me dice algo importante", f"{label} no stiff reasoning tone")
     assert_contains(reply, "No empezaría por documentos ni por carpetas todavía", f"{label} explains what not to start with")
     assert_contains(reply, "Empezaría por Organizar mi día", f"{label} recommends daily flow")
     assert_contains(reply, "porque primero necesitamos capturar", f"{label} explains why")
