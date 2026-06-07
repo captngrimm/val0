@@ -210,17 +210,18 @@ def classify_onboarding_daily_sources_answer(text: str, *, active_context: bool 
 
 def render_onboarding_daily_recommendation_reply(source_summary: str) -> str:
     return (
-        f"Perfecto. Entonces entiendo que tus pendientes están en {source_summary}. "
-        "Mi recomendación: empezamos con el flujo Organizar mi día.\n\n"
-        "Semana 1 sería simple:\n"
-        "1. Identificar dónde entran tus pendientes.\n"
+        f"Ok, eso me dice algo importante: tus pendientes están en {source_summary}. "
+        "No empezaría por documentos ni por carpetas todavía. Empezaría por Organizar mi día, "
+        "porque primero necesitamos capturar lo que se te riega y convertirlo en una revisión diaria simple.\n\n"
+        "Semana 1 sería sencilla:\n"
+        "1. Ver dónde entran tus pendientes.\n"
         "2. Separar agenda, tareas y recordatorios.\n"
-        "3. Armar una revisión diaria corta.\n"
-        "4. Probar recordatorios o tareas solo después de confirmarlo.\n"
-        "5. Revisar qué sí te ayudó antes de crecerlo.\n\n"
+        "3. Crear una revisión diaria corta.\n"
+        "4. Probar recordatorios o tareas solo cuando tú confirmes.\n"
+        "5. Revisar qué realmente te ayudó antes de crecerlo.\n\n"
         "Todavía no guardé nada, no configuré nada y no creé tareas, recordatorios ni eventos de calendario. "
         "En founder beta vamos con un solo flujo primero.\n\n"
-        "¿Quieres que usemos este como tu primer flujo piloto?"
+        "¿Te parece que probemos Organizar mi día como primer flujo piloto?"
     )
 
 
