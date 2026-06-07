@@ -5,6 +5,10 @@ import unicodedata
 from typing import Any
 
 
+DISCOVERY_STATE_KEY = "onboarding_discovery_state"
+_DISCOVERY_STAGE_CHOOSE_FLOW = "choose_flow"
+
+
 def _strip_accents(text: str) -> str:
     value = unicodedata.normalize("NFKD", str(text or ""))
     return "".join(ch for ch in value if not unicodedata.combining(ch))
@@ -43,6 +47,110 @@ def is_onboarding_discovery_query(text: str) -> bool:
     return False
 
 
+def _onboarding_chat_data(context: Any) -> dict[str, Any]:
+    chat_data = getattr(context, "chat_data", None)
+    if isinstance(chat_data, dict):
+        return chat_data
+    return {}
+
+
+def mark_onboarding_discovery_active(context: Any) -> None:
+    chat_data = _onboarding_chat_data(context)
+    if chat_data is not getattr(context, "chat_data", None):
+        return
+    chat_data[DISCOVERY_STATE_KEY] = {"stage": _DISCOVERY_STAGE_CHOOSE_FLOW}
+
+
+def clear_onboarding_discovery_active(context: Any) -> None:
+    chat_data = _onboarding_chat_data(context)
+    chat_data.pop(DISCOVERY_STATE_KEY, None)
+
+
+def has_active_onboarding_discovery(context: Any) -> bool:
+    state = _onboarding_chat_data(context).get(DISCOVERY_STATE_KEY)
+    return isinstance(state, dict) and state.get("stage") == _DISCOVERY_STAGE_CHOOSE_FLOW
+
+
+def _has_direct_discovery_choice_intent(norm: str) -> bool:
+    markers = (
+        "empezar por",
+        "empecemos por",
+        "empecemos con",
+        "quiero empezar",
+        "quiero ordenar",
+        "me gustaria ordenar",
+        "me gustaria empezar",
+        "escojo",
+        "elijo",
+        "ayudame con",
+        "ayudame a ordenar",
+    )
+    return any(marker in norm for marker in markers)
+
+
+def classify_onboarding_discovery_choice(text: str, *, active_context: bool = False) -> str | None:
+    norm = normalize_onboarding_discovery_text(text)
+    if not norm:
+        return None
+
+    direct_choice = active_context or _has_direct_discovery_choice_intent(norm)
+    if not direct_choice:
+        return None
+
+    if any(marker in norm for marker in ("otro", "otra cosa", "diferente", "algo diferente")):
+        return "other"
+
+    if any(marker in norm for marker in ("pendiente", "pendientes", "recordatorio", "recordatorios")):
+        return "reminders"
+
+    if any(marker in norm for marker in ("documento", "documentos", "caso", "casos", "papel", "papeles")):
+        return "documents"
+
+    if any(marker in norm for marker in ("cliente", "clientes", "seguimiento", "follow up", "followup")):
+        return "clients"
+
+    if any(marker in norm for marker in ("idea", "ideas", "carpeta", "carpetas")):
+        return "ideas"
+
+    if any(marker in norm for marker in ("organizar mi dia", "mi dia", "agenda", "dia")):
+        return "day"
+
+    return None
+
+
+def render_onboarding_discovery_choice_reply(choice: str) -> str:
+    replies = {
+        "day": (
+            "Perfecto. Empezamos por organizar tu día. ¿Dónde tienes tus pendientes ahora: calendario, WhatsApp, "
+            "notas, papel o en la cabeza?"
+        ),
+        "reminders": (
+            "Perfecto. Empezamos por pendientes y recordatorios. ¿Qué tipo de cosas se te pierden más: fechas, "
+            "pagos, llamadas, tareas pequeñas o promesas a otras personas?"
+        ),
+        "documents": (
+            "Perfecto. Empezamos por documentos. ¿Qué quieres ordenar primero: documentos personales, un caso, "
+            "contratos, recibos o algo administrativo?"
+        ),
+        "clients": (
+            "Perfecto. Empezamos por seguimiento. ¿A quién o qué tienes que perseguir más: clientes, proveedores, "
+            "oportunidades, cobros o tareas internas?"
+        ),
+        "ideas": (
+            "Perfecto. Empezamos por ideas y carpetas. ¿Qué quieres guardar sin que se pierda: ideas de negocio, "
+            "libro, proyectos, pendientes o notas sueltas?"
+        ),
+        "other": "Perfecto. Dime en una frase qué te gustaría ordenar o que Val te ayude a no perder.",
+    }
+    body = replies.get(choice)
+    if not body:
+        body = replies["other"]
+    return (
+        f"{body}\n\n"
+        "En founder beta lo armamos paso a paso: un solo flujo primero. Todavía no guardo nada ni creo acciones."
+    )
+
+
 def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
     return (
         "Puedo ayudarte como operadora personal por Telegram, pero lo útil no es tirarte un menú gigante. "
@@ -63,7 +171,14 @@ def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
 async def maybe_handle_onboarding_discovery(update: Any, context: Any, chat_id: int, client_id: str, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
+    active_choice_context = has_active_onboarding_discovery(context)
+    choice = classify_onboarding_discovery_choice(text, active_context=active_choice_context)
+    if choice:
+        clear_onboarding_discovery_active(context)
+        await update.message.reply_text(render_onboarding_discovery_choice_reply(choice))
+        return True
     if not is_onboarding_discovery_query(text):
         return False
+    mark_onboarding_discovery_active(context)
     await update.message.reply_text(render_onboarding_discovery_reply(client_id=client_id))
     return True
