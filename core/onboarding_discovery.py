@@ -8,6 +8,7 @@ from typing import Any
 DISCOVERY_STATE_KEY = "onboarding_discovery_state"
 _DISCOVERY_STAGE_CHOOSE_FLOW = "choose_flow"
 _DISCOVERY_STAGE_DAILY_SOURCES = "daily_sources"
+_DISCOVERY_STAGE_DAILY_RECOMMENDATION = "daily_recommendation"
 
 
 def _strip_accents(text: str) -> str:
@@ -69,6 +70,13 @@ def mark_onboarding_daily_sources_active(context: Any) -> None:
     chat_data[DISCOVERY_STATE_KEY] = {"stage": _DISCOVERY_STAGE_DAILY_SOURCES, "choice": "day"}
 
 
+def mark_onboarding_daily_recommendation_active(context: Any) -> None:
+    chat_data = _onboarding_chat_data(context)
+    if chat_data is not getattr(context, "chat_data", None):
+        return
+    chat_data[DISCOVERY_STATE_KEY] = {"stage": _DISCOVERY_STAGE_DAILY_RECOMMENDATION, "choice": "day"}
+
+
 def clear_onboarding_discovery_active(context: Any) -> None:
     chat_data = _onboarding_chat_data(context)
     chat_data.pop(DISCOVERY_STATE_KEY, None)
@@ -82,6 +90,11 @@ def has_active_onboarding_discovery(context: Any) -> bool:
 def has_active_onboarding_daily_sources(context: Any) -> bool:
     state = _onboarding_chat_data(context).get(DISCOVERY_STATE_KEY)
     return isinstance(state, dict) and state.get("stage") == _DISCOVERY_STAGE_DAILY_SOURCES
+
+
+def has_active_onboarding_daily_recommendation(context: Any) -> bool:
+    state = _onboarding_chat_data(context).get(DISCOVERY_STATE_KEY)
+    return isinstance(state, dict) and state.get("stage") == _DISCOVERY_STAGE_DAILY_RECOMMENDATION
 
 
 def _has_direct_discovery_choice_intent(norm: str) -> bool:
@@ -225,6 +238,82 @@ def render_onboarding_daily_recommendation_reply(source_summary: str) -> str:
     )
 
 
+def classify_onboarding_recommendation_reply(text: str, *, active_context: bool = False) -> str | None:
+    if not active_context:
+        return None
+    norm = normalize_onboarding_discovery_text(text)
+    if not norm:
+        return None
+
+    cancel_markers = (
+        "no",
+        "mejor no",
+        "cancelar",
+        "cancela",
+        "paremos",
+        "para",
+        "detente",
+        "no gracias",
+    )
+    if norm in cancel_markers or any(marker in norm for marker in ("mejor no", "no gracias", "cancelar", "cancela")):
+        return "cancel"
+
+    pivot_choice = classify_onboarding_discovery_choice(f"quiero {norm}", active_context=True)
+    if pivot_choice and pivot_choice != "day":
+        return f"pivot:{pivot_choice}"
+
+    confirm_markers = (
+        "si",
+        "dale",
+        "correcto",
+        "me parece",
+        "vamos",
+        "ok",
+        "okay",
+        "va",
+        "listo",
+    )
+    if norm in confirm_markers or any(marker in norm for marker in ("me parece", "vamos", "dale", "correcto")):
+        return "confirm"
+    return None
+
+
+def render_onboarding_daily_pilot_confirm_reply() -> str:
+    return (
+        "Perfecto. Entonces dejamos Organizar mi día como primer flujo piloto.\n\n"
+        "Siguiente paso: definir qué debe traer tu revisión diaria. Para empezar, ¿quieres que incluya agenda, "
+        "tareas, recordatorios, prioridades y pendientes sin fecha, o prefieres empezar más simple?\n\n"
+        "Todavía no guardé ni configuré nada; solo estamos definiendo el flujo. No creé tareas, recordatorios "
+        "ni eventos de calendario."
+    )
+
+
+def render_onboarding_recommendation_cancel_reply() -> str:
+    return (
+        "Perfecto, no lo forzamos. Podemos escoger otro flujo o dejarlo aquí por ahora.\n\n"
+        "Todavía no guardé ni configuré nada. Si quieres, dime: documentos, clientes, pendientes, ideas u otro."
+    )
+
+
+def render_onboarding_pivot_reply(choice: str) -> str:
+    names = {
+        "documents": "documentos",
+        "clients": "clientes",
+        "ideas": "ideas y carpetas",
+        "reminders": "pendientes y recordatorios",
+        "other": "otro flujo",
+    }
+    name = names.get(choice, "otro flujo")
+    if choice == "documents":
+        opener = "Perfecto, cambiamos a documentos. No lo forzamos: si documentos es lo que te urge, empezamos ahí."
+    else:
+        opener = f"Perfecto, cambiamos a {name}. No lo forzamos: si eso es lo que te urge, empezamos ahí."
+    return (
+        f"{opener}\n\n"
+        f"{render_onboarding_discovery_choice_reply(choice)}"
+    )
+
+
 def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
     return (
         "Puedo ayudarte como operadora personal por Telegram, pero lo útil no es tirarte un menú gigante. "
@@ -245,12 +334,27 @@ def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
 async def maybe_handle_onboarding_discovery(update: Any, context: Any, chat_id: int, client_id: str, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
+    recommendation_reply = classify_onboarding_recommendation_reply(
+        text,
+        active_context=has_active_onboarding_daily_recommendation(context),
+    )
+    if recommendation_reply:
+        clear_onboarding_discovery_active(context)
+        if recommendation_reply == "confirm":
+            await update.message.reply_text(render_onboarding_daily_pilot_confirm_reply())
+            return True
+        if recommendation_reply == "cancel":
+            await update.message.reply_text(render_onboarding_recommendation_cancel_reply())
+            return True
+        if recommendation_reply.startswith("pivot:"):
+            await update.message.reply_text(render_onboarding_pivot_reply(recommendation_reply.split(":", 1)[1]))
+            return True
     daily_source = classify_onboarding_daily_sources_answer(
         text,
         active_context=has_active_onboarding_daily_sources(context),
     )
     if daily_source:
-        clear_onboarding_discovery_active(context)
+        mark_onboarding_daily_recommendation_active(context)
         await update.message.reply_text(render_onboarding_daily_recommendation_reply(daily_source))
         return True
     active_choice_context = has_active_onboarding_discovery(context)
