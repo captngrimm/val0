@@ -1,6 +1,6 @@
 # ONBOARDING-01B Guided Workflow Discovery Runtime Route
 
-Purpose: document the narrow Telegram route for guided workflow discovery.
+Purpose: document the narrow Telegram route for guided discovery of the first user flow.
 
 ## Runtime Behavior Added
 
@@ -11,13 +11,13 @@ When a user asks discovery-style prompts such as:
 - "Val, ayúdame a empezar"
 - "Val, no sé qué necesito"
 
-Val replies with a Spanish-first guided workflow discovery answer:
+Val replies with a Spanish-first guided discovery answer:
 
 - short explanation
 - concrete examples
-- one-workflow-first framing
+- one-flow-first framing
 - founder-beta boundary
-- question: "¿Cuál te duele más esta semana?"
+- question: "Para empezar bien, escogemos un solo flujo primero. ¿Por dónde empezamos: organizar tu día, pendientes, documentos, clientes, ideas o algo diferente?"
 
 ## Scope
 
@@ -38,7 +38,6 @@ The reply must not mention:
 - implementation details
 - Karen private data
 - client files
-- AGI or magic AI claims
+- AGI or IA mágica claims
 
-Val frames itself as founder beta and asks the user to choose one workflow first.
-
+Val frames itself as founder beta and asks the user to start with "un solo flujo" before expanding the setup.

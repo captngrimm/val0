@@ -86,16 +86,24 @@ asyncio.run(main())
 
 
 def _assert_discovery_reply(reply: str, label: str) -> None:
-    assert_contains(reply, "workflow primero", f"{label} one workflow first")
+    assert_contains(reply, "flujo primero", f"{label} one flow first")
     assert_contains(reply, "Organizar mi día", f"{label} concrete day example")
     assert_contains(reply, "Pendientes/recordatorios", f"{label} reminders example")
     assert_contains(reply, "Documentos/casos", f"{label} documents example")
     assert_contains(reply, "Clientes/seguimiento", f"{label} client follow-up example")
     assert_contains(reply, "Ideas/carpetas", f"{label} folders example")
-    assert_contains(reply, "¿Cuál te duele más esta semana?", f"{label} pain this week framing")
+    assert_contains(
+        reply,
+        "¿Por dónde empezamos: organizar tu día, pendientes, documentos, clientes, ideas o algo diferente?",
+        f"{label} soft operational CTA",
+    )
     assert_contains(reply, "founder beta", f"{label} founder beta boundary")
-    assert_contains(reply, "no soy magia AI", f"{label} no magic AI claim")
-    assert_contains(reply, "no hago full autonomy", f"{label} no full autonomy claim")
+    assert_contains(reply, "no soy IA mágica", f"{label} no magic AI claim")
+    assert_contains(reply, "no hago autonomía completa", f"{label} no full autonomy claim")
+    assert_not_contains(reply, "workflow", f"{label} no English workflow copy")
+    assert_not_contains(reply, "magia AI", f"{label} no awkward Spanish/English magic AI copy")
+    assert_not_contains(reply, "full autonomy", f"{label} no English full autonomy copy")
+    assert_not_contains(reply, "te duele más esta semana", f"{label} no intense pain CTA")
     assert_true("AGI" not in reply, f"{label} no explicit AGI language")
     assert_not_contains(reply, "Karen", f"{label} no Karen private data")
     assert_not_contains(reply, "Caso Finca", f"{label} no private case data")

@@ -46,16 +46,17 @@ def is_onboarding_discovery_query(text: str) -> bool:
 def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
     return (
         "Puedo ayudarte como operadora personal por Telegram, pero lo útil no es tirarte un menú gigante. "
-        "Empezamos con un workflow primero: una cosa concreta que te duela esta semana.\n\n"
+        "Empezamos con un flujo primero: una cosa concreta que quieras ordenar ahora.\n\n"
         "Ejemplos concretos:\n"
         "1. Organizar mi día: agenda, tareas y prioridades.\n"
         "2. Pendientes/recordatorios: que no se te pierdan compromisos.\n"
         "3. Documentos/casos: ordenar papeles, resumir con cautela y preparar preguntas.\n"
         "4. Clientes/seguimiento: próximas acciones, promesas y follow-up.\n"
         "5. Ideas/carpetas: guardar notas, proyectos o ideas sin regarlas.\n\n"
-        "Límite founder beta: no soy magia AI, no hago full autonomy y no reemplazo abogado, médico, contador "
+        "Límite founder beta: no soy IA mágica, no hago autonomía completa y no reemplazo abogado, médico, contador "
         "ni criterio humano. Tú controlas qué se guarda y qué acciones se confirman.\n\n"
-        "¿Cuál te duele más esta semana?"
+        "Para empezar bien, escogemos un solo flujo primero. ¿Por dónde empezamos: organizar tu día, pendientes, "
+        "documentos, clientes, ideas o algo diferente?"
     )
 
 
