@@ -9,6 +9,7 @@ DISCOVERY_STATE_KEY = "onboarding_discovery_state"
 _DISCOVERY_STAGE_CHOOSE_FLOW = "choose_flow"
 _DISCOVERY_STAGE_DAILY_SOURCES = "daily_sources"
 _DISCOVERY_STAGE_DAILY_RECOMMENDATION = "daily_recommendation"
+_DISCOVERY_STAGE_DAILY_REVIEW_CONTENTS = "daily_review_contents"
 
 
 def _strip_accents(text: str) -> str:
@@ -77,6 +78,13 @@ def mark_onboarding_daily_recommendation_active(context: Any) -> None:
     chat_data[DISCOVERY_STATE_KEY] = {"stage": _DISCOVERY_STAGE_DAILY_RECOMMENDATION, "choice": "day"}
 
 
+def mark_onboarding_daily_review_contents_active(context: Any) -> None:
+    chat_data = _onboarding_chat_data(context)
+    if chat_data is not getattr(context, "chat_data", None):
+        return
+    chat_data[DISCOVERY_STATE_KEY] = {"stage": _DISCOVERY_STAGE_DAILY_REVIEW_CONTENTS, "choice": "day"}
+
+
 def clear_onboarding_discovery_active(context: Any) -> None:
     chat_data = _onboarding_chat_data(context)
     chat_data.pop(DISCOVERY_STATE_KEY, None)
@@ -95,6 +103,11 @@ def has_active_onboarding_daily_sources(context: Any) -> bool:
 def has_active_onboarding_daily_recommendation(context: Any) -> bool:
     state = _onboarding_chat_data(context).get(DISCOVERY_STATE_KEY)
     return isinstance(state, dict) and state.get("stage") == _DISCOVERY_STAGE_DAILY_RECOMMENDATION
+
+
+def has_active_onboarding_daily_review_contents(context: Any) -> bool:
+    state = _onboarding_chat_data(context).get(DISCOVERY_STATE_KEY)
+    return isinstance(state, dict) and state.get("stage") == _DISCOVERY_STAGE_DAILY_REVIEW_CONTENTS
 
 
 def _has_direct_discovery_choice_intent(norm: str) -> bool:
@@ -314,6 +327,78 @@ def render_onboarding_pivot_reply(choice: str) -> str:
     )
 
 
+_DAILY_REVIEW_LABELS = {
+    "agenda": "agenda",
+    "tasks": "tareas",
+    "reminders": "recordatorios",
+    "priorities": "prioridades",
+    "undated": "pendientes sin fecha",
+}
+
+
+def classify_onboarding_daily_review_contents(text: str, *, active_context: bool = False) -> list[str] | None:
+    if not active_context:
+        return None
+    norm = normalize_onboarding_discovery_text(text)
+    if not norm:
+        return None
+
+    if any(marker in norm for marker in ("mas simple", "simple", "empezar simple")):
+        return ["agenda", "tasks", "undated"]
+    if norm in {"todo", "todos", "todo eso", "todos esos", "todo lo anterior"} or "todo eso" in norm:
+        return ["agenda", "tasks", "reminders", "priorities", "undated"]
+
+    selected: list[str] = []
+    markers = (
+        ("agenda", "agenda"),
+        ("calendario", "agenda"),
+        ("tarea", "tasks"),
+        ("tareas", "tasks"),
+        ("recordatorio", "reminders"),
+        ("recordatorios", "reminders"),
+        ("prioridad", "priorities"),
+        ("prioridades", "priorities"),
+        ("pendientes sin fecha", "undated"),
+        ("sin fecha", "undated"),
+    )
+    for marker, key in markers:
+        if marker in norm and key not in selected:
+            selected.append(key)
+    return selected or None
+
+
+def _format_daily_review_items(keys: list[str]) -> str:
+    labels = [_DAILY_REVIEW_LABELS[key] for key in keys if key in _DAILY_REVIEW_LABELS]
+    if not labels:
+        return "agenda, tareas importantes y pendientes sin fecha"
+    if len(labels) == 1:
+        return labels[0]
+    return ", ".join(labels[:-1]) + " y " + labels[-1]
+
+
+def render_onboarding_daily_review_contents_reply(keys: list[str]) -> str:
+    simple_keys = ["agenda", "tasks", "undated"]
+    is_simple = keys == simple_keys
+    if is_simple:
+        return (
+            "Perfecto. Empezamos más simple. Yo dejaría la primera versión con solo tres cosas: agenda, "
+            "tareas importantes y pendientes sin fecha.\n\n"
+            "Así probamos valor rápido sin convertirlo en un monstruo. Todavía no guardé ni configuré nada, "
+            "y no creé tareas, recordatorios ni eventos de calendario.\n\n"
+            "¿Te parece esta versión simple para el piloto?"
+        )
+
+    items = _format_daily_review_items(keys)
+    return (
+        f"Perfecto. Entonces la revisión diaria piloto incluiría: {items}.\n\n"
+        "La idea sería que Val te ayude a ver cada mañana qué tienes encima, qué no se puede olvidar "
+        "y qué va primero.\n\n"
+        "Todavía no guardé ni configuré nada; seguimos definiendo el flujo. No creé tareas, recordatorios "
+        "ni eventos de calendario.\n\n"
+        "¿Quieres que dejemos este diseño como propuesta para el piloto, o prefieres empezar más simple?"
+    )
+
+
 def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
     return (
         "Puedo ayudarte como operadora personal por Telegram, pero lo útil no es tirarte un menú gigante. "
@@ -334,15 +419,24 @@ def render_onboarding_discovery_reply(*, client_id: str | None = None) -> str:
 async def maybe_handle_onboarding_discovery(update: Any, context: Any, chat_id: int, client_id: str, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
+    review_contents = classify_onboarding_daily_review_contents(
+        text,
+        active_context=has_active_onboarding_daily_review_contents(context),
+    )
+    if review_contents:
+        clear_onboarding_discovery_active(context)
+        await update.message.reply_text(render_onboarding_daily_review_contents_reply(review_contents))
+        return True
     recommendation_reply = classify_onboarding_recommendation_reply(
         text,
         active_context=has_active_onboarding_daily_recommendation(context),
     )
     if recommendation_reply:
-        clear_onboarding_discovery_active(context)
         if recommendation_reply == "confirm":
+            mark_onboarding_daily_review_contents_active(context)
             await update.message.reply_text(render_onboarding_daily_pilot_confirm_reply())
             return True
+        clear_onboarding_discovery_active(context)
         if recommendation_reply == "cancel":
             await update.message.reply_text(render_onboarding_recommendation_cancel_reply())
             return True
