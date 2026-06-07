@@ -58,6 +58,14 @@ def test_required_concepts() -> None:
         "$30",
         "soft close",
         "boundaries",
+        "Simple English",
+        "Spanish-first",
+        "optional support/practice",
+        "not replacing the Spanish pitch",
+        "Why Not Just ChatGPT",
+        "one-week test",
+        "mental load",
+        "It is my pleasure",
     )
     for needle in required:
         assert_contains(text, needle, f"required Ale brief concept {needle}")

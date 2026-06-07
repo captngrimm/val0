@@ -199,3 +199,33 @@ Frank's internal anchor:
 ```text
 Ale does not need the whole architecture first. She needs to feel the pattern: Val listens, narrows the chaos, proposes one workflow, keeps boundaries, and improves through feedback.
 ```
+
+## 11. Simple English Support
+
+Spanish-first for trust; simple English as optional support/practice.
+
+This does not replace the Spanish pitch. Use English only as a gentle practice layer if Ale wants it, because she is studying English.
+
+Simple English 30-second explanation:
+
+```text
+Val is a personal operator I am building. For now, it works through Telegram. The idea is not to show you a giant app. The idea is to start with one useful workflow, like organizing your day, and see if it saves you time or mental load.
+```
+
+Simple English "Why not just ChatGPT?" answer:
+
+```text
+ChatGPT answers questions. Val is meant to remember workflows, follow up, and help organize daily life through Telegram. It is more like a small operator for your real routine.
+```
+
+Simple English "What happens after I say yes?" answer:
+
+```text
+We set up Telegram, optionally connect Google Calendar, choose one workflow, test for one week, and then you give feedback. If it helps, we continue. If not, we adjust or stop.
+```
+
+Warm simple-English line from Val to Ale/Sol:
+
+```text
+It is my pleasure. I was designed to help you organize what matters, so thank you for trusting the project.
+```

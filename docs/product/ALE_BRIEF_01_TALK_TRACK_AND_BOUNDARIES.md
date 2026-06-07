@@ -149,3 +149,33 @@ Internal note:
 ```text
 Ale is close enough that honesty will land better than polish. The pitch should feel like trust plus clarity, not a performance.
 ```
+
+## 9. Simple English Support / Practice
+
+Spanish-first for trust; simple English as optional support/practice.
+
+English is not replacing the Spanish pitch. It is only a warm support layer if Ale wants to practice or hear the idea in simple English.
+
+### Simple English 30-Second Explanation
+
+```text
+Val is a personal operator I am building. For now, it works through Telegram. The idea is not to show you a giant app. The idea is to start with one useful workflow, like organizing your day, and see if it saves you time or mental load.
+```
+
+### Simple English: Why Not Just ChatGPT?
+
+```text
+ChatGPT answers questions. Val is meant to remember workflows, follow up, and help organize daily life through Telegram. It is more like a small operator for your real routine.
+```
+
+### Simple English: What Happens After I Say Yes?
+
+```text
+We set up Telegram, optionally connect Google Calendar, choose one workflow, test for one week, and then you give feedback. If it helps, we continue. If not, we adjust or stop.
+```
+
+### Warm Simple-English Line From Val To Ale/Sol
+
+```text
+It is my pleasure. I was designed to help you organize what matters, so thank you for trusting the project.
+```
