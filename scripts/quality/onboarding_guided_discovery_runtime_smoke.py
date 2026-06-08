@@ -133,12 +133,19 @@ def test_runtime_route() -> None:
     for phrase in (
         "Val, ¿cómo me puedes ayudar?",
         "Val, ¿qué puedes hacer?",
-        "Val, ayúdame a empezar",
-        "Val, no sé qué necesito",
     ):
         replies = _runtime_replies(phrase)
         assert_true(len(replies) == 1, f"runtime sends one reply for {phrase}")
         _assert_discovery_reply(replies[0], f"runtime {phrase}")
+
+    for phrase in (
+        "Val, ayúdame a empezar",
+        "Val, no sé qué necesito",
+    ):
+        replies = _runtime_replies(phrase)
+        assert_true(len(replies) == 1, f"runtime sends one adaptive intake reply for {phrase}")
+        assert_contains(replies[0], "2 o 3 preguntas rápidas", f"runtime {phrase} adaptive permission")
+        assert_contains(replies[0], "No guardo nada sin que tú me confirmes", f"runtime {phrase} no saving")
 
 
 def _assert_protected_not_staged() -> None:

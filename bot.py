@@ -140,6 +140,7 @@ from core.case_timeline_events import maybe_handle_case_timeline_event_confirmat
 from core.case_workspace import detect_case_workspace_view, maybe_handle_case_workspace_status
 from core.case_workspace_qa import case_qa_context_active, classify_case_qa_question, mark_case_qa_context, maybe_handle_case_workspace_qa
 from core.client_folders import maybe_handle_client_folder_query
+from core.adaptive_intake import maybe_handle_adaptive_intake
 from core.onboarding_discovery import maybe_handle_onboarding_discovery
 from core.karen_meeting_prep import looks_like_karen_meeting_prep_request, render_karen_meeting_prep_checklist
 from core.karen_next_action import maybe_handle_pending_next_action, karen_next_action_callback, maybe_handle_document_inventory, start_document_inventory
@@ -16581,6 +16582,13 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         logger.exception(f"[KAREN_NAME_LANGUAGE_GUARD_HANDLE_TEXT] failed: {e}")
+
+    try:
+        if await maybe_handle_adaptive_intake(update, context, text):
+            _maybe_log_intent_router_v2_actual("adaptive_intake", "maybe_handle_adaptive_intake", chat_id=chat_id, message_id=tg_msg_id, text=text)
+            return
+    except Exception as e:
+        logger.exception(f"[ADAPTIVE_INTAKE_HANDLE_TEXT] failed: {e}")
 
     try:
         if await maybe_handle_onboarding_discovery(update, context, chat_id, client_id, text):
