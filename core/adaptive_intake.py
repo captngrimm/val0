@@ -9,6 +9,7 @@ ADAPTIVE_INTAKE_STATE_KEY = "adaptive_intake_state"
 _STAGE_PERMISSION = "adaptive_intake_permission"
 _STAGE_DOMAIN = "adaptive_intake_domain"
 _STAGE_FOLLOWUP = "adaptive_intake_followup"
+_STAGE_RECOMMENDATION = "adaptive_intake_recommendation"
 
 
 def _strip_accents(text: str) -> str:
@@ -79,6 +80,26 @@ def classify_adaptive_intake_confirmation(text: str) -> str | None:
 def looks_like_too_broad(text: str) -> bool:
     norm = normalize_adaptive_intake_text(text)
     return norm in {"todo", "todos", "todo me sirve", "todo eso", "todo lo anterior"} or "todo me sirve" in norm
+
+
+def classify_work_recommendation_focus(text: str) -> str | None:
+    norm = normalize_adaptive_intake_text(text)
+    if not norm:
+        return None
+    if looks_like_too_broad(text):
+        return "too_broad"
+    focus_markers = (
+        ("shifts", ("horarios", "horario", "turnos", "turno")),
+        ("pending", ("pendientes", "pendiente", "cosas por hacer", "tareas")),
+        ("reminders", ("recordatorios", "recordatorio", "se me olvida", "se me olvidan", "cosas que se me olvidan")),
+        ("payments", ("dinero", "pagos", "pago", "cuentas", "facturas")),
+        ("after_shift", ("rutina despues del turno", "rutina después del turno", "despues del turno", "después del turno", "cierre de turno")),
+        ("fatigue", ("cansancio", "cansada", "cansado", "agotada", "agotado")),
+    )
+    for focus, markers in focus_markers:
+        if any(marker in norm for marker in markers):
+            return focus
+    return None
 
 
 def classify_adaptive_intake_domain(text: str) -> str | None:
@@ -163,6 +184,62 @@ def render_adaptive_intake_followup_response(domain: str, text: str) -> str:
     )
 
 
+def render_work_recommendation_reply(focus: str) -> str:
+    recommendations = {
+        "shifts": (
+            "organizarte alrededor de horarios",
+            "Rutina y Turnos",
+            "ver horarios, pendientes antes/después del turno y recordatorios básicos",
+            "porque el punto de fricción está alrededor de cuándo toca cada cosa, no de meter un sistema enorme",
+        ),
+        "pending": (
+            "que los pendientes no se te pierdan alrededor del trabajo",
+            "Organizar mi día laboral",
+            "capturar pendientes, separarlos por prioridad simple y revisar qué va antes o después del turno",
+            "porque primero necesitamos bajar lo regado a una revisión pequeña y usable",
+        ),
+        "reminders": (
+            "recordar cosas concretas sin cargarlo todo en la cabeza",
+            "Recordatorios básicos",
+            "anotar cosas importantes y decidir cuáles merecen recordatorio, siempre con confirmación",
+            "porque el dolor principal parece ser que algunas cosas se olvidan si no quedan visibles",
+        ),
+        "payments": (
+            "tener visibles pagos y fechas importantes",
+            "Pagos y fechas importantes",
+            "listar fechas, pagos o recibos pendientes para revisarlos sin convertirlo en consejo financiero",
+            "porque el valor está en orden y visibilidad, no en que Val decida por ti sobre dinero",
+        ),
+        "after_shift": (
+            "cerrar mejor el día después del turno",
+            "Rutina después del turno",
+            "hacer una mini revisión de pendientes, recordatorios y cosas que preparar para mañana",
+            "porque una rutina corta puede quitar carga sin volverse otro trabajo",
+        ),
+        "fatigue": (
+            "bajar la carga práctica después del turno",
+            "Cierre de turno",
+            "hacer una revisión muy simple de pendientes y preparar lo mínimo para el día siguiente",
+            "porque esto lo tratamos como apoyo práctico, no como lectura clínica ni consejo de salud",
+        ),
+        "too_broad": (
+            "no intentar resolver todo al mismo tiempo",
+            "Organizar mi día laboral",
+            "empezar por pendientes y revisión básica alrededor del turno",
+            "porque si arrancamos con todo se vuelve monstruo; mejor probamos una cosa que ordene lo demás",
+        ),
+    }
+    understood, workflow, test, why = recommendations.get(focus, recommendations["pending"])
+    opener = "Total, pero si arrancamos con todo se vuelve monstruo. " if focus == "too_broad" else ""
+    return (
+        f"{opener}Perfecto. Entonces lo primero que pesa es {understood}. "
+        f"Mi recomendación sería empezar con un flujo de {workflow}: {test}. "
+        f"Lo probaríamos una semana {why}.\n\n"
+        "No guardo nada todavía, no creo tareas, recordatorios ni eventos, y no tomo decisiones profesionales por ti. "
+        f"¿Te parece usar {workflow} como primer piloto?"
+    )
+
+
 async def maybe_handle_adaptive_intake(update: Any, context: Any, text: str) -> bool:
     if not update or not getattr(update, "message", None):
         return False
@@ -207,8 +284,28 @@ async def maybe_handle_adaptive_intake(update: Any, context: Any, text: str) -> 
         if looks_like_too_broad(text):
             await update.message.reply_text(render_adaptive_intake_too_broad_reply())
             return True
+        domain = str(state.get("domain") or "")
+        reply = render_adaptive_intake_followup_response(domain, text)
+        if domain == "work" and any(marker in normalize_adaptive_intake_text(text) for marker in ("cajera", "cajero")):
+            _set_state(context, _STAGE_RECOMMENDATION, domain=domain, role="cashier")
+        else:
+            clear_adaptive_intake_state(context)
+        await update.message.reply_text(reply)
+        return True
+
+    if stage == _STAGE_RECOMMENDATION:
+        decision = classify_adaptive_intake_confirmation(text)
+        if decision == "refuse":
+            clear_adaptive_intake_state(context)
+            await update.message.reply_text(render_adaptive_intake_refusal_reply())
+            return True
+        focus = classify_work_recommendation_focus(text)
+        if focus:
+            clear_adaptive_intake_state(context)
+            await update.message.reply_text(render_work_recommendation_reply(focus))
+            return True
         clear_adaptive_intake_state(context)
-        await update.message.reply_text(render_adaptive_intake_followup_response(str(state.get("domain") or ""), text))
+        await update.message.reply_text(render_work_recommendation_reply("pending"))
         return True
 
     if not is_adaptive_intake_trigger(text):
