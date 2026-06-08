@@ -42,11 +42,22 @@ KNOWN_CLASSIFIER_INTENTS = (
     "document_summary",
     "document_ocr",
     "case_status",
+    "adaptive_intake_start",
+    "adaptive_intake_domain",
+    "adaptive_intake_followup",
+    "adaptive_intake_recommendation",
     "memory_capture_candidate",
     "llm_fallback",
 )
 
-SHADOW_ONLY_INTENTS = {"memory_capture_candidate", "llm_fallback"}
+SHADOW_ONLY_INTENTS = {
+    "adaptive_intake_start",
+    "adaptive_intake_domain",
+    "adaptive_intake_followup",
+    "adaptive_intake_recommendation",
+    "memory_capture_candidate",
+    "llm_fallback",
+}
 
 STATIC_OBSERVED_BY_REPORT = {
     "ROUTER_07_SHADOW_OBSERVATION_REPORT.md": {
