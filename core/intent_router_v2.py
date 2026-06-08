@@ -66,6 +66,50 @@ def _pending_state_type(pending_state: Any) -> str:
     return "pending_action"
 
 
+def _adaptive_pending_intent(pending_type: str) -> str | None:
+    adaptive_states = {
+        "adaptive_intake_permission": "adaptive_intake_start",
+        "adaptive_intake_domain": "adaptive_intake_domain",
+        "adaptive_intake_followup": "adaptive_intake_followup",
+        "adaptive_intake_recommendation": "adaptive_intake_recommendation",
+    }
+    return adaptive_states.get(str(pending_type or ""))
+
+
+def _looks_like_adaptive_intake_start(normalized: str) -> bool:
+    return _has_any(normalized, (
+        "no se que necesito",
+        "ayudame a empezar",
+        "estoy perdida",
+        "estoy perdido",
+        "tengo demasiadas cosas",
+        "no se por donde empezar",
+        "quiero organizar mi dia",
+    ))
+
+
+def _looks_like_adaptive_intake_domain(normalized: str) -> bool:
+    return _has_any(normalized, (
+        "tengo clientes que perseguir",
+        "seguimiento de clientes",
+        "tengo papeles regados",
+        "papeles regados",
+        "documentos regados",
+        "ideas para un libro",
+        "ideas para un proyecto",
+    ))
+
+
+def _looks_like_adaptive_work_followup(normalized: str) -> bool:
+    return _has_any(normalized, (
+        "soy cajera",
+        "soy cajero",
+        "atiendo caja",
+        "trabajo en retail",
+        "tienda de departamento",
+    ))
+
+
 def _candidate(intent_type: str, confidence: float, source: str, normalized_text: str, reason: str, client_id: str | None, *, destructive: bool = False, needs_confirmation: bool = False) -> IntentCandidate:
     return IntentCandidate(
         intent_type=intent_type,
@@ -110,6 +154,16 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
     pending_type = _pending_state_type(pending_state)
 
     if pending_type:
+        adaptive_pending = _adaptive_pending_intent(pending_type)
+        if adaptive_pending:
+            return _decision(_candidate(
+                adaptive_pending,
+                0.98,
+                "pending_state",
+                normalized,
+                f"adaptive intake pending state exists: {pending_type}",
+                client,
+            ))
         return _decision(_candidate(
             "pending_action_reply",
             0.99,
@@ -131,6 +185,36 @@ def classify_intent_shadow(text, *, client_id=None, chat_id=None, pending_state=
             client,
             destructive=True,
             needs_confirmation=False,
+        ))
+
+    if _looks_like_adaptive_intake_start(normalized):
+        return _decision(_candidate(
+            "adaptive_intake_start",
+            0.88,
+            "deterministic",
+            normalized,
+            "matched adaptive intake start/help phrase",
+            client,
+        ))
+
+    if _looks_like_adaptive_work_followup(normalized):
+        return _decision(_candidate(
+            "adaptive_intake_followup",
+            0.78,
+            "deterministic",
+            normalized,
+            "matched work-role adaptive intake follow-up phrase",
+            client,
+        ))
+
+    if _looks_like_adaptive_intake_domain(normalized):
+        return _decision(_candidate(
+            "adaptive_intake_domain",
+            0.74,
+            "deterministic",
+            normalized,
+            "matched natural adaptive intake domain/workflow phrase",
+            client,
         ))
 
     if _has_any(normalized, ("crea evento", "google calendar", "pon en mi calendario", "agrega al calendario")) or re.search(r"\bagenda\s+.+\b(?:manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b.+\b(?:a las|am|pm|\d)", normalized):
