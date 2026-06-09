@@ -31,6 +31,22 @@
         <button id="startButton" type="button" aria-label="Start Diagnostic">Iniciar diagnostico AI Ops</button>
       </section>
 
+      <section class="voice-lite-panel" aria-labelledby="voice-lite-title">
+        <div>
+          <p class="eyebrow">Optional demo polish</p>
+          <h2 id="voice-lite-title">Voice Lite</h2>
+          <p>Short browser-native spoken moments for the meeting. No autoplay, no microphone permission, no external voice service.</p>
+        </div>
+        <div class="voice-controls" aria-label="Voice Lite controls">
+          <button id="speakIntroButton" type="button">Speak Intro</button>
+          <button id="speakFirstQuestionButton" type="button">Speak First Question</button>
+          <button id="speakOpportunityButton" type="button">Speak Opportunity Summary</button>
+          <button id="speakPilotButton" type="button">Speak Pilot Recommendation</button>
+          <button id="stopVoiceButton" type="button" class="secondary-button">Stop Voice</button>
+        </div>
+        <p id="voiceStatus" class="voice-status" role="status">Voice ready</p>
+      </section>
+
       <section class="diagnostic-grid" aria-label="AI Ops diagnostic workspace">
         <aside class="question-panel">
           <h2>Guided diagnostic questions</h2>

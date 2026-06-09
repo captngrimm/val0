@@ -7,6 +7,18 @@ const opportunityOutput = document.querySelector("#opportunityOutput");
 const pilotOutput = document.querySelector("#pilotOutput");
 const reportOutput = document.querySelector("#reportOutput");
 const questionItems = Array.from(document.querySelectorAll("#questionList li"));
+const voiceStatus = document.querySelector("#voiceStatus");
+
+const voiceLines = {
+  intro:
+    "Perfecto, Boss. Estamos iniciando un diagnóstico AI Ops para Carlos. Carlos, un gusto. Te haré unas preguntas cortas para entender cómo opera tu negocio, dónde se pierde tiempo y qué proceso tendría más sentido automatizar primero.",
+  firstQuestion:
+    "Primera pregunta: ¿qué tipo de negocio tienes y por dónde llegan normalmente tus clientes o leads?",
+  opportunity:
+    "Estoy viendo posibles oportunidades en captura de leads, seguimiento manual y visibilidad del estado de cada oportunidad.",
+  pilot:
+    "Mi recomendación inicial es empezar con un piloto pequeño: seguimiento de leads y recordatorios de próxima acción. Es medible, útil y no promete automatizar todo desde el primer día."
+};
 
 const sampleNotes = [
   "Carlos runs a service business.",
@@ -16,6 +28,38 @@ const sampleNotes = [
   "Some prospects are lost because nobody follows up.",
   "Carlos wants better visibility and fewer missed opportunities."
 ].join("\n");
+
+function voiceSupported() {
+  return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+}
+
+function setVoiceStatus(message) {
+  voiceStatus.textContent = message;
+}
+
+function stopVoice(status = "Stopped") {
+  if (voiceSupported()) {
+    window.speechSynthesis.cancel();
+  }
+  setVoiceStatus(status);
+}
+
+function speakVoiceLine(lineKey) {
+  if (!voiceSupported()) {
+    setVoiceStatus("Voice not supported in this browser");
+    return;
+  }
+
+  stopVoice("Stopped");
+  const utterance = new SpeechSynthesisUtterance(voiceLines[lineKey]);
+  utterance.lang = "es-PA";
+  utterance.rate = 0.95;
+  utterance.pitch = 1;
+  utterance.onstart = () => setVoiceStatus("Speaking...");
+  utterance.onend = () => setVoiceStatus("Voice ready");
+  utterance.onerror = () => setVoiceStatus("Voice not supported in this browser");
+  window.speechSynthesis.speak(utterance);
+}
 
 function companyName() {
   return companyInput.value.trim() || "Empresa X";
@@ -101,6 +145,15 @@ document.querySelector("#summaryButton").addEventListener("click", summarizeNote
 document.querySelector("#questionButton").addEventListener("click", suggestQuestion);
 document.querySelector("#opportunityButton").addEventListener("click", detectOpportunities);
 document.querySelector("#reportButton").addEventListener("click", generateReport);
+document.querySelector("#speakIntroButton").addEventListener("click", () => speakVoiceLine("intro"));
+document.querySelector("#speakFirstQuestionButton").addEventListener("click", () => speakVoiceLine("firstQuestion"));
+document.querySelector("#speakOpportunityButton").addEventListener("click", () => speakVoiceLine("opportunity"));
+document.querySelector("#speakPilotButton").addEventListener("click", () => speakVoiceLine("pilot"));
+document.querySelector("#stopVoiceButton").addEventListener("click", () => stopVoice("Stopped"));
 companyInput.addEventListener("input", () => {
   reportCompany.textContent = companyName();
 });
+
+if (!voiceSupported()) {
+  setVoiceStatus("Voice not supported in this browser");
+}

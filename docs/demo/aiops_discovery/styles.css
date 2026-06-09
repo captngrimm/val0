@@ -110,6 +110,7 @@ h3 {
 }
 
 .command-band,
+.voice-lite-panel,
 .question-panel,
 .notes-panel,
 .operator-panel,
@@ -127,6 +128,43 @@ h3 {
   gap: 16px;
   align-items: end;
   padding: 18px;
+}
+
+.voice-lite-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1.35fr) minmax(150px, 220px);
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+}
+
+.voice-lite-panel .eyebrow {
+  color: var(--brand);
+}
+
+.voice-controls {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.secondary-button {
+  background: #68767c;
+}
+
+.secondary-button:hover {
+  background: #46545b;
+}
+
+.voice-status {
+  margin: 0;
+  border: 1px solid #b9d5cf;
+  border-radius: 999px;
+  padding: 9px 12px;
+  color: var(--brand-deep);
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-align: center;
 }
 
 .field {
@@ -275,6 +313,7 @@ textarea {
 @media (max-width: 1040px) {
   .stage-header,
   .command-band,
+  .voice-lite-panel,
   .diagnostic-grid {
     grid-template-columns: 1fr;
   }
@@ -290,6 +329,10 @@ textarea {
   }
 
   .action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-controls {
     grid-template-columns: 1fr;
   }
 
