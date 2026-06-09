@@ -6,6 +6,8 @@ const STATUS_CLASSES = {
   "No contacto": "no-contacto",
 };
 
+const TODAY = "2026-06-09";
+
 const leads = [
   {
     id: "PC-DEMO-001",
@@ -47,7 +49,7 @@ const leads = [
     currentTools: "Correo, Google Drive y celular",
     appointmentScheduled: false,
     lastContact: "2026-06-08",
-    nextFollowUp: "2026-06-11",
+    nextFollowUp: "2026-06-08",
     nextAction: "Enviar resumen manual de opciones y llamar en dos días.",
     notes: "Socio ficticio llamó para consultar nueva compra. Próximo paso visible para continuidad entre turnos.",
     history: [
@@ -159,6 +161,7 @@ const operatorView = document.querySelector("#operatorView");
 const managerView = document.querySelector("#managerView");
 const operatorTab = document.querySelector("#operatorTab");
 const managerTab = document.querySelector("#managerTab");
+const operatorAdvisorFilter = document.querySelector("#operatorAdvisorFilter");
 const branchFilter = document.querySelector("#branchFilter");
 const advisorFilter = document.querySelector("#advisorFilter");
 
@@ -166,21 +169,38 @@ function normalizeClass(value) {
   return value.toLowerCase().replaceAll(" ", "-");
 }
 
-function isOverdue(lead) {
-  return lead.nextFollowUp <= "2026-06-09" && !["Venta", "Ilocalizable"].includes(lead.managementStatus);
+function needsFollowUp(lead) {
+  return lead.nextFollowUp < TODAY && lead.managementStatus !== "Venta";
+}
+
+function isPending(lead) {
+  return ["Seguimiento", "No contacto", "Ilocalizable", "Promesa de compra"].includes(lead.managementStatus);
+}
+
+function isManaged(lead) {
+  return lead.managementStatus !== "No contacto";
+}
+
+function countStatus(rows, status) {
+  return rows.filter((lead) => lead.managementStatus === status).length;
+}
+
+function operatorRows() {
+  return leads.filter((lead) => lead.advisor === operatorAdvisorFilter.value);
 }
 
 function filteredLeads() {
-  if (activeFilter === "vencidos") {
-    return leads.filter(isOverdue);
+  const assignedRows = operatorRows();
+  if (activeFilter === "pendientes") {
+    return assignedRows.filter(isPending);
   }
   if (activeFilter === "alta") {
-    return leads.filter((lead) => lead.priority === "Alta");
+    return assignedRows.filter((lead) => lead.priority === "Alta");
   }
   if (activeFilter === "citas") {
-    return leads.filter((lead) => lead.appointmentScheduled);
+    return assignedRows.filter((lead) => lead.appointmentScheduled);
   }
-  return leads;
+  return assignedRows;
 }
 
 function statusPill(status) {
@@ -189,7 +209,21 @@ function statusPill(status) {
 
 function renderLeadList() {
   const rows = filteredLeads();
+  const assignedRows = operatorRows();
   recordCount.textContent = `${rows.length} registros`;
+  document.querySelector("#operatorAssignedMetric").textContent = assignedRows.length;
+  document.querySelector("#operatorManagedMetric").textContent = assignedRows.filter(isManaged).length;
+  document.querySelector("#operatorPendingMetric").textContent = assignedRows.filter(isPending).length;
+  document.querySelector("#operatorSalesMetric").textContent = countStatus(assignedRows, "Venta");
+  document.querySelector("#operatorPromisesMetric").textContent = countStatus(assignedRows, "Promesa de compra");
+  document.querySelector("#operatorFollowUpsMetric").textContent = countStatus(assignedRows, "Seguimiento");
+  document.querySelector("#operatorUnreachableMetric").textContent = countStatus(assignedRows, "Ilocalizable");
+  document.querySelector("#operatorNoContactMetric").textContent = countStatus(assignedRows, "No contacto");
+
+  if (!rows.some((lead) => lead.id === selectedId) && rows[0]) {
+    selectedId = rows[0].id;
+  }
+
   leadList.innerHTML = rows
     .map(
       (lead) => `
@@ -251,8 +285,11 @@ function renderDetail() {
 function populateFilters() {
   const branches = ["Todas", ...new Set(leads.map((lead) => lead.branch))];
   const advisors = ["Todos", ...new Set(leads.map((lead) => lead.advisor))];
+  const operatorAdvisors = [...new Set(leads.map((lead) => lead.advisor))];
+  operatorAdvisorFilter.innerHTML = operatorAdvisors.map((advisor) => `<option value="${advisor}">${advisor}</option>`).join("");
   branchFilter.innerHTML = branches.map((branch) => `<option value="${branch}">${branch}</option>`).join("");
   advisorFilter.innerHTML = advisors.map((advisor) => `<option value="${advisor}">${advisor}</option>`).join("");
+  selectedId = operatorRows()[0]?.id || leads[0].id;
 }
 
 function managerRows() {
@@ -263,12 +300,32 @@ function managerRows() {
   });
 }
 
+function branchRowsForBreakdown() {
+  return leads.filter((lead) => branchFilter.value === "Todas" || lead.branch === branchFilter.value);
+}
+
+function progressPercent(rows) {
+  if (!rows.length) {
+    return 0;
+  }
+  const managed = rows.filter(isManaged).length;
+  return Math.round((managed / rows.length) * 100);
+}
+
 function renderManager() {
   const rows = managerRows();
-  document.querySelector("#openLeadsMetric").textContent = rows.filter((lead) => lead.managementStatus !== "Venta").length;
-  document.querySelector("#overdueMetric").textContent = rows.filter(isOverdue).length;
-  document.querySelector("#appointmentsMetric").textContent = rows.filter((lead) => lead.appointmentScheduled).length;
-  document.querySelector("#conversionsMetric").textContent = rows.filter((lead) => lead.managementStatus === "Venta").length;
+  document.querySelector("#assignedMetric").textContent = rows.length;
+  document.querySelector("#pendingMetric").textContent = rows.filter(isPending).length;
+  document.querySelector("#promisesMetric").textContent = countStatus(rows, "Promesa de compra");
+  document.querySelector("#salesMetric").textContent = countStatus(rows, "Venta");
+  document.querySelector("#followUpsMetric").textContent = countStatus(rows, "Seguimiento");
+  document.querySelector("#noContactMetric").textContent = countStatus(rows, "No contacto");
+  document.querySelector("#unreachableMetric").textContent = countStatus(rows, "Ilocalizable");
+
+  const monthProgress = progressPercent(rows);
+  document.querySelector("#monthProgressMetric").textContent = `${monthProgress}%`;
+  document.querySelector("#monthProgressLabel").textContent = `${rows.filter(isManaged).length} de ${rows.length} gestionados`;
+  document.querySelector("#monthProgressBar").style.width = `${monthProgress}%`;
 
   const branchNames = [...new Set(rows.map((lead) => lead.branch))];
   document.querySelector("#branchTableBody").innerHTML = branchNames
@@ -277,19 +334,65 @@ function renderManager() {
       return `
         <tr>
           <td>${branch}</td>
-          <td>${branchRows.filter((lead) => lead.managementStatus !== "Venta").length}</td>
-          <td>${branchRows.filter(isOverdue).length}</td>
-          <td>${branchRows.filter((lead) => lead.appointmentScheduled).length}</td>
-          <td>${branchRows.filter((lead) => lead.managementStatus === "Venta").length}</td>
-          <td>${branchRows.filter((lead) => lead.managementStatus === "Promesa de compra").length}</td>
-          <td>${branchRows.filter((lead) => lead.managementStatus === "No contacto").length}</td>
-          <td>${branchRows.filter((lead) => lead.channel === "Venta presencial").length}</td>
+          <td>${branchRows.length}</td>
+          <td>${countStatus(branchRows, "Venta")}</td>
+          <td>${countStatus(branchRows, "Promesa de compra")}</td>
+          <td>${countStatus(branchRows, "Seguimiento")}</td>
+          <td>${countStatus(branchRows, "No contacto")}</td>
+          <td>${countStatus(branchRows, "Ilocalizable")}</td>
+          <td>${branchRows.filter(isPending).length}</td>
         </tr>
       `;
     })
     .join("");
 
-  const risks = rows.filter((lead) => isOverdue(lead) || lead.priority === "Alta").slice(0, 5);
+  const breakdownRows = branchRowsForBreakdown();
+  const advisorNames = [...new Set(breakdownRows.map((lead) => lead.advisor))];
+  document.querySelector("#advisorTableBody").innerHTML = advisorNames
+    .map((advisor) => {
+      const advisorRows = breakdownRows.filter((lead) => lead.advisor === advisor);
+      return `
+        <tr>
+          <td>${advisor}</td>
+          <td>${advisorRows.length}</td>
+          <td>${countStatus(advisorRows, "Venta")}</td>
+          <td>${countStatus(advisorRows, "Promesa de compra")}</td>
+          <td>${countStatus(advisorRows, "Seguimiento")}</td>
+          <td>${countStatus(advisorRows, "No contacto")}</td>
+          <td>${countStatus(advisorRows, "Ilocalizable")}</td>
+          <td>${advisorRows.filter(isPending).length}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  const advisorStats = advisorNames.map((advisor) => {
+    const advisorRows = breakdownRows.filter((lead) => lead.advisor === advisor);
+    return {
+      advisor,
+      sales: countStatus(advisorRows, "Venta"),
+      pending: advisorRows.filter(isPending).length,
+      noContact: countStatus(advisorRows, "No contacto"),
+      unreachable: countStatus(advisorRows, "Ilocalizable"),
+    };
+  });
+  const topBy = (key) => advisorStats.reduce((best, row) => (!best || row[key] > best[key] ? row : best), null);
+  const topSales = topBy("sales");
+  const topPending = topBy("pending");
+  const topNoContact = topBy("noContact");
+  const topUnreachable = topBy("unreachable");
+  document.querySelector("#coachingSummary").innerHTML = [
+    ["Más ventas", topSales, "sales"],
+    ["Más pendientes", topPending, "pending"],
+    ["Más no contacto", topNoContact, "noContact"],
+    ["Más ilocalizables", topUnreachable, "unreachable"],
+  ]
+    .map(([label, row, key]) => `<article><span>${label}</span><strong>${row ? row.advisor : "-"}</strong><p>${row ? row[key] : 0} registros</p></article>`)
+    .join("");
+
+  const risks = rows
+    .filter((lead) => lead.managementStatus === "No contacto" || lead.managementStatus === "Ilocalizable" || (lead.managementStatus === "Promesa de compra" && needsFollowUp(lead)))
+    .slice(0, 5);
   document.querySelector("#riskList").innerHTML = risks
     .map((lead) => `<li><strong>${lead.name}</strong> - ${lead.branch}, ${lead.advisor}, ${lead.shift}. Canal: ${lead.channel}. Estado de gestión: ${lead.managementStatus}. Próxima acción: ${lead.nextAction}</li>`)
     .join("");
@@ -323,6 +426,12 @@ document.querySelectorAll(".chip").forEach((button) => {
     document.querySelectorAll(".chip").forEach((chip) => chip.classList.toggle("active", chip === button));
     renderLeadList();
   });
+});
+
+operatorAdvisorFilter.addEventListener("change", () => {
+  selectedId = operatorRows()[0]?.id || leads[0].id;
+  renderLeadList();
+  renderDetail();
 });
 
 document.querySelectorAll(".status-actions button").forEach((button) => {

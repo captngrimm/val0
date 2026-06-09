@@ -15,10 +15,11 @@ No requiere servidor. Se puede abrir directamente en el navegador.
 
 ## Qué Muestra
 
-La demo presenta dos vistas principales:
+La demo presenta tres niveles de lectura:
 
-- Vista asesores: lista diaria de socios, prospectos y oportunidades comerciales con sucursal, asesor, turno, canal, estado, prioridad, último contacto y próximo seguimiento.
-- Vista gerencial: filtros por sucursal y asesor, métricas de seguimiento y una tabla simple para ver riesgo operativo por sucursal, asesor y canal.
+- Vista asesor/operador: lista diaria asignada a cada asesor, con socios/prospectos, sucursal, turno, canal, estado de gestión, prioridad, último contacto, historial y próximo paso.
+- Vista gerente de sucursal: totales para una sucursal seleccionada, breakdown por asesor y lectura de quién tiene más ventas, pendientes, no contacto o ilocalizables.
+- Vista gerente general: macro totales de todas las sucursales, comparación por sucursal y entrada conceptual a una sucursal para ver detalle por asesor.
 
 La demo usa branding de reunión:
 
@@ -50,6 +51,8 @@ Los operadores trabajan por turnos. El punto de partida actual es abrir laptop, 
 La vista de asesores permite mostrar:
 
 - Lista de socios/prospectos.
+- Socios asignados por asesor.
+- Mini-dashboard acumulado del asesor: Total asignados, Total gestionados, Pendientes por gestionar, Ventas, Promesas de compra, Seguimiento, Ilocalizables y No contacto.
 - Estado socio.
 - Estado de gestión.
 - Sucursal.
@@ -65,6 +68,7 @@ La vista de asesores permite mostrar:
 - Notas.
 - Historial de interacción.
 - Próxima acción.
+- Botones editables de Estado de gestión para conversación de demo.
 
 Clarificación comercial:
 Estado socio describe la relación de membresía o cliente. Estado de gestión describe el proceso de venta, seguimiento o contacto que maneja el asesor. No son el mismo campo.
@@ -85,22 +89,40 @@ El valor del piloto es centralizar seguimiento, historial de contacto y próximo
 
 ## Flujo Gerencial
 
-La vista gerencial permite mostrar:
+La vista de gerente de sucursal permite mostrar:
 
-- Filtro por sucursal.
-- Filtro por asesor.
-- Leads abiertos.
-- Seguimientos vencidos.
-- Citas agendadas.
-- Conversiones simuladas.
-- Conteo de Venta.
-- Conteo de Promesa de compra.
-- Conteo de No contacto.
-- Conteo de ventas presenciales.
-- Tabla por sucursal.
-- Lista de oportunidades que requieren atención.
+- Totales de la sucursal seleccionada.
+- Breakdown por asesor dentro de esa sucursal.
+- Qué asesor tiene más ventas.
+- Qué asesor tiene más pendientes.
+- Qué asesor tiene más No contacto.
+- Qué asesor tiene más Ilocalizables.
+- Señales para coaching y necesidades de apoyo.
 
-El objetivo es explicar visibilidad gerencial: qué está vencido, quién tiene carga, qué sucursal necesita atención, qué Estado de gestión domina, qué canal genera actividad y qué oportunidades deben revisarse.
+La vista de gerente general permite mostrar:
+
+- Macro totales de todas las sucursales.
+- Comparación por sucursal.
+- Entrada conceptual a una sucursal para revisar el detalle por asesor.
+- Señales para decisiones de coaching, staffing, salidas o bonos.
+
+Métricas visibles:
+
+- Total asignados.
+- Total gestionados.
+- Socios asignados.
+- Ventas.
+- Promesas de compra.
+- Seguimientos.
+- No contacto.
+- Ilocalizables.
+- Pendientes por gestionar.
+- Avance del mes / corte medio mes.
+- Distribución por sucursal.
+- Breakdown por asesor dentro de la sucursal seleccionada.
+- Lista de No contacto / Ilocalizables / Promesas de compra.
+
+El objetivo es explicar visibilidad gerencial: cuántos socios están asignados, qué ventas y promesas existen, qué asesores tienen pendientes, qué sucursal necesita atención y dónde hay no contacto, ilocalizables o promesas de compra que requieren gestión.
 
 ---
 

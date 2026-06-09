@@ -66,13 +66,51 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow dark">Operación diaria</p>
-              <h2 id="operatorTitle">Lista de socios y prospectos</h2>
+              <h2 id="operatorTitle">Mis socios y prospectos asignados</h2>
             </div>
             <span id="recordCount" class="count-pill">0 registros</span>
           </div>
+          <label class="operator-select">
+            <span>Asesor en turno</span>
+            <select id="operatorAdvisorFilter" aria-label="Seleccionar asesor para vista operativa"></select>
+          </label>
+          <div class="operator-summary" aria-label="Mini-dashboard del asesor">
+            <article>
+              <span>Total asignados</span>
+              <strong id="operatorAssignedMetric">0</strong>
+            </article>
+            <article>
+              <span>Total gestionados</span>
+              <strong id="operatorManagedMetric">0</strong>
+            </article>
+            <article>
+              <span>Pendientes por gestionar</span>
+              <strong id="operatorPendingMetric">0</strong>
+            </article>
+            <article>
+              <span>Ventas</span>
+              <strong id="operatorSalesMetric">0</strong>
+            </article>
+            <article>
+              <span>Promesas de compra</span>
+              <strong id="operatorPromisesMetric">0</strong>
+            </article>
+            <article>
+              <span>Seguimiento</span>
+              <strong id="operatorFollowUpsMetric">0</strong>
+            </article>
+            <article>
+              <span>Ilocalizables</span>
+              <strong id="operatorUnreachableMetric">0</strong>
+            </article>
+            <article>
+              <span>No contacto</span>
+              <strong id="operatorNoContactMetric">0</strong>
+            </article>
+          </div>
           <div class="quick-filters" aria-label="Filtros rápidos">
             <button class="chip active" type="button" data-filter="todos">Todos</button>
-            <button class="chip" type="button" data-filter="vencidos">Vencidos</button>
+            <button class="chip" type="button" data-filter="pendientes">Socios por gestionar</button>
             <button class="chip" type="button" data-filter="alta">Prioridad alta</button>
             <button class="chip" type="button" data-filter="citas">Citas</button>
           </div>
@@ -170,6 +208,9 @@
           <div>
             <p class="eyebrow dark">Visibilidad gerencial</p>
             <h2 id="managerTitle">Dashboard del piloto operativo</h2>
+            <p class="manager-mode-copy">
+              Gerente general: use "Todas" para ver macro totales por sucursal. Gerente de sucursal: seleccione una sucursal para ver el detalle por asesor.
+            </p>
           </div>
           <div class="filters">
             <label>
@@ -185,29 +226,68 @@
 
         <div class="metrics-grid" aria-label="Métricas del piloto">
           <article class="metric-card">
-            <span>Leads abiertos</span>
-            <strong id="openLeadsMetric">0</strong>
+            <span>Socios asignados</span>
+            <strong id="assignedMetric">0</strong>
           </article>
           <article class="metric-card warning">
-            <span>Seguimientos vencidos</span>
-            <strong id="overdueMetric">0</strong>
+            <span>Pendientes por gestionar</span>
+            <strong id="pendingMetric">0</strong>
           </article>
           <article class="metric-card blue">
-            <span>Citas agendadas</span>
-            <strong id="appointmentsMetric">0</strong>
+            <span>Promesas de compra</span>
+            <strong id="promisesMetric">0</strong>
           </article>
           <article class="metric-card success">
-            <span>Conversiones simuladas</span>
-            <strong id="conversionsMetric">0</strong>
+            <span>Ventas</span>
+            <strong id="salesMetric">0</strong>
+          </article>
+          <article class="metric-card">
+            <span>Seguimientos</span>
+            <strong id="followUpsMetric">0</strong>
+          </article>
+          <article class="metric-card warning">
+            <span>No contacto</span>
+            <strong id="noContactMetric">0</strong>
+          </article>
+          <article class="metric-card warning">
+            <span>Ilocalizables</span>
+            <strong id="unreachableMetric">0</strong>
+          </article>
+          <article class="metric-card blue">
+            <span>Avance del mes</span>
+            <strong id="monthProgressMetric">0%</strong>
           </article>
         </div>
+
+        <section class="panel progress-panel" aria-labelledby="monthProgressTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Corte medio mes</p>
+              <h3 id="monthProgressTitle">Avance del mes por sucursal seleccionada</h3>
+            </div>
+            <span id="monthProgressLabel" class="count-pill">0 de 0 gestionados</span>
+          </div>
+          <div class="progress-track" aria-hidden="true">
+            <span id="monthProgressBar"></span>
+          </div>
+        </section>
+
+        <section class="panel coaching-panel" aria-labelledby="coachingTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Lectura de desempeño</p>
+              <h3 id="coachingTitle">Coaching, staffing, salidas o bonos</h3>
+            </div>
+          </div>
+          <div id="coachingSummary" class="coaching-summary" aria-label="Resumen de desempeño por asesor"></div>
+        </section>
 
         <div class="manager-grid">
           <section class="panel" aria-labelledby="branchTableTitle">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow dark">Resumen</p>
-                <h3 id="branchTableTitle">Tabla por sucursal</h3>
+                <h3 id="branchTableTitle">Distribución por sucursal</h3>
               </div>
             </div>
             <div class="table-wrap">
@@ -215,13 +295,13 @@
                 <thead>
                   <tr>
                     <th>Sucursal</th>
-                    <th>Abiertos</th>
-                    <th>Vencidos</th>
-                    <th>Citas</th>
+                    <th>Asignados</th>
                     <th>Venta</th>
                     <th>Promesa</th>
+                    <th>Seguimiento</th>
                     <th>No contacto</th>
-                    <th>Presencial</th>
+                    <th>Ilocalizable</th>
+                    <th>Pendientes</th>
                   </tr>
                 </thead>
                 <tbody id="branchTableBody"></tbody>
@@ -233,12 +313,38 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow dark">Acción gerencial</p>
-                <h3 id="riskTitle">Oportunidades que requieren atención</h3>
+                <h3 id="riskTitle">No contacto / Ilocalizables / Promesas de compra</h3>
               </div>
             </div>
             <ul id="riskList" class="risk-list"></ul>
           </section>
         </div>
+
+        <section class="panel" aria-labelledby="advisorBreakdownTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Detalle por asesor</p>
+              <h3 id="advisorBreakdownTitle">Breakdown por asesor dentro de la sucursal seleccionada</h3>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Asesor</th>
+                  <th>Asignados</th>
+                  <th>Venta</th>
+                  <th>Promesa</th>
+                  <th>Seguimiento</th>
+                  <th>No contacto</th>
+                  <th>Ilocalizable</th>
+                  <th>Pendientes</th>
+                </tr>
+              </thead>
+              <tbody id="advisorTableBody"></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
 

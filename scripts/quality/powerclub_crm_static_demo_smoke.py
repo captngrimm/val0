@@ -64,7 +64,7 @@ def test_spanish_labels_and_branding() -> None:
         "powerclub-mark",
         "Vista asesores",
         "Vista gerencial",
-        "Lista de socios y prospectos",
+        "Mis socios y prospectos asignados",
         "Sucursal",
         "Asesor",
         "Último contacto",
@@ -78,6 +78,9 @@ def test_spanish_labels_and_branding() -> None:
         "Canal",
         "Archivo actual",
         "Herramientas actuales",
+        "Mini-dashboard acumulado del asesor",
+        "Total asignados",
+        "Total gestionados",
         "Notas",
         "Historial de interacción",
     ):
@@ -88,12 +91,23 @@ def test_disclaimer_statuses_and_manager_metrics() -> None:
     text = read_demo()
     for needle in (
         "Demo con datos ficticios. No usa información real de Power Club.",
-        "Leads abiertos",
-        "Seguimientos vencidos",
-        "Citas agendadas",
-        "Conversiones simuladas",
-        "Filtro por sucursal",
-        "Filtro por asesor",
+        "Socios asignados",
+        "Socios por gestionar",
+        "Pendientes por gestionar",
+        "Total asignados",
+        "Total gestionados",
+        "Ventas",
+        "Promesas de compra",
+        "Seguimientos",
+        "No contacto",
+        "Ilocalizables",
+        "Avance del mes",
+        "Corte medio mes",
+        "Distribución por sucursal",
+        "Breakdown por asesor",
+        "No contacto / Ilocalizables / Promesas de compra",
+        "Filtro de sucursal",
+        "Filtro de asesor",
     ):
         assert_contains(text, needle, "demo disclaimer/statuses/metrics")
 
@@ -123,6 +137,42 @@ def test_operator_workflow_alignment() -> None:
         "Laptop",
     ):
         assert_contains(text, needle, "operator workflow alignment")
+
+
+def test_manager_realignment_labels_and_logic() -> None:
+    text = read_demo()
+    for needle in (
+        "Vista asesor/operador",
+        "Gerente general",
+        "Gerente de sucursal",
+        "macro totales",
+        "comparación por sucursal",
+        "coaching",
+        "staffing",
+        "salidas",
+        "bonos",
+        "operatorAdvisorFilter",
+        "operatorAssignedMetric",
+        "operatorManagedMetric",
+        "operatorSalesMetric",
+        "operatorPromisesMetric",
+        "operatorFollowUpsMetric",
+        "operatorUnreachableMetric",
+        "operatorNoContactMetric",
+        "operatorPendingMetric",
+        "assignedMetric",
+        "pendingMetric",
+        "promisesMetric",
+        "salesMetric",
+        "followUpsMetric",
+        "noContactMetric",
+        "unreachableMetric",
+        "monthProgressMetric",
+        "advisorTableBody",
+        "progressPercent",
+        "branchRowsForBreakdown",
+    ):
+        assert_contains(text, needle, "manager dashboard realignment")
 
 
 def test_estado_de_gestion_values_and_interpretation() -> None:
@@ -180,6 +230,13 @@ def test_no_real_data_or_promise_violations() -> None:
         "automatizacion por WhatsApp incluida",
         "CRM de produccion listo",
         "reemplaza el CRM actual desde hoy",
+        "Leads abiertos",
+        "Seguimientos vencidos",
+        "Conversiones simuladas",
+        "Oportunidades que requieren atención",
+        "vencido",
+        "vencidos",
+        "Vencidos",
         "API conectada",
         "backend activo",
         "full SaaS",
@@ -209,6 +266,7 @@ def main() -> int:
     test_spanish_labels_and_branding()
     test_disclaimer_statuses_and_manager_metrics()
     test_operator_workflow_alignment()
+    test_manager_realignment_labels_and_logic()
     test_estado_de_gestion_values_and_interpretation()
     test_static_no_network_or_auth_or_backend()
     test_no_real_data_or_promise_violations()
