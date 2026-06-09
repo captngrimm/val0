@@ -7,10 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEMO_DIR = ROOT / "docs/demo/powerclub_crm"
+ASSET_DIR = DEMO_DIR / "assets"
 HTML = DEMO_DIR / "index.html"
 CSS = DEMO_DIR / "styles.css"
 JS = DEMO_DIR / "app.js"
 DOC = ROOT / "docs/product/POWERCLUB_CRM_01B_STATIC_DUMMY_DEMO.md"
+LOGO_HORIZONTAL = ASSET_DIR / "powerclub-logo-horizontal.png"
+LOGO_SQUARE = ASSET_DIR / "powerclub-logo-square.png"
 PROTECTED = (
     "bot.py",
     "core",
@@ -43,7 +46,7 @@ def read_demo() -> str:
 
 
 def test_required_files_exist() -> None:
-    for path in (HTML, CSS, JS, DOC):
+    for path in (HTML, CSS, JS, DOC, LOGO_HORIZONTAL, LOGO_SQUARE):
         assert_true(path.exists(), f"{path.relative_to(ROOT)} exists")
 
 
@@ -55,6 +58,10 @@ def test_spanish_labels_and_branding() -> None:
         "Honest AI Ops",
         "Power Club CRM Pilot",
         "CRM Operativo Ligero",
+        "./assets/powerclub-logo-horizontal.png",
+        "./assets/powerclub-logo-square.png",
+        "powerclub-wordmark",
+        "powerclub-mark",
         "Vista asesores",
         "Vista gerencial",
         "Lista de socios y prospectos",
@@ -153,6 +160,15 @@ def test_static_no_network_or_auth_or_backend() -> None:
         "token",
     ):
         assert_not_contains(text, needle, "static demo avoids network/auth/persistence")
+
+    html = read(HTML)
+    for needle in (
+        'src="http',
+        "src='http",
+        "url(http",
+        "remote image",
+    ):
+        assert_not_contains(html, needle, "static demo avoids remote images")
 
 
 def test_no_real_data_or_promise_violations() -> None:

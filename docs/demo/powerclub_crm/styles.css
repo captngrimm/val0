@@ -74,12 +74,24 @@ h3 {
 
 .hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 380px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 390px);
   gap: 24px;
   align-items: end;
   padding: 34px clamp(18px, 4vw, 48px) 28px;
   background: var(--deep);
   color: #fff;
+}
+
+.powerclub-wordmark {
+  display: block;
+  width: min(310px, 78vw);
+  max-height: 88px;
+  margin-bottom: 18px;
+  object-fit: contain;
+  object-position: left center;
+  border-radius: 4px;
+  background: #fff;
+  padding: 10px 12px;
 }
 
 .subtitle {
@@ -116,6 +128,22 @@ h3 {
 .partner-card span {
   color: #d8eee9;
   font-weight: 700;
+}
+
+.partner-brand-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.powerclub-mark {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.72);
+  object-fit: cover;
+  background: #fff;
 }
 
 .partner-card p {
