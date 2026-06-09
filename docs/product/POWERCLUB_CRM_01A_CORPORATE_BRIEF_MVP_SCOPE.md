@@ -1,450 +1,453 @@
-# POWERCLUB-CRM-01A - Corporate Brief + MVP Scope
+# POWERCLUB-CRM-01A - Brief Corporativo + Alcance MVP
 
-Purpose:
-Client-facing pilot brief for a Power Club CRM discovery and MVP package using the Val AI Ops Stage as the consulting/demo surface.
+Propósito:
+Documento client-facing para preparar una conversación ejecutiva con Power Club sobre un piloto operativo de CRM, usando el Stage de Val AI Ops como superficie de consultoría y demostración.
 
-Status:
-Pilot proposal draft. This is not a production CRM contract, not a full SaaS build, and not an implementation commitment until scope, data access, users, timeline, and pricing are approved.
+Estado:
+Borrador de propuesta para piloto. No es un contrato de implementación final, no es un reemplazo completo del CRM actual y no compromete alcance, fechas, accesos, datos ni precios hasta que la gerencia apruebe el piloto.
 
-Data note:
-This document uses only anonymous assumptions and high-level discovery facts. It does not include real member records, lead lists, exported files, private conversations, live Karen files, credentials, or operational client data.
-
----
-
-## 1. Executive Summary
-
-Power Club appears to have a clear commercial opportunity: a simpler CRM pilot focused on follow-up discipline, sales visibility, and branch-level accountability.
-
-The business likely operates across around 10 branches, with an estimated 35-45 users/operators and approximately 1,500-2,000 records per month flowing from Excel/export sources. The current CRM or software environment appears too complex, too generic, or misaligned with the actual sales process.
-
-The proposed phase 1 is not a full replacement CRM. It is a focused pilot that turns exported data into a practical follow-up workspace for operators/asesores and a visibility dashboard for management. The goal is to reduce lost sales and missed opportunities by making every lead/member opportunity visible, assigned, prioritized, followed up, and measurable.
-
-Recommended first move:
-Run a structured discovery meeting with Karen and the General Manager, confirm the real sales stages and branch workflow, then prepare a pilot demo using sample/dummy data in the Val AI Ops Stage.
+Nota de datos:
+Este documento usa únicamente supuestos anónimos y datos generales de descubrimiento. No incluye registros reales de socios, prospectos, archivos exportados, conversaciones privadas, archivos vivos de Karen, credenciales ni data operativa sensible.
 
 ---
 
-## 2. Problem Summary
+## 1. Resumen Ejecutivo
 
-Current pain:
-Sales opportunities are being lost because of poor follow-up, inconsistent next actions, and low visibility for managers.
+Power Club parece tener una oportunidad comercial clara: ordenar el seguimiento de prospectos y socios con un CRM operativo ligero, pensado para la forma real en que trabajan las sucursales.
 
-Likely causes:
+Según los supuestos iniciales, Power Club opera alrededor de 10 sucursales, con un estimado de 35-45 usuarios/operadores y aproximadamente 1,500-2,000 registros al mes provenientes de Excel o exportaciones. El sistema actual parece demasiado complejo, poco alineado al proceso comercial o difícil de usar como herramienta diaria.
 
-- Records exist in Excel/export files, but the next action is not always clear.
-- Operators/asesores may not have a simple daily queue.
-- Branch managers may not have a reliable view of overdue follow-ups.
-- General management may see totals but not the operational reasons behind lost opportunities.
-- Existing software may require too many steps or may not match how Power Club actually sells, renews, or recovers opportunities.
+La fase 1 propuesta no busca reemplazar todo el software actual. Busca probar, en pequeño, una capa práctica de seguimiento: una lista clara para asesores, un flujo simple de actualización y un tablero de visibilidad gerencial para saber qué oportunidades están activas, vencidas, ganadas, perdidas o sin dueño.
 
-Business impact:
+Objetivo del piloto:
+Reducir oportunidades perdidas por falta de seguimiento, aumentar la visibilidad gerencial y validar si Power Club necesita un CRM operativo ligero antes de considerar una implementación más grande.
 
-- Hot prospects cool down before follow-up.
-- Renewals, reactivations, or pending sales may be missed.
-- Operators may duplicate effort or work from outdated lists.
-- Managers may discover problems only after the sale is already lost.
-- The business lacks a shared source of truth for commercial action.
+Siguiente movimiento recomendado:
+Hacer una reunión corta de descubrimiento con Karen y luego una conversación con Gerencia General para confirmar el proceso real, seleccionar una sucursal o flujo piloto y preparar una demo con datos ficticios.
 
 ---
 
-## 3. Current Flow Assumptions
+## 2. Resumen del Problema
 
-These assumptions must be confirmed before implementation.
+Dolor principal:
+Power Club puede estar perdiendo ventas, renovaciones o reactivaciones por seguimiento irregular, baja visibilidad gerencial y falta de una lista diaria clara para los asesores.
 
-- Records are currently generated from Excel/export sources.
-- Each branch has its own commercial activity and operators/asesores.
-- Leads, members, renewals, trials, reactivations, or pending opportunities may be mixed across exports.
-- Follow-up may happen through manual calls, messages, in-person branch activity, or informal tracking.
-- The current system is not trusted as the daily operational workspace.
-- Managers need visibility by branch, operator, status, and overdue action.
-- Karen is the internal trusted contact who can help validate process reality before a GM meeting.
+Causas probables:
 
-Anonymous sample flow:
+- La información existe en Excel o exportaciones, pero no siempre queda claro cuál es la siguiente acción.
+- Los asesores pueden trabajar desde listas separadas, mensajes, memoria o instrucciones informales.
+- Los gerentes de sucursal pueden no ver a tiempo cuáles seguimientos están vencidos.
+- Gerencia puede tener números generales, pero poca visibilidad sobre por qué se pierden oportunidades.
+- El software actual puede tener demasiados pasos o no reflejar cómo Power Club realmente vende, renueva y recupera socios.
 
-`Export -> clean/import -> assign branch/operator -> classify status -> daily follow-up -> update outcome -> manager review -> next action or close`
+Impacto comercial:
 
----
-
-## 4. Target Users
-
-### General Manager
-
-Needs a high-level view of commercial pipeline health, follow-up discipline, conversion risks, and branch performance.
-
-### Branch Managers
-
-Need to see what is pending, overdue, assigned, won/lost, and blocked for their branch.
-
-### Operators / Asesores
-
-Need a simple daily work queue: who to contact, why, by when, with what last context, and how to mark the result.
-
-### Internal Trusted Contact
-
-Karen can help validate the real workflow, vocabulary, decision path, and meeting readiness before broader presentation.
-
-### Admin / Data Owner
-
-Needs to prepare exports, import/update data, review duplicates, and maintain basic field quality during the pilot.
+- Prospectos calientes se enfrían antes de recibir seguimiento.
+- Renovaciones o reactivaciones pueden quedar sin dueño.
+- Los asesores pueden duplicar esfuerzos o trabajar con información desactualizada.
+- Los gerentes detectan problemas tarde, cuando la oportunidad ya se perdió.
+- La empresa no tiene una fuente operativa simple para priorizar acciones comerciales.
 
 ---
 
-## 5. CRM MVP Scope
+## 3. Supuestos del Flujo Actual
 
-Phase 1 goal:
-Create a simple pilot CRM workflow that makes follow-up visible and measurable without forcing the company into a heavy software migration.
+Estos supuestos deben validarse antes de cualquier implementación.
 
-Included in MVP:
+- Los registros comerciales se generan desde Excel o exportaciones del sistema actual.
+- Cada sucursal tiene actividad comercial propia y asesores responsables.
+- Prospectos, socios, renovaciones, pruebas, reactivaciones y oportunidades pendientes pueden aparecer mezclados en los exportes.
+- El seguimiento ocurre de forma manual por llamada, mensaje, atención en sucursal u otros canales aprobados por la empresa.
+- El sistema actual no funciona como lista diaria simple para todos los asesores.
+- Los gerentes necesitan visibilidad por sucursal, asesor, estado y fecha de próximo seguimiento.
+- Karen es el contacto interno de confianza para validar vocabulario, proceso real y sensibilidad antes de la reunión con Gerencia General.
 
-- Anonymous/sample data structure for demo.
-- Export-based intake model from Excel or CSV.
-- Lead/opportunity list with search and filters.
-- Branch and operator assignment.
-- Sales/follow-up status.
-- Next action date.
-- Last contact result.
-- Overdue follow-up visibility.
-- Manager dashboard requirements.
-- Basic pipeline stages.
-- Pilot success metrics.
-- Manual import/update process.
-- Meeting-ready corporate brief and demo scope.
+Flujo anónimo de referencia:
 
-Primary MVP objects:
-
-- Person/lead/member opportunity.
-- Branch.
-- Operator/asesor.
-- Follow-up task.
-- Outcome/status.
-- Manager dashboard view.
-
-Success definition:
-The pilot is successful if operators can work a daily list, managers can see overdue and high-value opportunities, and leadership can identify whether follow-up discipline improves within the pilot period.
+`Exportación -> limpieza/importación -> asignar sucursal/asesor -> clasificar estado -> seguimiento diario -> actualizar resultado -> revisión gerencial -> próxima acción o cierre`
 
 ---
 
-## 6. Suggested Data Fields
+## 4. Usuarios Objetivo
 
-Minimum fields for phase 1:
+### Gerencia General
 
-- Record ID.
-- Full name.
-- Phone.
-- Email, if available.
-- Branch.
-- Assigned operator/asesor.
-- Source.
-- Opportunity type.
-- Current status.
-- Priority.
-- Created date.
-- Last contact date.
-- Last contact result.
-- Next action date.
-- Next action type.
-- Notes.
-- Estimated value or plan interest, if available.
-- Close reason, when lost or not interested.
+Necesita una vista clara de salud comercial, seguimiento vencido, oportunidades perdidas, avance por sucursal y puntos donde el proceso se tranca.
 
-Suggested status values:
+### Gerentes de Sucursal
 
-- New.
-- Assigned.
-- Contacted.
-- Follow-up scheduled.
-- Interested.
-- Pending decision.
-- Won.
-- Lost.
-- No response.
-- Invalid/duplicate.
+Necesitan ver qué está pendiente, qué está vencido, quién tiene cada oportunidad, qué se ganó, qué se perdió y qué requiere atención.
 
-Suggested opportunity types:
+### Asesores / Operadores
 
-- New membership.
-- Renewal.
-- Reactivation.
+Necesitan una cola diaria sencilla: a quién contactar, por qué, cuándo fue el último contacto, cuál es la próxima acción y cómo registrar el resultado.
+
+### Contacto Interno de Confianza
+
+Karen puede ayudar a validar el lenguaje interno, los pasos reales, los puntos sensibles y la mejor forma de presentar el piloto a Gerencia.
+
+### Responsable de Datos / Administración
+
+Necesita preparar exportaciones, revisar duplicados, mantener campos básicos y apoyar la carga manual durante el piloto.
+
+---
+
+## 5. Alcance MVP del CRM
+
+Meta de fase 1:
+Diseñar y validar un CRM operativo ligero que mejore el seguimiento y la visibilidad sin obligar a Power Club a una migración grande desde el primer día.
+
+Incluido en el MVP:
+
+- Estructura de datos ficticios para demo.
+- Modelo de carga desde Excel o CSV.
+- Lista de prospectos/socios/oportunidades con búsqueda y filtros.
+- Asignación por sucursal y asesor.
+- Estado comercial y estado de seguimiento.
+- Fecha de próxima acción.
+- Resultado del último contacto.
+- Vista de seguimientos vencidos.
+- Requisitos de tablero gerencial.
+- Etapas comerciales básicas.
+- Métricas de éxito del piloto.
+- Proceso manual de importación/actualización.
+- Brief corporativo y alcance de demo para reunión.
+
+Objetos principales del MVP:
+
+- Prospecto, socio u oportunidad comercial.
+- Sucursal.
+- Asesor.
+- Tarea de seguimiento.
+- Resultado o estado.
+- Vista gerencial.
+
+Definición de éxito:
+El piloto es exitoso si los asesores pueden trabajar una lista diaria, los gerentes pueden ver oportunidades vencidas o sin dueño, y Gerencia puede medir si la disciplina de seguimiento mejora durante el periodo piloto.
+
+---
+
+## 6. Campos de Datos Sugeridos
+
+Campos mínimos para fase 1:
+
+- ID de registro.
+- Nombre completo.
+- Teléfono.
+- Correo, si existe.
+- Sucursal.
+- Asesor asignado.
+- Fuente.
+- Tipo de oportunidad.
+- Estado actual.
+- Prioridad.
+- Fecha de creación.
+- Fecha de último contacto.
+- Resultado del último contacto.
+- Fecha de próxima acción.
+- Tipo de próxima acción.
+- Notas.
+- Plan de interés o valor estimado, si existe.
+- Motivo de cierre, si se perdió o no hay interés.
+
+Estados sugeridos:
+
+- Nuevo.
+- Asignado.
+- Contactado.
+- Seguimiento programado.
+- Interesado.
+- Pendiente de decisión.
+- Ganado.
+- Perdido.
+- Sin respuesta.
+- Inválido/duplicado.
+
+Tipos de oportunidad sugeridos:
+
+- Nueva membresía.
+- Renovación.
+- Reactivación.
 - Upgrade.
-- Referral.
-- Corporate/group lead.
-- Trial follow-up.
-- Other.
+- Referido.
+- Lead corporativo/grupal.
+- Seguimiento de prueba.
+- Otro.
 
-Data quality rules:
+Reglas de calidad de datos:
 
-- No real customer data in demo materials.
-- No private IDs, payment details, health data, or sensitive personal notes in phase 1.
-- Duplicates should be flagged before operator assignment where possible.
-- Every active record should have one owner and one next action.
-
----
-
-## 7. Operator / Asesor Workflow
-
-Daily operator workflow:
-
-1. Open assigned queue.
-2. Filter by due today, overdue, high priority, or new.
-3. Review record context and last note.
-4. Contact prospect/member through the existing approved manual channel.
-5. Update result.
-6. Set next action date or close reason.
-7. Move to the next assigned record.
-
-Operator view should answer:
-
-- Who do I contact next?
-- Why is this person in my queue?
-- What happened last time?
-- What status should I update?
-- When should I follow up again?
-- Which opportunities are overdue?
-
-Operator guardrails:
-
-- The system supports follow-up; it does not sell automatically.
-- Phase 1 does not send WhatsApp automation.
-- Phase 1 does not make autonomous decisions.
-- Operators remain responsible for relationship context and final updates.
+- No usar datos reales de socios o prospectos en materiales de demo.
+- No incluir cédulas, información de pago, datos sensibles de salud ni notas privadas en fase 1.
+- Marcar duplicados antes de asignar trabajo a asesores cuando sea posible.
+- Todo registro activo debe tener un dueño y una próxima acción.
 
 ---
 
-## 8. Manager Workflow
+## 7. Flujo del Asesor / Operador
 
-Daily manager workflow:
+Flujo diario sugerido:
 
-1. Review branch pipeline summary.
-2. Check overdue follow-ups.
-3. Identify unassigned records.
-4. Review operator workload.
-5. Spot stalled opportunities.
-6. Ask for action on priority records.
-7. Review outcomes and close reasons.
+1. Abrir la lista asignada.
+2. Filtrar por hoy, vencidos, prioridad alta o nuevos.
+3. Revisar contexto y último resultado.
+4. Contactar al prospecto o socio por el canal manual aprobado por Power Club.
+5. Registrar resultado.
+6. Definir próxima acción o motivo de cierre.
+7. Continuar con el siguiente registro.
 
-Weekly manager workflow:
+La vista del asesor debe responder:
 
-- Compare branch activity and conversion.
-- Review lost reasons.
-- Identify records with no contact.
-- Adjust assignments or follow-up cadence.
-- Escalate process issues to GM.
+- ¿A quién debo contactar ahora?
+- ¿Por qué esta persona está en mi lista?
+- ¿Qué pasó en el último contacto?
+- ¿Qué estado debo actualizar?
+- ¿Cuándo toca el próximo seguimiento?
+- ¿Qué oportunidades están vencidas?
 
-Manager view should answer:
+Límites para asesores:
 
-- Which branch has the highest follow-up risk?
-- Which operators are overloaded or inactive?
-- Which opportunities are aging?
-- What is being lost and why?
-- What changed since last week?
-
----
-
-## 9. Dashboard Requirements
-
-Phase 1 dashboard should prioritize visibility over complexity.
-
-Core dashboard cards:
-
-- Total active opportunities.
-- New records this period.
-- Due today.
-- Overdue follow-ups.
-- Won opportunities.
-- Lost opportunities.
-- No-response opportunities.
-- Unassigned records.
-
-Required filters:
-
-- Date range.
-- Branch.
-- Operator/asesor.
-- Status.
-- Opportunity type.
-- Priority.
-
-Recommended charts/tables:
-
-- Pipeline by status.
-- Overdue follow-ups by branch.
-- Operator workload.
-- Outcomes by week.
-- Lost reasons.
-- Aging report.
-- Source performance, if source data is reliable.
-
-Pilot metrics:
-
-- Percentage of active records with assigned owner.
-- Percentage of active records with next action date.
-- Overdue follow-up count.
-- Contact attempt volume.
-- Win/loss movement by week.
-- Records closed with clear reason.
+- El sistema apoya el seguimiento; no vende automáticamente.
+- Fase 1 no envía automatizaciones por WhatsApp.
+- Fase 1 no toma decisiones autónomas.
+- El asesor mantiene la relación, el criterio comercial y la actualización final.
 
 ---
 
-## 10. 30/60/90 Roadmap
+## 8. Flujo Gerencial
 
-### First 30 Days - Discovery + Pilot Structure
+Flujo diario sugerido:
 
-- Confirm branch workflow, user roles, and status vocabulary.
-- Review sample export structure.
-- Define minimum required fields.
-- Build dummy/sample demo view.
-- Create operator workflow and manager workflow.
-- Validate dashboard requirements with Karen and GM.
-- Choose one pilot branch or small user group.
-- Define pilot success metrics.
+1. Revisar resumen por sucursal.
+2. Ver seguimientos vencidos.
+3. Identificar registros sin asignar.
+4. Revisar carga por asesor.
+5. Detectar oportunidades estancadas.
+6. Pedir acción sobre casos prioritarios.
+7. Revisar resultados y motivos de cierre.
 
-### Days 31-60 - Controlled Pilot
+Flujo semanal sugerido:
 
-- Run pilot with manually prepared/imported export data.
-- Train pilot operators and manager.
-- Monitor daily queue usage.
-- Review overdue follow-ups and status updates weekly.
-- Adjust fields, statuses, and dashboard filters.
-- Document process gaps and data quality issues.
+- Comparar actividad y conversión por sucursal.
+- Revisar motivos de oportunidades perdidas.
+- Identificar registros sin contacto.
+- Ajustar asignaciones o cadencia de seguimiento.
+- Elevar problemas de proceso a Gerencia General.
 
-### Days 61-90 - Decision + Expansion Plan
+La vista gerencial debe responder:
 
-- Review pilot results.
-- Compare before/after follow-up visibility.
-- Decide whether to continue, pause, or expand.
-- Prepare branch rollout plan if successful.
-- Estimate support load for 35-45 users.
-- Define production requirements separately from phase 1.
+- ¿Qué sucursal tiene mayor riesgo de seguimiento vencido?
+- ¿Qué asesores tienen más carga o poca actividad registrada?
+- ¿Qué oportunidades se están envejeciendo?
+- ¿Qué se está perdiendo y por qué?
+- ¿Qué cambió desde la semana pasada?
 
 ---
 
-## 11. Pilot Proposal
+## 9. Requisitos del Dashboard
 
-Recommended pilot:
+El dashboard de fase 1 debe priorizar claridad y acción, no complejidad.
 
-- Duration: 4-6 weeks.
-- Scope: 1-2 branches or one focused commercial workflow.
-- Users: 5-10 initial users/operators plus one manager reviewer.
-- Data: anonymized sample for demo; approved export subset for pilot only after scope confirmation.
-- Process: manual import/update from Excel/CSV, no live backend integration.
-- Output: simple CRM workspace specification, dashboard requirements, pilot workflow, findings report, and expansion recommendation.
+Tarjetas principales:
 
-Pilot goals:
+- Oportunidades activas.
+- Registros nuevos del periodo.
+- Seguimientos para hoy.
+- Seguimientos vencidos.
+- Oportunidades ganadas.
+- Oportunidades perdidas.
+- Oportunidades sin respuesta.
+- Registros sin asignar.
 
-- Reduce invisible or forgotten opportunities.
-- Increase records with clear owner and next action.
-- Give managers a reliable overdue follow-up view.
-- Validate whether Power Club needs a custom lightweight CRM, a better process layer on existing tools, or a deeper implementation later.
+Filtros requeridos:
 
-Pilot deliverables:
+- Rango de fecha.
+- Sucursal.
+- Asesor.
+- Estado.
+- Tipo de oportunidad.
+- Prioridad.
 
-- Confirmed workflow map.
-- Field dictionary.
-- Status model.
-- Operator workflow.
-- Manager workflow.
-- Dashboard specification.
-- Pilot metric report.
-- 30/60/90 implementation recommendation.
+Tablas o gráficos recomendados:
 
----
+- Pipeline por estado.
+- Seguimientos vencidos por sucursal.
+- Carga por asesor.
+- Resultados por semana.
+- Motivos de pérdida.
+- Antigüedad de oportunidades.
+- Desempeño por fuente, si el dato es confiable.
 
-## 12. Pricing Options
+Métricas del piloto:
 
-Pricing is illustrative and should be confirmed after discovery.
-
-### Option A - Discovery + Demo Brief
-
-- Scope: process discovery, sample data model, executive brief, meeting-ready demo structure.
-- Suggested price: USD 750-1,500.
-- Best for: validating fit before committing to a pilot.
-
-### Option B - 4-6 Week Pilot
-
-- Scope: discovery, pilot structure, sample/import workflow, operator/manager workflows, dashboard requirements, weekly review, final recommendation.
-- Suggested price: USD 2,500-5,000 setup/project fee.
-- Optional support: USD 500-1,500/month during pilot, depending on meeting cadence and user count.
-- Best for: proving value with a limited branch/user group.
-
-### Option C - Post-Pilot Expansion
-
-- Scope: production planning, broader rollout, stronger data operations, training, support model, and possible implementation build.
-- Suggested price: custom quote after pilot.
-- Best for: expanding only after the pilot shows operational value.
-
-Pricing boundary:
-Phase 1 pricing does not include a full SaaS platform, payment processing, live WhatsApp automation, real-time integrations, backend engineering, or enterprise support unless separately scoped.
+- Porcentaje de registros activos con asesor asignado.
+- Porcentaje de registros activos con próxima acción.
+- Cantidad de seguimientos vencidos.
+- Volumen de intentos de contacto.
+- Movimiento de ganadas/perdidas por semana.
+- Registros cerrados con motivo claro.
 
 ---
 
-## 13. Boundaries / What Phase 1 Does NOT Include
+## 10. Roadmap 30/60/90
 
-Phase 1 does not include:
+### Primeros 30 días - Descubrimiento + estructura del piloto
 
-- Real Power Club data in public or demo files.
-- Karen live files.
-- Full SaaS product build.
-- Backend implementation.
-- Payment integration.
-- WhatsApp automation.
-- Autonomous sales decisions.
-- Replacement of current staff or management judgment.
-- Migration of all historical records.
-- Complex permissions model.
-- OAuth/token work.
-- Systemd/runtime deployment.
-- Broad Val0 runtime refactor.
-- Real-time integration with existing CRM/software.
-- Production-grade analytics warehouse.
-- Legal, accounting, compliance, or regulated data processing advice.
+- Confirmar flujo por sucursal, roles y vocabulario comercial.
+- Revisar estructura de exportación con campos ficticios.
+- Definir campos mínimos requeridos.
+- Preparar demo con datos ficticios.
+- Diseñar flujo del asesor y flujo gerencial.
+- Validar requisitos del dashboard con Karen y Gerencia General.
+- Escoger una sucursal o grupo pequeño para piloto.
+- Definir métricas de éxito.
 
-Phase 1 is a pilot and consulting package. Production CRM scope must be separately approved after discovery.
+### Días 31-60 - Piloto operativo controlado
 
----
+- Ejecutar piloto con data aprobada y preparada manualmente.
+- Capacitar asesores y gerente del grupo piloto.
+- Monitorear uso de la lista diaria.
+- Revisar semanalmente seguimientos vencidos y cambios de estado.
+- Ajustar campos, estados y filtros.
+- Documentar problemas de proceso y calidad de datos.
 
-## 14. Meeting Questions for Karen / GM
+### Días 61-90 - Decisión y plan de expansión
 
-Questions for Karen before the GM meeting:
-
-- What exact problem would make the GM say "this is worth trying"?
-- Which branch or team would be best for a low-risk pilot?
-- What words do operators actually use for leads, members, renewals, and follow-ups?
-- Which export is safest to discuss structurally without exposing real data?
-- What does the current software fail to show clearly?
-- Who owns follow-up today?
-- What is the most common reason opportunities are lost?
-- What would be politically sensitive to avoid in the first meeting?
-- Should the first demo be in Spanish, English, or mixed?
-
-Questions for the General Manager:
-
-- How many branches should be included in the first pilot?
-- Which commercial workflow loses the most value today?
-- What are the top 3 statuses leadership needs to see every day?
-- What is the current record volume by month and branch?
-- What fields exist in the Excel/export today?
-- What follow-up cadence should operators follow?
-- What is considered a successful contact?
-- What lost reasons should be tracked?
-- Who should approve field/status changes?
-- What decision metric determines pilot success?
+- Revisar resultados del piloto.
+- Comparar visibilidad antes/después.
+- Decidir si se continúa, se pausa o se expande.
+- Preparar plan de rollout por sucursales si el piloto funciona.
+- Estimar soporte necesario para 35-45 usuarios.
+- Separar requisitos de producción de lo validado en fase 1.
 
 ---
 
-## 15. Next Recommended Step
+## 11. Propuesta de Piloto
 
-Prepare a 30-45 minute discovery meeting with Karen first, then a GM-facing demo conversation.
+Piloto recomendado:
 
-Suggested sequence:
+- Duración: 4-6 semanas.
+- Alcance: 1-2 sucursales o un flujo comercial específico.
+- Usuarios: 5-10 asesores/operadores iniciales más un gerente revisor.
+- Datos: muestra ficticia para demo; subconjunto aprobado de exportación solo después de confirmar alcance.
+- Proceso: importación/actualización manual desde Excel/CSV; sin integración viva con backend en fase 1.
+- Salida: especificación de CRM operativo ligero, flujo de asesores, flujo gerencial, requisitos de dashboard, reporte de hallazgos y recomendación de expansión.
 
-1. Confirm current export structure using dummy field names only.
-2. Confirm branch/operator workflow and sales status vocabulary.
-3. Select the safest pilot slice: one branch, one workflow, or one opportunity type.
-4. Build a meeting-ready sample using anonymous records.
-5. Present the pilot as a focused visibility and follow-up system, not a final production CRM.
+Metas del piloto:
 
-Recommended meeting close:
+- Reducir oportunidades invisibles u olvidadas.
+- Aumentar registros con dueño y próxima acción.
+- Dar a gerentes una vista confiable de seguimientos vencidos.
+- Validar si Power Club necesita un CRM operativo ligero, una capa de proceso sobre herramientas existentes o una implementación más profunda después.
+
+Entregables del piloto:
+
+- Mapa de flujo confirmado.
+- Diccionario de campos.
+- Modelo de estados.
+- Flujo del asesor.
+- Flujo gerencial.
+- Especificación de dashboard.
+- Reporte de métricas del piloto.
+- Recomendación de implementación 30/60/90.
+
+---
+
+## 12. Opciones de Precio
+
+Los precios son referenciales y deben confirmarse después del descubrimiento.
+
+### Opción A - Descubrimiento + Brief de Demo
+
+- Alcance: descubrimiento del proceso, modelo de datos de muestra, brief ejecutivo y estructura de demo para reunión.
+- Precio sugerido: USD 750-1,500.
+- Mejor para: validar si vale la pena pasar a piloto.
+
+### Opción B - Piloto de 4-6 Semanas
+
+- Alcance: descubrimiento, estructura del piloto, flujo de carga manual, flujos asesor/gerencia, requisitos de dashboard, revisión semanal y recomendación final.
+- Precio sugerido: USD 2,500-5,000 como fee de proyecto.
+- Soporte opcional: USD 500-1,500/mes durante el piloto, según frecuencia de reuniones y cantidad de usuarios.
+- Mejor para: probar valor con un grupo limitado antes de escalar.
+
+### Opción C - Expansión Después del Piloto
+
+- Alcance: planificación de producción, rollout por sucursales, operación de datos, capacitación, soporte y posible desarrollo adicional.
+- Precio sugerido: cotización a medida después del piloto.
+- Mejor para: expandir solo si el piloto demuestra valor operativo.
+
+Límite de precio:
+La fase 1 no incluye plataforma completa, procesamiento de pagos, automatización viva por WhatsApp, integraciones en tiempo real, desarrollo backend ni soporte empresarial salvo que se cotice por separado.
+
+---
+
+## 13. Límites / Lo Que Fase 1 NO Incluye
+
+Fase 1 no incluye:
+
+- Datos reales de Power Club en archivos públicos o materiales de demo.
+- Archivos vivos de Karen.
+- Construcción de una plataforma completa.
+- Implementación backend.
+- Integración de pagos.
+- Automatización por WhatsApp.
+- Decisiones comerciales autónomas.
+- Reemplazo del criterio de asesores, gerentes o Gerencia General.
+- Migración completa de históricos.
+- Modelo complejo de permisos.
+- Trabajo con OAuth, tokens o credenciales.
+- Despliegue systemd/runtime.
+- Refactor amplio del runtime de Val0.
+- Integración en tiempo real con el CRM/software actual.
+- Data warehouse o analítica avanzada de producción.
+- Asesoría legal, contable, financiera, médica o regulatoria.
+
+Fase 1 es un piloto operativo y paquete consultivo. El alcance de producción debe aprobarse por separado después del descubrimiento.
+
+---
+
+## 14. Preguntas de Reunión para Karen / Gerencia General
+
+Preguntas para Karen antes de la reunión con Gerencia:
+
+- ¿Qué problema concreto haría que Gerencia diga "esto vale la pena probarlo"?
+- ¿Qué sucursal o equipo sería mejor para un piloto de bajo riesgo?
+- ¿Qué palabras usan internamente para prospectos, socios, renovaciones, reactivaciones y seguimientos?
+- ¿Qué exportación se puede revisar estructuralmente sin exponer datos reales?
+- ¿Qué no muestra bien el software actual?
+- ¿Quién es dueño del seguimiento hoy?
+- ¿Cuál es la razón más común de oportunidades perdidas?
+- ¿Qué temas pueden ser sensibles en la primera reunión?
+- ¿La primera demo debe ser en español completo o con algunos términos técnicos en inglés?
+
+Preguntas para Gerencia General:
+
+- ¿Cuántas sucursales conviene incluir en el primer piloto?
+- ¿Qué flujo comercial pierde más valor hoy?
+- ¿Cuáles son los 3 estados que Gerencia necesita ver todos los días?
+- ¿Cuál es el volumen real de registros por mes y por sucursal?
+- ¿Qué campos existen hoy en Excel/exportación?
+- ¿Qué cadencia de seguimiento deberían cumplir los asesores?
+- ¿Qué cuenta como contacto exitoso?
+- ¿Qué motivos de pérdida vale la pena medir?
+- ¿Quién debe aprobar cambios de campos o estados?
+- ¿Qué métrica define si el piloto funcionó?
+
+---
+
+## 15. Siguiente Paso Recomendado
+
+Preparar una reunión de descubrimiento de 30-45 minutos con Karen primero, y luego una conversación de demo con Gerencia General.
+
+Secuencia sugerida:
+
+1. Confirmar estructura actual de exportación usando campos ficticios.
+2. Confirmar flujo por sucursal, asesores y estados comerciales.
+3. Seleccionar el piloto más seguro: una sucursal, un flujo o un tipo de oportunidad.
+4. Preparar una muestra de reunión con registros anónimos.
+5. Presentar el piloto como una capa de seguimiento y visibilidad gerencial, no como reemplazo final del CRM.
+
+Cierre recomendado para la reunión:
 
 ```text
-The first step is not to replace your CRM. The first step is to prove whether a simpler follow-up layer can recover lost opportunities and give management better visibility within a small, measurable pilot.
+El primer paso no es reemplazar todo el CRM. El primer paso es probar si una capa simple de seguimiento puede recuperar oportunidades perdidas y dar mejor visibilidad gerencial en un piloto pequeño y medible.
 ```
