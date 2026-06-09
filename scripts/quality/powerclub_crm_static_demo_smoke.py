@@ -175,6 +175,28 @@ def test_manager_realignment_labels_and_logic() -> None:
         assert_contains(text, needle, "manager dashboard realignment")
 
 
+def test_asesor_selector_initializes_and_is_readable() -> None:
+    text = read_demo()
+    for needle in (
+        "Asesor en turno",
+        "operatorAdvisorFilter.value = operatorAdvisors[0]",
+        "const advisor = operatorAdvisorFilter.value || leads[0].advisor",
+        "operatorRows()",
+        "operatorAssignedMetric",
+        "operatorManagedMetric",
+        "operatorPendingMetric",
+        "operatorSalesMetric",
+        "Andrea Vega",
+        "Carlos Mendez",
+        "Daniela Soto",
+        "color-scheme: light",
+        "option {",
+        "background: #fff",
+        "color: var(--ink)",
+    ):
+        assert_contains(text, needle, "asesor selector initialization/readability")
+
+
 def test_estado_de_gestion_values_and_interpretation() -> None:
     text = read_demo()
     for needle in (
@@ -241,6 +263,7 @@ def test_no_real_data_or_promise_violations() -> None:
         "backend activo",
         "full SaaS",
         "Karen",
+        "Carmen",
         "chat log",
         "transcript",
         "CLIENT_FOLDERS.json",
@@ -267,6 +290,7 @@ def main() -> int:
     test_disclaimer_statuses_and_manager_metrics()
     test_operator_workflow_alignment()
     test_manager_realignment_labels_and_logic()
+    test_asesor_selector_initializes_and_is_readable()
     test_estado_de_gestion_values_and_interpretation()
     test_static_no_network_or_auth_or_backend()
     test_no_real_data_or_promise_violations()

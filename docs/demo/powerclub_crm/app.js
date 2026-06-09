@@ -186,7 +186,8 @@ function countStatus(rows, status) {
 }
 
 function operatorRows() {
-  return leads.filter((lead) => lead.advisor === operatorAdvisorFilter.value);
+  const advisor = operatorAdvisorFilter.value || leads[0].advisor;
+  return leads.filter((lead) => lead.advisor === advisor);
 }
 
 function filteredLeads() {
@@ -287,6 +288,7 @@ function populateFilters() {
   const advisors = ["Todos", ...new Set(leads.map((lead) => lead.advisor))];
   const operatorAdvisors = [...new Set(leads.map((lead) => lead.advisor))];
   operatorAdvisorFilter.innerHTML = operatorAdvisors.map((advisor) => `<option value="${advisor}">${advisor}</option>`).join("");
+  operatorAdvisorFilter.value = operatorAdvisors[0] || "";
   branchFilter.innerHTML = branches.map((branch) => `<option value="${branch}">${branch}</option>`).join("");
   advisorFilter.innerHTML = advisors.map((advisor) => `<option value="${advisor}">${advisor}</option>`).join("");
   selectedId = operatorRows()[0]?.id || leads[0].id;

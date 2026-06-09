@@ -538,6 +538,18 @@ select {
   padding: 0 10px;
   background: #fff;
   color: var(--ink);
+  color-scheme: light;
+  accent-color: var(--green);
+}
+
+select:focus {
+  outline: 3px solid rgba(17, 113, 95, 0.22);
+  outline-offset: 2px;
+}
+
+option {
+  background: #fff;
+  color: var(--ink);
 }
 
 .metrics-grid {
