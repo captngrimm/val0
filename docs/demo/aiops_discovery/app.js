@@ -9,10 +9,12 @@ const reportOutput = document.querySelector("#reportOutput");
 const questionItems = Array.from(document.querySelectorAll("#questionList li"));
 
 const sampleNotes = [
-  "Carlos runs a service business where new requests arrive through WhatsApp, referrals, and phone calls.",
-  "The owner loses time reconstructing what was promised and what needs follow-up.",
-  "Current tools include messages, spreadsheets, calendar, and informal notes.",
-  "The desired outcome is a simple 30/60/90 map and one first pilot that reduces manual follow-up."
+  "Carlos runs a service business.",
+  "Leads arrive through WhatsApp and referrals.",
+  "Follow-up is manual.",
+  "Quotes are tracked in Excel or notebooks.",
+  "Some prospects are lost because nobody follows up.",
+  "Carlos wants better visibility and fewer missed opportunities."
 ].join("\n");
 
 function companyName() {
