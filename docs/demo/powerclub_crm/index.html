@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Power Club CRM Pilot | CRM Operativo Ligero</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Val AI Ops Discovery</p>
+        <h1>Power Club CRM Pilot</h1>
+        <p class="subtitle">CRM Operativo Ligero para seguimiento de prospectos, socios y oportunidades comerciales.</p>
+      </div>
+      <div class="partner-card" aria-label="Firma consultora">
+        <strong>Isthmus Dynamics</strong>
+        <span>Honest AI Ops</span>
+        <p>Demo consultiva para visualizar un piloto operativo, sin datos reales y sin promesas de automatización.</p>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section class="notice" aria-label="Nota de datos ficticios">
+        <strong>Demo con datos ficticios. No usa información real de Power Club.</strong>
+        <span>La intención es mostrar estructura, flujo y visibilidad gerencial para una conversación de piloto.</span>
+      </section>
+
+      <section class="toolbar" aria-label="Controles de demo">
+        <div>
+          <p class="eyebrow dark">Vista de reunión</p>
+          <h2>CRM operativo ligero</h2>
+        </div>
+        <div class="view-tabs" role="tablist" aria-label="Cambiar vista">
+          <button id="operatorTab" class="tab active" type="button" aria-selected="true">Vista asesores</button>
+          <button id="managerTab" class="tab" type="button" aria-selected="false">Vista gerencial</button>
+        </div>
+      </section>
+
+      <section id="operatorView" class="view-grid active-view" aria-labelledby="operatorTitle">
+        <div class="panel list-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Operación diaria</p>
+              <h2 id="operatorTitle">Lista de socios y prospectos</h2>
+            </div>
+            <span id="recordCount" class="count-pill">0 registros</span>
+          </div>
+          <div class="quick-filters" aria-label="Filtros rápidos">
+            <button class="chip active" type="button" data-filter="todos">Todos</button>
+            <button class="chip" type="button" data-filter="vencidos">Vencidos</button>
+            <button class="chip" type="button" data-filter="alta">Prioridad alta</button>
+            <button class="chip" type="button" data-filter="citas">Citas</button>
+          </div>
+          <div id="leadList" class="lead-list" aria-label="Lista de oportunidades ficticias"></div>
+        </div>
+
+        <aside class="panel detail-panel" aria-labelledby="detailTitle">
+          <div class="panel-heading detail-heading">
+            <div>
+              <p class="eyebrow dark">Ficha de seguimiento</p>
+              <h2 id="detailTitle">Detalle del socio/prospecto</h2>
+            </div>
+            <span id="detailPriority" class="priority-pill">Prioridad</span>
+          </div>
+
+          <div class="person-block">
+            <h3 id="detailName">Seleccione un registro</h3>
+            <p id="detailPhone" class="muted">Teléfono: +507 0000-0000</p>
+          </div>
+
+          <dl class="detail-list">
+            <div>
+              <dt>Sucursal</dt>
+              <dd id="detailBranch">-</dd>
+            </div>
+            <div>
+              <dt>Asesor</dt>
+              <dd id="detailAdvisor">-</dd>
+            </div>
+            <div>
+              <dt>Tipo de interés</dt>
+              <dd id="detailInterest">-</dd>
+            </div>
+            <div>
+              <dt>Último contacto</dt>
+              <dd id="detailLastContact">-</dd>
+            </div>
+            <div>
+              <dt>Próxima acción</dt>
+              <dd id="detailNextAction">-</dd>
+            </div>
+          </dl>
+
+          <div class="status-actions" aria-label="Estados comerciales">
+            <button type="button" data-status="Nuevo">Nuevo</button>
+            <button type="button" data-status="Contactado">Contactado</button>
+            <button type="button" data-status="Seguimiento">Seguimiento</button>
+            <button type="button" data-status="Cita agendada">Cita agendada</button>
+            <button type="button" data-status="Inscrito">Inscrito</button>
+            <button type="button" data-status="Perdido">Perdido</button>
+          </div>
+
+          <section class="notes-box" aria-labelledby="notesTitle">
+            <h3 id="notesTitle">Notas</h3>
+            <p id="detailNotes">Notas ficticias para orientar la conversación del piloto.</p>
+          </section>
+
+          <section aria-labelledby="historyTitle">
+            <h3 id="historyTitle">Historial de interacción</h3>
+            <ol id="detailHistory" class="history-list"></ol>
+          </section>
+        </aside>
+      </section>
+
+      <section id="managerView" class="manager-view" aria-labelledby="managerTitle" hidden>
+        <div class="manager-topline">
+          <div>
+            <p class="eyebrow dark">Visibilidad gerencial</p>
+            <h2 id="managerTitle">Dashboard del piloto operativo</h2>
+          </div>
+          <div class="filters">
+            <label>
+              <span>Sucursal</span>
+              <select id="branchFilter" aria-label="Filtro de sucursal"></select>
+            </label>
+            <label>
+              <span>Asesor</span>
+              <select id="advisorFilter" aria-label="Filtro de asesor"></select>
+            </label>
+          </div>
+        </div>
+
+        <div class="metrics-grid" aria-label="Métricas del piloto">
+          <article class="metric-card">
+            <span>Leads abiertos</span>
+            <strong id="openLeadsMetric">0</strong>
+          </article>
+          <article class="metric-card warning">
+            <span>Seguimientos vencidos</span>
+            <strong id="overdueMetric">0</strong>
+          </article>
+          <article class="metric-card blue">
+            <span>Citas agendadas</span>
+            <strong id="appointmentsMetric">0</strong>
+          </article>
+          <article class="metric-card success">
+            <span>Conversiones simuladas</span>
+            <strong id="conversionsMetric">0</strong>
+          </article>
+        </div>
+
+        <div class="manager-grid">
+          <section class="panel" aria-labelledby="branchTableTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Resumen</p>
+                <h3 id="branchTableTitle">Tabla por sucursal</h3>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sucursal</th>
+                    <th>Abiertos</th>
+                    <th>Vencidos</th>
+                    <th>Citas</th>
+                    <th>Inscritos</th>
+                  </tr>
+                </thead>
+                <tbody id="branchTableBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="riskTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Acción gerencial</p>
+                <h3 id="riskTitle">Oportunidades que requieren atención</h3>
+              </div>
+            </div>
+            <ul id="riskList" class="risk-list"></ul>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
