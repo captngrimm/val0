@@ -7,16 +7,21 @@ const STATUS_CLASSES = {
 };
 
 const TODAY = "2026-06-09";
+const TOTAL_FAKE_RECORDS = 60;
+const PLAN_OPTIONS = ["Mensual $49", "Prepagado 1 mes", "Trimestral", "Semestral", "Anual", "Otro plan"];
 
 const leads = [
   {
     id: "PC-DEMO-001",
-    name: "Mariana Rios",
+    name: "Socio Demo 001",
     phone: "+507 6000-0101",
+    email: "socio.demo.001@example.invalid",
     branch: "Costa del Este",
-    advisor: "Andrea Vega",
+    advisor: "Asesor Demo A",
     shift: "Turno mañana",
     interest: "Nueva membresía",
+    lastPlan: "Sin plan anterior",
+    offeredPlan: "Mensual $49",
     memberStatus: "Prospecto",
     managementStatus: "Seguimiento",
     priority: "Alta",
@@ -27,6 +32,7 @@ const leads = [
     lastContact: "2026-06-07",
     nextFollowUp: "2026-06-09",
     nextAction: "Llamar hoy para confirmar plan familiar.",
+    managementNote: "Pendiente validar horario preferido.",
     notes: "Prospecto ficticio interesado en horario nocturno. El seguimiento centralizado evita depender solo del archivo por nombre.",
     history: [
       "2026-06-05: Solicitó información de planes.",
@@ -35,12 +41,15 @@ const leads = [
   },
   {
     id: "PC-DEMO-002",
-    name: "Luis Paredes",
+    name: "Socio Demo 002",
     phone: "+507 6000-0102",
+    email: "socio.demo.002@example.invalid",
     branch: "San Francisco",
-    advisor: "Carlos Mendez",
+    advisor: "Asesor Demo B",
     shift: "Turno tarde",
     interest: "Reactivación",
+    lastPlan: "Mensual $49",
+    offeredPlan: "Trimestral",
     memberStatus: "Ex socio",
     managementStatus: "Promesa de compra",
     priority: "Media",
@@ -51,6 +60,7 @@ const leads = [
     lastContact: "2026-06-08",
     nextFollowUp: "2026-06-08",
     nextAction: "Enviar resumen manual de opciones y llamar en dos días.",
+    managementNote: "Quiere comparar plan trimestral con mensual.",
     notes: "Socio ficticio llamó para consultar nueva compra. Próximo paso visible para continuidad entre turnos.",
     history: [
       "2026-06-04: Registro importado desde exportación de ejemplo.",
@@ -59,12 +69,15 @@ const leads = [
   },
   {
     id: "PC-DEMO-003",
-    name: "Sofia Navarro",
+    name: "Socio Demo 003",
     phone: "+507 6000-0103",
+    email: "socio.demo.003@example.invalid",
     branch: "El Dorado",
-    advisor: "Andrea Vega",
+    advisor: "Asesor Demo A",
     shift: "Turno mañana",
     interest: "Seguimiento de prueba",
+    lastPlan: "Sin plan anterior",
+    offeredPlan: "Prepagado 1 mes",
     memberStatus: "Prospecto",
     managementStatus: "Seguimiento",
     priority: "Alta",
@@ -75,6 +88,7 @@ const leads = [
     lastContact: "2026-06-08",
     nextFollowUp: "2026-06-10",
     nextAction: "Confirmar asistencia a cita de evaluación.",
+    managementNote: "Visita agendada en sucursal.",
     notes: "Prospecto ficticio atendido en persona; requiere historial de contacto visible para el siguiente operador.",
     history: [
       "2026-06-06: Completó prueba de cortesía ficticia.",
@@ -83,12 +97,15 @@ const leads = [
   },
   {
     id: "PC-DEMO-004",
-    name: "Roberto Chen",
+    name: "Socio Demo 004",
     phone: "+507 6000-0104",
+    email: "socio.demo.004@example.invalid",
     branch: "Albrook",
-    advisor: "Daniela Soto",
+    advisor: "Asesor Demo C",
     shift: "Turno tarde",
     interest: "Renovación",
+    lastPlan: "Semestral",
+    offeredPlan: "Anual",
     memberStatus: "Socio por vencer",
     managementStatus: "No contacto",
     priority: "Media",
@@ -99,17 +116,21 @@ const leads = [
     lastContact: "Sin contacto",
     nextFollowUp: "2026-06-09",
     nextAction: "Primer contacto manual para renovación.",
+    managementNote: "No se ha logrado primer contacto.",
     notes: "Socio ficticio con renovación pendiente. Aún no hay contacto registrado para el turno actual.",
     history: ["2026-06-09: Registro ficticio asignado a asesora."],
   },
   {
     id: "PC-DEMO-005",
-    name: "Paola Castillo",
+    name: "Socio Demo 005",
     phone: "+507 6000-0105",
+    email: "socio.demo.005@example.invalid",
     branch: "Costa del Este",
-    advisor: "Carlos Mendez",
+    advisor: "Asesor Demo B",
     shift: "Turno mañana",
     interest: "Upgrade",
+    lastPlan: "Trimestral",
+    offeredPlan: "Semestral",
     memberStatus: "Socio activo",
     managementStatus: "Venta",
     priority: "Baja",
@@ -120,6 +141,7 @@ const leads = [
     lastContact: "2026-06-06",
     nextFollowUp: "2026-06-20",
     nextAction: "Seguimiento de satisfacción post-inscripción.",
+    managementNote: "Venta demo cerrada en sucursal.",
     notes: "Conversión simulada de venta presencial para mostrar trazabilidad desde asesor y sucursal.",
     history: [
       "2026-06-03: Interés en upgrade ficticio.",
@@ -128,12 +150,15 @@ const leads = [
   },
   {
     id: "PC-DEMO-006",
-    name: "Miguel Torres",
+    name: "Socio Demo 006",
     phone: "+507 6000-0106",
+    email: "socio.demo.006@example.invalid",
     branch: "San Francisco",
-    advisor: "Daniela Soto",
+    advisor: "Asesor Demo C",
     shift: "Turno cierre",
     interest: "Lead corporativo",
+    lastPlan: "Otro plan",
+    offeredPlan: "Anual",
     memberStatus: "Prospecto",
     managementStatus: "Ilocalizable",
     priority: "Media",
@@ -144,6 +169,7 @@ const leads = [
     lastContact: "2026-06-02",
     nextFollowUp: "2026-06-06",
     nextAction: "Cerrar con motivo y revisar aprendizaje.",
+    managementNote: "No responde celular en intentos demo.",
     notes: "Oportunidad ficticia no localizada por celular; queda historial para continuidad del siguiente turno.",
     history: [
       "2026-06-01: Contacto inicial.",
@@ -151,6 +177,59 @@ const leads = [
     ],
   },
 ];
+
+function createGeneratedRecords(count) {
+  const branches = ["Costa del Este", "San Francisco", "El Dorado", "Albrook", "Brisas"];
+  const advisors = ["Asesor Demo A", "Asesor Demo B", "Asesor Demo C", "Asesor Demo D", "Asesor Demo E", "Asesor Demo F"];
+  const statuses = ["Venta", "Promesa de compra", "Seguimiento", "Ilocalizable", "No contacto"];
+  const memberStatuses = ["Prospecto", "Socio activo", "Ex socio", "Socio por vencer", "Excluido"];
+  const interests = ["Nueva membresía", "Reactivación", "Renovación", "Upgrade", "Seguimiento de prueba"];
+  const channels = ["Celular", "Llamada de socio", "Venta presencial"];
+  const priorities = ["Alta", "Media", "Baja"];
+
+  return Array.from({ length: count }, (_, index) => {
+    const number = index + 7;
+    const status = statuses[index % statuses.length];
+    const branch = branches[index % branches.length];
+    const advisor = advisors[index % advisors.length];
+    const plan = PLAN_OPTIONS[index % PLAN_OPTIONS.length];
+    const lastPlan = PLAN_OPTIONS[(index + 2) % PLAN_OPTIONS.length];
+    const nextDay = String(9 + (index % 12)).padStart(2, "0");
+    const lastDay = String(1 + (index % 8)).padStart(2, "0");
+    const padded = String(number).padStart(3, "0");
+
+    return {
+      id: `PC-DEMO-${padded}`,
+      name: `Socio Demo ${padded}`,
+      phone: `+507 6000-${String(100 + number).padStart(4, "0")}`,
+      email: `socio.demo.${padded}@example.invalid`,
+      branch,
+      advisor,
+      shift: index % 3 === 0 ? "Turno mañana" : index % 3 === 1 ? "Turno tarde" : "Turno cierre",
+      interest: interests[index % interests.length],
+      lastPlan,
+      offeredPlan: plan,
+      memberStatus: memberStatuses[index % memberStatuses.length],
+      managementStatus: status,
+      priority: priorities[index % priorities.length],
+      channel: channels[index % channels.length],
+      sourceFile: `Archivo por nombre: Base demo ${branch}`,
+      currentTools: index % 2 === 0 ? "Correo, Google Drive y celular" : "Laptop, correo y Google Drive",
+      appointmentScheduled: index % 7 === 0,
+      lastContact: `2026-06-${lastDay}`,
+      nextFollowUp: `2026-06-${nextDay}`,
+      nextAction: status === "Venta" ? "Seguimiento de satisfacción." : "Gestionar contacto y actualizar estado.",
+      managementNote: "Nota demo para seguimiento del asesor.",
+      notes: "Registro ficticio generado para demostrar volumen, scroll y filtros.",
+      history: [
+        `2026-06-${lastDay}: Registro demo asignado.`,
+        `2026-06-${lastDay}: Interacción ficticia registrada.`,
+      ],
+    };
+  });
+}
+
+leads.push(...createGeneratedRecords(TOTAL_FAKE_RECORDS - leads.length));
 
 let selectedId = leads[0].id;
 let activeFilter = "todos";
@@ -257,12 +336,18 @@ function renderLeadList() {
 
 function renderDetail() {
   const lead = leads.find((item) => item.id === selectedId) || leads[0];
+  const [nextActionDate, nextActionText] = lead.nextAction.includes(" - ")
+    ? lead.nextAction.split(" - ")
+    : [lead.nextFollowUp, lead.nextAction];
   document.querySelector("#detailName").textContent = lead.name;
-  document.querySelector("#detailPhone").textContent = `Teléfono: ${lead.phone}`;
+  document.querySelector("#detailPhone").textContent = `Celular: ${lead.phone}`;
+  document.querySelector("#detailEmail").textContent = `Correo electrónico: ${lead.email}`;
   document.querySelector("#detailBranch").textContent = lead.branch;
   document.querySelector("#detailAdvisor").textContent = lead.advisor;
   document.querySelector("#detailShift").textContent = lead.shift;
   document.querySelector("#detailInterest").textContent = lead.interest;
+  document.querySelector("#detailLastPlan").textContent = lead.lastPlan;
+  document.querySelector("#detailOfferedPlan").textContent = lead.offeredPlan;
   document.querySelector("#detailMemberStatus").textContent = lead.memberStatus;
   document.querySelector("#detailManagementStatus").textContent = lead.managementStatus;
   document.querySelector("#detailLastContact").textContent = lead.lastContact;
@@ -271,6 +356,10 @@ function renderDetail() {
   document.querySelector("#detailSourceFile").textContent = lead.sourceFile;
   document.querySelector("#detailTools").textContent = lead.currentTools;
   document.querySelector("#detailNotes").textContent = lead.notes;
+  document.querySelector("#nextActionInput").value = nextActionText;
+  document.querySelector("#nextActionDateInput").value = nextActionDate || lead.nextFollowUp;
+  document.querySelector("#managementNoteInput").value = lead.managementNote;
+  document.querySelector("#offeredPlanSelect").value = lead.offeredPlan;
 
   const priority = document.querySelector("#detailPriority");
   priority.textContent = `Prioridad ${lead.priority}`;
@@ -394,9 +483,15 @@ function renderManager() {
 
   const risks = rows
     .filter((lead) => lead.managementStatus === "No contacto" || lead.managementStatus === "Ilocalizable" || (lead.managementStatus === "Promesa de compra" && needsFollowUp(lead)))
-    .slice(0, 5);
-  document.querySelector("#riskList").innerHTML = risks
-    .map((lead) => `<li><strong>${lead.name}</strong> - ${lead.branch}, ${lead.advisor}, ${lead.shift}. Canal: ${lead.channel}. Estado de gestión: ${lead.managementStatus}. Próxima acción: ${lead.nextAction}</li>`)
+    .reduce((groups, lead) => {
+      const key = `${lead.branch}|${lead.advisor}|${lead.managementStatus}`;
+      groups[key] = groups[key] || { branch: lead.branch, advisor: lead.advisor, status: lead.managementStatus, count: 0 };
+      groups[key].count += 1;
+      return groups;
+    }, {});
+  document.querySelector("#riskList").innerHTML = Object.values(risks)
+    .slice(0, 8)
+    .map((group) => `<li><strong>${group.advisor}</strong> - ${group.branch}. ${group.count} registros en ${group.status}.</li>`)
     .join("");
 }
 
@@ -445,6 +540,30 @@ document.querySelectorAll(".status-actions button").forEach((button) => {
     renderDetail();
     renderManager();
   });
+});
+
+document.querySelector("#offeredPlanSelect").addEventListener("change", (event) => {
+  const lead = leads.find((item) => item.id === selectedId);
+  lead.offeredPlan = event.target.value;
+  renderDetail();
+});
+
+document.querySelector("#nextActionInput").addEventListener("input", (event) => {
+  const lead = leads.find((item) => item.id === selectedId);
+  lead.nextAction = event.target.value;
+  renderLeadList();
+});
+
+document.querySelector("#nextActionDateInput").addEventListener("change", (event) => {
+  const lead = leads.find((item) => item.id === selectedId);
+  lead.nextFollowUp = event.target.value;
+  renderLeadList();
+  renderManager();
+});
+
+document.querySelector("#managementNoteInput").addEventListener("input", (event) => {
+  const lead = leads.find((item) => item.id === selectedId);
+  lead.managementNote = event.target.value;
 });
 
 operatorTab.addEventListener("click", () => switchView("operator"));

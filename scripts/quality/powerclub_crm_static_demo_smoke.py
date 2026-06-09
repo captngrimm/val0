@@ -71,7 +71,11 @@ def test_spanish_labels_and_branding() -> None:
         "Próxima acción",
         "Prioridad",
         "Teléfono",
+        "Celular",
+        "Correo electrónico",
         "Tipo de interés",
+        "Último plan adquirido",
+        "Plan ofrecido",
         "Estado socio",
         "Estado de gestión",
         "Turno",
@@ -83,6 +87,7 @@ def test_spanish_labels_and_branding() -> None:
         "Total gestionados",
         "Notas",
         "Historial de interacción",
+        "Ficha del socio",
     ):
         assert_contains(text, needle, "Spanish UI labels and branding")
 
@@ -108,6 +113,8 @@ def test_disclaimer_statuses_and_manager_metrics() -> None:
         "No contacto / Ilocalizables / Promesas de compra",
         "Filtro de sucursal",
         "Filtro de asesor",
+        "TOTAL_FAKE_RECORDS = 60",
+        "createGeneratedRecords(TOTAL_FAKE_RECORDS - leads.length)",
     ):
         assert_contains(text, needle, "demo disclaimer/statuses/metrics")
 
@@ -175,6 +182,55 @@ def test_manager_realignment_labels_and_logic() -> None:
         assert_contains(text, needle, "manager dashboard realignment")
 
 
+def test_operator_forms_plans_and_monthly_cycle() -> None:
+    text = read_demo()
+    for needle in (
+        "Próxima acción",
+        "Fecha próxima acción",
+        "Nota de gestión",
+        "nextActionInput",
+        "nextActionDateInput",
+        "managementNoteInput",
+        "Último plan adquirido",
+        "Plan ofrecido",
+        "offeredPlanSelect",
+        "Mensual $49",
+        "Prepagado 1 mes",
+        "Trimestral",
+        "Semestral",
+        "Anual",
+        "Otro plan",
+        "Excluido",
+        "Contexto actual",
+        "Carga mensual de base/listado",
+        "Gestión durante el mes",
+        "Cierre mensual",
+        "Reporte final mensual",
+        "Historial mensual archivado",
+        "Exportar gestión a Excel",
+        "Generar reporte mensual",
+        "Cerrar mes / guardar cierre mensual",
+        "Demo: exportación y cierre mensual representados de forma conceptual.",
+        "En piloto real, el cierre mensual podría guardar resultados y permitir descarga Excel.",
+    ):
+        assert_contains(text, needle, "operator forms/plans/monthly cycle")
+
+
+def test_role_visibility_language() -> None:
+    text = read_demo()
+    for needle in (
+        "Modelo conceptual de visibilidad por rol",
+        "Asesor / operador",
+        "Ve solo sus registros asignados",
+        "Gerente de sucursal",
+        "Ve su sucursal y sus asesores",
+        "Gerente general",
+        "Ve todas las sucursales y puede entrar a una sucursal",
+        "No hay autenticación real ni login en esta demo",
+    ):
+        assert_contains(text, needle, "role visibility language")
+
+
 def test_asesor_selector_initializes_and_is_readable() -> None:
     text = read_demo()
     for needle in (
@@ -186,9 +242,9 @@ def test_asesor_selector_initializes_and_is_readable() -> None:
         "operatorManagedMetric",
         "operatorPendingMetric",
         "operatorSalesMetric",
-        "Andrea Vega",
-        "Carlos Mendez",
-        "Daniela Soto",
+        "Asesor Demo A",
+        "Asesor Demo B",
+        "Asesor Demo C",
         "color-scheme: light",
         "option {",
         "background: #fff",
@@ -266,6 +322,12 @@ def test_no_real_data_or_promise_violations() -> None:
         "Carmen",
         "chat log",
         "transcript",
+        "vencido",
+        "vencidos",
+        "Vencidos",
+        "exportación real conectada",
+        "descarga Excel implementada",
+        "guardar resultados automáticamente",
         "CLIENT_FOLDERS.json",
         "CLIENT_GROCERY.md",
         "/clients/karen",
@@ -290,6 +352,8 @@ def main() -> int:
     test_disclaimer_statuses_and_manager_metrics()
     test_operator_workflow_alignment()
     test_manager_realignment_labels_and_logic()
+    test_operator_forms_plans_and_monthly_cycle()
+    test_role_visibility_language()
     test_asesor_selector_initializes_and_is_readable()
     test_estado_de_gestion_values_and_interpretation()
     test_static_no_network_or_auth_or_backend()

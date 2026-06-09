@@ -41,6 +41,8 @@ Demo con datos ficticios. No usa información real de Power Club.
 
 Los nombres, teléfonos, sucursales, asesores, estados, notas e historial de interacción son muestras inventadas para explicar el flujo. No representan socios reales, prospectos reales ni operaciones reales de Power Club.
 
+La demo genera alrededor de 60 registros ficticios para que la lista se sienta más real y permita demostrar scroll, filtros, conteos por asesor y lectura gerencial.
+
 ---
 
 ## Flujo de Asesores
@@ -53,8 +55,11 @@ La vista de asesores permite mostrar:
 - Lista de socios/prospectos.
 - Socios asignados por asesor.
 - Mini-dashboard acumulado del asesor: Total asignados, Total gestionados, Pendientes por gestionar, Ventas, Promesas de compra, Seguimiento, Ilocalizables y No contacto.
+- Celular y correo electrónico con valores placeholder.
 - Estado socio.
 - Estado de gestión.
+- Último plan adquirido.
+- Plan ofrecido como dropdown con valores de ejemplo.
 - Sucursal.
 - Asesor asignado.
 - Turno del operador.
@@ -69,6 +74,18 @@ La vista de asesores permite mostrar:
 - Historial de interacción.
 - Próxima acción.
 - Botones editables de Estado de gestión para conversación de demo.
+- Campos fillable de Próxima acción, Fecha próxima acción y Nota de gestión.
+
+Planes de ejemplo:
+
+- Mensual $49.
+- Prepagado 1 mes.
+- Trimestral.
+- Semestral.
+- Anual.
+- Otro plan.
+
+Estado socio se mantiene separado de Estado de gestión. En los registros ficticios puede aparecer `Excluido` para mostrar casos de muestra del flujo.
 
 Clarificación comercial:
 Estado socio describe la relación de membresía o cliente. Estado de gestión describe el proceso de venta, seguimiento o contacto que maneja el asesor. No son el mismo campo.
@@ -84,6 +101,8 @@ Valores visibles de Estado de gestión:
 Los botones de Estado de gestión son interactivos dentro del navegador, pero solo modifican el arreglo local de demo mientras la página está abierta. No guardan datos, no llaman APIs y no escriben archivos.
 
 El valor del piloto es centralizar seguimiento, historial de contacto y próximo paso visible para que exista continuidad entre turnos, incluso si el proceso actual inicia desde correo, Google Drive y archivos por nombre.
+
+Los campos de archivo por nombre, correo, Google Drive y celular aparecen como Contexto actual. No se presentan como campos finales del CRM, sino como transición desde el proceso actual hacia seguimiento centralizado.
 
 ---
 
@@ -126,6 +145,45 @@ El objetivo es explicar visibilidad gerencial: cuántos socios están asignados,
 
 ---
 
+## Ciclo Mensual
+
+La demo representa un ciclo mensual conceptual:
+
+- Carga mensual de base/listado.
+- Gestión durante el mes.
+- Cierre mensual.
+- Reporte final mensual.
+- Historial mensual archivado.
+
+Controles visibles de demo:
+
+- Exportar gestión a Excel.
+- Generar reporte mensual.
+- Cerrar mes / guardar cierre mensual.
+
+Estos controles son visuales y conceptuales. No exportan archivos, no guardan datos, no llaman APIs y no prometen comportamiento de producción.
+
+Texto visible:
+
+```text
+Demo: exportación y cierre mensual representados de forma conceptual.
+En piloto real, el cierre mensual podría guardar resultados y permitir descarga Excel.
+```
+
+---
+
+## Modelo de Visibilidad por Rol
+
+Modelo conceptual de permisos para el piloto:
+
+- Asesor / operador: ve solo sus registros asignados.
+- Gerente de sucursal: ve su sucursal y sus asesores.
+- Gerente general: ve todas las sucursales y puede entrar a una sucursal.
+
+No hay autenticación real ni login en esta demo. Es una representación estática del modelo de visibilidad esperado.
+
+---
+
 ## Límites
 
 Esta demo no incluye:
@@ -135,6 +193,8 @@ Esta demo no incluye:
 - Backend.
 - APIs.
 - Autenticación.
+- Persistencia.
+- Exportación real de archivos.
 - Integración de pagos.
 - Automatización por WhatsApp.
 - Promesa de CRM de producción.

@@ -26,12 +26,16 @@ body {
 }
 
 button,
-select {
+select,
+input,
+textarea {
   font: inherit;
 }
 
 button,
-select {
+select,
+input,
+textarea {
   min-height: 40px;
 }
 
@@ -159,6 +163,7 @@ h3 {
 
 .notice,
 .workflow-strip,
+.role-model,
 .toolbar,
 .panel,
 .metric-card {
@@ -215,6 +220,36 @@ h3 {
   margin: 6px 0 0;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.role-model {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.role-model article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfb;
+}
+
+.role-model span,
+.role-model strong {
+  display: block;
+}
+
+.role-model span {
+  color: var(--green);
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.role-model strong {
+  margin-top: 4px;
 }
 
 .toolbar {
@@ -439,7 +474,9 @@ h3 {
 }
 
 .detail-list div,
-.notes-box {
+.notes-box,
+.context-box,
+.form-box {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
@@ -462,6 +499,50 @@ dd {
   margin: 14px 0;
 }
 
+.form-box {
+  margin: 14px 0;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.form-grid label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.wide-field {
+  grid-column: 1 / -1;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid #bdc9ce;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  color: var(--ink);
+  color-scheme: light;
+}
+
+textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.microcopy {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 .field-note {
   display: grid;
   gap: 3px;
@@ -479,6 +560,23 @@ dd {
 
 .notes-box p {
   margin-bottom: 0;
+}
+
+.context-box {
+  margin: 14px 0;
+  border-style: dashed;
+  background: #f8faf9;
+}
+
+.context-box p {
+  margin-bottom: 10px;
+  color: var(--muted);
+}
+
+.context-box dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
 }
 
 .history-list,
@@ -601,6 +699,36 @@ option {
   gap: 12px;
 }
 
+.monthly-cycle-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.monthly-steps,
+.monthly-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.monthly-steps span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #fbfcfb;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.monthly-actions button {
+  background: var(--deep);
+}
+
+.monthly-actions button:hover {
+  background: #0b2325;
+}
+
 .coaching-panel {
   display: grid;
   gap: 10px;
@@ -677,6 +805,7 @@ th {
 @media (max-width: 920px) {
   .hero,
   .workflow-strip,
+  .role-model,
   .view-grid,
   .manager-grid {
     grid-template-columns: 1fr;
@@ -707,6 +836,7 @@ th {
 
   .detail-list,
   .operator-summary,
+  .form-grid,
   .metrics-grid,
   .coaching-summary {
     grid-template-columns: 1fr;

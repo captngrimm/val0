@@ -50,6 +50,21 @@
         </article>
       </section>
 
+      <section class="role-model" aria-label="Modelo conceptual de visibilidad por rol">
+        <article>
+          <span>Asesor / operador</span>
+          <strong>Ve solo sus registros asignados</strong>
+        </article>
+        <article>
+          <span>Gerente de sucursal</span>
+          <strong>Ve su sucursal y sus asesores</strong>
+        </article>
+        <article>
+          <span>Gerente general</span>
+          <strong>Ve todas las sucursales y puede entrar a una sucursal</strong>
+        </article>
+      </section>
+
       <section class="toolbar" aria-label="Controles de demo">
         <div>
           <p class="eyebrow dark">Vista de reunión</p>
@@ -121,14 +136,15 @@
           <div class="panel-heading detail-heading">
             <div>
               <p class="eyebrow dark">Ficha de seguimiento</p>
-              <h2 id="detailTitle">Detalle del socio/prospecto</h2>
+              <h2 id="detailTitle">Ficha del socio</h2>
             </div>
             <span id="detailPriority" class="priority-pill">Prioridad</span>
           </div>
 
           <div class="person-block">
             <h3 id="detailName">Seleccione un registro</h3>
-            <p id="detailPhone" class="muted">Teléfono: +507 0000-0000</p>
+            <p id="detailPhone" class="muted">Celular: +507 0000-0000</p>
+            <p id="detailEmail" class="muted">Correo electrónico: socio.demo@example.invalid</p>
           </div>
 
           <dl class="detail-list">
@@ -147,6 +163,14 @@
             <div>
               <dt>Tipo de interés</dt>
               <dd id="detailInterest">-</dd>
+            </div>
+            <div>
+              <dt>Último plan adquirido</dt>
+              <dd id="detailLastPlan">-</dd>
+            </div>
+            <div>
+              <dt>Plan ofrecido</dt>
+              <dd id="detailOfferedPlan">-</dd>
             </div>
             <div>
               <dt>Estado socio</dt>
@@ -168,15 +192,37 @@
               <dt>Canal</dt>
               <dd id="detailChannel">-</dd>
             </div>
-            <div>
-              <dt>Archivo actual</dt>
-              <dd id="detailSourceFile">-</dd>
-            </div>
-            <div>
-              <dt>Herramientas actuales</dt>
-              <dd id="detailTools">-</dd>
-            </div>
           </dl>
+
+          <section class="form-box" aria-labelledby="actionFormTitle">
+            <h3 id="actionFormTitle">Gestión del asesor</h3>
+            <div class="form-grid">
+              <label>
+                <span>Próxima acción</span>
+                <input id="nextActionInput" type="text" value="" aria-label="Próxima acción editable">
+              </label>
+              <label>
+                <span>Fecha próxima acción</span>
+                <input id="nextActionDateInput" type="date" value="" aria-label="Fecha próxima acción editable">
+              </label>
+              <label>
+                <span>Plan ofrecido</span>
+                <select id="offeredPlanSelect" aria-label="Plan ofrecido">
+                  <option>Mensual $49</option>
+                  <option>Prepagado 1 mes</option>
+                  <option>Trimestral</option>
+                  <option>Semestral</option>
+                  <option>Anual</option>
+                  <option>Otro plan</option>
+                </select>
+              </label>
+              <label class="wide-field">
+                <span>Nota de gestión</span>
+                <textarea id="managementNoteInput" rows="3" aria-label="Nota de gestión editable"></textarea>
+              </label>
+            </div>
+            <p class="microcopy">Planes de ejemplo / valores demo. Los campos se muestran como captura conceptual; esta demo no guarda datos.</p>
+          </section>
 
           <div class="field-note">
             <strong>Estado de gestión</strong>
@@ -194,6 +240,21 @@
           <section class="notes-box" aria-labelledby="notesTitle">
             <h3 id="notesTitle">Notas</h3>
             <p id="detailNotes">Notas ficticias para orientar la conversación del piloto.</p>
+          </section>
+
+          <section class="context-box" aria-labelledby="contextTitle">
+            <h3 id="contextTitle">Contexto actual</h3>
+            <p>El flujo actual puede iniciar desde correo, Google Drive, celular y archivos por nombre. En el piloto, esto se usa como contexto de transición, no como campo principal del CRM.</p>
+            <dl>
+              <div>
+                <dt>Archivo de referencia</dt>
+                <dd id="detailSourceFile">-</dd>
+              </div>
+              <div>
+                <dt>Herramientas actuales</dt>
+                <dd id="detailTools">-</dd>
+              </div>
+            </dl>
           </section>
 
           <section aria-labelledby="historyTitle">
@@ -270,6 +331,28 @@
           <div class="progress-track" aria-hidden="true">
             <span id="monthProgressBar"></span>
           </div>
+        </section>
+
+        <section class="panel monthly-cycle-panel" aria-labelledby="monthlyCycleTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Ciclo mensual</p>
+              <h3 id="monthlyCycleTitle">Carga, gestión, cierre y reporte mensual</h3>
+            </div>
+          </div>
+          <div class="monthly-steps" aria-label="Ciclo mensual conceptual">
+            <span>Carga mensual de base/listado</span>
+            <span>Gestión durante el mes</span>
+            <span>Cierre mensual</span>
+            <span>Reporte final mensual</span>
+            <span>Historial mensual archivado</span>
+          </div>
+          <div class="monthly-actions" aria-label="Controles conceptuales de cierre mensual">
+            <button type="button">Exportar gestión a Excel</button>
+            <button type="button">Generar reporte mensual</button>
+            <button type="button">Cerrar mes / guardar cierre mensual</button>
+          </div>
+          <p class="microcopy">Demo: exportación y cierre mensual representados de forma conceptual. En piloto real, el cierre mensual podría guardar resultados y permitir descarga Excel.</p>
         </section>
 
         <section class="panel coaching-panel" aria-labelledby="coachingTitle">
