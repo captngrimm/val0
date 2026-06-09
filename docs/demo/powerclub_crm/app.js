@@ -13,15 +13,19 @@ const leads = [
     phone: "+507 6000-0101",
     branch: "Costa del Este",
     advisor: "Andrea Vega",
+    shift: "Turno mañana",
     interest: "Nueva membresía",
     memberStatus: "Prospecto",
     managementStatus: "Seguimiento",
     priority: "Alta",
+    channel: "Celular",
+    sourceFile: "Archivo por nombre: Prospectos junio",
+    currentTools: "Correo, Google Drive y celular",
     appointmentScheduled: false,
     lastContact: "2026-06-07",
     nextFollowUp: "2026-06-09",
     nextAction: "Llamar hoy para confirmar plan familiar.",
-    notes: "Prospecto ficticio interesado en horario nocturno y clases grupales.",
+    notes: "Prospecto ficticio interesado en horario nocturno. El seguimiento centralizado evita depender solo del archivo por nombre.",
     history: [
       "2026-06-05: Solicitó información de planes.",
       "2026-06-07: Se explicó plan familiar y quedó pendiente llamada.",
@@ -33,15 +37,19 @@ const leads = [
     phone: "+507 6000-0102",
     branch: "San Francisco",
     advisor: "Carlos Mendez",
+    shift: "Turno tarde",
     interest: "Reactivación",
     memberStatus: "Ex socio",
     managementStatus: "Promesa de compra",
     priority: "Media",
+    channel: "Llamada de socio",
+    sourceFile: "Archivo por nombre: Reactivaciones",
+    currentTools: "Correo, Google Drive y celular",
     appointmentScheduled: false,
     lastContact: "2026-06-08",
     nextFollowUp: "2026-06-11",
     nextAction: "Enviar resumen manual de opciones y llamar en dos días.",
-    notes: "Socio ficticio pausado por horario laboral. Quiere evaluar sede cercana.",
+    notes: "Socio ficticio llamó para consultar nueva compra. Próximo paso visible para continuidad entre turnos.",
     history: [
       "2026-06-04: Registro importado desde exportación de ejemplo.",
       "2026-06-08: Contactado por llamada manual.",
@@ -53,15 +61,19 @@ const leads = [
     phone: "+507 6000-0103",
     branch: "El Dorado",
     advisor: "Andrea Vega",
+    shift: "Turno mañana",
     interest: "Seguimiento de prueba",
     memberStatus: "Prospecto",
     managementStatus: "Seguimiento",
     priority: "Alta",
+    channel: "Venta presencial",
+    sourceFile: "Archivo por nombre: Pruebas y visitas",
+    currentTools: "Laptop, correo y Google Drive",
     appointmentScheduled: true,
     lastContact: "2026-06-08",
     nextFollowUp: "2026-06-10",
     nextAction: "Confirmar asistencia a cita de evaluación.",
-    notes: "Prospecto ficticio agendado para visita; requiere seguimiento puntual.",
+    notes: "Prospecto ficticio atendido en persona; requiere historial de contacto visible para el siguiente operador.",
     history: [
       "2026-06-06: Completó prueba de cortesía ficticia.",
       "2026-06-08: Se agenda cita en sucursal.",
@@ -73,15 +85,19 @@ const leads = [
     phone: "+507 6000-0104",
     branch: "Albrook",
     advisor: "Daniela Soto",
+    shift: "Turno tarde",
     interest: "Renovación",
     memberStatus: "Socio por vencer",
     managementStatus: "No contacto",
     priority: "Media",
+    channel: "Celular",
+    sourceFile: "Archivo por nombre: Renovaciones",
+    currentTools: "Correo, Google Drive y celular",
     appointmentScheduled: false,
     lastContact: "Sin contacto",
     nextFollowUp: "2026-06-09",
     nextAction: "Primer contacto manual para renovación.",
-    notes: "Socio ficticio con renovación pendiente en exportación de muestra.",
+    notes: "Socio ficticio con renovación pendiente. Aún no hay contacto registrado para el turno actual.",
     history: ["2026-06-09: Registro ficticio asignado a asesora."],
   },
   {
@@ -90,15 +106,19 @@ const leads = [
     phone: "+507 6000-0105",
     branch: "Costa del Este",
     advisor: "Carlos Mendez",
+    shift: "Turno mañana",
     interest: "Upgrade",
     memberStatus: "Socio activo",
     managementStatus: "Venta",
     priority: "Baja",
+    channel: "Venta presencial",
+    sourceFile: "Archivo por nombre: Upgrades",
+    currentTools: "Laptop, correo y Google Drive",
     appointmentScheduled: false,
     lastContact: "2026-06-06",
     nextFollowUp: "2026-06-20",
     nextAction: "Seguimiento de satisfacción post-inscripción.",
-    notes: "Conversión simulada para mostrar métrica de inscritos.",
+    notes: "Conversión simulada de venta presencial para mostrar trazabilidad desde asesor y sucursal.",
     history: [
       "2026-06-03: Interés en upgrade ficticio.",
       "2026-06-06: Marcado como inscrito en demo.",
@@ -110,15 +130,19 @@ const leads = [
     phone: "+507 6000-0106",
     branch: "San Francisco",
     advisor: "Daniela Soto",
+    shift: "Turno cierre",
     interest: "Lead corporativo",
     memberStatus: "Prospecto",
     managementStatus: "Ilocalizable",
     priority: "Media",
+    channel: "Celular",
+    sourceFile: "Archivo por nombre: Corporativos",
+    currentTools: "Correo, Google Drive y celular",
     appointmentScheduled: false,
     lastContact: "2026-06-02",
     nextFollowUp: "2026-06-06",
     nextAction: "Cerrar con motivo y revisar aprendizaje.",
-    notes: "Oportunidad ficticia perdida por falta de presupuesto.",
+    notes: "Oportunidad ficticia no localizada por celular; queda historial para continuidad del siguiente turno.",
     history: [
       "2026-06-01: Contacto inicial.",
       "2026-06-02: Indica que no seguirá este mes.",
@@ -176,7 +200,7 @@ function renderLeadList() {
           </div>
           <div class="lead-meta">
             <span>${lead.branch}</span>
-            <span>${lead.advisor}</span>
+            <span>${lead.advisor} · ${lead.shift}</span>
           </div>
           <div class="lead-meta">
             <span>Último: ${lead.lastContact}</span>
@@ -188,7 +212,7 @@ function renderLeadList() {
           </div>
           <div class="lead-meta">
             <span>Estado de gestión: ${lead.managementStatus}</span>
-            <span>${lead.interest}</span>
+            <span>${lead.channel}</span>
           </div>
         </button>
       `
@@ -202,11 +226,15 @@ function renderDetail() {
   document.querySelector("#detailPhone").textContent = `Teléfono: ${lead.phone}`;
   document.querySelector("#detailBranch").textContent = lead.branch;
   document.querySelector("#detailAdvisor").textContent = lead.advisor;
+  document.querySelector("#detailShift").textContent = lead.shift;
   document.querySelector("#detailInterest").textContent = lead.interest;
   document.querySelector("#detailMemberStatus").textContent = lead.memberStatus;
   document.querySelector("#detailManagementStatus").textContent = lead.managementStatus;
   document.querySelector("#detailLastContact").textContent = lead.lastContact;
   document.querySelector("#detailNextAction").textContent = `${lead.nextFollowUp} - ${lead.nextAction}`;
+  document.querySelector("#detailChannel").textContent = lead.channel;
+  document.querySelector("#detailSourceFile").textContent = lead.sourceFile;
+  document.querySelector("#detailTools").textContent = lead.currentTools;
   document.querySelector("#detailNotes").textContent = lead.notes;
 
   const priority = document.querySelector("#detailPriority");
@@ -255,6 +283,7 @@ function renderManager() {
           <td>${branchRows.filter((lead) => lead.managementStatus === "Venta").length}</td>
           <td>${branchRows.filter((lead) => lead.managementStatus === "Promesa de compra").length}</td>
           <td>${branchRows.filter((lead) => lead.managementStatus === "No contacto").length}</td>
+          <td>${branchRows.filter((lead) => lead.channel === "Venta presencial").length}</td>
         </tr>
       `;
     })
@@ -262,7 +291,7 @@ function renderManager() {
 
   const risks = rows.filter((lead) => isOverdue(lead) || lead.priority === "Alta").slice(0, 5);
   document.querySelector("#riskList").innerHTML = risks
-    .map((lead) => `<li><strong>${lead.name}</strong> - ${lead.branch}, ${lead.advisor}. Estado de gestión: ${lead.managementStatus}. Próxima acción: ${lead.nextAction}</li>`)
+    .map((lead) => `<li><strong>${lead.name}</strong> - ${lead.branch}, ${lead.advisor}, ${lead.shift}. Canal: ${lead.channel}. Estado de gestión: ${lead.managementStatus}. Próxima acción: ${lead.nextAction}</li>`)
     .join("");
 }
 

@@ -130,6 +130,7 @@ h3 {
 }
 
 .notice,
+.workflow-strip,
 .toolbar,
 .panel,
 .metric-card {
@@ -149,6 +150,43 @@ h3 {
 .notice span,
 .muted {
   color: var(--muted);
+}
+
+.workflow-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.workflow-strip article {
+  min-width: 0;
+  border-left: 4px solid var(--green);
+  padding: 8px 10px;
+  background: #fbfcfb;
+}
+
+.workflow-strip span,
+.workflow-strip strong {
+  display: block;
+}
+
+.workflow-strip span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.workflow-strip strong {
+  margin-top: 3px;
+  color: var(--deep);
+}
+
+.workflow-strip p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .toolbar {
@@ -498,6 +536,7 @@ th {
 
 @media (max-width: 920px) {
   .hero,
+  .workflow-strip,
   .view-grid,
   .manager-grid {
     grid-template-columns: 1fr;

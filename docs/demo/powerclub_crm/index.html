@@ -26,6 +26,24 @@
         <span>La intención es mostrar estructura, flujo y visibilidad gerencial para una conversación de piloto.</span>
       </section>
 
+      <section class="workflow-strip" aria-label="Flujo operativo actual">
+        <article>
+          <span>Inicio de turno</span>
+          <strong>Laptop, correo y Google Drive</strong>
+          <p>La demo parte del flujo actual: operadores abren sus herramientas básicas y trabajan desde archivos por nombre.</p>
+        </article>
+        <article>
+          <span>Canales reales</span>
+          <strong>Celular, llamadas y venta presencial</strong>
+          <p>El CRM piloto centraliza seguimiento de contactos por celular, llamadas de socios y ventas presenciales.</p>
+        </article>
+        <article>
+          <span>Continuidad</span>
+          <strong>Próximo paso visible entre turnos</strong>
+          <p>La meta es que el siguiente asesor vea historial, estado de gestión y próxima acción sin depender del archivo correcto.</p>
+        </article>
+      </section>
+
       <section class="toolbar" aria-label="Controles de demo">
         <div>
           <p class="eyebrow dark">Vista de reunión</p>
@@ -79,6 +97,10 @@
               <dd id="detailAdvisor">-</dd>
             </div>
             <div>
+              <dt>Turno</dt>
+              <dd id="detailShift">-</dd>
+            </div>
+            <div>
               <dt>Tipo de interés</dt>
               <dd id="detailInterest">-</dd>
             </div>
@@ -97,6 +119,18 @@
             <div>
               <dt>Próxima acción</dt>
               <dd id="detailNextAction">-</dd>
+            </div>
+            <div>
+              <dt>Canal</dt>
+              <dd id="detailChannel">-</dd>
+            </div>
+            <div>
+              <dt>Archivo actual</dt>
+              <dd id="detailSourceFile">-</dd>
+            </div>
+            <div>
+              <dt>Herramientas actuales</dt>
+              <dd id="detailTools">-</dd>
             </div>
           </dl>
 
@@ -181,6 +215,7 @@
                     <th>Venta</th>
                     <th>Promesa</th>
                     <th>No contacto</th>
+                    <th>Presencial</th>
                   </tr>
                 </thead>
                 <tbody id="branchTableBody"></tbody>

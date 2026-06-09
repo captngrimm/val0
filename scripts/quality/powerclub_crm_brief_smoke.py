@@ -50,7 +50,7 @@ def test_required_sections() -> None:
         "Propuesta de Piloto",
         "Opciones de Precio",
         "Límites / Lo Que Fase 1 NO Incluye",
-        "Preguntas de Reunión para Karen / Gerencia General",
+        "Preguntas de Reunión para Contacto Interno / Gerencia General",
         "Siguiente Paso Recomendado",
     ):
         assert_contains(text, needle, "required Power Club section")
@@ -77,7 +77,7 @@ def test_known_pilot_facts_and_boundaries() -> None:
         "sin integración viva con backend en fase 1",
         "Fase 1 no envía automatizaciones por WhatsApp",
         "No usar datos reales de socios o prospectos en materiales de demo",
-        "Archivos vivos de Karen",
+        "Archivos vivos de contactos internos",
         "Refactor amplio del runtime de Val0",
     ):
         assert_contains(text, needle, "Power Club pilot facts and boundaries")
@@ -89,6 +89,7 @@ def test_no_forbidden_leakage_or_overreach() -> None:
         "CLIENT_FOLDERS.json",
         "CLIENT_GROCERY.md",
         "/clients/karen",
+        "Karen",
         "Corporate Brief",
         "Executive Summary",
         "Problem Summary",

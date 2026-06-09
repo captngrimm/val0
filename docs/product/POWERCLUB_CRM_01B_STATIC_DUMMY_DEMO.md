@@ -17,8 +17,8 @@ No requiere servidor. Se puede abrir directamente en el navegador.
 
 La demo presenta dos vistas principales:
 
-- Vista asesores: lista diaria de socios, prospectos y oportunidades comerciales con sucursal, asesor, estado, prioridad, último contacto y próximo seguimiento.
-- Vista gerencial: filtros por sucursal y asesor, métricas de seguimiento y una tabla simple para ver riesgo operativo.
+- Vista asesores: lista diaria de socios, prospectos y oportunidades comerciales con sucursal, asesor, turno, canal, estado, prioridad, último contacto y próximo seguimiento.
+- Vista gerencial: filtros por sucursal y asesor, métricas de seguimiento y una tabla simple para ver riesgo operativo por sucursal, asesor y canal.
 
 La demo usa branding de reunión:
 
@@ -44,6 +44,9 @@ Los nombres, teléfonos, sucursales, asesores, estados, notas e historial de int
 
 ## Flujo de Asesores
 
+Insight operativo usado:
+Los operadores trabajan por turnos. El punto de partida actual es abrir laptop, correo, Google Drive y archivos establecidos por nombre; luego se gestiona contacto por celular, llamadas de socios o ventas presenciales. La demo no copia conversaciones ni datos reales: solo usa este patrón operativo de forma paraphraseada.
+
 La vista de asesores permite mostrar:
 
 - Lista de socios/prospectos.
@@ -51,6 +54,10 @@ La vista de asesores permite mostrar:
 - Estado de gestión.
 - Sucursal.
 - Asesor asignado.
+- Turno del operador.
+- Herramientas actuales: correo, Google Drive y celular.
+- Archivo actual por nombre como dolor de estado actual.
+- Canal: celular, llamada de socio o venta presencial.
 - Último contacto.
 - Fecha de próximo seguimiento.
 - Prioridad.
@@ -72,6 +79,8 @@ Valores visibles de Estado de gestión:
 
 Los botones de Estado de gestión son interactivos dentro del navegador, pero solo modifican el arreglo local de demo mientras la página está abierta. No guardan datos, no llaman APIs y no escriben archivos.
 
+El valor del piloto es centralizar seguimiento, historial de contacto y próximo paso visible para que exista continuidad entre turnos, incluso si el proceso actual inicia desde correo, Google Drive y archivos por nombre.
+
 ---
 
 ## Flujo Gerencial
@@ -87,10 +96,11 @@ La vista gerencial permite mostrar:
 - Conteo de Venta.
 - Conteo de Promesa de compra.
 - Conteo de No contacto.
+- Conteo de ventas presenciales.
 - Tabla por sucursal.
 - Lista de oportunidades que requieren atención.
 
-El objetivo es explicar visibilidad gerencial: qué está vencido, quién tiene carga, qué sucursal necesita atención, qué Estado de gestión domina y qué oportunidades deben revisarse.
+El objetivo es explicar visibilidad gerencial: qué está vencido, quién tiene carga, qué sucursal necesita atención, qué Estado de gestión domina, qué canal genera actividad y qué oportunidades deben revisarse.
 
 ---
 

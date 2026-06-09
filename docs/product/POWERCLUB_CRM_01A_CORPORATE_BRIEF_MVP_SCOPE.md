@@ -7,7 +7,7 @@ Estado:
 Borrador de propuesta para piloto. No es un contrato de implementación final, no es un reemplazo completo del CRM actual y no compromete alcance, fechas, accesos, datos ni precios hasta que la gerencia apruebe el piloto.
 
 Nota de datos:
-Este documento usa únicamente supuestos anónimos y datos generales de descubrimiento. No incluye registros reales de socios, prospectos, archivos exportados, conversaciones privadas, archivos vivos de Karen, credenciales ni data operativa sensible.
+Este documento usa únicamente supuestos anónimos y datos generales de descubrimiento. No incluye registros reales de socios, prospectos, archivos exportados, conversaciones privadas, archivos vivos de contactos internos, credenciales ni data operativa sensible.
 
 ---
 
@@ -23,7 +23,7 @@ Objetivo del piloto:
 Reducir oportunidades perdidas por falta de seguimiento, aumentar la visibilidad gerencial y validar si Power Club necesita un CRM operativo ligero antes de considerar una implementación más grande.
 
 Siguiente movimiento recomendado:
-Hacer una reunión corta de descubrimiento con Karen y luego una conversación con Gerencia General para confirmar el proceso real, seleccionar una sucursal o flujo piloto y preparar una demo con datos ficticios.
+Hacer una reunión corta de descubrimiento con el contacto interno y luego una conversación con Gerencia General para confirmar el proceso real, seleccionar una sucursal o flujo piloto y preparar una demo con datos ficticios.
 
 ---
 
@@ -60,7 +60,7 @@ Estos supuestos deben validarse antes de cualquier implementación.
 - El seguimiento ocurre de forma manual por llamada, mensaje, atención en sucursal u otros canales aprobados por la empresa.
 - El sistema actual no funciona como lista diaria simple para todos los asesores.
 - Los gerentes necesitan visibilidad por sucursal, asesor, estado y fecha de próximo seguimiento.
-- Karen es el contacto interno de confianza para validar vocabulario, proceso real y sensibilidad antes de la reunión con Gerencia General.
+- Un contacto interno de confianza puede validar vocabulario, proceso real y sensibilidad antes de la reunión con Gerencia General.
 
 Flujo anónimo de referencia:
 
@@ -84,7 +84,7 @@ Necesitan una cola diaria sencilla: a quién contactar, por qué, cuándo fue el
 
 ### Contacto Interno de Confianza
 
-Karen puede ayudar a validar el lenguaje interno, los pasos reales, los puntos sensibles y la mejor forma de presentar el piloto a Gerencia.
+Un contacto interno puede ayudar a validar el lenguaje interno, los pasos reales, los puntos sensibles y la mejor forma de presentar el piloto a Gerencia.
 
 ### Responsable de Datos / Administración
 
@@ -297,7 +297,7 @@ Métricas del piloto:
 - Definir campos mínimos requeridos.
 - Preparar demo con datos ficticios.
 - Diseñar flujo del asesor y flujo gerencial.
-- Validar requisitos del dashboard con Karen y Gerencia General.
+- Validar requisitos del dashboard con el contacto interno y Gerencia General.
 - Escoger una sucursal o grupo pequeño para piloto.
 - Definir métricas de éxito.
 
@@ -385,7 +385,7 @@ La fase 1 no incluye plataforma completa, procesamiento de pagos, automatizació
 Fase 1 no incluye:
 
 - Datos reales de Power Club en archivos públicos o materiales de demo.
-- Archivos vivos de Karen.
+- Archivos vivos de contactos internos.
 - Construcción de una plataforma completa.
 - Implementación backend.
 - Integración de pagos.
@@ -405,9 +405,9 @@ Fase 1 es un piloto operativo y paquete consultivo. El alcance de producción de
 
 ---
 
-## 14. Preguntas de Reunión para Karen / Gerencia General
+## 14. Preguntas de Reunión para Contacto Interno / Gerencia General
 
-Preguntas para Karen antes de la reunión con Gerencia:
+Preguntas para el contacto interno antes de la reunión con Gerencia:
 
 - ¿Qué problema concreto haría que Gerencia diga "esto vale la pena probarlo"?
 - ¿Qué sucursal o equipo sería mejor para un piloto de bajo riesgo?
@@ -436,7 +436,7 @@ Preguntas para Gerencia General:
 
 ## 15. Siguiente Paso Recomendado
 
-Preparar una reunión de descubrimiento de 30-45 minutos con Karen primero, y luego una conversación de demo con Gerencia General.
+Preparar una reunión de descubrimiento de 30-45 minutos con el contacto interno primero, y luego una conversación de demo con Gerencia General.
 
 Secuencia sugerida:
 

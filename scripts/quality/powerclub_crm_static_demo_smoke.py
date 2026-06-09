@@ -67,6 +67,10 @@ def test_spanish_labels_and_branding() -> None:
         "Tipo de interés",
         "Estado socio",
         "Estado de gestión",
+        "Turno",
+        "Canal",
+        "Archivo actual",
+        "Herramientas actuales",
         "Notas",
         "Historial de interacción",
     ):
@@ -85,6 +89,33 @@ def test_disclaimer_statuses_and_manager_metrics() -> None:
         "Filtro por asesor",
     ):
         assert_contains(text, needle, "demo disclaimer/statuses/metrics")
+
+
+def test_operator_workflow_alignment() -> None:
+    text = read_demo()
+    for needle in (
+        "turnos",
+        "Inicio de turno",
+        "Continuidad",
+        "continuidad entre turnos",
+        "correo",
+        "Google Drive",
+        "celular",
+        "archivos por nombre",
+        "Archivo por nombre",
+        "seguimiento centralizado",
+        "historial de contacto",
+        "Próximo paso visible",
+        "visibilidad gerencial",
+        "asesor",
+        "sucursal",
+        "Venta presencial",
+        "ventas presenciales",
+        "Llamada de socio",
+        "llamadas de socios",
+        "Laptop",
+    ):
+        assert_contains(text, needle, "operator workflow alignment")
 
 
 def test_estado_de_gestion_values_and_interpretation() -> None:
@@ -136,6 +167,9 @@ def test_no_real_data_or_promise_violations() -> None:
         "API conectada",
         "backend activo",
         "full SaaS",
+        "Karen",
+        "chat log",
+        "transcript",
         "CLIENT_FOLDERS.json",
         "CLIENT_GROCERY.md",
         "/clients/karen",
@@ -158,6 +192,7 @@ def main() -> int:
     test_required_files_exist()
     test_spanish_labels_and_branding()
     test_disclaimer_statuses_and_manager_metrics()
+    test_operator_workflow_alignment()
     test_estado_de_gestion_values_and_interpretation()
     test_static_no_network_or_auth_or_backend()
     test_no_real_data_or_promise_violations()
