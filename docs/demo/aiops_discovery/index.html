@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Val AI Ops Discovery | Mapa IA 30/60/90</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <header class="stage-header">
+      <div>
+        <p class="eyebrow">Founder-beta diagnostic stage</p>
+        <h1>Val AI Ops Discovery</h1>
+        <p class="subtitle">Mapa IA 30/60/90 para diagnostico, pilotos y siguientes pasos.</p>
+      </div>
+      <div class="trust-note">
+        Val helps structure diagnosis and pilot design. Human confirmation required before implementation.
+      </div>
+    </header>
+
+    <main class="stage-shell">
+      <section class="command-band" aria-labelledby="start-title">
+        <div>
+          <h2 id="start-title">Start command</h2>
+          <p>Use this stage to run a focused AI Ops discovery meeting without exposing a generic chat interface.</p>
+        </div>
+        <label class="field">
+          <span>Client / company</span>
+          <input id="companyInput" type="text" value="Empresa X" aria-label="Client or company">
+        </label>
+        <button id="startButton" type="button" aria-label="Start Diagnostic">Iniciar diagnostico AI Ops</button>
+      </section>
+
+      <section class="diagnostic-grid" aria-label="AI Ops diagnostic workspace">
+        <aside class="question-panel">
+          <h2>Guided diagnostic questions</h2>
+          <ol id="questionList" class="question-list">
+            <li data-question="What type of business is this?">Business type</li>
+            <li data-question="Where do leads or clients come from?">Lead/client channels</li>
+            <li data-question="What processes must not fail?">Critical processes</li>
+            <li data-question="What work is manual, repetitive, or easy to forget?">Manual/repetitive work</li>
+            <li data-question="What tools are used today?">Tools used</li>
+            <li data-question="Where is the most time lost?">Where time is lost</li>
+            <li data-question="What is the current bottleneck?">Current bottleneck</li>
+            <li data-question="What outcome would make the next 30/60/90 days successful?">Desired 30/60/90 outcome</li>
+          </ol>
+        </aside>
+
+        <section class="notes-panel">
+          <div class="panel-heading">
+            <h2>Meeting notes</h2>
+            <button id="sampleNotesButton" type="button">Load sample notes</button>
+          </div>
+          <textarea id="notesInput" rows="12" placeholder="Frank can paste notes or transcript fragments here."></textarea>
+          <div class="action-row">
+            <button id="summaryButton" type="button">Summarize Notes</button>
+            <button id="questionButton" type="button">Suggest Next Question</button>
+            <button id="opportunityButton" type="button">Detect Opportunities</button>
+            <button id="reportButton" type="button">Generate Draft Map</button>
+          </div>
+        </section>
+
+        <section class="operator-panel" aria-label="Val operator panels">
+          <div class="signal-card">
+            <h2>Current summary</h2>
+            <p id="summaryOutput">Start the diagnostic or paste notes to create a working summary.</p>
+          </div>
+          <div class="signal-card">
+            <h2>Suggested next question</h2>
+            <p id="nextQuestionOutput">Ask where time is being lost and what follow-up currently depends on memory.</p>
+          </div>
+          <div class="signal-card">
+            <h2>Detected opportunities</h2>
+            <ul id="opportunityOutput">
+              <li>Capture incoming requests into a structured review queue.</li>
+              <li>Draft follow-up messages for human approval.</li>
+            </ul>
+          </div>
+          <div class="signal-card warning">
+            <h2>Risks / things not to promise</h2>
+            <ul>
+              <li>No fake autonomy.</li>
+              <li>No professional replacement claims.</li>
+              <li>No implementation without human confirmation.</li>
+            </ul>
+          </div>
+          <div class="signal-card pilot">
+            <h2>Recommended first pilot</h2>
+            <p id="pilotOutput">AI-assisted intake and follow-up prep: capture notes, classify opportunities, and prepare next steps for review.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="report-preview" aria-labelledby="report-title">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Draft report artifact</p>
+            <h2 id="report-title">Mapa IA 30/60/90 &mdash; <span id="reportCompany">Empresa X</span></h2>
+          </div>
+          <span class="status-pill">Mock renderer</span>
+        </div>
+        <article id="reportOutput" class="report-body">
+          <h3>Executive summary</h3>
+          <p>Empresa X needs a practical AI Ops diagnostic that turns messy meeting context into one clear first pilot.</p>
+          <h3>Current processes</h3>
+          <p>Requests, follow-up, admin review, and owner decisions are still being mapped.</p>
+          <h3>Pain points</h3>
+          <p>Manual tracking, scattered notes, and delayed follow-up are the likely first bottlenecks to validate.</p>
+          <h3>Opportunities</h3>
+          <p>Capture notes, structure next steps, and prepare follow-up drafts for human approval.</p>
+          <h3>Recommended pilot</h3>
+          <p>Start with AI-assisted intake and follow-up prep.</p>
+          <h3>30/60/90 roadmap</h3>
+          <p>30 days: validate. 60 days: pilot. 90 days: expand or redesign based on evidence.</p>
+          <h3>Limits / boundaries</h3>
+          <p>Val structures diagnosis and pilot design. She does not replace professional judgment or execute implementation without confirmation.</p>
+          <h3>Next steps</h3>
+          <p>Confirm the workflow owner, success metric, and first-week test.</p>
+        </article>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
