@@ -8,6 +8,7 @@ const pilotOutput = document.querySelector("#pilotOutput");
 const reportOutput = document.querySelector("#reportOutput");
 const questionItems = Array.from(document.querySelectorAll("#questionList li"));
 const voiceStatus = document.querySelector("#voiceStatus");
+const exportStatus = document.querySelector("#exportStatus");
 
 const voiceLines = {
   intro:
@@ -134,6 +135,46 @@ function generateReport() {
     <h3>Next steps</h3>
     <p>Confirm the workflow owner, choose the first-week success metric, and prepare a scoped implementation proposal.</p>
   `;
+  exportStatus.textContent = "Draft map generated. Copy the report or use Print / Save as PDF.";
+}
+
+function reportText() {
+  const company = companyName();
+  return [
+    `Mapa IA 30/60/90 - ${company}`,
+    "",
+    reportOutput.innerText.trim()
+  ].join("\n");
+}
+
+function selectReportText() {
+  const range = document.createRange();
+  range.selectNodeContents(reportOutput);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+async function copyReport() {
+  const text = reportText();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      exportStatus.textContent = "Report copied to clipboard.";
+      return;
+    } catch (error) {
+      selectReportText();
+      exportStatus.textContent = "Clipboard blocked. Report text selected; copy it manually.";
+      return;
+    }
+  }
+  selectReportText();
+  exportStatus.textContent = "Clipboard unavailable. Report text selected; copy it manually.";
+}
+
+function printReport() {
+  exportStatus.textContent = "Print dialog opened. Choose Save as PDF if you want a PDF copy.";
+  window.print();
 }
 
 document.querySelector("#startButton").addEventListener("click", startDiagnostic);
@@ -145,6 +186,8 @@ document.querySelector("#summaryButton").addEventListener("click", summarizeNote
 document.querySelector("#questionButton").addEventListener("click", suggestQuestion);
 document.querySelector("#opportunityButton").addEventListener("click", detectOpportunities);
 document.querySelector("#reportButton").addEventListener("click", generateReport);
+document.querySelector("#copyReportButton").addEventListener("click", copyReport);
+document.querySelector("#printReportButton").addEventListener("click", printReport);
 document.querySelector("#speakIntroButton").addEventListener("click", () => speakVoiceLine("intro"));
 document.querySelector("#speakFirstQuestionButton").addEventListener("click", () => speakVoiceLine("firstQuestion"));
 document.querySelector("#speakOpportunityButton").addEventListener("click", () => speakVoiceLine("opportunity"));

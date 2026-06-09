@@ -47,6 +47,24 @@
         <p id="voiceStatus" class="voice-status" role="status">Voice ready</p>
       </section>
 
+      <section class="demo-checklist-panel" aria-labelledby="demo-checklist-title">
+        <div>
+          <p class="eyebrow">Meeting mode</p>
+          <h2 id="demo-checklist-title">Demo Mode Checklist</h2>
+        </div>
+        <ol class="demo-checklist">
+          <li>Open stage.</li>
+          <li>Start Diagnostic.</li>
+          <li>Load/paste Carlos sample notes.</li>
+          <li>Summarize Notes.</li>
+          <li>Suggest Next Question.</li>
+          <li>Detect Opportunities.</li>
+          <li>Generate Draft Map.</li>
+          <li>Try Voice Lite intro/question.</li>
+          <li>Copy or print report.</li>
+        </ol>
+      </section>
+
       <section class="diagnostic-grid" aria-label="AI Ops diagnostic workspace">
         <aside class="question-panel">
           <h2>Guided diagnostic questions</h2>
@@ -113,8 +131,13 @@
             <p class="eyebrow">Draft report artifact</p>
             <h2 id="report-title">Mapa IA 30/60/90 &mdash; <span id="reportCompany">Empresa X</span></h2>
           </div>
-          <span class="status-pill">Mock renderer</span>
+          <div class="report-actions" aria-label="Report export controls">
+            <span class="status-pill">Mock renderer</span>
+            <button id="copyReportButton" type="button">Copy Report</button>
+            <button id="printReportButton" type="button" class="secondary-button">Print / Save as PDF</button>
+          </div>
         </div>
+        <p id="exportStatus" class="export-status" role="status">Use Copy Report or Print / Save as PDF after generating the draft map.</p>
         <article id="reportOutput" class="report-body">
           <h3>Executive summary</h3>
           <p>Empresa X needs a practical AI Ops diagnostic that turns messy meeting context into one clear first pilot.</p>

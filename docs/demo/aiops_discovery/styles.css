@@ -111,6 +111,7 @@ h3 {
 
 .command-band,
 .voice-lite-panel,
+.demo-checklist-panel,
 .question-panel,
 .notes-panel,
 .operator-panel,
@@ -128,6 +129,27 @@ h3 {
   gap: 16px;
   align-items: end;
   padding: 18px;
+}
+
+.demo-checklist-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 18px;
+}
+
+.demo-checklist-panel .eyebrow {
+  color: var(--brand);
+}
+
+.demo-checklist {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 8px 18px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
 }
 
 .voice-lite-panel {
@@ -298,6 +320,21 @@ textarea {
   font-weight: 800;
 }
 
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.export-status {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
 .report-body {
   display: grid;
   gap: 8px;
@@ -314,6 +351,7 @@ textarea {
   .stage-header,
   .command-band,
   .voice-lite-panel,
+  .demo-checklist-panel,
   .diagnostic-grid {
     grid-template-columns: 1fr;
   }
@@ -333,6 +371,10 @@ textarea {
   }
 
   .voice-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-checklist {
     grid-template-columns: 1fr;
   }
 
