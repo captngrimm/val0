@@ -47,7 +47,8 @@ Los nombres, teléfonos, sucursales, asesores, estados, notas e historial de int
 La vista de asesores permite mostrar:
 
 - Lista de socios/prospectos.
-- Estados comerciales.
+- Estado socio.
+- Estado de gestión.
 - Sucursal.
 - Asesor asignado.
 - Último contacto.
@@ -58,16 +59,18 @@ La vista de asesores permite mostrar:
 - Historial de interacción.
 - Próxima acción.
 
-Estados visibles:
+Clarificación comercial:
+Estado socio describe la relación de membresía o cliente. Estado de gestión describe el proceso de venta, seguimiento o contacto que maneja el asesor. No son el mismo campo.
 
-- Nuevo.
-- Contactado.
+Valores visibles de Estado de gestión:
+
+- Venta.
+- Promesa de compra.
 - Seguimiento.
-- Cita agendada.
-- Inscrito.
-- Perdido.
+- Ilocalizable.
+- No contacto.
 
-Los botones de estado son interactivos dentro del navegador, pero solo modifican el arreglo local de demo mientras la página está abierta. No guardan datos, no llaman APIs y no escriben archivos.
+Los botones de Estado de gestión son interactivos dentro del navegador, pero solo modifican el arreglo local de demo mientras la página está abierta. No guardan datos, no llaman APIs y no escriben archivos.
 
 ---
 
@@ -81,10 +84,13 @@ La vista gerencial permite mostrar:
 - Seguimientos vencidos.
 - Citas agendadas.
 - Conversiones simuladas.
+- Conteo de Venta.
+- Conteo de Promesa de compra.
+- Conteo de No contacto.
 - Tabla por sucursal.
 - Lista de oportunidades que requieren atención.
 
-El objetivo es explicar visibilidad gerencial: qué está vencido, quién tiene carga, qué sucursal necesita atención y qué oportunidades deben revisarse.
+El objetivo es explicar visibilidad gerencial: qué está vencido, quién tiene carga, qué sucursal necesita atención, qué Estado de gestión domina y qué oportunidades deben revisarse.
 
 ---
 

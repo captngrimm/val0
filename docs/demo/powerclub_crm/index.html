@@ -83,6 +83,14 @@
               <dd id="detailInterest">-</dd>
             </div>
             <div>
+              <dt>Estado socio</dt>
+              <dd id="detailMemberStatus">-</dd>
+            </div>
+            <div>
+              <dt>Estado de gestión</dt>
+              <dd id="detailManagementStatus">-</dd>
+            </div>
+            <div>
               <dt>Último contacto</dt>
               <dd id="detailLastContact">-</dd>
             </div>
@@ -92,13 +100,17 @@
             </div>
           </dl>
 
-          <div class="status-actions" aria-label="Estados comerciales">
-            <button type="button" data-status="Nuevo">Nuevo</button>
-            <button type="button" data-status="Contactado">Contactado</button>
-            <button type="button" data-status="Seguimiento">Seguimiento</button>
-            <button type="button" data-status="Cita agendada">Cita agendada</button>
-            <button type="button" data-status="Inscrito">Inscrito</button>
-            <button type="button" data-status="Perdido">Perdido</button>
+          <div class="field-note">
+            <strong>Estado de gestión</strong>
+            <span>Describe el proceso comercial del asesor. No es lo mismo que Estado socio, que describe la relación de membresía.</span>
+          </div>
+
+          <div class="status-actions" aria-label="Estado de gestión">
+            <button type="button" data-management-status="Venta">Venta</button>
+            <button type="button" data-management-status="Promesa de compra">Promesa de compra</button>
+            <button type="button" data-management-status="Seguimiento">Seguimiento</button>
+            <button type="button" data-management-status="Ilocalizable">Ilocalizable</button>
+            <button type="button" data-management-status="No contacto">No contacto</button>
           </div>
 
           <section class="notes-box" aria-labelledby="notesTitle">
@@ -166,7 +178,9 @@
                     <th>Abiertos</th>
                     <th>Vencidos</th>
                     <th>Citas</th>
-                    <th>Inscritos</th>
+                    <th>Venta</th>
+                    <th>Promesa</th>
+                    <th>No contacto</th>
                   </tr>
                 </thead>
                 <tbody id="branchTableBody"></tbody>

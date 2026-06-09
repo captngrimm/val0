@@ -1,10 +1,9 @@
 const STATUS_CLASSES = {
-  Nuevo: "nuevo",
-  Contactado: "contactado",
+  Venta: "venta",
+  "Promesa de compra": "promesa-de-compra",
   Seguimiento: "seguimiento",
-  "Cita agendada": "cita-agendada",
-  Inscrito: "inscrito",
-  Perdido: "perdido",
+  Ilocalizable: "ilocalizable",
+  "No contacto": "no-contacto",
 };
 
 const leads = [
@@ -15,8 +14,10 @@ const leads = [
     branch: "Costa del Este",
     advisor: "Andrea Vega",
     interest: "Nueva membresía",
-    status: "Seguimiento",
+    memberStatus: "Prospecto",
+    managementStatus: "Seguimiento",
     priority: "Alta",
+    appointmentScheduled: false,
     lastContact: "2026-06-07",
     nextFollowUp: "2026-06-09",
     nextAction: "Llamar hoy para confirmar plan familiar.",
@@ -33,8 +34,10 @@ const leads = [
     branch: "San Francisco",
     advisor: "Carlos Mendez",
     interest: "Reactivación",
-    status: "Contactado",
+    memberStatus: "Ex socio",
+    managementStatus: "Promesa de compra",
     priority: "Media",
+    appointmentScheduled: false,
     lastContact: "2026-06-08",
     nextFollowUp: "2026-06-11",
     nextAction: "Enviar resumen manual de opciones y llamar en dos días.",
@@ -51,8 +54,10 @@ const leads = [
     branch: "El Dorado",
     advisor: "Andrea Vega",
     interest: "Seguimiento de prueba",
-    status: "Cita agendada",
+    memberStatus: "Prospecto",
+    managementStatus: "Seguimiento",
     priority: "Alta",
+    appointmentScheduled: true,
     lastContact: "2026-06-08",
     nextFollowUp: "2026-06-10",
     nextAction: "Confirmar asistencia a cita de evaluación.",
@@ -69,8 +74,10 @@ const leads = [
     branch: "Albrook",
     advisor: "Daniela Soto",
     interest: "Renovación",
-    status: "Nuevo",
+    memberStatus: "Socio por vencer",
+    managementStatus: "No contacto",
     priority: "Media",
+    appointmentScheduled: false,
     lastContact: "Sin contacto",
     nextFollowUp: "2026-06-09",
     nextAction: "Primer contacto manual para renovación.",
@@ -84,8 +91,10 @@ const leads = [
     branch: "Costa del Este",
     advisor: "Carlos Mendez",
     interest: "Upgrade",
-    status: "Inscrito",
+    memberStatus: "Socio activo",
+    managementStatus: "Venta",
     priority: "Baja",
+    appointmentScheduled: false,
     lastContact: "2026-06-06",
     nextFollowUp: "2026-06-20",
     nextAction: "Seguimiento de satisfacción post-inscripción.",
@@ -102,8 +111,10 @@ const leads = [
     branch: "San Francisco",
     advisor: "Daniela Soto",
     interest: "Lead corporativo",
-    status: "Perdido",
+    memberStatus: "Prospecto",
+    managementStatus: "Ilocalizable",
     priority: "Media",
+    appointmentScheduled: false,
     lastContact: "2026-06-02",
     nextFollowUp: "2026-06-06",
     nextAction: "Cerrar con motivo y revisar aprendizaje.",
@@ -132,7 +143,7 @@ function normalizeClass(value) {
 }
 
 function isOverdue(lead) {
-  return lead.nextFollowUp <= "2026-06-09" && !["Inscrito", "Perdido"].includes(lead.status);
+  return lead.nextFollowUp <= "2026-06-09" && !["Venta", "Ilocalizable"].includes(lead.managementStatus);
 }
 
 function filteredLeads() {
@@ -143,7 +154,7 @@ function filteredLeads() {
     return leads.filter((lead) => lead.priority === "Alta");
   }
   if (activeFilter === "citas") {
-    return leads.filter((lead) => lead.status === "Cita agendada");
+    return leads.filter((lead) => lead.appointmentScheduled);
   }
   return leads;
 }
@@ -161,7 +172,7 @@ function renderLeadList() {
         <button class="lead-card ${lead.id === selectedId ? "active" : ""}" type="button" data-id="${lead.id}">
           <div class="lead-top">
             <strong>${lead.name}</strong>
-            ${statusPill(lead.status)}
+            ${statusPill(lead.managementStatus)}
           </div>
           <div class="lead-meta">
             <span>${lead.branch}</span>
@@ -173,6 +184,10 @@ function renderLeadList() {
           </div>
           <div class="lead-meta">
             <span>Prioridad ${lead.priority}</span>
+            <span>Estado socio: ${lead.memberStatus}</span>
+          </div>
+          <div class="lead-meta">
+            <span>Estado de gestión: ${lead.managementStatus}</span>
             <span>${lead.interest}</span>
           </div>
         </button>
@@ -188,6 +203,8 @@ function renderDetail() {
   document.querySelector("#detailBranch").textContent = lead.branch;
   document.querySelector("#detailAdvisor").textContent = lead.advisor;
   document.querySelector("#detailInterest").textContent = lead.interest;
+  document.querySelector("#detailMemberStatus").textContent = lead.memberStatus;
+  document.querySelector("#detailManagementStatus").textContent = lead.managementStatus;
   document.querySelector("#detailLastContact").textContent = lead.lastContact;
   document.querySelector("#detailNextAction").textContent = `${lead.nextFollowUp} - ${lead.nextAction}`;
   document.querySelector("#detailNotes").textContent = lead.notes;
@@ -199,7 +216,7 @@ function renderDetail() {
   document.querySelector("#detailHistory").innerHTML = lead.history.map((item) => `<li>${item}</li>`).join("");
 
   document.querySelectorAll(".status-actions button").forEach((button) => {
-    button.classList.toggle("active", button.dataset.status === lead.status);
+    button.classList.toggle("active", button.dataset.managementStatus === lead.managementStatus);
   });
 }
 
@@ -220,10 +237,10 @@ function managerRows() {
 
 function renderManager() {
   const rows = managerRows();
-  document.querySelector("#openLeadsMetric").textContent = rows.filter((lead) => !["Inscrito", "Perdido"].includes(lead.status)).length;
+  document.querySelector("#openLeadsMetric").textContent = rows.filter((lead) => lead.managementStatus !== "Venta").length;
   document.querySelector("#overdueMetric").textContent = rows.filter(isOverdue).length;
-  document.querySelector("#appointmentsMetric").textContent = rows.filter((lead) => lead.status === "Cita agendada").length;
-  document.querySelector("#conversionsMetric").textContent = rows.filter((lead) => lead.status === "Inscrito").length;
+  document.querySelector("#appointmentsMetric").textContent = rows.filter((lead) => lead.appointmentScheduled).length;
+  document.querySelector("#conversionsMetric").textContent = rows.filter((lead) => lead.managementStatus === "Venta").length;
 
   const branchNames = [...new Set(rows.map((lead) => lead.branch))];
   document.querySelector("#branchTableBody").innerHTML = branchNames
@@ -232,10 +249,12 @@ function renderManager() {
       return `
         <tr>
           <td>${branch}</td>
-          <td>${branchRows.filter((lead) => !["Inscrito", "Perdido"].includes(lead.status)).length}</td>
+          <td>${branchRows.filter((lead) => lead.managementStatus !== "Venta").length}</td>
           <td>${branchRows.filter(isOverdue).length}</td>
-          <td>${branchRows.filter((lead) => lead.status === "Cita agendada").length}</td>
-          <td>${branchRows.filter((lead) => lead.status === "Inscrito").length}</td>
+          <td>${branchRows.filter((lead) => lead.appointmentScheduled).length}</td>
+          <td>${branchRows.filter((lead) => lead.managementStatus === "Venta").length}</td>
+          <td>${branchRows.filter((lead) => lead.managementStatus === "Promesa de compra").length}</td>
+          <td>${branchRows.filter((lead) => lead.managementStatus === "No contacto").length}</td>
         </tr>
       `;
     })
@@ -243,7 +262,7 @@ function renderManager() {
 
   const risks = rows.filter((lead) => isOverdue(lead) || lead.priority === "Alta").slice(0, 5);
   document.querySelector("#riskList").innerHTML = risks
-    .map((lead) => `<li><strong>${lead.name}</strong> - ${lead.branch}, ${lead.advisor}. Próxima acción: ${lead.nextAction}</li>`)
+    .map((lead) => `<li><strong>${lead.name}</strong> - ${lead.branch}, ${lead.advisor}. Estado de gestión: ${lead.managementStatus}. Próxima acción: ${lead.nextAction}</li>`)
     .join("");
 }
 
@@ -280,8 +299,8 @@ document.querySelectorAll(".chip").forEach((button) => {
 document.querySelectorAll(".status-actions button").forEach((button) => {
   button.addEventListener("click", () => {
     const lead = leads.find((item) => item.id === selectedId);
-    lead.status = button.dataset.status;
-    lead.history = [`Demo: estado marcado como ${lead.status}.`, ...lead.history];
+    lead.managementStatus = button.dataset.managementStatus;
+    lead.history = [`Demo: Estado de gestión marcado como ${lead.managementStatus}.`, ...lead.history];
     renderLeadList();
     renderDetail();
     renderManager();

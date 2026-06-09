@@ -65,6 +65,8 @@ def test_spanish_labels_and_branding() -> None:
         "Prioridad",
         "Teléfono",
         "Tipo de interés",
+        "Estado socio",
+        "Estado de gestión",
         "Notas",
         "Historial de interacción",
     ):
@@ -75,12 +77,6 @@ def test_disclaimer_statuses_and_manager_metrics() -> None:
     text = read_demo()
     for needle in (
         "Demo con datos ficticios. No usa información real de Power Club.",
-        "Nuevo",
-        "Contactado",
-        "Seguimiento",
-        "Cita agendada",
-        "Inscrito",
-        "Perdido",
         "Leads abiertos",
         "Seguimientos vencidos",
         "Citas agendadas",
@@ -89,6 +85,24 @@ def test_disclaimer_statuses_and_manager_metrics() -> None:
         "Filtro por asesor",
     ):
         assert_contains(text, needle, "demo disclaimer/statuses/metrics")
+
+
+def test_estado_de_gestion_values_and_interpretation() -> None:
+    text = read_demo()
+    for needle in (
+        "Estado de gestión",
+        "Venta",
+        "Promesa de compra",
+        "Seguimiento",
+        "Ilocalizable",
+        "No contacto",
+        "Estado socio describe",
+        "Estado de gestión describe",
+        "No son el mismo campo",
+        "managementStatus",
+        "memberStatus",
+    ):
+        assert_contains(text, needle, "Estado de gestión model")
 
 
 def test_static_no_network_or_auth_or_backend() -> None:
@@ -144,6 +158,7 @@ def main() -> int:
     test_required_files_exist()
     test_spanish_labels_and_branding()
     test_disclaimer_statuses_and_manager_metrics()
+    test_estado_de_gestion_values_and_interpretation()
     test_static_no_network_or_auth_or_backend()
     test_no_real_data_or_promise_violations()
     test_forbidden_files_not_touched()

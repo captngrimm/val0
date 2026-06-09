@@ -291,6 +291,22 @@ h3 {
   color: var(--red);
 }
 
+.status-pill.venta {
+  background: #e7f5ed;
+  color: var(--green);
+}
+
+.status-pill.promesa-de-compra {
+  background: #fff4e6;
+  color: var(--amber);
+}
+
+.status-pill.ilocalizable,
+.status-pill.no-contacto {
+  background: #fae9e7;
+  color: var(--red);
+}
+
 .priority-pill.alta {
   background: #fae9e7;
   color: var(--red);
@@ -339,6 +355,21 @@ dd {
 
 .notes-box {
   margin: 14px 0;
+}
+
+.field-note {
+  display: grid;
+  gap: 3px;
+  margin: 12px 0;
+  border: 1px solid #b9d5cf;
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f0faf6;
+}
+
+.field-note span {
+  color: var(--muted);
 }
 
 .notes-box p {
