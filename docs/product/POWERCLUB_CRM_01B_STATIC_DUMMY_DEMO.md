@@ -143,6 +143,33 @@ Métricas visibles:
 
 El objetivo es explicar visibilidad gerencial: cuántos socios están asignados, qué ventas y promesas existen, qué asesores tienen pendientes, qué sucursal necesita atención y dónde hay no contacto, ilocalizables o promesas de compra que requieren gestión.
 
+Actualización Battle 01B:
+La vista gerencial ahora funciona como dashboard ejecutivo de inteligencia operacional, usando datos sintéticos agregados para representar 56 asesores, 6 sucursales y 1,800 registros mensuales conceptuales. La pantalla no renderiza cada registro en una tabla masiva; muestra totales, rankings y listas priorizadas para una conversación ejecutiva.
+
+Widgets ejecutivos incluidos:
+
+- Executive KPI strip.
+- Advisor activity ranking.
+- Advisor result ranking.
+- Pending follow-ups.
+- Overdue follow-ups expresados como seguimiento atrasado.
+- Follow-up aging.
+- Status distribution / embudo comercial.
+- Branch comparison.
+- Source/channel performance.
+- Daily/weekly activity.
+- Stuck opportunities.
+- Recovered opportunity / avoided lost sales estimate.
+- Manager action prompts.
+
+Narrativa comercial:
+
+```text
+PowerClub puede perder dinero cuando los leads no reciben seguimiento. El dashboard muestra quién está actuando, dónde hay seguimiento atrasado, qué sucursal requiere atención y qué oportunidad aún puede rescatarse.
+```
+
+Los valores de oportunidad recuperable son estimaciones ficticias basadas en supuestos de demo. No representan ingresos reales, desempeño real ni resultados reales de Power Club.
+
 ---
 
 ## Ciclo Mensual

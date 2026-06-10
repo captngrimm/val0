@@ -243,6 +243,78 @@ const managerTab = document.querySelector("#managerTab");
 const operatorAdvisorFilter = document.querySelector("#operatorAdvisorFilter");
 const branchFilter = document.querySelector("#branchFilter");
 const advisorFilter = document.querySelector("#advisorFilter");
+const sourceFilter = document.querySelector("#sourceFilter");
+const statusFilter = document.querySelector("#statusFilter");
+const temperatureFilter = document.querySelector("#temperatureFilter");
+
+const EXECUTIVE_RECORDS = 1800;
+const EXECUTIVE_ADVISOR_COUNT = 56;
+const EXECUTIVE_BRANCHES = ["Costa del Este", "San Francisco", "El Dorado", "Albrook", "Brisas", "Via Brasil"];
+const EXECUTIVE_SOURCES = ["Instagram", "Facebook", "Walk-in", "Referido", "Web", "Corporativo", "Evento", "Reactivacion", "Llamada entrante", "Promocion"];
+const EXECUTIVE_STATUSES = ["Nuevo", "Contactado", "Interesado", "Cita agendada", "Visitado", "Venta", "Perdido"];
+const TEMPERATURES = ["Hot", "Warm", "Cold"];
+const AVERAGE_MEMBERSHIP_VALUE_FAKE = 69;
+const WEEK_DAYS = ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"];
+
+const executiveAdvisors = Array.from({ length: EXECUTIVE_ADVISOR_COUNT }, (_, index) => {
+  const number = index + 1;
+  return {
+    id: `advisor_demo_${String(number).padStart(3, "0")}`,
+    name: `Asesor Demo ${String(number).padStart(2, "0")}`,
+    branch: EXECUTIVE_BRANCHES[index % EXECUTIVE_BRANCHES.length],
+  };
+});
+
+const executiveLeads = Array.from({ length: EXECUTIVE_RECORDS }, (_, index) => {
+  const advisor = executiveAdvisors[index % executiveAdvisors.length];
+  const branch = advisor.branch;
+  const source = EXECUTIVE_SOURCES[(index * 3 + Math.floor(index / 11)) % EXECUTIVE_SOURCES.length];
+  const status = EXECUTIVE_STATUSES[(index * 5 + Math.floor(index / 17)) % EXECUTIVE_STATUSES.length];
+  const temperature = TEMPERATURES[(index + (status === "Interesado" ? 0 : 1)) % TEMPERATURES.length];
+  const day = 1 + (index % 28);
+  const followUpOffset = (index % 13) - 6;
+  const followUpDay = Math.max(1, Math.min(28, 9 + followUpOffset));
+  const isOverdue = followUpDay < 9 && status !== "Venta" && status !== "Perdido";
+  const isStuck = status !== "Venta" && status !== "Perdido" && (index % 10 === 0 || (status === "Visitado" && index % 4 === 0));
+  const value = AVERAGE_MEMBERSHIP_VALUE_FAKE + (index % 5) * 10;
+  const activities = 1 + (index % 6) + (status === "Venta" ? 2 : 0);
+
+  return {
+    id: `lead_demo_${String(index + 1).padStart(4, "0")}`,
+    name: `Prospecto Demo ${String(index + 1).padStart(4, "0")}`,
+    branch,
+    advisorId: advisor.id,
+    advisor: advisor.name,
+    source,
+    status,
+    temperature,
+    createdDay: day,
+    nextFollowUpDay: followUpDay,
+    overdueHours: isOverdue ? (9 - followUpDay) * 24 + (index % 8) * 3 : 0,
+    agingBucket: isOverdue
+      ? followUpDay <= 1
+        ? "8+ dias"
+        : followUpDay <= 5
+          ? "4-7 dias"
+          : followUpDay <= 7
+            ? "2-3 dias"
+            : "1 dia"
+      : "Hoy",
+    isOverdue,
+    isStuck,
+    isDueToday: followUpDay === 9 && status !== "Venta" && status !== "Perdido",
+    estimatedValue: value,
+    activities,
+    calls: 1 + (index % 4),
+    messages: 1 + (index % 5),
+    visits: status === "Cita agendada" || status === "Visitado" || status === "Venta" ? 1 : 0,
+  };
+});
+
+const executiveActivitiesByDay = WEEK_DAYS.map((day, index) => ({
+  day,
+  count: executiveLeads.reduce((sum, lead) => sum + (lead.createdDay % 7 === index ? lead.activities : 0), 0),
+}));
 
 function normalizeClass(value) {
   return value.toLowerCase().replaceAll(" ", "-");
@@ -373,125 +445,287 @@ function renderDetail() {
 }
 
 function populateFilters() {
-  const branches = ["Todas", ...new Set(leads.map((lead) => lead.branch))];
-  const advisors = ["Todos", ...new Set(leads.map((lead) => lead.advisor))];
+  const branches = ["Todas", ...EXECUTIVE_BRANCHES];
+  const advisors = ["Todos", ...executiveAdvisors.map((advisor) => advisor.name)];
   const operatorAdvisors = [...new Set(leads.map((lead) => lead.advisor))];
   operatorAdvisorFilter.innerHTML = operatorAdvisors.map((advisor) => `<option value="${advisor}">${advisor}</option>`).join("");
   operatorAdvisorFilter.value = operatorAdvisors[0] || "";
   branchFilter.innerHTML = branches.map((branch) => `<option value="${branch}">${branch}</option>`).join("");
   advisorFilter.innerHTML = advisors.map((advisor) => `<option value="${advisor}">${advisor}</option>`).join("");
+  sourceFilter.innerHTML = ["Todos", ...EXECUTIVE_SOURCES].map((source) => `<option value="${source}">${source}</option>`).join("");
+  statusFilter.innerHTML = ["Todos", ...EXECUTIVE_STATUSES].map((status) => `<option value="${status}">${status}</option>`).join("");
+  temperatureFilter.innerHTML = ["Todas", ...TEMPERATURES].map((temperature) => `<option value="${temperature}">${temperature}</option>`).join("");
   selectedId = operatorRows()[0]?.id || leads[0].id;
 }
 
 function managerRows() {
-  return leads.filter((lead) => {
+  return executiveLeads.filter((lead) => {
     const branchOk = branchFilter.value === "Todas" || lead.branch === branchFilter.value;
     const advisorOk = advisorFilter.value === "Todos" || lead.advisor === advisorFilter.value;
-    return branchOk && advisorOk;
+    const sourceOk = sourceFilter.value === "Todos" || lead.source === sourceFilter.value;
+    const statusOk = statusFilter.value === "Todos" || lead.status === statusFilter.value;
+    const temperatureOk = temperatureFilter.value === "Todas" || lead.temperature === temperatureFilter.value;
+    return branchOk && advisorOk && sourceOk && statusOk && temperatureOk;
   });
 }
 
 function branchRowsForBreakdown() {
-  return leads.filter((lead) => branchFilter.value === "Todas" || lead.branch === branchFilter.value);
+  return executiveLeads.filter((lead) => branchFilter.value === "Todas" || lead.branch === branchFilter.value);
 }
 
 function progressPercent(rows) {
   if (!rows.length) {
     return 0;
   }
-  const managed = rows.filter(isManaged).length;
+  const managed = rows.filter((lead) => lead.status !== "Nuevo").length;
   return Math.round((managed / rows.length) * 100);
+}
+
+function formatMoney(value) {
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+function pct(part, total) {
+  return total ? Math.round((part / total) * 100) : 0;
+}
+
+function statusCount(rows, status) {
+  return rows.filter((lead) => lead.status === status).length;
+}
+
+function isAtRisk(lead) {
+  return lead.isOverdue || lead.isStuck || (lead.temperature === "Hot" && !lead.isDueToday && lead.status !== "Venta" && lead.status !== "Perdido");
+}
+
+function recoveryProbability(lead) {
+  if (lead.isStuck && lead.status === "Visitado") return 0.3;
+  if (lead.temperature === "Hot") return 0.35;
+  if (lead.temperature === "Warm") return 0.2;
+  return 0.05;
+}
+
+function groupBy(rows, key) {
+  return rows.reduce((groups, row) => {
+    const groupKey = row[key];
+    groups[groupKey] = groups[groupKey] || [];
+    groups[groupKey].push(row);
+    return groups;
+  }, {});
+}
+
+function advisorStats(rows) {
+  const grouped = groupBy(rows, "advisor");
+  return Object.entries(grouped).map(([advisor, advisorRows]) => {
+    const converted = statusCount(advisorRows, "Venta");
+    const open = advisorRows.filter((lead) => lead.status !== "Venta" && lead.status !== "Perdido").length;
+    const overdue = advisorRows.filter((lead) => lead.isOverdue).length;
+    const activity = advisorRows.reduce((sum, lead) => sum + lead.activities + lead.calls + lead.messages + lead.visits, 0);
+    return {
+      advisor,
+      branch: advisorRows[0].branch,
+      assigned: advisorRows.length,
+      activity,
+      converted,
+      open,
+      overdue,
+      risk: advisorRows.filter(isAtRisk).length,
+      conversion: pct(converted, advisorRows.length),
+      value: advisorRows.reduce((sum, lead) => sum + (lead.status === "Venta" ? lead.estimatedValue : 0), 0),
+    };
+  });
+}
+
+function renderBars(containerId, rows, labelKey, valueKey, detail) {
+  if (!rows.length) {
+    document.querySelector(containerId).innerHTML = `<article><div><strong>Sin datos para este filtro</strong><span>Ajuste filtros de demo</span></div><div class="bar-track"><span style="width: 5%"></span></div></article>`;
+    return;
+  }
+  const max = Math.max(...rows.map((row) => row[valueKey]), 1);
+  document.querySelector(containerId).innerHTML = rows
+    .map((row) => `
+      <article>
+        <div>
+          <strong>${row[labelKey]}</strong>
+          <span>${detail(row)}</span>
+        </div>
+        <div class="bar-track"><span style="width: ${Math.max(5, Math.round((row[valueKey] / max) * 100))}%"></span></div>
+      </article>
+    `)
+    .join("");
 }
 
 function renderManager() {
   const rows = managerRows();
-  document.querySelector("#assignedMetric").textContent = rows.length;
-  document.querySelector("#pendingMetric").textContent = rows.filter(isPending).length;
-  document.querySelector("#promisesMetric").textContent = countStatus(rows, "Promesa de compra");
-  document.querySelector("#salesMetric").textContent = countStatus(rows, "Venta");
-  document.querySelector("#followUpsMetric").textContent = countStatus(rows, "Seguimiento");
-  document.querySelector("#noContactMetric").textContent = countStatus(rows, "No contacto");
-  document.querySelector("#unreachableMetric").textContent = countStatus(rows, "Ilocalizable");
+  const activeRows = rows.filter((lead) => lead.status !== "Venta" && lead.status !== "Perdido");
+  const dueTodayRows = rows.filter((lead) => lead.isDueToday);
+  const overdueRows = rows.filter((lead) => lead.isOverdue);
+  const riskRows = rows.filter(isAtRisk);
+  const recoverable = riskRows.reduce((sum, lead) => sum + lead.estimatedValue * recoveryProbability(lead), 0);
+  const atRiskValue = riskRows.reduce((sum, lead) => sum + lead.estimatedValue, 0);
+
+  document.querySelector("#assignedMetric").textContent = activeRows.length.toLocaleString("en-US");
+  document.querySelector("#pendingMetric").textContent = dueTodayRows.length.toLocaleString("en-US");
+  document.querySelector("#promisesMetric").textContent = statusCount(rows, "Interesado").toLocaleString("en-US");
+  document.querySelector("#salesMetric").textContent = statusCount(rows, "Venta").toLocaleString("en-US");
+  document.querySelector("#followUpsMetric").textContent = rows.filter((lead) => lead.status === "Contactado" || lead.status === "Cita agendada").length.toLocaleString("en-US");
+  document.querySelector("#noContactMetric").textContent = overdueRows.length.toLocaleString("en-US");
+  document.querySelector("#unreachableMetric").textContent = riskRows.length.toLocaleString("en-US");
+  document.querySelector("#atRiskValueMetric").textContent = formatMoney(atRiskValue);
+  document.querySelector("#recoverableValueMetric").textContent = formatMoney(recoverable);
+  document.querySelector("#hotRiskMetric").textContent = riskRows.filter((lead) => lead.temperature === "Hot").length.toLocaleString("en-US");
+  document.querySelector("#recoveryNarrativeValue").textContent = `Estimacion demo: ${formatMoney(recoverable)} rescatables.`;
 
   const monthProgress = progressPercent(rows);
   document.querySelector("#monthProgressMetric").textContent = `${monthProgress}%`;
-  document.querySelector("#monthProgressLabel").textContent = `${rows.filter(isManaged).length} de ${rows.length} gestionados`;
+  document.querySelector("#monthProgressLabel").textContent = `${rows.filter((lead) => lead.status !== "Nuevo").length} de ${rows.length} gestionados`;
   document.querySelector("#monthProgressBar").style.width = `${monthProgress}%`;
 
   const branchNames = [...new Set(rows.map((lead) => lead.branch))];
   document.querySelector("#branchTableBody").innerHTML = branchNames
     .map((branch) => {
       const branchRows = rows.filter((lead) => lead.branch === branch);
+      const branchRisk = branchRows.filter(isAtRisk).length;
       return `
         <tr>
           <td>${branch}</td>
           <td>${branchRows.length}</td>
-          <td>${countStatus(branchRows, "Venta")}</td>
-          <td>${countStatus(branchRows, "Promesa de compra")}</td>
-          <td>${countStatus(branchRows, "Seguimiento")}</td>
-          <td>${countStatus(branchRows, "No contacto")}</td>
-          <td>${countStatus(branchRows, "Ilocalizable")}</td>
-          <td>${branchRows.filter(isPending).length}</td>
+          <td>${statusCount(branchRows, "Venta")}</td>
+          <td>${statusCount(branchRows, "Interesado")}</td>
+          <td>${statusCount(branchRows, "Contactado") + statusCount(branchRows, "Cita agendada")}</td>
+          <td>${branchRows.filter((lead) => lead.isOverdue).length}</td>
+          <td>${branchRisk}</td>
+          <td>${branchRows.filter((lead) => lead.isDueToday).length}</td>
+          <td>${formatMoney(branchRows.reduce((sum, lead) => sum + lead.estimatedValue, 0))}</td>
         </tr>
       `;
     })
     .join("");
 
-  const breakdownRows = branchRowsForBreakdown();
-  const advisorNames = [...new Set(breakdownRows.map((lead) => lead.advisor))];
-  document.querySelector("#advisorTableBody").innerHTML = advisorNames
-    .map((advisor) => {
-      const advisorRows = breakdownRows.filter((lead) => lead.advisor === advisor);
+  const breakdownRows = rows.length ? rows : branchRowsForBreakdown();
+  const advisorRows = advisorStats(breakdownRows);
+  document.querySelector("#advisorTableBody").innerHTML = advisorRows
+    .sort((a, b) => b.assigned - a.assigned)
+    .slice(0, 24)
+    .map((row) => {
+      const advisorLeadRows = breakdownRows.filter((lead) => lead.advisor === row.advisor);
+      const normalizedRow = row || {
+        assigned: 0,
+        converted: 0,
+        overdue: 0,
+        risk: 0,
+        conversion: 0,
+      };
       return `
         <tr>
-          <td>${advisor}</td>
-          <td>${advisorRows.length}</td>
-          <td>${countStatus(advisorRows, "Venta")}</td>
-          <td>${countStatus(advisorRows, "Promesa de compra")}</td>
-          <td>${countStatus(advisorRows, "Seguimiento")}</td>
-          <td>${countStatus(advisorRows, "No contacto")}</td>
-          <td>${countStatus(advisorRows, "Ilocalizable")}</td>
-          <td>${advisorRows.filter(isPending).length}</td>
+          <td>${row.advisor}</td>
+          <td>${normalizedRow.assigned}</td>
+          <td>${normalizedRow.converted}</td>
+          <td>${statusCount(advisorLeadRows, "Interesado")}</td>
+          <td>${statusCount(advisorLeadRows, "Contactado")}</td>
+          <td>${normalizedRow.overdue}</td>
+          <td>${normalizedRow.risk}</td>
+          <td>${advisorLeadRows.filter((lead) => lead.isDueToday).length}</td>
+          <td>${normalizedRow.conversion}%</td>
         </tr>
       `;
     })
     .join("");
 
-  const advisorStats = advisorNames.map((advisor) => {
-    const advisorRows = breakdownRows.filter((lead) => lead.advisor === advisor);
-    return {
-      advisor,
-      sales: countStatus(advisorRows, "Venta"),
-      pending: advisorRows.filter(isPending).length,
-      noContact: countStatus(advisorRows, "No contacto"),
-      unreachable: countStatus(advisorRows, "Ilocalizable"),
-    };
-  });
-  const topBy = (key) => advisorStats.reduce((best, row) => (!best || row[key] > best[key] ? row : best), null);
-  const topSales = topBy("sales");
-  const topPending = topBy("pending");
-  const topNoContact = topBy("noContact");
-  const topUnreachable = topBy("unreachable");
+  const topBy = (key) => advisorRows.reduce((best, row) => (!best || row[key] > best[key] ? row : best), null);
+  const topSales = topBy("converted");
+  const topPending = topBy("open");
+  const topNoContact = topBy("overdue");
+  const topUnreachable = topBy("risk");
   document.querySelector("#coachingSummary").innerHTML = [
-    ["Más ventas", topSales, "sales"],
-    ["Más pendientes", topPending, "pending"],
-    ["Más no contacto", topNoContact, "noContact"],
-    ["Más ilocalizables", topUnreachable, "unreachable"],
+    ["Mas ventas", topSales, "converted"],
+    ["Mas pendientes", topPending, "open"],
+    ["Mas atraso", topNoContact, "overdue"],
+    ["Mas riesgo", topUnreachable, "risk"],
   ]
     .map(([label, row, key]) => `<article><span>${label}</span><strong>${row ? row.advisor : "-"}</strong><p>${row ? row[key] : 0} registros</p></article>`)
     .join("");
 
-  const risks = rows
-    .filter((lead) => lead.managementStatus === "No contacto" || lead.managementStatus === "Ilocalizable" || (lead.managementStatus === "Promesa de compra" && needsFollowUp(lead)))
-    .reduce((groups, lead) => {
-      const key = `${lead.branch}|${lead.advisor}|${lead.managementStatus}`;
-      groups[key] = groups[key] || { branch: lead.branch, advisor: lead.advisor, status: lead.managementStatus, count: 0 };
-      groups[key].count += 1;
-      return groups;
-    }, {});
-  document.querySelector("#riskList").innerHTML = Object.values(risks)
+  document.querySelector("#activityRankingList").innerHTML = [...advisorRows]
+    .sort((a, b) => b.activity - a.activity)
     .slice(0, 8)
-    .map((group) => `<li><strong>${group.advisor}</strong> - ${group.branch}. ${group.count} registros en ${group.status}.</li>`)
+    .map((row) => `<li><strong>${row.advisor}</strong><span>${row.activity} actividades - ${row.branch}</span></li>`)
+    .join("") || "<li>Sin datos para este filtro.</li>";
+
+  document.querySelector("#resultRankingList").innerHTML = [...advisorRows]
+    .sort((a, b) => b.converted - a.converted || b.conversion - a.conversion)
+    .slice(0, 8)
+    .map((row) => `<li><strong>${row.advisor}</strong><span>${row.converted} ventas - ${row.conversion}% conversion</span></li>`)
+    .join("") || "<li>Sin datos para este filtro.</li>";
+
+  document.querySelector("#riskList").innerHTML = riskRows
+    .slice(0, 8)
+    .map((lead) => `<li><strong>${lead.advisor}</strong> - ${lead.branch}. ${lead.name} en ${lead.status}; ${lead.isOverdue ? `${lead.overdueHours}h de atraso` : "sin proximo paso claro"}.</li>`)
+    .join("") || "<li>No hay oportunidades en riesgo para este filtro.</li>";
+
+  document.querySelector("#pendingFollowUpsList").innerHTML = dueTodayRows
+    .slice(0, 7)
+    .map((lead) => `<li><strong>${lead.name}</strong><span>${lead.advisor} - ${lead.branch} - ${lead.temperature}</span></li>`)
+    .join("") || "<li>No hay pendientes para hoy con este filtro.</li>";
+
+  document.querySelector("#overdueFollowUpsList").innerHTML = overdueRows
+    .sort((a, b) => b.overdueHours - a.overdueHours)
+    .slice(0, 7)
+    .map((lead) => `<li><strong>${lead.name}</strong><span>${lead.overdueHours}h - ${lead.advisor} - ${formatMoney(lead.estimatedValue)}</span></li>`)
+    .join("") || "<li>No hay seguimiento atrasado con este filtro.</li>";
+
+  const agingRows = ["Hoy", "1 dia", "2-3 dias", "4-7 dias", "8+ dias"].map((bucket) => ({
+    label: bucket,
+    count: rows.filter((lead) => lead.agingBucket === bucket).length,
+  }));
+  renderBars("#agingChart", agingRows, "label", "count", (row) => `${row.count} seguimientos`);
+
+  const funnelRows = EXECUTIVE_STATUSES.map((status) => ({
+    label: status,
+    count: statusCount(rows, status),
+  }));
+  renderBars("#statusFunnel", funnelRows, "label", "count", (row) => `${row.count} registros`);
+
+  const sourceRows = Object.entries(groupBy(rows, "source"))
+    .map(([source, sourceRows]) => ({
+      source,
+      count: sourceRows.length,
+      converted: statusCount(sourceRows, "Venta"),
+      conversion: pct(statusCount(sourceRows, "Venta"), sourceRows.length),
+    }))
+    .sort((a, b) => b.conversion - a.conversion || b.count - a.count)
+    .slice(0, 8);
+  renderBars("#sourcePerformance", sourceRows, "source", "count", (row) => `${row.converted} ventas - ${row.conversion}% conversion`);
+
+  const maxActivity = Math.max(...executiveActivitiesByDay.map((item) => item.count), 1);
+  document.querySelector("#activityTrend").innerHTML = executiveActivitiesByDay
+    .map((item) => `
+      <article>
+        <span style="height: ${Math.max(16, Math.round((item.count / maxActivity) * 120))}px"></span>
+        <strong>${item.day}</strong>
+        <em>${item.count}</em>
+      </article>
+    `)
+    .join("");
+
+  document.querySelector("#stuckOpportunitiesList").innerHTML = rows
+    .filter((lead) => lead.isStuck)
+    .slice(0, 8)
+    .map((lead) => `<li><strong>${lead.name}</strong><span>${lead.status} - ${lead.branch} - rescatar ${formatMoney(lead.estimatedValue * recoveryProbability(lead))}</span></li>`)
+    .join("") || "<li>No hay stuck opportunities para este filtro.</li>";
+
+  const weakestBranch = Object.entries(groupBy(rows, "branch"))
+    .map(([branch, branchRows]) => ({ branch, overdue: branchRows.filter((lead) => lead.isOverdue).length, total: branchRows.length }))
+    .sort((a, b) => pct(b.overdue, b.total) - pct(a.overdue, a.total))[0];
+  const noisySource = sourceRows.sort((a, b) => b.count - a.count || a.conversion - b.conversion)[0];
+  const topRiskAdvisor = topUnreachable;
+  document.querySelector("#managerActionPrompts").innerHTML = [
+    ["Rescatar hoy", `${riskRows.filter((lead) => lead.temperature === "Hot").length} hot leads en riesgo. Priorizar llamadas manuales y reasignacion si el asesor no puede actuar.`],
+    ["Coaching de asesor", `${topRiskAdvisor ? topRiskAdvisor.advisor : "-"} concentra riesgo. Revisar calidad de contacto y seguimiento atrasado.`],
+    ["Inspeccionar sucursal", `${weakestBranch ? weakestBranch.branch : "-"} muestra mayor tasa de atraso. Revisar carga y disciplina de seguimiento.`],
+    ["Revisar canal", `${noisySource ? noisySource.source : "-"} genera volumen. Validar si convierte o consume tiempo de asesores.`],
+    ["Cerrar ciclo", `${rows.filter((lead) => lead.status === "Visitado" && lead.isStuck).length} visitas sin desenlace. Exigir proxima accion.`],
+  ]
+    .map(([title, copy]) => `<article><span>${title}</span><strong>${copy}</strong></article>`)
     .join("");
 }
 
@@ -570,6 +804,9 @@ operatorTab.addEventListener("click", () => switchView("operator"));
 managerTab.addEventListener("click", () => switchView("manager"));
 branchFilter.addEventListener("change", renderManager);
 advisorFilter.addEventListener("change", renderManager);
+sourceFilter.addEventListener("change", renderManager);
+statusFilter.addEventListener("change", renderManager);
+temperatureFilter.addEventListener("change", renderManager);
 
 populateFilters();
 renderLeadList();

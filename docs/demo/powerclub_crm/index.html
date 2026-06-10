@@ -12,7 +12,7 @@
         <img class="powerclub-wordmark" src="./assets/powerclub-logo-horizontal.png" alt="Power Club">
         <p class="eyebrow">Val AI Ops Discovery</p>
         <h1>Power Club CRM Pilot</h1>
-        <p class="subtitle">CRM Operativo Ligero para seguimiento de prospectos, socios y oportunidades comerciales.</p>
+        <p class="subtitle">Pilot de visibilidad ejecutiva para detectar seguimiento atrasado, responsabilidad por asesor, desempeno por sucursal y oportunidades que todavia se pueden rescatar.</p>
       </div>
       <div class="partner-card" aria-label="Firma consultora">
         <div class="partner-brand-row">
@@ -29,7 +29,7 @@
     <main class="app-shell">
       <section class="notice" aria-label="Nota de datos ficticios">
         <strong>Demo con datos ficticios. No usa información real de Power Club.</strong>
-        <span>La intención es mostrar estructura, flujo y visibilidad gerencial para una conversación de piloto.</span>
+        <span>Piloto de visibilidad, no CRM final de produccion. No conectado a WhatsApp, pagos, backend ni datos reales.</span>
       </section>
 
       <section class="workflow-strip" aria-label="Flujo operativo actual">
@@ -268,9 +268,12 @@
         <div class="manager-topline">
           <div>
             <p class="eyebrow dark">Visibilidad gerencial</p>
-            <h2 id="managerTitle">Dashboard del piloto operativo</h2>
+            <h2 id="managerTitle">Dashboard ejecutivo de oportunidades y seguimiento</h2>
             <p class="manager-mode-copy">
-              Gerente general: use "Todas" para ver macro totales por sucursal. Gerente de sucursal: seleccione una sucursal para ver el detalle por asesor.
+              PowerClub puede perder dinero cuando los leads no reciben seguimiento. Esta vista muestra quien esta actuando, donde hay seguimiento atrasado, que sucursal requiere atencion y que oportunidad aun puede rescatarse.
+            </p>
+            <p class="manager-mode-copy">
+              Gerente general: use "Todas" para ver macro totales por sucursal. Gerente de sucursal: seleccione una sucursal para ver el detalle por asesor. Vista asesor/operador queda separada para trabajo diario.
             </p>
           </div>
           <div class="filters">
@@ -282,16 +285,28 @@
               <span>Asesor</span>
               <select id="advisorFilter" aria-label="Filtro de asesor"></select>
             </label>
+            <label>
+              <span>Canal</span>
+              <select id="sourceFilter" aria-label="Filtro de canal"></select>
+            </label>
+            <label>
+              <span>Estado</span>
+              <select id="statusFilter" aria-label="Filtro de estado"></select>
+            </label>
+            <label>
+              <span>Temperatura</span>
+              <select id="temperatureFilter" aria-label="Filtro de temperatura"></select>
+            </label>
           </div>
         </div>
 
         <div class="metrics-grid" aria-label="Métricas del piloto">
           <article class="metric-card">
-            <span>Socios asignados</span>
+            <span>Oportunidades activas / socios asignados</span>
             <strong id="assignedMetric">0</strong>
           </article>
           <article class="metric-card warning">
-            <span>Pendientes por gestionar</span>
+            <span>Seguimientos para hoy</span>
             <strong id="pendingMetric">0</strong>
           </article>
           <article class="metric-card blue">
@@ -307,11 +322,11 @@
             <strong id="followUpsMetric">0</strong>
           </article>
           <article class="metric-card warning">
-            <span>No contacto</span>
+            <span>Seguimientos atrasados</span>
             <strong id="noContactMetric">0</strong>
           </article>
           <article class="metric-card warning">
-            <span>Ilocalizables</span>
+            <span>Oportunidades en riesgo</span>
             <strong id="unreachableMetric">0</strong>
           </article>
           <article class="metric-card blue">
@@ -319,6 +334,31 @@
             <strong id="monthProgressMetric">0%</strong>
           </article>
         </div>
+
+        <section class="panel executive-narrative" aria-labelledby="executiveNarrativeTitle">
+          <div>
+            <p class="eyebrow dark">Dolor - visibilidad - accion - dinero rescatado</p>
+            <h3 id="executiveNarrativeTitle">La demo convierte seguimiento comercial en control gerencial</h3>
+          </div>
+          <div class="narrative-steps">
+            <article>
+              <span>Dolor</span>
+              <strong>El seguimiento disperso enfria leads con intencion.</strong>
+            </article>
+            <article>
+              <span>Visibilidad</span>
+              <strong>Gerencia ve asesores, sucursales, canales y riesgo en una sola pantalla.</strong>
+            </article>
+            <article>
+              <span>Accion</span>
+              <strong>La vista recomienda rescatar, reasignar, hacer coaching o revisar fuente.</strong>
+            </article>
+            <article>
+              <span>Dinero</span>
+              <strong id="recoveryNarrativeValue">Estimacion demo: $0 rescatables.</strong>
+            </article>
+          </div>
+        </section>
 
         <section class="panel progress-panel" aria-labelledby="monthProgressTitle">
           <div class="panel-heading">
@@ -355,21 +395,61 @@
           <p class="microcopy">Demo: exportación y cierre mensual representados de forma conceptual. En piloto real, el cierre mensual podría guardar resultados y permitir descarga Excel.</p>
         </section>
 
+        <section class="panel recovery-panel" aria-labelledby="recoveryTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Estimacion de rescate</p>
+              <h3 id="recoveryTitle">Oportunidad recuperable / perdida evitada</h3>
+            </div>
+            <span class="count-pill">Estimacion basada en supuestos de demo</span>
+          </div>
+          <div class="recovery-grid">
+            <article>
+              <span>Valor en riesgo</span>
+              <strong id="atRiskValueMetric">$0</strong>
+            </article>
+            <article>
+              <span>Recuperable estimado</span>
+              <strong id="recoverableValueMetric">$0</strong>
+            </article>
+            <article>
+              <span>Hot leads en riesgo</span>
+              <strong id="hotRiskMetric">0</strong>
+            </article>
+            <article>
+              <span>Supuesto demo</span>
+              <strong>35% hot / 20% warm</strong>
+            </article>
+          </div>
+          <p class="microcopy">Los valores son ficticios. Sirven para mostrar como la visibilidad puede traducirse a dinero potencialmente protegido, no para reportar ingresos reales.</p>
+        </section>
+
         <section class="panel coaching-panel" aria-labelledby="coachingTitle">
           <div class="panel-heading">
             <div>
               <p class="eyebrow dark">Lectura de desempeño</p>
-              <h3 id="coachingTitle">Coaching, staffing, salidas o bonos</h3>
+              <h3 id="coachingTitle">Advisor activity ranking y advisor result ranking</h3>
             </div>
           </div>
           <div id="coachingSummary" class="coaching-summary" aria-label="Resumen de desempeño por asesor"></div>
+          <div class="ranking-grid">
+            <div>
+              <h4>Ranking de actividad</h4>
+              <ol id="activityRankingList" class="rank-list"></ol>
+            </div>
+            <div>
+              <h4>Ranking de resultados</h4>
+              <ol id="resultRankingList" class="rank-list"></ol>
+            </div>
+          </div>
+          <p class="microcopy">Uso gerencial: coaching, staffing, salidas o bonos. El ranking usa datos sinteticos para mostrar decisiones posibles.</p>
         </section>
 
         <div class="manager-grid">
           <section class="panel" aria-labelledby="branchTableTitle">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow dark">Resumen</p>
+                <p class="eyebrow dark">Comparación por sucursal</p>
                 <h3 id="branchTableTitle">Distribución por sucursal</h3>
               </div>
             </div>
@@ -382,9 +462,10 @@
                     <th>Venta</th>
                     <th>Promesa</th>
                     <th>Seguimiento</th>
-                    <th>No contacto</th>
-                    <th>Ilocalizable</th>
+                    <th>Atrasados</th>
+                    <th>Riesgo</th>
                     <th>Pendientes</th>
+                    <th>Valor estimado</th>
                   </tr>
                 </thead>
                 <tbody id="branchTableBody"></tbody>
@@ -403,6 +484,91 @@
           </section>
         </div>
 
+        <div class="manager-grid">
+          <section class="panel" aria-labelledby="followUpTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Control de seguimiento</p>
+                <h3 id="followUpTitle">Pendientes y atrasados por prioridad</h3>
+              </div>
+            </div>
+            <div class="queue-grid">
+              <div>
+                <h4>Pendientes para hoy</h4>
+                <ul id="pendingFollowUpsList" class="compact-list"></ul>
+              </div>
+              <div>
+                <h4>Seguimientos atrasados</h4>
+                <ul id="overdueFollowUpsList" class="compact-list danger-list"></ul>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" aria-labelledby="agingTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Follow-up aging</p>
+                <h3 id="agingTitle">Antiguedad del atraso</h3>
+              </div>
+            </div>
+            <div id="agingChart" class="bar-list" aria-label="Barras de antiguedad de seguimiento"></div>
+          </section>
+        </div>
+
+        <div class="manager-grid">
+          <section class="panel" aria-labelledby="funnelTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Funnel</p>
+                <h3 id="funnelTitle">Status distribution / embudo comercial</h3>
+              </div>
+            </div>
+            <div id="statusFunnel" class="funnel-list" aria-label="Distribución de estado"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="sourceTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Canales</p>
+                <h3 id="sourceTitle">Source/channel performance</h3>
+              </div>
+            </div>
+            <div id="sourcePerformance" class="bar-list" aria-label="Desempeño por canal"></div>
+          </section>
+        </div>
+
+        <div class="manager-grid">
+          <section class="panel" aria-labelledby="activityTrendTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Ritmo comercial</p>
+                <h3 id="activityTrendTitle">Daily/weekly activity</h3>
+              </div>
+            </div>
+            <div id="activityTrend" class="trend-bars" aria-label="Actividad diaria y semanal"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="stuckTitle">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow dark">Rescate</p>
+                <h3 id="stuckTitle">Stuck opportunities</h3>
+              </div>
+            </div>
+            <ul id="stuckOpportunitiesList" class="compact-list danger-list"></ul>
+          </section>
+        </div>
+
+        <section class="panel" aria-labelledby="managerActionsTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Acciones recomendadas</p>
+              <h3 id="managerActionsTitle">Manager action prompts</h3>
+            </div>
+          </div>
+          <div id="managerActionPrompts" class="action-prompt-grid" aria-label="Prompts de acción gerencial"></div>
+        </section>
+
         <section class="panel" aria-labelledby="advisorBreakdownTitle">
           <div class="panel-heading">
             <div>
@@ -419,9 +585,10 @@
                   <th>Venta</th>
                   <th>Promesa</th>
                   <th>Seguimiento</th>
-                  <th>No contacto</th>
-                  <th>Ilocalizable</th>
+                  <th>Atrasados</th>
+                  <th>Riesgo</th>
                   <th>Pendientes</th>
+                  <th>Conversión</th>
                 </tr>
               </thead>
               <tbody id="advisorTableBody"></tbody>
