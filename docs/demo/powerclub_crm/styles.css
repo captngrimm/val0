@@ -660,19 +660,44 @@ option {
 
 .kpi-board {
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .kpi-group {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.kpi-group:first-child {
+  border-top: 0;
+  padding-top: 0;
 }
 
 .collapse-section-header {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
   justify-content: space-between;
+}
+
+.collapse-premium-header {
+  border: 1px solid #d3dfdc;
+  border-radius: 999px;
+  padding: 8px 10px 8px 14px;
+  background: linear-gradient(180deg, #ffffff, #f8fbfa);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 10px 24px rgba(23, 33, 38, 0.05);
+  cursor: pointer;
+}
+
+.panel > .collapse-premium-header {
+  margin: -2px -2px 4px;
+}
+
+.collapse-premium-header:hover {
+  border-color: #b9ccc8;
+  background: #fbfcfb;
 }
 
 .kpi-group h3 {
@@ -684,17 +709,17 @@ option {
 }
 
 .collapse-toggle {
-  display: inline-flex;
-  min-height: 34px;
-  gap: 7px;
-  align-items: center;
+  display: inline-grid;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  place-items: center;
   border: 1px solid #bed0cc;
-  border-radius: 999px;
-  padding: 0 10px;
-  background: #f7faf8;
+  border-radius: 50%;
+  padding: 0;
+  background: #fff;
   color: var(--deep);
-  font-size: 0.78rem;
-  font-weight: 850;
 }
 
 .collapse-toggle:hover {

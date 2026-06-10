@@ -1128,15 +1128,17 @@ function initializeCollapsibleSections() {
     button.className = "collapse-toggle";
     button.type = "button";
     button.setAttribute("aria-controls", body.id);
+    button.setAttribute("aria-label", `${label}: abrir o cerrar seccion`);
     button.title = help;
-    button.innerHTML = `<span class="collapse-chevron" aria-hidden="true"></span><span>${label}</span>`;
+    button.innerHTML = `<span class="collapse-chevron" aria-hidden="true"></span>`;
 
     if (isPanel) {
+      heading.classList.add("collapse-premium-header");
       heading.appendChild(button);
       section.appendChild(body);
     } else {
       const header = document.createElement("div");
-      header.className = "collapse-section-header";
+      header.className = "collapse-section-header collapse-premium-header";
       section.insertBefore(header, heading);
       header.appendChild(heading);
       header.appendChild(button);
