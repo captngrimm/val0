@@ -573,7 +573,7 @@ function renderManager() {
   document.querySelector("#atRiskValueMetric").textContent = formatMoney(atRiskValue);
   document.querySelector("#recoverableValueMetric").textContent = formatMoney(recoverable);
   document.querySelector("#hotRiskMetric").textContent = riskRows.filter((lead) => lead.temperature === "Hot").length.toLocaleString("en-US");
-  document.querySelector("#recoveryNarrativeValue").textContent = `Estimacion demo: ${formatMoney(recoverable)} rescatables.`;
+  document.querySelector("#recoveryNarrativeValue").textContent = `Estimacion demo: ${formatMoney(recoverable)} de oportunidad protegible.`;
 
   const monthProgress = progressPercent(rows);
   document.querySelector("#monthProgressMetric").textContent = `${monthProgress}%`;
@@ -581,55 +581,52 @@ function renderManager() {
   document.querySelector("#monthProgressBar").style.width = `${monthProgress}%`;
 
   const branchNames = [...new Set(rows.map((lead) => lead.branch))];
-  document.querySelector("#branchTableBody").innerHTML = branchNames
-    .map((branch) => {
-      const branchRows = rows.filter((lead) => lead.branch === branch);
-      const branchRisk = branchRows.filter(isAtRisk).length;
-      return `
-        <tr>
-          <td>${branch}</td>
-          <td>${branchRows.length}</td>
-          <td>${statusCount(branchRows, "Venta")}</td>
-          <td>${statusCount(branchRows, "Interesado")}</td>
-          <td>${statusCount(branchRows, "Contactado") + statusCount(branchRows, "Cita agendada")}</td>
-          <td>${branchRows.filter((lead) => lead.isOverdue).length}</td>
-          <td>${branchRisk}</td>
-          <td>${branchRows.filter((lead) => lead.isDueToday).length}</td>
-          <td>${formatMoney(branchRows.reduce((sum, lead) => sum + lead.estimatedValue, 0))}</td>
-        </tr>
-      `;
-    })
-    .join("");
+  document.querySelector("#branchTableBody").innerHTML = branchNames.length
+    ? branchNames
+        .map((branch) => {
+          const branchRows = rows.filter((lead) => lead.branch === branch);
+          const branchRisk = branchRows.filter(isAtRisk).length;
+          return `
+            <tr>
+              <td>${branch}</td>
+              <td>${branchRows.length}</td>
+              <td>${statusCount(branchRows, "Venta")}</td>
+              <td>${statusCount(branchRows, "Interesado")}</td>
+              <td>${statusCount(branchRows, "Contactado") + statusCount(branchRows, "Cita agendada")}</td>
+              <td>${branchRows.filter((lead) => lead.isOverdue).length}</td>
+              <td>${branchRisk}</td>
+              <td>${branchRows.filter((lead) => lead.isDueToday).length}</td>
+              <td>${formatMoney(branchRows.reduce((sum, lead) => sum + lead.estimatedValue, 0))}</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="9">Sin datos para este filtro.</td></tr>`;
 
-  const breakdownRows = rows.length ? rows : branchRowsForBreakdown();
+  const breakdownRows = rows;
   const advisorRows = advisorStats(breakdownRows);
-  document.querySelector("#advisorTableBody").innerHTML = advisorRows
-    .sort((a, b) => b.assigned - a.assigned)
-    .slice(0, 24)
-    .map((row) => {
-      const advisorLeadRows = breakdownRows.filter((lead) => lead.advisor === row.advisor);
-      const normalizedRow = row || {
-        assigned: 0,
-        converted: 0,
-        overdue: 0,
-        risk: 0,
-        conversion: 0,
-      };
-      return `
-        <tr>
-          <td>${row.advisor}</td>
-          <td>${normalizedRow.assigned}</td>
-          <td>${normalizedRow.converted}</td>
-          <td>${statusCount(advisorLeadRows, "Interesado")}</td>
-          <td>${statusCount(advisorLeadRows, "Contactado")}</td>
-          <td>${normalizedRow.overdue}</td>
-          <td>${normalizedRow.risk}</td>
-          <td>${advisorLeadRows.filter((lead) => lead.isDueToday).length}</td>
-          <td>${normalizedRow.conversion}%</td>
-        </tr>
-      `;
-    })
-    .join("");
+  document.querySelector("#advisorTableBody").innerHTML = advisorRows.length
+    ? advisorRows
+        .sort((a, b) => b.assigned - a.assigned)
+        .slice(0, 24)
+        .map((row) => {
+          const advisorLeadRows = breakdownRows.filter((lead) => lead.advisor === row.advisor);
+          return `
+            <tr>
+              <td>${row.advisor}</td>
+              <td>${row.assigned}</td>
+              <td>${row.converted}</td>
+              <td>${statusCount(advisorLeadRows, "Interesado")}</td>
+              <td>${statusCount(advisorLeadRows, "Contactado")}</td>
+              <td>${row.overdue}</td>
+              <td>${row.risk}</td>
+              <td>${advisorLeadRows.filter((lead) => lead.isDueToday).length}</td>
+              <td>${row.conversion}%</td>
+            </tr>
+          `;
+        })
+        .join("")
+    : `<tr><td colspan="9">Sin datos para este filtro.</td></tr>`;
 
   const topBy = (key) => advisorRows.reduce((best, row) => (!best || row[key] > best[key] ? row : best), null);
   const topSales = topBy("converted");

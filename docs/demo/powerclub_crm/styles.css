@@ -1008,12 +1008,12 @@ th {
   .operator-summary,
   .form-grid,
   .metrics-grid,
-    .coaching-summary,
-    .narrative-steps,
-    .recovery-grid,
-    .ranking-grid,
-    .queue-grid,
-    .trend-bars {
+  .coaching-summary,
+  .narrative-steps,
+  .recovery-grid,
+  .ranking-grid,
+  .queue-grid,
+  .trend-bars {
     grid-template-columns: 1fr;
   }
 
