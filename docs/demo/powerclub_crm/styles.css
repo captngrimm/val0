@@ -384,6 +384,143 @@ h3 {
   font-size: 1.25rem;
 }
 
+.advisor-progress-panel,
+.advisor-workflow-panel {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  background: #f7fbf9;
+}
+
+.advisor-panel-head,
+.advisor-schedule-row,
+.advisor-rhythm {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.advisor-panel-head h3,
+.advisor-current-client strong {
+  margin: 0;
+}
+
+.advisor-panel-head h3 {
+  font-size: 1rem;
+}
+
+.advisor-progress-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(86px, 1fr));
+  gap: 8px;
+}
+
+.advisor-progress-grid article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--panel);
+}
+
+.advisor-progress-grid span,
+.advisor-rhythm span,
+.advisor-current-client span,
+.fast-note span,
+.advisor-schedule-row span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.advisor-progress-grid strong,
+.advisor-rhythm strong,
+.advisor-current-client strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.advisor-goal-track {
+  height: 8px;
+}
+
+.advisor-workflow-card {
+  display: grid;
+  gap: 10px;
+}
+
+.advisor-current-client {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel);
+}
+
+.advisor-current-client p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.advisor-action-row,
+.quick-outcomes {
+  display: grid;
+  gap: 8px;
+}
+
+.advisor-action-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.quick-outcomes {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.manual-action,
+.quick-outcomes button,
+#saveAndNextButton {
+  min-height: 42px;
+  border: 1px solid #bed0cc;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--deep);
+  font-weight: 850;
+}
+
+.manual-action {
+  background: var(--green);
+  color: #fff;
+}
+
+.quick-outcomes button:hover,
+#saveAndNextButton:hover {
+  border-color: var(--green);
+  background: #e8f3f0;
+}
+
+.fast-note {
+  display: grid;
+  gap: 6px;
+}
+
+.advisor-schedule-row {
+  align-items: end;
+}
+
+.advisor-schedule-row label {
+  flex: 1;
+}
+
+#saveAndNextButton {
+  padding: 0 14px;
+  background: var(--deep);
+  color: #fff;
+}
+
 .tab,
 .chip,
 .status-actions button {
@@ -394,7 +531,8 @@ h3 {
 
 .tab.active,
 .chip.active,
-.status-actions button.active {
+.status-actions button.active,
+.quick-outcomes button.active {
   border-color: var(--green);
   background: var(--green);
   color: #fff;
@@ -2170,6 +2308,10 @@ option {
 body[data-theme="dark"] .workflow-strip article,
 body[data-theme="dark"] .role-model article,
 body[data-theme="dark"] .operator-summary article,
+body[data-theme="dark"] .advisor-progress-panel,
+body[data-theme="dark"] .advisor-workflow-panel,
+body[data-theme="dark"] .advisor-progress-grid article,
+body[data-theme="dark"] .advisor-current-client,
 body[data-theme="dark"] .detail-list div,
 body[data-theme="dark"] .notes-box,
 body[data-theme="dark"] .context-box,
@@ -2197,6 +2339,9 @@ body[data-theme="dark"] .kpi-explain-body section {
 body[data-theme="dark"] .tab,
 body[data-theme="dark"] .chip,
 body[data-theme="dark"] .status-actions button,
+body[data-theme="dark"] .quick-outcomes button,
+body[data-theme="dark"] .manual-action,
+body[data-theme="dark"] #saveAndNextButton,
 body[data-theme="dark"] .collapse-toggle,
 body[data-theme="dark"] .kpi-explain-close {
   border-color: var(--line);
@@ -2216,6 +2361,7 @@ body[data-theme="dark"] .future-bi-panel {
 body[data-theme="dark"] .tab.active,
 body[data-theme="dark"] .chip.active,
 body[data-theme="dark"] .status-actions button.active,
+body[data-theme="dark"] .quick-outcomes button.active,
 body[data-theme="dark"] .segmented-control button.active {
   background: var(--green);
   color: #081211;
@@ -2268,7 +2414,9 @@ body[data-density="compact"] .queue-grid > div,
 body[data-density="compact"] .manager-option-grid article,
 body[data-density="compact"] .scorecard-metrics article,
 body[data-density="compact"] .insight-grid article,
-body[data-density="compact"] .bi-tile {
+body[data-density="compact"] .bi-tile,
+body[data-density="compact"] .advisor-progress-panel,
+body[data-density="compact"] .advisor-workflow-panel {
   padding: 10px;
 }
 
@@ -2277,7 +2425,8 @@ body[data-density="compact"] .kpi-board,
 body[data-density="compact"] .manager-grid,
 body[data-density="compact"] .scorecard-shell,
 body[data-density="compact"] .visual-summary-grid,
-body[data-density="compact"] .bi-preview-grid {
+body[data-density="compact"] .bi-preview-grid,
+body[data-density="compact"] .advisor-progress-grid {
   gap: 12px;
 }
 
@@ -2374,6 +2523,7 @@ th {
 
   .detail-list,
   .operator-summary,
+  .advisor-progress-grid,
   .form-grid,
   .metrics-grid,
   .coaching-summary,
@@ -2399,8 +2549,25 @@ th {
 
   .tab,
   .chip,
-  .status-actions button {
+  .status-actions button,
+  .manual-action,
+  .quick-outcomes button,
+  #saveAndNextButton {
     flex: 1 1 auto;
+  }
+
+  .advisor-panel-head,
+  .advisor-schedule-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .advisor-action-row {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-outcomes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   select {

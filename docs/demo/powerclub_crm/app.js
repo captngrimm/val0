@@ -253,6 +253,9 @@ const temperatureFilter = document.querySelector("#temperatureFilter");
 const scorecardAdvisorSelect = document.querySelector("#scorecardAdvisorSelect");
 const kpiExplainDrawer = document.querySelector("#kpiExplainDrawer");
 const kpiExplainClose = document.querySelector("#kpiExplainClose");
+const advisorQuickNoteInput = document.querySelector("#advisorQuickNoteInput");
+const advisorNextFollowUpInput = document.querySelector("#advisorNextFollowUpInput");
+const saveAndNextButton = document.querySelector("#saveAndNextButton");
 const sectionOpenState = {};
 const collapsibleRegistry = {};
 const SECTION_HELP = {
@@ -531,6 +534,47 @@ function statusPill(status) {
   return `<span class="status-pill ${STATUS_CLASSES[status]}">${status}</span>`;
 }
 
+function renderAdvisorWorkflow(assignedRows) {
+  const lead = assignedRows.find((item) => item.id === selectedId) || assignedRows[0] || leads[0];
+  const queueIndex = Math.max(assignedRows.findIndex((item) => item.id === lead.id), 0);
+  document.querySelector("#advisorQueueName").textContent = lead.name;
+  document.querySelector("#advisorQueueSummary").textContent = `${lead.branch} · ${lead.interest} · Prioridad ${lead.priority}`;
+  document.querySelector("#advisorWorkflowQueuePosition").textContent = `${queueIndex + 1} de ${assignedRows.length}`;
+  advisorQuickNoteInput.value = lead.managementNote || "";
+  advisorNextFollowUpInput.value = lead.nextFollowUp || TODAY;
+}
+
+function renderAdvisorProgress(assignedRows) {
+  const completedToday = assignedRows.filter(isManaged).length;
+  const pending = assignedRows.filter(isPending).length;
+  const overdue = assignedRows.filter(needsFollowUp).length;
+  const sales = countStatus(assignedRows, "Venta");
+  const promises = countStatus(assignedRows, "Promesa de compra");
+  const conversion = pct(sales, assignedRows.length);
+  const rhythm = Math.max(1, Math.round(completedToday / 3));
+  const goalProgress = Math.min(100, pct(completedToday, 12));
+  let status = "Vas bien";
+
+  if (overdue > 0) {
+    status = "Atento a seguimientos atrasados";
+  } else if (rhythm < 2) {
+    status = "Necesitas subir ritmo hoy";
+  } else if (goalProgress >= 75) {
+    status = "Buen avance, sigue así";
+  }
+
+  document.querySelector("#myCompletedTodayMetric").textContent = completedToday;
+  document.querySelector("#myPendingMetric").textContent = pending;
+  document.querySelector("#myOverdueMetric").textContent = overdue;
+  document.querySelector("#myConversionMetric").textContent = `${conversion}%`;
+  document.querySelector("#mySalesMetric").textContent = sales;
+  document.querySelector("#myPromisesMetric").textContent = promises;
+  document.querySelector("#myRhythmMetric").textContent = `${rhythm}/día`;
+  document.querySelector("#myGoalProgressBar").style.width = `${goalProgress}%`;
+  document.querySelector("#myGoalProgressLabel").textContent = `${goalProgress}% de meta diaria demo: 12 gestiones.`;
+  document.querySelector("#advisorProgressStatus").textContent = status;
+}
+
 function renderLeadList() {
   const rows = filteredLeads();
   const assignedRows = operatorRows();
@@ -543,10 +587,13 @@ function renderLeadList() {
   document.querySelector("#operatorFollowUpsMetric").textContent = countStatus(assignedRows, "Seguimiento");
   document.querySelector("#operatorUnreachableMetric").textContent = countStatus(assignedRows, "Ilocalizable");
   document.querySelector("#operatorNoContactMetric").textContent = countStatus(assignedRows, "No contacto");
+  renderAdvisorProgress(assignedRows);
 
   if (!rows.some((lead) => lead.id === selectedId) && rows[0]) {
     selectedId = rows[0].id;
   }
+
+  renderAdvisorWorkflow(assignedRows);
 
   leadList.innerHTML = rows
     .map(
@@ -604,6 +651,8 @@ function renderDetail() {
   document.querySelector("#nextActionDateInput").value = nextActionDate || lead.nextFollowUp;
   document.querySelector("#managementNoteInput").value = lead.managementNote;
   document.querySelector("#offeredPlanSelect").value = lead.offeredPlan;
+  advisorQuickNoteInput.value = lead.managementNote || "";
+  advisorNextFollowUpInput.value = lead.nextFollowUp || TODAY;
 
   const priority = document.querySelector("#detailPriority");
   priority.textContent = `Prioridad ${lead.priority}`;
@@ -613,6 +662,10 @@ function renderDetail() {
 
   document.querySelectorAll(".status-actions button").forEach((button) => {
     button.classList.toggle("active", button.dataset.managementStatus === lead.managementStatus);
+  });
+
+  document.querySelectorAll("[data-advisor-outcome]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.advisorOutcome === lead.managementStatus);
   });
 }
 
@@ -1289,6 +1342,19 @@ document.querySelectorAll(".status-actions button").forEach((button) => {
   });
 });
 
+document.querySelectorAll("[data-advisor-outcome]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const lead = leads.find((item) => item.id === selectedId);
+    lead.managementStatus = button.dataset.advisorOutcome;
+    lead.managementNote = advisorQuickNoteInput.value;
+    lead.nextFollowUp = advisorNextFollowUpInput.value || lead.nextFollowUp;
+    lead.history = [`Demo: Resultado rápido marcado como ${button.textContent.trim()}.`, ...lead.history];
+    renderLeadList();
+    renderDetail();
+    renderManager();
+  });
+});
+
 document.querySelector("#offeredPlanSelect").addEventListener("change", (event) => {
   const lead = leads.find((item) => item.id === selectedId);
   lead.offeredPlan = event.target.value;
@@ -1311,6 +1377,39 @@ document.querySelector("#nextActionDateInput").addEventListener("change", (event
 document.querySelector("#managementNoteInput").addEventListener("input", (event) => {
   const lead = leads.find((item) => item.id === selectedId);
   lead.managementNote = event.target.value;
+  advisorQuickNoteInput.value = event.target.value;
+});
+
+advisorQuickNoteInput.addEventListener("input", (event) => {
+  const lead = leads.find((item) => item.id === selectedId);
+  lead.managementNote = event.target.value;
+  document.querySelector("#managementNoteInput").value = event.target.value;
+});
+
+advisorNextFollowUpInput.addEventListener("change", (event) => {
+  const lead = leads.find((item) => item.id === selectedId);
+  lead.nextFollowUp = event.target.value;
+  document.querySelector("#nextActionDateInput").value = event.target.value;
+  renderLeadList();
+  renderManager();
+});
+
+saveAndNextButton.addEventListener("click", () => {
+  const lead = leads.find((item) => item.id === selectedId);
+  const rows = filteredLeads();
+  const currentIndex = rows.findIndex((item) => item.id === selectedId);
+  lead.managementNote = advisorQuickNoteInput.value;
+  lead.nextFollowUp = advisorNextFollowUpInput.value || lead.nextFollowUp;
+  lead.history = ["Demo: Gestión guardada desde cola del asesor.", ...lead.history];
+
+  if (rows.length > 1) {
+    const nextIndex = currentIndex >= 0 && currentIndex < rows.length - 1 ? currentIndex + 1 : 0;
+    selectedId = rows[nextIndex].id;
+  }
+
+  renderLeadList();
+  renderDetail();
+  renderManager();
 });
 
 operatorTab.addEventListener("click", () => switchView("operator"));

@@ -226,6 +226,92 @@
               <strong id="operatorNoContactMetric">0</strong>
             </article>
           </div>
+
+          <section class="advisor-progress-panel" aria-labelledby="advisorProgressTitle">
+            <div class="advisor-panel-head">
+              <div>
+                <p class="eyebrow dark">Mi progreso</p>
+                <h3 id="advisorProgressTitle">Resumen personal de hoy</h3>
+              </div>
+              <span id="advisorProgressStatus" class="count-pill">Vas bien</span>
+            </div>
+            <div class="advisor-progress-grid" aria-label="Indicadores personales del asesor">
+              <article>
+                <span>Completados hoy</span>
+                <strong id="myCompletedTodayMetric">0</strong>
+              </article>
+              <article>
+                <span>Pendientes</span>
+                <strong id="myPendingMetric">0</strong>
+              </article>
+              <article>
+                <span>Atrasados</span>
+                <strong id="myOverdueMetric">0</strong>
+              </article>
+              <article>
+                <span>Conversión</span>
+                <strong id="myConversionMetric">0%</strong>
+              </article>
+              <article>
+                <span>Ventas</span>
+                <strong id="mySalesMetric">0</strong>
+              </article>
+              <article>
+                <span>Promesas</span>
+                <strong id="myPromisesMetric">0</strong>
+              </article>
+            </div>
+            <div class="advisor-rhythm">
+              <span>Ritmo de contactos</span>
+              <strong id="myRhythmMetric">0/día</strong>
+            </div>
+            <div class="progress-track advisor-goal-track" aria-hidden="true">
+              <span id="myGoalProgressBar"></span>
+            </div>
+            <p id="myGoalProgressLabel" class="microcopy">Meta demo pendiente.</p>
+          </section>
+
+          <section class="advisor-workflow-panel" aria-labelledby="advisorWorkflowTitle">
+            <div class="advisor-panel-head">
+              <div>
+                <p class="eyebrow dark">Vista asesor / cola de seguimiento</p>
+                <h3 id="advisorWorkflowTitle">Próximo cliente recomendado</h3>
+              </div>
+              <span id="advisorWorkflowQueuePosition" class="count-pill">1 de 0</span>
+            </div>
+            <div class="advisor-workflow-card">
+              <div class="advisor-current-client">
+                <span>Cliente actual</span>
+                <strong id="advisorQueueName">Socio Demo</strong>
+                <p id="advisorQueueSummary">Sucursal - interés - prioridad</p>
+              </div>
+              <div class="advisor-action-row" aria-label="Acciones manuales del asesor">
+                <button type="button" class="manual-action">Llamar</button>
+                <button type="button" class="manual-action">WhatsApp manual</button>
+              </div>
+              <div class="quick-outcomes" aria-label="Resultado rápido">
+                <button type="button" data-advisor-outcome="No contacto">No respondió</button>
+                <button type="button" data-advisor-outcome="Seguimiento">Interesado</button>
+                <button type="button" data-advisor-outcome="Promesa de compra">Promesa de compra</button>
+                <button type="button" data-advisor-outcome="Venta">Compró</button>
+                <button type="button" data-advisor-outcome="Seguimiento">Reagendar</button>
+                <button type="button" data-advisor-outcome="Ilocalizable">No interesado</button>
+              </div>
+              <label class="fast-note">
+                <span>Nota rápida</span>
+                <textarea id="advisorQuickNoteInput" rows="3" aria-label="Nota rápida del asesor"></textarea>
+              </label>
+              <div class="advisor-schedule-row">
+                <label>
+                  <span>Próximo seguimiento</span>
+                  <input id="advisorNextFollowUpInput" type="date" aria-label="Próxima fecha de seguimiento">
+                </label>
+                <button id="saveAndNextButton" type="button">Guardar y siguiente</button>
+              </div>
+              <p class="microcopy">Demo conceptual: no llama, no abre WhatsApp y no guarda en un sistema real.</p>
+            </div>
+          </section>
+
           <div class="quick-filters" aria-label="Filtros rápidos">
             <button class="chip active" type="button" data-filter="todos">Todos</button>
             <button class="chip" type="button" data-filter="pendientes">Socios por gestionar</button>
