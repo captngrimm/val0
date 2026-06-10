@@ -18,6 +18,13 @@
   box-sizing: border-box;
 }
 
+.icon-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   background: var(--wash);
@@ -690,23 +697,39 @@ option {
 .metric-icon {
   position: relative;
   display: inline-grid;
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   place-items: center;
   border: 1px solid rgba(17, 113, 95, 0.18);
-  border-radius: 8px;
-  background: #e8f3f0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f5fbf8, #e2f1ed);
   color: var(--green);
-}
-
-.metric-icon {
-  box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 8px 18px rgba(17, 113, 95, 0.08);
 }
 
 .metric-icon::before,
 .metric-icon::after {
   position: absolute;
   content: "";
+  display: none;
+}
+
+.metric-icon svg {
+  position: relative;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+}
+
+.metric-icon svg path,
+.metric-icon svg circle,
+.metric-icon svg rect {
+  vector-effect: non-scaling-stroke;
 }
 
 .icon-target::before {
@@ -979,8 +1002,9 @@ option {
 
 .metric-card.warning .metric-icon {
   border-color: rgba(157, 61, 52, 0.18);
-  background: #fae9e7;
+  background: linear-gradient(180deg, #fff7f6, #fae9e7);
   color: var(--red);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 8px 18px rgba(157, 61, 52, 0.08);
 }
 
 .metric-card.blue {
@@ -989,8 +1013,9 @@ option {
 
 .metric-card.blue .metric-icon {
   border-color: rgba(40, 106, 166, 0.18);
-  background: #eef7fc;
+  background: linear-gradient(180deg, #f6fbff, #e8f3fb);
   color: var(--blue);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 8px 18px rgba(40, 106, 166, 0.08);
 }
 
 .metric-card.success {

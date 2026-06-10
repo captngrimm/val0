@@ -7,6 +7,91 @@
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
+    <svg class="icon-sprite" aria-hidden="true" focusable="false">
+      <symbol id="icon-pipeline" viewBox="0 0 24 24">
+        <path d="M4 7h8"></path>
+        <path d="M12 7a4 4 0 0 1 4 4v6"></path>
+        <path d="M4 17h16"></path>
+        <circle cx="4" cy="7" r="2"></circle>
+        <circle cx="20" cy="17" r="2"></circle>
+      </symbol>
+      <symbol id="icon-calendar-check" viewBox="0 0 24 24">
+        <rect x="4" y="5" width="16" height="15" rx="3"></rect>
+        <path d="M8 3v4"></path>
+        <path d="M16 3v4"></path>
+        <path d="M4 10h16"></path>
+        <path d="m9 15 2 2 4-5"></path>
+      </symbol>
+      <symbol id="icon-conversion" viewBox="0 0 24 24">
+        <path d="M5 18h14"></path>
+        <path d="M7 16 11 12l3 3 5-7"></path>
+        <path d="M17 8h2v2"></path>
+        <path d="M8 8h.01"></path>
+        <path d="M16 16h.01"></path>
+      </symbol>
+      <symbol id="icon-sale" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8"></circle>
+        <path d="m8.5 12 2.2 2.2 4.8-5"></path>
+      </symbol>
+      <symbol id="icon-phone" viewBox="0 0 24 24">
+        <path d="M7 5 5 7c1.2 6 6 10.8 12 12l2-2-3-3-2 1c-2.2-1-4-2.8-5-5l1-2-3-3Z"></path>
+      </symbol>
+      <symbol id="icon-chat" viewBox="0 0 24 24">
+        <path d="M5 6h14v10H9l-4 3V6Z"></path>
+        <path d="M8 10h8"></path>
+        <path d="M8 13h5"></path>
+      </symbol>
+      <symbol id="icon-check-stack" viewBox="0 0 24 24">
+        <path d="m7 12 3 3 7-7"></path>
+        <path d="M5 18h14"></path>
+        <path d="M5 6h10"></path>
+      </symbol>
+      <symbol id="icon-pulse" viewBox="0 0 24 24">
+        <path d="M4 14h4l2-6 4 10 2-4h4"></path>
+      </symbol>
+      <symbol id="icon-handshake" viewBox="0 0 24 24">
+        <path d="M7 12 4 9l4-4 3 3"></path>
+        <path d="m17 12 3-3-4-4-3 3"></path>
+        <path d="m8 13 3-3 5 5-3 3-2-2"></path>
+        <path d="m13 8 3 3"></path>
+      </symbol>
+      <symbol id="icon-branch" viewBox="0 0 24 24">
+        <path d="M4 20h16"></path>
+        <path d="M6 20V8l6-3 6 3v12"></path>
+        <path d="M9 20v-4h6v4"></path>
+        <path d="M9 10h.01"></path>
+        <path d="M15 10h.01"></path>
+        <path d="M12 13h.01"></path>
+      </symbol>
+      <symbol id="icon-channel" viewBox="0 0 24 24">
+        <circle cx="6" cy="12" r="2"></circle>
+        <circle cx="18" cy="6" r="2"></circle>
+        <circle cx="18" cy="18" r="2"></circle>
+        <path d="M8 11 16 7"></path>
+        <path d="M8 13 16 17"></path>
+      </symbol>
+      <symbol id="icon-clock-warning" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8"></circle>
+        <path d="M12 8v5l3 2"></path>
+        <path d="M19 19 21 21"></path>
+      </symbol>
+      <symbol id="icon-alert" viewBox="0 0 24 24">
+        <path d="M12 4 21 20H3L12 4Z"></path>
+        <path d="M12 10v4"></path>
+        <path d="M12 17h.01"></path>
+      </symbol>
+      <symbol id="icon-risk" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8"></circle>
+        <path d="M12 7v6"></path>
+        <path d="M12 16h.01"></path>
+      </symbol>
+      <symbol id="icon-blocked-path" viewBox="0 0 24 24">
+        <path d="M4 6h6a4 4 0 0 1 4 4v0a4 4 0 0 0 4 4h2"></path>
+        <path d="M4 18h6a4 4 0 0 0 4-4v0a4 4 0 0 1 4-4h2"></path>
+        <path d="m9 9 6 6"></path>
+        <path d="m15 9-6 6"></path>
+      </symbol>
+    </svg>
     <header class="hero">
       <div class="hero-copy">
         <img class="powerclub-wordmark" src="./assets/powerclub-logo-horizontal.png" alt="Power Club">
@@ -306,7 +391,7 @@
             <div class="metrics-grid">
               <article class="metric-card">
                 <div class="metric-head">
-                  <span class="metric-icon icon-target" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-pipeline"></use></svg></span>
                   <span>Oportunidades activas</span>
                   <span class="help-dot" tabindex="0" aria-label="Muestra el volumen abierto despues de aplicar filtros. Decision: revisar carga por sucursal y asesor.">?</span>
                 </div>
@@ -315,7 +400,7 @@
               </article>
               <article class="metric-card warning">
                 <div class="metric-head">
-                  <span class="metric-icon icon-calendar" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-calendar-check"></use></svg></span>
                   <span>Seguimientos para hoy</span>
                   <span class="help-dot" tabindex="0" aria-label="Acciones que deben gestionarse hoy. Decision: priorizar el turno antes de perder intencion.">?</span>
                 </div>
@@ -324,7 +409,7 @@
               </article>
               <article class="metric-card blue">
                 <div class="metric-head">
-                  <span class="metric-icon icon-rate" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-conversion"></use></svg></span>
                   <span>Conversion rate</span>
                   <span class="help-dot" tabindex="0" aria-label="Ventas sobre registros filtrados. Decision: comparar calidad de gestion, sucursal y canal.">?</span>
                 </div>
@@ -333,7 +418,7 @@
               </article>
               <article class="metric-card success">
                 <div class="metric-head">
-                  <span class="metric-icon icon-check" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-sale"></use></svg></span>
                   <span>Ventas</span>
                   <span class="help-dot" tabindex="0" aria-label="Cierres ficticios dentro de la muestra demo. Decision: entender resultado, no solo actividad.">?</span>
                 </div>
@@ -348,7 +433,7 @@
             <div class="metrics-grid">
               <article class="metric-card">
                 <div class="metric-head">
-                  <span class="metric-icon icon-phone" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-phone"></use></svg></span>
                   <span>Contactos / asesor / dia</span>
                   <span class="help-dot" tabindex="0" aria-label="Promedio sintetico de llamadas, mensajes y visitas por asesor activo. Decision: detectar ritmo bajo.">?</span>
                 </div>
@@ -357,7 +442,7 @@
               </article>
               <article class="metric-card">
                 <div class="metric-head">
-                  <span class="metric-icon icon-chat" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-chat"></use></svg></span>
                   <span>Seguimientos</span>
                 </div>
                 <strong id="followUpsMetric">0</strong>
@@ -365,7 +450,7 @@
               </article>
               <article class="metric-card blue">
                 <div class="metric-head">
-                  <span class="metric-icon icon-done" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-check-stack"></use></svg></span>
                   <span>Completados hoy</span>
                   <span class="help-dot" tabindex="0" aria-label="Interacciones del dia ya registradas en la demo. Decision: separar carga pendiente de trabajo ejecutado.">?</span>
                 </div>
@@ -374,7 +459,7 @@
               </article>
               <article class="metric-card blue">
                 <div class="metric-head">
-                  <span class="metric-icon icon-pulse" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-pulse"></use></svg></span>
                   <span>Ritmo vs sucursal</span>
                   <span class="help-dot" tabindex="0" aria-label="Compara actividad promedio de asesores filtrados contra la media de sucursal. Decision: coaching o redistribucion.">?</span>
                 </div>
@@ -389,7 +474,7 @@
             <div class="metrics-grid">
               <article class="metric-card blue">
                 <div class="metric-head">
-                  <span class="metric-icon icon-handshake" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-handshake"></use></svg></span>
                   <span>Promesas de compra</span>
                   <span class="help-dot" tabindex="0" aria-label="Interes declarado que requiere seguimiento cercano. Decision: proteger leads con intencion.">?</span>
                 </div>
@@ -398,7 +483,7 @@
               </article>
               <article class="metric-card">
                 <div class="metric-head">
-                  <span class="metric-icon icon-branch" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-branch"></use></svg></span>
                   <span>Branch conversion</span>
                   <span class="help-dot" tabindex="0" aria-label="Mejor conversion por sucursal en el filtro actual. Decision: replicar practica o investigar diferencias.">?</span>
                 </div>
@@ -407,7 +492,7 @@
               </article>
               <article class="metric-card">
                 <div class="metric-head">
-                  <span class="metric-icon icon-source" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-channel"></use></svg></span>
                   <span>Source quality</span>
                   <span class="help-dot" tabindex="0" aria-label="Canal con mejor relacion entre volumen y conversion. Decision: mover esfuerzo comercial al canal correcto.">?</span>
                 </div>
@@ -416,7 +501,7 @@
               </article>
               <article class="metric-card blue">
                 <div class="metric-head">
-                  <span class="metric-icon icon-progress" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-conversion"></use></svg></span>
                   <span>Avance del mes</span>
                 </div>
                 <strong id="monthProgressMetric">0%</strong>
@@ -430,7 +515,7 @@
             <div class="metrics-grid">
               <article class="metric-card warning">
                 <div class="metric-head">
-                  <span class="metric-icon icon-clock" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-clock-warning"></use></svg></span>
                   <span>Seguimientos atrasados</span>
                   <span class="help-dot" tabindex="0" aria-label="Registros con proxima accion anterior al corte demo. Decision: intervenir antes de que el lead se enfrie.">?</span>
                 </div>
@@ -439,7 +524,7 @@
               </article>
               <article class="metric-card warning">
                 <div class="metric-head">
-                  <span class="metric-icon icon-warning" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-alert"></use></svg></span>
                   <span>Atraso sobre abiertos</span>
                   <span class="help-dot" tabindex="0" aria-label="Porcentaje de oportunidades abiertas con atraso. Decision: medir disciplina de seguimiento.">?</span>
                 </div>
@@ -448,7 +533,7 @@
               </article>
               <article class="metric-card warning">
                 <div class="metric-head">
-                  <span class="metric-icon icon-alert" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-risk"></use></svg></span>
                   <span>Oportunidades en riesgo</span>
                   <span class="help-dot" tabindex="0" aria-label="Leads atrasados, trabados o calientes sin proximo paso claro. Decision: rescate, reasignacion o coaching.">?</span>
                 </div>
@@ -457,7 +542,7 @@
               </article>
               <article class="metric-card warning">
                 <div class="metric-head">
-                  <span class="metric-icon icon-stuck" aria-hidden="true"></span>
+                  <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-blocked-path"></use></svg></span>
                   <span>Stuck opportunities</span>
                   <span class="help-dot" tabindex="0" aria-label="Oportunidades sin desenlace claro. Decision: exigir proxima accion o cerrar aprendizaje.">?</span>
                 </div>
