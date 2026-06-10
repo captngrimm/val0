@@ -173,6 +173,8 @@ These are planning ranges, not a final quote.
 
 Proposal reference:
 
+- Client proposal draft: `docs/product/POWERCLUB_CRM_CLIENT_PROPOSAL_DRAFT_V1.md`
+- Discovery questionnaire: `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md`
 - Pricing model: `docs/product/POWERCLUB_CRM_PROPOSAL_PRICING_MODEL_V1.md`
 - Scope freeze checklist: `docs/product/POWERCLUB_CRM_SCOPE_FREEZE_CHECKLIST_V1.md`
 
