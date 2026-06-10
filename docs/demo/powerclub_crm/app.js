@@ -254,6 +254,7 @@ const scorecardAdvisorSelect = document.querySelector("#scorecardAdvisorSelect")
 const kpiExplainDrawer = document.querySelector("#kpiExplainDrawer");
 const kpiExplainClose = document.querySelector("#kpiExplainClose");
 const sectionOpenState = {};
+const collapsibleRegistry = {};
 const SECTION_HELP = {
   "core-kpis": "Indicadores basicos para saber si la operacion esta bajo control.",
   "advisor-productivity-kpis": "Mide ritmo de trabajo, seguimiento y actividad por asesor.",
@@ -262,6 +263,12 @@ const SECTION_HELP = {
   "advisor-scorecard": "Resumen individual para coaching, riesgo y proxima accion.",
   "advanced-manager-insights": "Metricas mas profundas para analizar patrones y prioridades.",
   "future-bi-view": "Ejemplo conceptual de una capa BI avanzada despues del piloto.",
+};
+const VIEW_PRESETS = {
+  executive: ["core-kpis", "sales-quality-kpis"],
+  followup: ["core-kpis", "advisor-productivity-kpis", "risk-recovery-kpis"],
+  advisors: ["advisor-productivity-kpis", "advisor-scorecard"],
+  risk: ["risk-recovery-kpis", "advanced-manager-insights"],
 };
 
 function setTheme(theme) {
@@ -1121,6 +1128,26 @@ function setCollapsibleState(section, button, body, isOpen) {
   sectionOpenState[section.dataset.collapseId] = isOpen;
 }
 
+function applyViewPreset(presetName) {
+  const openIds = VIEW_PRESETS[presetName];
+  if (!openIds) return;
+  const openSet = new Set(openIds);
+  Object.entries(collapsibleRegistry).forEach(([id, entry]) => {
+    setCollapsibleState(entry.section, entry.button, entry.body, openSet.has(id));
+  });
+  document.querySelectorAll("[data-view-preset]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.viewPreset === presetName);
+    button.setAttribute("aria-pressed", String(button.dataset.viewPreset === presetName));
+  });
+}
+
+function clearViewPresetSelection() {
+  document.querySelectorAll("[data-view-preset]").forEach((button) => {
+    button.classList.remove("active");
+    button.setAttribute("aria-pressed", "false");
+  });
+}
+
 function initializeCollapsibleSections() {
   document.querySelectorAll("[data-collapse-id]").forEach((section) => {
     if (section.dataset.collapseReady === "true") return;
@@ -1168,8 +1195,10 @@ function initializeCollapsibleSections() {
     const defaultOpen = section.dataset.defaultOpen !== "false";
     const initialOpen = Object.prototype.hasOwnProperty.call(sectionOpenState, id) ? sectionOpenState[id] : defaultOpen;
     setCollapsibleState(section, button, body, initialOpen);
+    collapsibleRegistry[id] = { section, button, body };
 
     const toggleSection = () => {
+      clearViewPresetSelection();
       setCollapsibleState(section, button, body, button.getAttribute("aria-expanded") !== "true");
     };
 
@@ -1289,6 +1318,10 @@ lightThemeButton.addEventListener("click", () => setTheme("light"));
 darkThemeButton.addEventListener("click", () => setTheme("dark"));
 comfortableDensityButton.addEventListener("click", () => setDensity("comfortable"));
 compactDensityButton.addEventListener("click", () => setDensity("compact"));
+document.querySelectorAll("[data-view-preset]").forEach((button) => {
+  button.setAttribute("aria-pressed", "false");
+  button.addEventListener("click", () => applyViewPreset(button.dataset.viewPreset));
+});
 branchFilter.addEventListener("change", renderManager);
 advisorFilter.addEventListener("change", renderManager);
 sourceFilter.addEventListener("change", renderManager);
