@@ -773,7 +773,8 @@ option {
 .recovery-grid,
 .action-prompt-grid,
 .ranking-grid,
-.queue-grid {
+.queue-grid,
+.manager-option-grid {
   display: grid;
   gap: 10px;
 }
@@ -791,11 +792,21 @@ option {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.manager-options-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.manager-option-grid {
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+}
+
 .narrative-steps article,
 .recovery-grid article,
 .action-prompt-grid article,
 .ranking-grid > div,
-.queue-grid > div {
+.queue-grid > div,
+.manager-option-grid article {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
@@ -804,7 +815,8 @@ option {
 
 .narrative-steps span,
 .recovery-grid span,
-.action-prompt-grid span {
+.action-prompt-grid span,
+.manager-option-grid span {
   display: block;
   color: var(--green);
   font-size: 0.74rem;
@@ -814,9 +826,16 @@ option {
 
 .narrative-steps strong,
 .recovery-grid strong,
-.action-prompt-grid strong {
+.action-prompt-grid strong,
+.manager-option-grid strong {
   display: block;
   margin-top: 5px;
+}
+
+.manager-option-grid p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
 }
 
 .recovery-grid strong {
@@ -985,7 +1004,8 @@ th {
   .narrative-steps,
   .recovery-grid,
   .ranking-grid,
-  .queue-grid {
+  .queue-grid,
+  .manager-option-grid {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
   }
 }
@@ -1013,6 +1033,7 @@ th {
   .recovery-grid,
   .ranking-grid,
   .queue-grid,
+  .manager-option-grid,
   .trend-bars {
     grid-template-columns: 1fr;
   }

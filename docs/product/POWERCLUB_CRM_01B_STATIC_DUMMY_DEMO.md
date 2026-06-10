@@ -161,6 +161,7 @@ Widgets ejecutivos incluidos:
 - Stuck opportunities.
 - Recovered opportunity / avoided lost sales estimate.
 - Manager action prompts.
+- Manager View Options para congelar la primera vista gerencial del piloto.
 
 Narrativa comercial:
 
@@ -169,6 +170,16 @@ PowerClub puede perder dinero cuando los leads no reciben seguimiento. El dashbo
 ```
 
 Los valores de oportunidad recuperable son estimaciones ficticias basadas en supuestos de demo. No representan ingresos reales, desempeño real ni resultados reales de Power Club.
+
+Actualización Battle 01D:
+La vista gerencial incluye una sección consultiva llamada `Configure su vista gerencial` con cuatro opciones de alcance:
+
+- Follow-up Control View.
+- Advisor Performance View.
+- Branch Comparison View.
+- Recovery Opportunities View.
+
+Cada opción explica qué muestra, a quién ayuda, qué decisión soporta y por qué importa financieramente. La intención es facilitar una conversación de scope freeze antes de proponer el piloto.
 
 ---
 
