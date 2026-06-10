@@ -138,6 +138,32 @@
         background: rgba(210, 179, 106, 0.09);
       }
 
+      .stage-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .stage-link {
+        display: inline-flex;
+        min-height: 38px;
+        align-items: center;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 0 12px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 0.82rem;
+        font-weight: 850;
+        text-decoration: none;
+      }
+
+      .stage-link:hover {
+        border-color: var(--cyan);
+        background: var(--cyan-soft);
+      }
+
       .stage-badge strong {
         color: var(--gold);
       }
@@ -451,6 +477,10 @@
         .stage-badge {
           min-width: 0;
         }
+
+        .stage-actions {
+          justify-content: flex-start;
+        }
       }
 
       @media (max-width: 640px) {
@@ -478,7 +508,10 @@
         </div>
         <div class="stage-badge" aria-label="Estado de demo">
           <strong>Meeting Ops cockpit</strong>
-          <span>Estático · determinístico · sin servicios externos</span>
+          <span>Interno · estático · sin servicios externos</span>
+          <div class="stage-actions">
+            <a class="stage-link" href="./index.html">Volver al CRM demo</a>
+          </div>
         </div>
       </header>
 
@@ -533,11 +566,11 @@
             <p class="eyebrow">Uso en reunión</p>
             <ol class="agenda-list">
               <li>Frank introduce Val como herramienta interna.</li>
-              <li>Val da el marco de la sesión.</li>
+              <li>Frank usa Val para mostrar el marco de la sesión.</li>
               <li>Frank muestra la maqueta CRM.</li>
               <li>Frank vuelve a Val para preguntas guiadas.</li>
               <li>Se capturan notas, decisiones, riesgos y próximos pasos.</li>
-              <li>Val genera un resumen local para seguimiento.</li>
+              <li>Frank genera un resumen local para seguimiento.</li>
             </ol>
           </div>
         </section>
