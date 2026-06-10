@@ -172,7 +172,7 @@
               <button id="darkThemeButton" type="button" aria-pressed="false">Oscuro</button>
             </div>
             <div class="segmented-control" aria-label="Densidad de vista">
-              <button id="comfortableDensityButton" class="active" type="button" aria-pressed="true">Comodo</button>
+              <button id="comfortableDensityButton" class="active" type="button" aria-pressed="true">Cómodo</button>
               <button id="compactDensityButton" type="button" aria-pressed="false">Compacto</button>
             </div>
           </div>
@@ -404,8 +404,8 @@
         </div>
 
         <section class="kpi-board" aria-label="Métricas gerenciales del piloto">
-          <div class="kpi-group" data-collapse-id="core-kpis" data-collapse-label="Core Management KPIs" data-default-open="true">
-            <h3>Core Management KPIs</h3>
+          <div class="kpi-group" data-collapse-id="core-kpis" data-collapse-label="KPIs gerenciales clave" data-default-open="true">
+            <h3>KPIs gerenciales clave</h3>
             <div class="metrics-grid">
               <article class="metric-card" data-kpi="activeOpportunities" tabindex="0">
                 <div class="metric-head">
@@ -428,7 +428,7 @@
               <article class="metric-card blue" data-kpi="conversionRate" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-conversion"></use></svg></span>
-                  <span>Conversion rate</span>
+                  <span>Tasa de conversión</span>
                   <span class="help-dot" tabindex="0" aria-label="Ventas sobre registros filtrados. Decision: comparar calidad de gestion, sucursal y canal.">?</span>
                 </div>
                 <strong id="conversionMetric">0%</strong>
@@ -446,13 +446,13 @@
             </div>
           </div>
 
-          <div class="kpi-group" data-collapse-id="advisor-productivity-kpis" data-collapse-label="Advisor Productivity KPIs" data-default-open="true">
-            <h3>Advisor Productivity KPIs</h3>
+          <div class="kpi-group" data-collapse-id="advisor-productivity-kpis" data-collapse-label="KPIs de productividad por asesor" data-default-open="true">
+            <h3>KPIs de productividad por asesor</h3>
             <div class="metrics-grid">
               <article class="metric-card" data-kpi="contactsPerAdvisorDay" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-phone"></use></svg></span>
-                  <span>Contactos / asesor / dia</span>
+                  <span>Contactos / asesor / día</span>
                   <span class="help-dot" tabindex="0" aria-label="Promedio sintetico de llamadas, mensajes y visitas por asesor activo. Decision: detectar ritmo bajo.">?</span>
                 </div>
                 <strong id="contactPaceMetric">0</strong>
@@ -487,8 +487,8 @@
             </div>
           </div>
 
-          <div class="kpi-group" data-collapse-id="sales-quality-kpis" data-collapse-label="Sales Quality KPIs" data-default-open="true">
-            <h3>Sales Quality KPIs</h3>
+          <div class="kpi-group" data-collapse-id="sales-quality-kpis" data-collapse-label="KPIs de calidad comercial" data-default-open="true">
+            <h3>KPIs de calidad comercial</h3>
             <div class="metrics-grid">
               <article class="metric-card blue" data-kpi="purchasePromises" tabindex="0">
                 <div class="metric-head">
@@ -502,7 +502,7 @@
               <article class="metric-card" data-kpi="branchConversion" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-branch"></use></svg></span>
-                  <span>Branch conversion</span>
+                  <span>Conversión por sucursal</span>
                   <span class="help-dot" tabindex="0" aria-label="Mejor conversion por sucursal en el filtro actual. Decision: replicar practica o investigar diferencias.">?</span>
                 </div>
                 <strong id="branchConversionMetric">0%</strong>
@@ -511,7 +511,7 @@
               <article class="metric-card" data-kpi="sourceQuality" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-channel"></use></svg></span>
-                  <span>Source quality</span>
+                  <span>Calidad del canal</span>
                   <span class="help-dot" tabindex="0" aria-label="Canal con mejor relacion entre volumen y conversion. Decision: mover esfuerzo comercial al canal correcto.">?</span>
                 </div>
                 <strong id="sourceQualityMetric">-</strong>
@@ -528,8 +528,8 @@
             </div>
           </div>
 
-          <div class="kpi-group" data-collapse-id="risk-recovery-kpis" data-collapse-label="Risk / Recovery KPIs" data-default-open="true">
-            <h3>Risk / Recovery KPIs</h3>
+          <div class="kpi-group" data-collapse-id="risk-recovery-kpis" data-collapse-label="KPIs de riesgo y rescate" data-default-open="true">
+            <h3>KPIs de riesgo y rescate</h3>
             <div class="metrics-grid">
               <article class="metric-card warning" data-kpi="overdueFollowUps" tabindex="0">
                 <div class="metric-head">
@@ -547,7 +547,7 @@
                   <span class="help-dot" tabindex="0" aria-label="Porcentaje de oportunidades abiertas con atraso. Decision: medir disciplina de seguimiento.">?</span>
                 </div>
                 <strong id="overdueRateCardMetric">0%</strong>
-                <em>Follow-up health</em>
+                <em>Salud del seguimiento</em>
               </article>
               <article class="metric-card warning" data-kpi="riskOpportunities" tabindex="0">
                 <div class="metric-head">
@@ -561,7 +561,7 @@
               <article class="metric-card warning" data-kpi="stuckOpportunities" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-blocked-path"></use></svg></span>
-                  <span>Stuck opportunities</span>
+                  <span>Oportunidades estancadas</span>
                   <span class="help-dot" tabindex="0" aria-label="Oportunidades sin desenlace claro. Decision: exigir proxima accion o cerrar aprendizaje.">?</span>
                 </div>
                 <strong id="stuckCountMetric">0</strong>
@@ -600,28 +600,28 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow dark">Configure su vista gerencial</p>
-              <h3 id="managerOptionsTitle">Manager View Options para congelar alcance de piloto</h3>
+              <h3 id="managerOptionsTitle">Opciones de vista gerencial para congelar alcance de piloto</h3>
             </div>
             <span class="count-pill">Concepto consultivo</span>
           </div>
           <div class="manager-option-grid">
             <article>
-              <span>Follow-up Control View</span>
+              <span>Vista de control de seguimiento</span>
               <strong>Seguimientos de hoy, atrasos y aging por asesor.</strong>
               <p>Ayuda a gerentes de sucursal a decidir quien debe actuar hoy. Importa financieramente porque el seguimiento rapido protege leads con intencion.</p>
             </article>
             <article>
-              <span>Advisor Performance View</span>
+              <span>Vista de desempeño por asesor</span>
               <strong>Ranking de actividad, resultados y senales de coaching.</strong>
               <p>Ayuda a gerencia comercial a decidir coaching, apoyo o replicar mejores practicas. Importa porque mejora conversion sin comprar mas leads.</p>
             </article>
             <article>
-              <span>Branch Comparison View</span>
+              <span>Vista comparativa por sucursal</span>
               <strong>Sucursales comparadas por conversion, atraso y riesgo.</strong>
               <p>Ayuda a gerencia general a decidir donde intervenir. Importa porque separa problemas de volumen, seguimiento y cierre.</p>
             </article>
             <article>
-              <span>Recovery Opportunities View</span>
+              <span>Vista de oportunidades de rescate</span>
               <strong>Hot leads, stuck opportunities y escenario de rescate.</strong>
               <p>Ayuda a priorizar rescate inmediato. Importa porque enfoca al equipo en oportunidades que todavia requieren intervencion.</p>
             </article>
@@ -721,7 +721,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow dark">Lectura de desempeño</p>
-              <h3 id="coachingTitle">Advisor activity ranking y advisor result ranking</h3>
+              <h3 id="coachingTitle">Ranking de actividad y resultados por asesor</h3>
             </div>
           </div>
           <div id="coachingSummary" class="coaching-summary" aria-label="Resumen de desempeño por asesor"></div>
@@ -738,11 +738,11 @@
           <p class="microcopy">Uso gerencial: coaching, staffing, salidas o bonos. El ranking usa datos sinteticos para mostrar decisiones posibles.</p>
         </section>
 
-        <section class="panel advisor-scorecard-panel" aria-labelledby="advisorScorecardTitle" data-collapse-id="advisor-scorecard" data-collapse-label="Advisor Scorecard" data-default-open="true">
+        <section class="panel advisor-scorecard-panel" aria-labelledby="advisorScorecardTitle" data-collapse-id="advisor-scorecard" data-collapse-label="Ficha del asesor" data-default-open="true">
           <div class="panel-heading">
             <div>
               <p class="eyebrow dark">Ficha del asesor</p>
-              <h3 id="advisorScorecardTitle">Advisor Scorecard - lectura gerencial individual</h3>
+              <h3 id="advisorScorecardTitle">Ficha del asesor - lectura gerencial individual</h3>
               <p class="panel-subcopy">Vista compacta para inspeccionar un asesor, entender desempeno/riesgo y decidir la proxima accion. Datos sinteticos de demo.</p>
             </div>
             <label class="scorecard-select">
@@ -764,14 +764,14 @@
               <article><span>Pendientes hoy</span><strong id="scorePendingMetric">0</strong></article>
               <article><span>Atrasadas</span><strong id="scoreOverdueMetric">0</strong></article>
               <article><span>Contactos/dia</span><strong id="scoreContactsMetric">0</strong></article>
-              <article><span>Conversion</span><strong id="scoreConversionMetric">0%</strong></article>
+              <article><span>Conversión</span><strong id="scoreConversionMetric">0%</strong></article>
               <article><span>Ventas</span><strong id="scoreSalesMetric">0</strong></article>
               <article><span>Promesas</span><strong id="scorePromisesMetric">0</strong></article>
               <article><span>Dias sin contacto</span><strong id="scoreAvgNoContactMetric">0.0</strong></article>
             </div>
             <div class="scorecard-action">
               <div>
-                <span>Performance vs branch average</span>
+                <span>Desempeño vs promedio de sucursal</span>
                 <strong id="scoreVsBranchMetric">0%</strong>
               </div>
               <div class="score-track" aria-hidden="true"><span id="scoreVsBranchBar"></span></div>
@@ -783,7 +783,7 @@
         <section class="panel visual-summary-panel" aria-labelledby="visualSummaryTitle">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow dark">Vista Power-BI-like</p>
+              <p class="eyebrow dark">Vista tipo BI</p>
               <h3 id="visualSummaryTitle">Resumen visual para explicar el estado comercial</h3>
             </div>
             <span class="count-pill">Demo ejecutivo</span>
@@ -794,26 +794,26 @@
                 <span id="statusDonutTotal">0</span>
               </div>
               <div>
-                <strong>Status distribution</strong>
+                <strong>Distribución de estados</strong>
                 <p>Vista rapida de mix: nuevo, contactado, interesado, cita, venta y perdido.</p>
               </div>
             </div>
             <div class="mini-kpi-stack">
-              <article><span>Conversion demo</span><strong id="conversionVisualMetric">0%</strong></article>
+              <article><span>Conversión demo</span><strong id="conversionVisualMetric">0%</strong></article>
               <article><span>Atraso sobre abiertos</span><strong id="overdueRateMetric">0%</strong></article>
               <article><span>Riesgo sobre abiertos</span><strong id="riskRateMetric">0%</strong></article>
             </div>
           </div>
         </section>
 
-        <section class="panel advanced-insights-panel" aria-labelledby="advancedInsightsTitle" data-collapse-id="advanced-manager-insights" data-collapse-label="Advanced Manager Insights" data-default-open="false">
+        <section class="panel advanced-insights-panel" aria-labelledby="advancedInsightsTitle" data-collapse-id="advanced-manager-insights" data-collapse-label="Insights gerenciales avanzados" data-default-open="false">
           <div class="panel-heading">
             <div>
-              <p class="eyebrow dark">Advanced manager insights</p>
+              <p class="eyebrow dark">Insights gerenciales avanzados</p>
               <h3 id="advancedInsightsTitle">Senales que gerencia puede no estar midiendo todavia</h3>
               <p class="panel-subcopy">La demo traduce actividad diaria en senales de coaching, productividad y calidad de canal. Todo es sintetico y sirve para conversacion de piloto.</p>
             </div>
-            <span class="count-pill">Fake data model</span>
+            <span class="count-pill">Modelo con datos ficticios</span>
           </div>
           <div class="insight-grid">
             <article>
@@ -822,7 +822,7 @@
               <p>Mientras mas sube, mas probable es que la oportunidad pierda temperatura. Accion: revisar atrasos por asesor.</p>
             </article>
             <article>
-              <span>Advisor activity vs branch average</span>
+              <span>Actividad del asesor vs promedio de sucursal</span>
               <strong id="activityVsBranchMetric">0%</strong>
               <p>Muestra si el equipo filtrado trabaja por encima o debajo del ritmo esperado. Accion: coaching o redistribucion.</p>
             </article>
@@ -846,26 +846,26 @@
               <h3 id="futureBiTitle">Dashboard avanzado - ejemplo conceptual</h3>
               <p class="panel-subcopy">Ejemplo conceptual de cómo podría verse una capa BI más avanzada después del piloto, usando datos reales aprobados.</p>
             </div>
-            <span class="count-pill">Phase 2 conceptual</span>
+            <span class="count-pill">Fase 2 conceptual</span>
           </div>
           <div class="bi-preview-grid" aria-label="Paneles visuales conceptuales de BI futuro">
             <article class="bi-tile">
               <div class="bi-tile-head">
-                <span>Branch comparison</span>
+                <span>Comparación por sucursal</span>
                 <strong id="biBranchLeader">-</strong>
               </div>
               <div id="biBranchBars" class="bi-bar-mini" aria-label="Comparacion visual por sucursal"></div>
             </article>
             <article class="bi-tile">
               <div class="bi-tile-head">
-                <span>Advisor performance</span>
+                <span>Desempeño por asesor</span>
                 <strong id="biAdvisorLeader">-</strong>
               </div>
               <div id="biAdvisorBars" class="bi-bar-mini advisor-bars" aria-label="Desempeno visual por asesor"></div>
             </article>
             <article class="bi-tile risk">
               <div class="bi-tile-head">
-                <span>Follow-up risk</span>
+                <span>Riesgo de seguimiento</span>
                 <strong id="biRiskRate">0%</strong>
               </div>
               <div class="bi-risk-gauge">
@@ -875,7 +875,7 @@
             </article>
             <article class="bi-tile">
               <div class="bi-tile-head">
-                <span>Conversion/source trend</span>
+                <span>Tendencia conversión/fuente</span>
                 <strong id="biSourceLeader">-</strong>
               </div>
               <div id="biSourceTrend" class="bi-trend-mini" aria-label="Tendencia conceptual por canal"></div>
@@ -946,7 +946,7 @@
           <section class="panel" aria-labelledby="agingTitle">
             <div class="panel-heading">
               <div>
-                <p class="eyebrow dark">Follow-up aging</p>
+                <p class="eyebrow dark">Antiguedad del seguimiento</p>
                 <h3 id="agingTitle">Antiguedad del atraso</h3>
               </div>
             </div>
@@ -959,7 +959,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow dark">Funnel</p>
-                <h3 id="funnelTitle">Status distribution / embudo comercial</h3>
+                <h3 id="funnelTitle">Distribución de estados / embudo comercial</h3>
               </div>
             </div>
             <div id="statusFunnel" class="funnel-list" aria-label="Distribución de estado"></div>
@@ -969,7 +969,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow dark">Canales</p>
-                <h3 id="sourceTitle">Source/channel performance</h3>
+                <h3 id="sourceTitle">Desempeño por fuente/canal</h3>
               </div>
             </div>
             <div id="sourcePerformance" class="bar-list" aria-label="Desempeño por canal"></div>
@@ -981,7 +981,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow dark">Ritmo comercial</p>
-                <h3 id="activityTrendTitle">Daily/weekly activity</h3>
+                <h3 id="activityTrendTitle">Actividad diaria/semanal</h3>
               </div>
             </div>
             <div id="activityTrend" class="trend-bars" aria-label="Actividad diaria y semanal"></div>
@@ -991,7 +991,7 @@
             <div class="panel-heading">
               <div>
                 <p class="eyebrow dark">Rescate</p>
-                <h3 id="stuckTitle">Stuck opportunities</h3>
+                <h3 id="stuckTitle">Oportunidades estancadas</h3>
               </div>
             </div>
             <ul id="stuckOpportunitiesList" class="compact-list danger-list"></ul>
@@ -1002,7 +1002,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow dark">Acciones recomendadas</p>
-              <h3 id="managerActionsTitle">Manager action prompts</h3>
+              <h3 id="managerActionsTitle">Acciones sugeridas para gerencia</h3>
             </div>
           </div>
           <div id="managerActionPrompts" class="action-prompt-grid" aria-label="Prompts de acción gerencial"></div>
@@ -1012,7 +1012,7 @@
           <div class="panel-heading">
             <div>
               <p class="eyebrow dark">Detalle por asesor</p>
-              <h3 id="advisorBreakdownTitle">Breakdown por asesor dentro de la sucursal seleccionada</h3>
+              <h3 id="advisorBreakdownTitle">Detalle por asesor dentro de la sucursal seleccionada</h3>
             </div>
           </div>
           <div class="table-wrap">
@@ -1041,7 +1041,7 @@
       <div class="kpi-explain-panel" role="dialog" aria-modal="false">
         <div class="kpi-explain-heading">
           <div>
-            <p class="eyebrow dark">KPI explainability</p>
+            <p class="eyebrow dark">Explicación de KPIs</p>
             <h3 id="kpiExplainTitle">Seleccione una métrica</h3>
           </div>
           <button id="kpiExplainClose" class="kpi-explain-close" type="button" aria-label="Cerrar explicación">Cerrar</button>
