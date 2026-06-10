@@ -16,13 +16,17 @@ This is not runtime config, not a deployment instruction, and not permission to 
 
 1. Static demo:
    `docs/demo/powerclub_crm/index.html`
-2. Live meeting script:
+2. Karen alignment message:
+   `docs/product/POWERCLUB_CRM_KAREN_ALIGNMENT_MESSAGE_V1.md`
+3. Boss meeting prep:
+   `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md`
+4. Live meeting script:
    `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md`
-3. Meeting checklist:
+5. Meeting checklist:
    `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md`
-4. Executive leave-behind:
+6. Executive leave-behind:
    `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md`
-5. Discovery questionnaire:
+7. Discovery questionnaire:
    `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md`
 
 ## Recommended Meeting Order
@@ -41,6 +45,8 @@ This is not runtime config, not a deployment instruction, and not permission to 
 | Asset | Path | Use live? | Purpose |
 | --- | --- | --- | --- |
 | Static PowerClub CRM demo | `docs/demo/powerclub_crm/index.html` | Yes | Show dashboard-first narrative and operator workflow |
+| Karen alignment message | `docs/product/POWERCLUB_CRM_KAREN_ALIGNMENT_MESSAGE_V1.md` | Before meeting | Align with Karen before asking for boss/GM time |
+| Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Operator only | Prepare objective, flow, questions, and close options |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Operator only | Keep talk track crisp |
 | Meeting checklist | `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md` | Operator only | Keep meeting sequence controlled |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | Optional | Use if they ask for a concise summary |
@@ -66,6 +72,7 @@ Do not send raw internal docs unless Frank intentionally wants to expose the wor
 | 01C QA/polish doc | `docs/product/POWERCLUB_CRM_BATTLE_01C_BROWSER_VISUAL_QA_POLISH.md` | Internal QA method and limitations |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Talk track and do-not-say notes |
 | Proposal pricing model | `docs/product/POWERCLUB_CRM_PROPOSAL_PRICING_MODEL_V1.md` | Internal pricing guardrails |
+| Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Frank's prep before leadership conversation |
 | Discovery questionnaire | `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md` | Question bank; use selectively |
 
 ## Client-Facing Assets
@@ -73,6 +80,7 @@ Do not send raw internal docs unless Frank intentionally wants to expose the wor
 | Asset | Path | When to use |
 | --- | --- | --- |
 | Static demo | `docs/demo/powerclub_crm/index.html` | During meeting |
+| Karen alignment message | `docs/product/POWERCLUB_CRM_KAREN_ALIGNMENT_MESSAGE_V1.md` | Send/adapt before requesting boss/GM meeting |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | After meeting or if they request summary |
 | Client proposal draft | `docs/product/POWERCLUB_CRM_CLIENT_PROPOSAL_DRAFT_V1.md` | After discovery and tailoring |
 | Scope freeze checklist | `docs/product/POWERCLUB_CRM_SCOPE_FREEZE_CHECKLIST_V1.md` | When moving toward paid pilot |
