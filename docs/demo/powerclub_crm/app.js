@@ -249,6 +249,7 @@ const temperatureFilter = document.querySelector("#temperatureFilter");
 const scorecardAdvisorSelect = document.querySelector("#scorecardAdvisorSelect");
 const kpiExplainDrawer = document.querySelector("#kpiExplainDrawer");
 const kpiExplainClose = document.querySelector("#kpiExplainClose");
+const sectionOpenState = {};
 
 const KPI_EXPLANATIONS = {
   activeOpportunities: {
@@ -1084,6 +1085,64 @@ function closeKpiExplanation() {
   kpiExplainDrawer.setAttribute("aria-hidden", "true");
 }
 
+function setCollapsibleState(section, button, body, isOpen) {
+  section.classList.toggle("collapsed", !isOpen);
+  button.setAttribute("aria-expanded", String(isOpen));
+  body.hidden = !isOpen;
+  sectionOpenState[section.dataset.collapseId] = isOpen;
+}
+
+function initializeCollapsibleSections() {
+  document.querySelectorAll("[data-collapse-id]").forEach((section) => {
+    if (section.dataset.collapseReady === "true") return;
+    const id = section.dataset.collapseId;
+    const label = section.dataset.collapseLabel || "Seccion";
+    const isPanel = section.classList.contains("panel");
+    const heading = isPanel ? section.querySelector(":scope > .panel-heading") : section.querySelector(":scope > h3");
+    if (!heading) return;
+
+    const body = document.createElement("div");
+    body.className = "collapse-body";
+    body.id = `${id}-body`;
+
+    const reference = isPanel ? heading : heading.nextElementSibling;
+    let node = isPanel ? heading.nextElementSibling : reference;
+    while (node) {
+      const next = node.nextElementSibling;
+      body.appendChild(node);
+      node = next;
+    }
+
+    const button = document.createElement("button");
+    button.className = "collapse-toggle";
+    button.type = "button";
+    button.setAttribute("aria-controls", body.id);
+    button.innerHTML = `<span class="collapse-chevron" aria-hidden="true"></span><span>${label}</span>`;
+
+    if (isPanel) {
+      heading.appendChild(button);
+      section.appendChild(body);
+    } else {
+      const header = document.createElement("div");
+      header.className = "collapse-section-header";
+      section.insertBefore(header, heading);
+      header.appendChild(heading);
+      header.appendChild(button);
+      section.appendChild(body);
+    }
+
+    const defaultOpen = section.dataset.defaultOpen !== "false";
+    const initialOpen = Object.prototype.hasOwnProperty.call(sectionOpenState, id) ? sectionOpenState[id] : defaultOpen;
+    setCollapsibleState(section, button, body, initialOpen);
+
+    button.addEventListener("click", () => {
+      setCollapsibleState(section, button, body, button.getAttribute("aria-expanded") !== "true");
+    });
+
+    section.dataset.collapseReady = "true";
+  });
+}
+
 function switchView(view) {
   const managerActive = view === "manager";
   operatorView.classList.toggle("active-view", !managerActive);
@@ -1190,6 +1249,7 @@ temperatureFilter.addEventListener("change", renderManager);
 scorecardAdvisorSelect.addEventListener("change", renderManager);
 
 populateFilters();
+initializeCollapsibleSections();
 renderLeadList();
 renderDetail();
 renderManager();
