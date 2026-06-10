@@ -35,6 +35,7 @@
       }
 
       button,
+      input,
       select,
       textarea {
         font: inherit;
@@ -54,6 +55,9 @@
 
       .stage-header,
       .cockpit-grid > section,
+      .setup-panel,
+      .whiteboard-panel,
+      .recommendation-panel,
       .capture-column,
       .summary-panel {
         border: 1px solid var(--line);
@@ -275,6 +279,7 @@
       .primary,
       .secondary,
       .ghost,
+      .category-chips button,
       .quick-capture button {
         min-height: 42px;
         border: 1px solid var(--line);
@@ -374,6 +379,127 @@
         gap: 8px;
       }
 
+      .setup-panel,
+      .whiteboard-panel,
+      .recommendation-panel {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .setup-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .setup-grid label,
+      .speech-actions {
+        display: grid;
+        gap: 7px;
+      }
+
+      .setup-grid input,
+      .setup-grid select {
+        min-height: 42px;
+        border: 1px solid rgba(99, 232, 255, 0.2);
+        border-radius: 12px;
+        padding: 0 12px;
+        color: var(--text);
+        background: rgba(1, 5, 10, 0.56);
+      }
+
+      .speech-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .category-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .category-chips button {
+        min-height: 34px;
+        border-radius: 999px;
+        padding: 0 11px;
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 0.78rem;
+      }
+
+      .category-chips button.active {
+        border-color: var(--cyan);
+        background: var(--cyan-soft);
+      }
+
+      .whiteboard-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .whiteboard-lane {
+        min-height: 180px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .whiteboard-lane h3 {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 10px;
+        color: var(--text);
+      }
+
+      .whiteboard-lane h3 span {
+        display: inline-flex;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 12px rgba(99, 232, 255, 0.65);
+      }
+
+      .whiteboard-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .whiteboard-list li {
+        border: 1px solid rgba(210, 179, 106, 0.18);
+        border-radius: 12px;
+        padding: 9px;
+        color: #f3f8f8;
+        background: rgba(210, 179, 106, 0.08);
+        font-size: 0.88rem;
+        line-height: 1.45;
+      }
+
+      .recommendation-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .recommendation-card {
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 14px;
+        padding: 12px;
+        background: var(--panel-strong);
+      }
+
+      .recommendation-card strong {
+        display: block;
+        margin-top: 5px;
+        font-size: 1.02rem;
+      }
+
       .quick-capture button {
         background: rgba(255, 255, 255, 0.05);
       }
@@ -470,6 +596,9 @@
       @media (max-width: 1080px) {
         .stage-header,
         .cockpit-grid,
+        .setup-grid,
+        .whiteboard-grid,
+        .recommendation-grid,
         .capture-grid {
           grid-template-columns: 1fr;
         }
@@ -485,6 +614,7 @@
 
       @media (max-width: 640px) {
         .control-grid,
+        .speech-actions,
         .quick-capture {
           grid-template-columns: 1fr;
         }
@@ -514,6 +644,33 @@
           </div>
         </div>
       </header>
+
+      <section class="setup-panel" aria-labelledby="setupTitle">
+        <div>
+          <p class="eyebrow">Setup de reunión</p>
+          <h2 id="setupTitle">Contexto para Val Discovery</h2>
+          <p class="guardrail">Captura asistida: Frank confirma y clasifica la respuesta. Val sugiere próximos pasos con reglas locales.</p>
+        </div>
+        <div class="setup-grid">
+          <label>
+            <span class="field-label">Persona / cliente</span>
+            <input id="clientNameInput" type="text" value="PowerClub" aria-label="Nombre de cliente o persona">
+          </label>
+          <label>
+            <span class="field-label">Rol / compañía / contexto</span>
+            <input id="clientContextInput" type="text" value="GM / gerencia comercial" aria-label="Rol o contexto de reunión">
+          </label>
+          <label>
+            <span class="field-label">Objetivo</span>
+            <select id="meetingObjectiveInput" aria-label="Objetivo de reunión">
+              <option>Validar dolor operativo y alcance de piloto</option>
+              <option>Preparar discovery con gerencia</option>
+              <option>Definir datos y responsables</option>
+              <option>Cerrar siguiente paso comercial</option>
+            </select>
+          </label>
+        </div>
+      </section>
 
       <div class="cockpit-grid">
         <section class="presence-panel" aria-labelledby="presenceTitle">
@@ -590,6 +747,25 @@
             <span class="field-label">Respuesta capturada</span>
             <textarea id="answerCapture" class="answer-capture" rows="5" placeholder="Frank escribe la respuesta o idea clave escuchada en la reunión."></textarea>
           </label>
+          <div class="speech-actions" aria-label="Captura de respuesta">
+            <button id="listenResponseButton" class="secondary" type="button">Escuchar respuesta</button>
+            <button id="useWrittenResponseButton" class="ghost" type="button">Usar respuesta escrita</button>
+          </div>
+          <p id="sttStatus" class="status-line">Transcripción experimental del navegador. Si no está disponible, escriba la respuesta o use dictado del sistema.</p>
+
+          <div>
+            <p class="eyebrow">Categoría de discovery</p>
+            <div class="category-chips" aria-label="Categorías de respuesta">
+              <button type="button" data-category="leads">Leads</button>
+              <button type="button" data-category="seguimiento">Seguimiento</button>
+              <button type="button" data-category="cierre">Cierre</button>
+              <button type="button" data-category="visibilidad">Visibilidad gerencial</button>
+              <button type="button" data-category="asesor">Flujo asesor</button>
+              <button type="button" data-category="datos">Datos/fuentes</button>
+              <button type="button" data-category="alcance">Alcance/piloto</button>
+              <button type="button" data-category="riesgo">Riesgo/exclusión</button>
+            </div>
+          </div>
 
           <div class="quick-capture" aria-label="Captura rápida">
             <button type="button" data-capture="pain">Capturar dolor</button>
@@ -618,6 +794,57 @@
           </div>
         </section>
       </div>
+
+      <section class="whiteboard-panel" aria-labelledby="whiteboardTitle">
+        <div>
+          <p class="eyebrow">Whiteboard vivo</p>
+          <h2 id="whiteboardTitle">Val organiza la conversación en tiempo real</h2>
+          <p class="guardrail">No hay análisis autónomo. La clasificación es local/determinística y Frank confirma cada captura.</p>
+        </div>
+        <div class="whiteboard-grid">
+          <article class="whiteboard-lane">
+            <h3><span></span>Dolor detectado</h3>
+            <ul id="painBoard" class="whiteboard-list"></ul>
+          </article>
+          <article class="whiteboard-lane">
+            <h3><span></span>Señales / patrones</h3>
+            <ul id="signalBoard" class="whiteboard-list"></ul>
+          </article>
+          <article class="whiteboard-lane">
+            <h3><span></span>Datos pendientes</h3>
+            <ul id="dataBoard" class="whiteboard-list"></ul>
+          </article>
+          <article class="whiteboard-lane">
+            <h3><span></span>Decisiones</h3>
+            <ul id="decisionBoard" class="whiteboard-list"></ul>
+          </article>
+          <article class="whiteboard-lane">
+            <h3><span></span>Riesgos / exclusiones</h3>
+            <ul id="riskBoard" class="whiteboard-list"></ul>
+          </article>
+          <article class="whiteboard-lane">
+            <h3><span></span>Próximo paso recomendado</h3>
+            <ul id="nextStepBoard" class="whiteboard-list"></ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="recommendation-panel" aria-labelledby="recommendationTitle">
+        <div>
+          <p class="eyebrow">Val recomienda mostrar</p>
+          <h2 id="recommendationTitle">Puente hacia la maqueta CRM</h2>
+        </div>
+        <div class="recommendation-grid">
+          <article class="recommendation-card">
+            <span class="field-label">Sección CRM recomendada</span>
+            <strong id="recommendedSection">Vista gerencial</strong>
+          </article>
+          <article class="recommendation-card">
+            <span class="field-label">Siguiente pregunta sugerida</span>
+            <strong id="recommendedQuestion">¿Qué necesita ver gerencia cada mañana para saber dónde actuar?</strong>
+          </article>
+        </div>
+      </section>
 
       <section class="capture-column" aria-labelledby="captureTitle">
         <div>
@@ -690,15 +917,25 @@
         risks: [],
         data: [],
         pilots: [],
+        signals: [],
+        responses: [],
         lastCapture: "",
+        lastCategory: "visibilidad",
+        recommendedSection: "Vista gerencial",
+        recommendedQuestion: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?",
       };
 
       let questionIndex = 0;
+      let recognition = null;
 
+      const clientNameInput = document.querySelector("#clientNameInput");
+      const clientContextInput = document.querySelector("#clientContextInput");
+      const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
       const valMessage = document.querySelector("#valMessage");
       const valOrb = document.querySelector("#valOrb");
       const valWave = document.querySelector("#valWave");
       const speechStatus = document.querySelector("#speechStatus");
+      const sttStatus = document.querySelector("#sttStatus");
       const questionCategory = document.querySelector("#questionCategory");
       const questionText = document.querySelector("#questionText");
       const answerCapture = document.querySelector("#answerCapture");
@@ -709,6 +946,17 @@
       const nextStepsField = document.querySelector("#nextStepsField");
       const summaryOutput = document.querySelector("#summaryOutput");
       const copyStatus = document.querySelector("#copyStatus");
+      const recommendedSection = document.querySelector("#recommendedSection");
+      const recommendedQuestion = document.querySelector("#recommendedQuestion");
+      const boardLists = {
+        pains: document.querySelector("#painBoard"),
+        signals: document.querySelector("#signalBoard"),
+        data: document.querySelector("#dataBoard"),
+        decisions: document.querySelector("#decisionBoard"),
+        risks: document.querySelector("#riskBoard"),
+        next: document.querySelector("#nextStepBoard"),
+      };
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
       function setSpeaking(active) {
         valOrb.classList.toggle("speaking", active);
@@ -757,11 +1005,22 @@
         questionCategory.textContent = question.category;
         questionText.textContent = question.text;
         setValMessage(`Pregunta sugerida: ${question.text}`);
+        captureState.recommendedQuestion = question.text;
+        recommendedQuestion.textContent = question.text;
       }
 
       function appendLine(field, label, text) {
         const line = `- ${label}: ${text}`;
         field.value = field.value ? `${field.value}\n${line}` : line;
+      }
+
+      function escapeHtml(value) {
+        return value
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
       }
 
       function observationFor(type) {
@@ -770,16 +1029,98 @@
         if (type === "risk") return "Val sugiere moverlo a exclusiones, parking lot o fase dos antes de cotizar.";
         if (type === "data") return "Val sugiere pedir fuente, export, muestra segura o diccionario de campos.";
         if (type === "pilot") return "Val sugiere avanzar a scope freeze: sucursal, usuarios, campos, reportes y límites.";
+        if (type === "signal") return "Val sugiere convertir esta señal en una pregunta de impacto o alcance.";
         return "Capture una respuesta para que Val sugiera el siguiente movimiento de discovery.";
       }
 
-      function capture(type) {
-        const text = answerCapture.value.trim();
+      function categoryFromText(text) {
+        const lower = text.toLowerCase();
+        if (lower.includes("lead") || lower.includes("prospect") || lower.includes("socio")) return "leads";
+        if (lower.includes("seguimiento") || lower.includes("atras") || lower.includes("llamar") || lower.includes("contact")) return "seguimiento";
+        if (lower.includes("venta") || lower.includes("cierre") || lower.includes("compr") || lower.includes("conversion")) return "cierre";
+        if (lower.includes("gerencia") || lower.includes("dashboard") || lower.includes("visibilidad") || lower.includes("reporte")) return "visibilidad";
+        if (lower.includes("asesor") || lower.includes("operador") || lower.includes("cola")) return "asesor";
+        if (lower.includes("dato") || lower.includes("excel") || lower.includes("fuente") || lower.includes("export") || lower.includes("campo")) return "datos";
+        if (lower.includes("piloto") || lower.includes("alcance") || lower.includes("sucursal") || lower.includes("v1")) return "alcance";
+        if (lower.includes("riesgo") || lower.includes("exclusion") || lower.includes("exclusión") || lower.includes("whatsapp") || lower.includes("pago")) return "riesgo";
+        return captureState.lastCategory || "visibilidad";
+      }
+
+      function recommendationFor(category) {
+        const map = {
+          leads: ["Vista gerencial", "¿De dónde llegan los leads y cómo se asignan hoy?"],
+          seguimiento: ["Riesgo y rescate", "¿Qué seguimiento atrasado se debería rescatar primero?"],
+          cierre: ["Riesgo y rescate", "¿Qué señales indican que una promesa está cerca de compra?"],
+          visibilidad: ["Vista gerencial", "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?"],
+          asesor: ["Cola del asesor", "¿Qué necesita hacer el asesor en menos clics para mantener el seguimiento actualizado?"],
+          datos: ["Scope freeze / piloto", "¿Qué fuente, export o muestra aprobada podemos revisar?"],
+          alcance: ["Scope freeze / piloto", "¿Qué sucursal, usuarios y campos entran al primer piloto?"],
+          riesgo: ["Scope freeze / piloto", "¿Qué debe ir a exclusiones o fase dos para proteger el piloto?"],
+        };
+        return map[category] || map.visibilidad;
+      }
+
+      function acknowledgementFor(category) {
+        const map = {
+          leads: "Entendido. Si el dolor está en leads, conviene revisar origen, asignación y seguimiento inicial.",
+          seguimiento: "Entendido. Si el dolor principal es seguimiento, conviene revisar oportunidades en riesgo, atrasos y cola diaria del asesor.",
+          cierre: "Entendido. Si el foco es cierre, conviene mirar promesas, conversión y señales de compra.",
+          visibilidad: "Entendido. Si el dolor es visibilidad gerencial, conviene empezar por KPIs, sucursales y asesores.",
+          asesor: "Entendido. Si el dolor está en flujo asesor, conviene mostrar cola diaria, resultado rápido y notas.",
+          datos: "Antes de cotizar, falta confirmar fuente de datos, campos obligatorios y una muestra aprobada.",
+          alcance: "Esto apunta a piloto. Conviene separar V1, fase dos y deseos futuros antes de cotizar.",
+          riesgo: "Esto debe ir a alcance o exclusiones para proteger el piloto.",
+        };
+        return map[category] || map.visibilidad;
+      }
+
+      function boardTargetFor(type, category) {
+        if (type === "decision") return "decisions";
+        if (type === "risk" || category === "riesgo") return "risks";
+        if (type === "data" || category === "datos") return "data";
+        if (type === "pilot" || category === "alcance") return "next";
+        if (type === "pain") return "pains";
+        return "signals";
+      }
+
+      function renderWhiteboard() {
+        const empty = "<li>Sin captura todavía.</li>";
+        boardLists.pains.innerHTML = captureState.pains.length ? captureState.pains.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
+        boardLists.signals.innerHTML = captureState.signals.length ? captureState.signals.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
+        boardLists.data.innerHTML = captureState.data.length ? captureState.data.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
+        boardLists.decisions.innerHTML = captureState.decisions.length ? captureState.decisions.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
+        boardLists.risks.innerHTML = captureState.risks.length ? captureState.risks.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
+        boardLists.next.innerHTML = captureState.pilots.length ? captureState.pilots.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
+      }
+
+      function updateRecommendations(category) {
+        const [section, question] = recommendationFor(category);
+        captureState.recommendedSection = section;
+        captureState.recommendedQuestion = question;
+        recommendedSection.textContent = section;
+        recommendedQuestion.textContent = question;
+      }
+
+      function setActiveCategory(category) {
+        captureState.lastCategory = category;
+        document.querySelectorAll("[data-category]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.category === category);
+        });
+        updateRecommendations(category);
+      }
+
+      function capture(type, explicitText = "") {
+        const text = (explicitText || answerCapture.value).trim();
         if (!text) {
           valObservation.textContent = "Escriba primero una respuesta capturada para clasificarla.";
           return;
         }
+        const category = captureState.lastCategory || categoryFromText(text);
+        const inferredCategory = categoryFromText(text);
+        const finalCategory = captureState.lastCategory || inferredCategory;
         captureState.lastCapture = type;
+        captureState.lastCategory = finalCategory;
+        captureState.responses.push(`[${finalCategory}] ${text}`);
         if (type === "pain") {
           captureState.pains.push(text);
           appendLine(notesField, "Dolor", text);
@@ -800,7 +1141,13 @@
           captureState.pilots.push(text);
           appendLine(nextStepsField, "Candidato para piloto", text);
         }
-        valObservation.textContent = observationFor(type);
+        const target = boardTargetFor(type, finalCategory);
+        if (target === "signals") {
+          captureState.signals.push(text);
+        }
+        updateRecommendations(finalCategory);
+        renderWhiteboard();
+        valObservation.textContent = `${acknowledgementFor(finalCategory)} ${observationFor(type)}`;
         setValMessage(valObservation.textContent);
         answerCapture.value = "";
       }
@@ -819,7 +1166,17 @@
           data: "Datos y fuentes",
           pilot: "Alcance de piloto",
         };
-        const target = map[captureState.lastCapture] || "Visibilidad gerencial";
+        const categoryMap = {
+          leads: "Dolor operativo",
+          seguimiento: "Dolor operativo",
+          cierre: "Visibilidad gerencial",
+          visibilidad: "Visibilidad gerencial",
+          asesor: "Flujo asesor",
+          datos: "Datos y fuentes",
+          alcance: "Alcance de piloto",
+          riesgo: "Riesgos / exclusiones",
+        };
+        const target = categoryMap[captureState.lastCategory] || map[captureState.lastCapture] || "Visibilidad gerencial";
         const nextIndex = findQuestionByCategory(target);
         questionIndex = nextIndex >= 0 ? nextIndex : (questionIndex + 1) % questionBank.length;
         renderQuestion(questionIndex);
@@ -830,11 +1187,27 @@
       }
 
       function generateSummary() {
+        const person = clientNameInput.value.trim() || "Sin nombre capturado";
+        const context = clientContextInput.value.trim() || "Sin contexto capturado";
+        const objective = meetingObjectiveInput.value;
         const summary = [
           "Val Discovery Mode - resumen de reunión",
           "",
+          `Persona/cliente: ${person}`,
+          `Rol/contexto: ${context}`,
+          `Objetivo: ${objective}`,
+          `Categoría detectada: ${captureState.lastCategory}`,
+          `Sección CRM recomendada: ${captureState.recommendedSection}`,
+          `Siguiente pregunta sugerida: ${captureState.recommendedQuestion}`,
+          "",
+          "Respuestas capturadas:",
+          formatList(captureState.responses),
+          "",
           "Dolores capturados:",
           formatList(captureState.pains),
+          "",
+          "Señales / patrones:",
+          formatList(captureState.signals),
           "",
           "Decisiones:",
           formatList(captureState.decisions),
@@ -881,7 +1254,9 @@
       }
 
       document.querySelector("#startSessionButton").addEventListener("click", () => {
-        setValMessage(scriptedLines.intro, true);
+        const person = clientNameInput.value.trim() || "PowerClub";
+        const objective = meetingObjectiveInput.value;
+        setValMessage(`Hola. Esta sesión con ${person} busca ${objective.toLowerCase()}. Frank opera la conversación y Val organiza preguntas, capturas y próximos pasos con reglas locales.`, true);
         valObservation.textContent = scriptedLines.framing;
       });
 
@@ -897,10 +1272,45 @@
       document.querySelector("#generateSummaryButtonBottom").addEventListener("click", generateSummary);
       document.querySelector("#copySummaryButton").addEventListener("click", copySummary);
       document.querySelector("#copySummaryButtonBottom").addEventListener("click", copySummary);
+      document.querySelector("#useWrittenResponseButton").addEventListener("click", () => capture("signal"));
+
+      document.querySelector("#listenResponseButton").addEventListener("click", () => {
+        if (!SpeechRecognition) {
+          sttStatus.textContent = "STT no disponible en este navegador. Escribe la respuesta o usa dictado del sistema.";
+          return;
+        }
+        recognition = recognition || new SpeechRecognition();
+        recognition.lang = "es-PA";
+        recognition.interimResults = false;
+        recognition.continuous = false;
+        recognition.onstart = () => {
+          sttStatus.textContent = "Escuchando con transcripción experimental del navegador. No se guarda audio.";
+          setSpeaking(true);
+        };
+        recognition.onresult = (event) => {
+          const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
+          answerCapture.value = transcript;
+          sttStatus.textContent = "Respuesta transcrita. Frank debe revisar y clasificar antes de capturar.";
+          setSpeaking(false);
+        };
+        recognition.onerror = () => {
+          sttStatus.textContent = "STT no pudo capturar. Escribe la respuesta o usa dictado del sistema.";
+          setSpeaking(false);
+        };
+        recognition.onend = () => setSpeaking(false);
+        recognition.start();
+      });
 
       document.querySelectorAll("[data-capture]").forEach((button) => {
         button.addEventListener("click", () => capture(button.dataset.capture));
       });
+
+      document.querySelectorAll("[data-category]").forEach((button) => {
+        button.addEventListener("click", () => setActiveCategory(button.dataset.category));
+      });
+
+      setActiveCategory("visibilidad");
+      renderWhiteboard();
     </script>
   </body>
 </html>
