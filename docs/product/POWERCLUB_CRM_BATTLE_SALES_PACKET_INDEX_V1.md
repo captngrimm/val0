@@ -36,9 +36,15 @@ This is not runtime config, not a deployment instruction, and not permission to 
    `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_STAGE_V1.md`
 11. Browser visual QA 01C:
    `docs/product/POWERCLUB_CRM_BROWSER_VISUAL_QA_01C_V1.md`
-12. Executive leave-behind:
+12. Seven-day GM readiness plan:
+   `docs/product/POWERCLUB_CRM_SEVEN_DAY_GM_READINESS_PLAN_V1.md`
+13. Val Discovery architecture roadmap:
+   `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_ARCHITECTURE_ROADMAP_V1.md`
+14. GM meeting runbook:
+   `docs/product/POWERCLUB_CRM_GM_MEETING_RUNBOOK_V1.md`
+15. Executive leave-behind:
    `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md`
-13. Discovery questionnaire:
+16. Discovery questionnaire:
    `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md`
 
 ## Recommended Meeting Order
@@ -65,6 +71,9 @@ This is not runtime config, not a deployment instruction, and not permission to 
 | Demo narrative order | `docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md` | Operator only | Keep the first screen and live sequence focused on executive value |
 | Val Discovery Stage spec | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_STAGE_V1.md` | Operator only | Defines internal Val meeting cockpit, scripted flow, capture behavior, and guardrails |
 | Browser visual QA 01C | `docs/product/POWERCLUB_CRM_BROWSER_VISUAL_QA_01C_V1.md` | Operator only | Records source-level visual QA, fixes, limitations, and Karen/GM readiness notes |
+| Seven-day GM readiness plan | `docs/product/POWERCLUB_CRM_SEVEN_DAY_GM_READINESS_PLAN_V1.md` | Operator only | Seven-day execution plan with ETA tracker, cut rules, and readiness gates |
+| Val Discovery architecture roadmap | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_ARCHITECTURE_ROADMAP_V1.md` | Operator only | Defines safe evolution levels from static cockpit to future high-risk voice/LLM |
+| GM meeting runbook | `docs/product/POWERCLUB_CRM_GM_MEETING_RUNBOOK_V1.md` | Operator only | Live GM talk track, Val explanation, objections, and close path |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Operator only | Keep talk track crisp |
 | Meeting checklist | `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md` | Operator only | Keep meeting sequence controlled |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | Optional | Use if they ask for a concise summary |
@@ -93,6 +102,9 @@ Do not send raw internal docs unless Frank intentionally wants to expose the wor
 | Objection handling | `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md` | Internal answer bank for objections and scope protection |
 | Demo narrative order | `docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md` | Internal sequence guide; prevents feature-by-feature demo drift |
 | Browser visual QA 01C | `docs/product/POWERCLUB_CRM_BROWSER_VISUAL_QA_01C_V1.md` | Internal QA note; includes browser limitation and readiness guidance |
+| Seven-day GM readiness plan | `docs/product/POWERCLUB_CRM_SEVEN_DAY_GM_READINESS_PLAN_V1.md` | Internal execution plan; includes projected vs actual ETA tracker |
+| Val Discovery architecture roadmap | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_ARCHITECTURE_ROADMAP_V1.md` | Internal architecture roadmap; prevents fake AI or unsafe LLM claims |
+| GM meeting runbook | `docs/product/POWERCLUB_CRM_GM_MEETING_RUNBOOK_V1.md` | Internal meeting-control guide for GM conversation |
 | Proposal pricing model | `docs/product/POWERCLUB_CRM_PROPOSAL_PRICING_MODEL_V1.md` | Internal pricing guardrails |
 | Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Frank's prep before leadership conversation |
 | Discovery questionnaire | `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md` | Question bank; use selectively |
@@ -122,6 +134,9 @@ Do not send before discovery:
 - Demo narrative order guide.
 - Val Discovery Stage spec.
 - Browser visual QA note.
+- Seven-day GM readiness plan.
+- Val Discovery architecture roadmap.
+- GM meeting runbook.
 - Discovery questionnaire as a full questionnaire dump.
 
 Reason:
