@@ -28,9 +28,11 @@ This is not runtime config, not a deployment instruction, and not permission to 
    `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md`
 7. Meeting checklist:
    `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md`
-8. Executive leave-behind:
+8. Demo narrative order:
+   `docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md`
+9. Executive leave-behind:
    `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md`
-9. Discovery questionnaire:
+10. Discovery questionnaire:
    `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md`
 
 ## Recommended Meeting Order
@@ -53,6 +55,7 @@ This is not runtime config, not a deployment instruction, and not permission to 
 | Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Operator only | Prepare objective, flow, questions, and close options |
 | Rehearsal script | `docs/product/POWERCLUB_CRM_REHEARSAL_SCRIPT_V1.md` | Operator only | Practice the 60-second, Karen, boss/GM, and discovery talk tracks |
 | Objection handling | `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md` | Operator only | Answer price, timeline, CRM, WhatsApp, AI, production, and scope questions safely |
+| Demo narrative order | `docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md` | Operator only | Keep the first screen and live sequence focused on executive value |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Operator only | Keep talk track crisp |
 | Meeting checklist | `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md` | Operator only | Keep meeting sequence controlled |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | Optional | Use if they ask for a concise summary |
@@ -79,6 +82,7 @@ Do not send raw internal docs unless Frank intentionally wants to expose the wor
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Talk track and do-not-say notes |
 | Rehearsal script | `docs/product/POWERCLUB_CRM_REHEARSAL_SCRIPT_V1.md` | Practice script for Frank before Karen/boss/GM conversation |
 | Objection handling | `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md` | Internal answer bank for objections and scope protection |
+| Demo narrative order | `docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md` | Internal sequence guide; prevents feature-by-feature demo drift |
 | Proposal pricing model | `docs/product/POWERCLUB_CRM_PROPOSAL_PRICING_MODEL_V1.md` | Internal pricing guardrails |
 | Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Frank's prep before leadership conversation |
 | Discovery questionnaire | `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md` | Question bank; use selectively |
@@ -104,6 +108,7 @@ Do not send before discovery:
 - Meeting script.
 - Rehearsal script.
 - Objection handling guide.
+- Demo narrative order guide.
 - Discovery questionnaire as a full questionnaire dump.
 
 Reason:
@@ -201,6 +206,17 @@ Prepares safe answers for production readiness, CRM category, HubSpot/Salesforce
 
 When to use:
 Before the meeting and when preparing follow-up notes.
+
+### Demo Narrative Order
+
+Path:
+`docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md`
+
+What it is for:
+Defines the clean presentation order: purpose, executive dashboard, risk/recovery, advisor scorecard, advisor workflow, templates/dictation, AI future, and discovery next steps.
+
+When to use:
+Before opening the demo live, especially if the screen order starts to feel like build order instead of sales order.
 
 ### Executive Leave-Behind
 
