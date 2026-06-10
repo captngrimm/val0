@@ -30,9 +30,13 @@ This is not runtime config, not a deployment instruction, and not permission to 
    `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md`
 8. Demo narrative order:
    `docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md`
-9. Executive leave-behind:
+9. Val Discovery Stage:
+   `docs/demo/powerclub_crm/val_discovery.html`
+10. Val Discovery Stage spec:
+   `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_STAGE_V1.md`
+11. Executive leave-behind:
    `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md`
-10. Discovery questionnaire:
+12. Discovery questionnaire:
    `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md`
 
 ## Recommended Meeting Order
@@ -51,11 +55,13 @@ This is not runtime config, not a deployment instruction, and not permission to 
 | Asset | Path | Use live? | Purpose |
 | --- | --- | --- | --- |
 | Static PowerClub CRM demo | `docs/demo/powerclub_crm/index.html` | Yes | Show dashboard-first narrative and operator workflow |
+| Val Discovery Stage | `docs/demo/powerclub_crm/val_discovery.html` | Optional | Internal Isthmus meeting cockpit for guided discovery and capture |
 | Karen alignment message | `docs/product/POWERCLUB_CRM_KAREN_ALIGNMENT_MESSAGE_V1.md` | Before meeting | Align with Karen before asking for boss/GM time |
 | Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Operator only | Prepare objective, flow, questions, and close options |
 | Rehearsal script | `docs/product/POWERCLUB_CRM_REHEARSAL_SCRIPT_V1.md` | Operator only | Practice the 60-second, Karen, boss/GM, and discovery talk tracks |
 | Objection handling | `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md` | Operator only | Answer price, timeline, CRM, WhatsApp, AI, production, and scope questions safely |
 | Demo narrative order | `docs/product/POWERCLUB_CRM_DEMO_NARRATIVE_ORDER_V1.md` | Operator only | Keep the first screen and live sequence focused on executive value |
+| Val Discovery Stage spec | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_STAGE_V1.md` | Operator only | Defines internal Val meeting cockpit, scripted flow, capture behavior, and guardrails |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Operator only | Keep talk track crisp |
 | Meeting checklist | `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md` | Operator only | Keep meeting sequence controlled |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | Optional | Use if they ask for a concise summary |
@@ -92,6 +98,7 @@ Do not send raw internal docs unless Frank intentionally wants to expose the wor
 | Asset | Path | When to use |
 | --- | --- | --- |
 | Static demo | `docs/demo/powerclub_crm/index.html` | During meeting |
+| Val Discovery Stage | `docs/demo/powerclub_crm/val_discovery.html` | Internal screen-share only if Frank wants to show the Isthmus discovery cockpit |
 | Karen alignment message | `docs/product/POWERCLUB_CRM_KAREN_ALIGNMENT_MESSAGE_V1.md` | Send/adapt before requesting boss/GM meeting |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | After meeting or if they request summary |
 | Client proposal draft | `docs/product/POWERCLUB_CRM_CLIENT_PROPOSAL_DRAFT_V1.md` | After discovery and tailoring |
@@ -109,6 +116,7 @@ Do not send before discovery:
 - Rehearsal script.
 - Objection handling guide.
 - Demo narrative order guide.
+- Val Discovery Stage spec.
 - Discovery questionnaire as a full questionnaire dump.
 
 Reason:
@@ -129,6 +137,17 @@ Shows the executive dashboard and operator workflow with fake data.
 
 When to use:
 Live during the meeting, immediately after the opening.
+
+### Val Discovery Stage
+
+Path:
+`docs/demo/powerclub_crm/val_discovery.html`
+
+What it is for:
+Internal Isthmus Dynamics meeting cockpit for guided discovery, scripted Val prompts, note capture, risks, decisions, next steps, and local meeting summary.
+
+When to use:
+Before or during the meeting if Frank wants a premium meeting-ops surface instead of raw chat. Introduce it as an internal tool in development, not as part of the PowerClub CRM pilot.
 
 ### Manager Visibility Guidebook
 

@@ -299,6 +299,25 @@ h3 {
   font-weight: 700;
 }
 
+.internal-mode-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 10px;
+  border: 1px solid #9dd8d8;
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: var(--deep);
+  background: #edf8f6;
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.internal-mode-link:hover {
+  border-color: var(--green);
+  background: #dff1ec;
+}
+
 .toolbar-controls {
   display: flex;
   flex-wrap: wrap;
@@ -2410,6 +2429,7 @@ body[data-theme="dark"] .quick-outcomes button,
 body[data-theme="dark"] .manual-action,
 body[data-theme="dark"] .copy-template-button,
 body[data-theme="dark"] #saveAndNextButton,
+body[data-theme="dark"] .internal-mode-link,
 body[data-theme="dark"] .collapse-toggle,
 body[data-theme="dark"] .kpi-explain-close {
   border-color: var(--line);

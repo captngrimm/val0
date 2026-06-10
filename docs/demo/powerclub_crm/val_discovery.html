@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Val Discovery Mode | Isthmus Dynamics</title>
+    <style>
+      :root {
+        --void: #05070b;
+        --panel: rgba(13, 20, 30, 0.82);
+        --panel-strong: rgba(18, 28, 40, 0.94);
+        --line: rgba(122, 214, 224, 0.22);
+        --cyan: #63e8ff;
+        --cyan-soft: rgba(99, 232, 255, 0.18);
+        --red: #ff314d;
+        --red-soft: rgba(255, 49, 77, 0.2);
+        --gold: #d2b36a;
+        --text: #edf7fb;
+        --muted: #9db2bd;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at 50% 10%, rgba(89, 222, 255, 0.16), transparent 30%),
+          radial-gradient(circle at 85% 20%, rgba(255, 49, 77, 0.12), transparent 26%),
+          linear-gradient(145deg, #030407, #091018 46%, #04060a);
+      }
+
+      button,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .stage-shell {
+        display: grid;
+        gap: 18px;
+        width: min(1440px, 100%);
+        margin: 0 auto;
+        padding: 28px clamp(16px, 3vw, 44px) 36px;
+      }
+
+      .stage-header,
+      .cockpit-grid > section,
+      .capture-column,
+      .summary-panel {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--panel);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+        backdrop-filter: blur(18px);
+      }
+
+      .stage-header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 20px;
+        align-items: center;
+        padding: 20px;
+      }
+
+      .brand-lockup {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+
+      .brand-mark {
+        width: 58px;
+        height: 58px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 50%;
+        object-fit: cover;
+        padding: 6px;
+        background: #07090d;
+        box-shadow: 0 0 24px rgba(99, 232, 255, 0.16);
+      }
+
+      .eyebrow {
+        margin: 0 0 5px;
+        color: var(--cyan);
+        font-size: 0.72rem;
+        font-weight: 850;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 6px;
+        font-size: clamp(2rem, 4vw, 4.4rem);
+        letter-spacing: -0.03em;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        font-size: 1.1rem;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 0.95rem;
+      }
+
+      .positioning {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      .stage-badge {
+        display: grid;
+        gap: 4px;
+        min-width: 220px;
+        border: 1px solid rgba(210, 179, 106, 0.34);
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(210, 179, 106, 0.09);
+      }
+
+      .stage-badge strong {
+        color: var(--gold);
+      }
+
+      .stage-badge span {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .cockpit-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.85fr) minmax(360px, 1.2fr) minmax(300px, 0.95fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .presence-panel,
+      .val-panel,
+      .question-panel {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .orb-stage {
+        display: grid;
+        min-height: 310px;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid rgba(99, 232, 255, 0.16);
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at center, rgba(255, 49, 77, 0.13), transparent 28%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
+        position: relative;
+      }
+
+      .orb-stage::before,
+      .orb-stage::after {
+        content: "";
+        position: absolute;
+        width: 420px;
+        height: 420px;
+        border: 1px solid rgba(99, 232, 255, 0.09);
+        border-radius: 50%;
+        animation: rotateRing 18s linear infinite;
+      }
+
+      .orb-stage::after {
+        width: 280px;
+        height: 280px;
+        border-color: rgba(255, 49, 77, 0.12);
+        animation-duration: 11s;
+        animation-direction: reverse;
+      }
+
+      .val-orb {
+        position: relative;
+        z-index: 1;
+        width: 154px;
+        height: 154px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 50% 45%, #ffeff1 0 4%, #ff6b7c 5% 17%, #e91534 18% 38%, #3b0912 39% 64%, #06080c 65%);
+        box-shadow:
+          0 0 20px rgba(255, 49, 77, 0.52),
+          0 0 72px rgba(255, 49, 77, 0.3),
+          inset 0 0 24px rgba(255, 255, 255, 0.2);
+        animation: idlePulse 3.4s ease-in-out infinite;
+      }
+
+      .val-orb.speaking {
+        animation: speakPulse 0.9s ease-in-out infinite;
+      }
+
+      .wave {
+        position: absolute;
+        z-index: 2;
+        width: 72%;
+        height: 72px;
+        opacity: 0;
+      }
+
+      .wave svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      .wave path {
+        fill: none;
+        stroke: var(--cyan);
+        stroke-linecap: round;
+        stroke-width: 3;
+        filter: drop-shadow(0 0 8px rgba(99, 232, 255, 0.7));
+        stroke-dasharray: 18 14;
+        animation: dashWave 1.2s linear infinite;
+      }
+
+      .wave.speaking {
+        opacity: 0.84;
+      }
+
+      .control-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+      }
+
+      .primary,
+      .secondary,
+      .ghost,
+      .quick-capture button {
+        min-height: 42px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        color: var(--text);
+        font-weight: 850;
+      }
+
+      .primary {
+        background: linear-gradient(135deg, var(--red), #8d1022);
+        box-shadow: 0 0 24px rgba(255, 49, 77, 0.22);
+      }
+
+      .secondary {
+        background: linear-gradient(135deg, rgba(99, 232, 255, 0.18), rgba(99, 232, 255, 0.04));
+      }
+
+      .ghost {
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .val-says {
+        min-height: 150px;
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 14px;
+        padding: 14px;
+        background: var(--panel-strong);
+      }
+
+      .val-says p {
+        margin: 0;
+        color: #dff9ff;
+        font-size: 1.08rem;
+        line-height: 1.55;
+      }
+
+      .agenda-list,
+      .question-bank {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .agenda-list li,
+      .question-bank li,
+      .observation-list li {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 9px 10px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .question-card {
+        display: grid;
+        gap: 10px;
+        border: 1px solid rgba(99, 232, 255, 0.2);
+        border-radius: 16px;
+        padding: 16px;
+        background: linear-gradient(180deg, rgba(99, 232, 255, 0.08), rgba(255, 255, 255, 0.03));
+      }
+
+      .question-category {
+        width: fit-content;
+        border: 1px solid rgba(99, 232, 255, 0.26);
+        border-radius: 999px;
+        padding: 5px 10px;
+        color: var(--cyan);
+        font-size: 0.75rem;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .question-text {
+        margin: 0;
+        font-size: 1.35rem;
+        line-height: 1.35;
+      }
+
+      .answer-capture,
+      .capture-grid textarea,
+      .summary-output {
+        width: 100%;
+        border: 1px solid rgba(99, 232, 255, 0.2);
+        border-radius: 14px;
+        padding: 12px;
+        resize: vertical;
+        color: var(--text);
+        background: rgba(1, 5, 10, 0.56);
+      }
+
+      .quick-capture {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .quick-capture button {
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .quick-capture button:hover,
+      .secondary:hover,
+      .ghost:hover {
+        border-color: var(--cyan);
+        background: var(--cyan-soft);
+      }
+
+      .observation-panel {
+        border: 1px solid rgba(210, 179, 106, 0.24);
+        border-radius: 14px;
+        padding: 14px;
+        background: rgba(210, 179, 106, 0.08);
+      }
+
+      .observation-panel p {
+        margin: 0;
+        color: #f6e9c6;
+        line-height: 1.5;
+      }
+
+      .capture-column {
+        display: grid;
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .capture-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .capture-grid label {
+        display: grid;
+        gap: 7px;
+      }
+
+      .capture-grid span,
+      .field-label {
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 850;
+        text-transform: uppercase;
+      }
+
+      .summary-panel {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+      }
+
+      .summary-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .status-line {
+        min-height: 20px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      .guardrail {
+        color: var(--muted);
+        font-size: 0.84rem;
+        line-height: 1.5;
+      }
+
+      @keyframes idlePulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(255, 49, 77, 0.46), 0 0 72px rgba(255, 49, 77, 0.25); }
+        50% { transform: scale(1.035); box-shadow: 0 0 28px rgba(255, 49, 77, 0.72), 0 0 92px rgba(99, 232, 255, 0.18); }
+      }
+
+      @keyframes speakPulse {
+        0%, 100% { transform: scale(1.02); }
+        50% { transform: scale(1.12); }
+      }
+
+      @keyframes rotateRing {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      @keyframes dashWave {
+        to { stroke-dashoffset: -64; }
+      }
+
+      @media (max-width: 1080px) {
+        .stage-header,
+        .cockpit-grid,
+        .capture-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .stage-badge {
+          min-width: 0;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .control-grid,
+        .quick-capture {
+          grid-template-columns: 1fr;
+        }
+
+        .stage-shell {
+          padding-inline: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage-shell">
+      <header class="stage-header">
+        <div class="brand-lockup">
+          <img class="brand-mark" src="./assets/isthmus-dynamics-mark.png" alt="Isthmus Dynamics">
+          <div>
+            <p class="eyebrow">Isthmus Dynamics · Honest AI Ops</p>
+            <h1>Val Discovery Mode</h1>
+            <p class="positioning">Herramienta interna de Isthmus Dynamics para guiar discovery, capturar decisiones y ordenar próximos pasos.</p>
+          </div>
+        </div>
+        <div class="stage-badge" aria-label="Estado de demo">
+          <strong>Meeting Ops cockpit</strong>
+          <span>Estático · determinístico · sin servicios externos</span>
+        </div>
+      </header>
+
+      <div class="cockpit-grid">
+        <section class="presence-panel" aria-labelledby="presenceTitle">
+          <div>
+            <p class="eyebrow">Presencia Val</p>
+            <h2 id="presenceTitle">Núcleo de discovery guiado</h2>
+            <p class="guardrail">No es un agente completo. No graba, no escucha y no usa datos reales. Frank opera la reunión.</p>
+          </div>
+          <div class="orb-stage" aria-hidden="true">
+            <div id="valOrb" class="val-orb"></div>
+            <div id="valWave" class="wave">
+              <svg viewBox="0 0 420 90">
+                <path d="M5 45 C45 5, 85 85, 125 45 S205 5, 245 45 S325 85, 365 45 S405 5, 415 45"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="control-grid" aria-label="Controles principales">
+            <button id="startSessionButton" class="primary" type="button">Iniciar sesión</button>
+            <button id="speakButton" class="secondary" type="button">Hablar como Val</button>
+            <button id="nextQuestionButton" class="ghost" type="button">Siguiente pregunta</button>
+            <button id="smartQuestionButton" class="ghost" type="button">Siguiente pregunta inteligente</button>
+            <button id="generateSummaryButton" class="secondary" type="button">Generar resumen</button>
+            <button id="copySummaryButton" class="ghost" type="button">Copiar resumen</button>
+          </div>
+          <p id="speechStatus" class="status-line">Voz opcional del navegador. Si no está disponible, Val funciona en texto.</p>
+        </section>
+
+        <section class="val-panel" aria-labelledby="valSaysTitle">
+          <div>
+            <p class="eyebrow">Val dice</p>
+            <h2 id="valSaysTitle">Guía de reunión</h2>
+          </div>
+          <div class="val-says">
+            <p id="valMessage">Listo para iniciar. Esta pantalla ayuda a ordenar discovery, decisiones, riesgos y próximos pasos.</p>
+          </div>
+
+          <div>
+            <p class="eyebrow">Agenda</p>
+            <ul class="agenda-list">
+              <li>Validar dolor operativo</li>
+              <li>Revisar vista gerencial</li>
+              <li>Revisar flujo asesor</li>
+              <li>Identificar datos/campos necesarios</li>
+              <li>Definir alcance de piloto</li>
+              <li>Acordar próximo paso</li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="eyebrow">Uso en reunión</p>
+            <ol class="agenda-list">
+              <li>Frank introduce Val como herramienta interna.</li>
+              <li>Val da el marco de la sesión.</li>
+              <li>Frank muestra la maqueta CRM.</li>
+              <li>Frank vuelve a Val para preguntas guiadas.</li>
+              <li>Se capturan notas, decisiones, riesgos y próximos pasos.</li>
+              <li>Val genera un resumen local para seguimiento.</li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="question-panel" aria-labelledby="questionTitle">
+          <div>
+            <p class="eyebrow">Discovery guiado</p>
+            <h2 id="questionTitle">Pregunta actual</h2>
+          </div>
+
+          <div class="question-card">
+            <span id="questionCategory" class="question-category">Dolor operativo</span>
+            <p id="questionText" class="question-text">¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?</p>
+          </div>
+
+          <label>
+            <span class="field-label">Respuesta capturada</span>
+            <textarea id="answerCapture" class="answer-capture" rows="5" placeholder="Frank escribe la respuesta o idea clave escuchada en la reunión."></textarea>
+          </label>
+
+          <div class="quick-capture" aria-label="Captura rápida">
+            <button type="button" data-capture="pain">Capturar dolor</button>
+            <button type="button" data-capture="decision">Capturar decisión</button>
+            <button type="button" data-capture="risk">Marcar riesgo</button>
+            <button type="button" data-capture="data">Dato pendiente</button>
+            <button type="button" data-capture="pilot">Candidato para piloto</button>
+          </div>
+
+          <div class="observation-panel" aria-labelledby="observationTitle">
+            <p class="eyebrow">Val observa</p>
+            <p id="valObservation">Capture una respuesta para que Val sugiera el siguiente movimiento de discovery.</p>
+          </div>
+
+          <div>
+            <p class="eyebrow">Banco de categorías</p>
+            <ul class="question-bank">
+              <li>Dolor operativo</li>
+              <li>Visibilidad gerencial</li>
+              <li>Flujo asesor</li>
+              <li>Datos y fuentes</li>
+              <li>Alcance de piloto</li>
+              <li>Riesgos / exclusiones</li>
+              <li>Próximo paso</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <section class="capture-column" aria-labelledby="captureTitle">
+        <div>
+          <p class="eyebrow">Captura de reunión</p>
+          <h2 id="captureTitle">Notas, decisiones, riesgos y próximos pasos</h2>
+        </div>
+        <div class="capture-grid">
+          <label>
+            <span>Notas</span>
+            <textarea id="notesField" rows="7" placeholder="Dolores, contexto operativo y señales importantes."></textarea>
+          </label>
+          <label>
+            <span>Decisiones</span>
+            <textarea id="decisionsField" rows="7" placeholder="Acuerdos, responsables o criterios confirmados."></textarea>
+          </label>
+          <label>
+            <span>Riesgos / parking lot</span>
+            <textarea id="risksField" rows="7" placeholder="Riesgos, exclusiones o temas para fase posterior."></textarea>
+          </label>
+          <label>
+            <span>Próximos pasos</span>
+            <textarea id="nextStepsField" rows="7" placeholder="Discovery, datos pendientes, scope freeze o propuesta."></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="summary-panel" aria-labelledby="summaryTitle">
+        <div>
+          <p class="eyebrow">Resumen local</p>
+          <h2 id="summaryTitle">Salida para seguimiento</h2>
+          <p class="guardrail">El resumen se genera en esta página desde lo capturado. No hay persistencia ni servicios externos.</p>
+        </div>
+        <textarea id="summaryOutput" class="summary-output" rows="12" placeholder="Genere un resumen cuando termine la conversación."></textarea>
+        <div class="summary-actions">
+          <button id="generateSummaryButtonBottom" class="secondary" type="button">Generar resumen</button>
+          <button id="copySummaryButtonBottom" class="ghost" type="button">Copiar resumen</button>
+        </div>
+        <p id="copyStatus" class="status-line">Listo para generar resumen.</p>
+      </section>
+    </main>
+
+    <script>
+      const scriptedLines = {
+        intro: "Hola. Esta sesión busca validar dolor operativo, visibilidad gerencial, flujo asesor y alcance de piloto.",
+        framing: "Mi objetivo es ayudar a que esta conversación termine con decisiones claras, no con ideas sueltas.",
+        manager: "Pregunta sugerida: ¿qué necesita ver gerencia cada mañana para saber dónde actuar?",
+        advisor: "Pregunta sugerida: ¿qué necesita hacer el asesor en menos clics para mantener el seguimiento actualizado?",
+        scope: "Antes de cotizar, conviene separar piloto, fase dos y deseos futuros.",
+        wrap: "Cierre sugerido: confirmar dolor, datos necesarios, responsable de decisión y próximo paso.",
+      };
+
+      const questionBank = [
+        { category: "Dolor operativo", text: "¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?" },
+        { category: "Dolor operativo", text: "¿Con qué frecuencia gerencia se entera tarde de un seguimiento atrasado?" },
+        { category: "Visibilidad gerencial", text: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?" },
+        { category: "Visibilidad gerencial", text: "¿Qué indicador cambiaría una decisión diaria de sucursal o asesor?" },
+        { category: "Flujo asesor", text: "¿Qué necesita hacer el asesor en menos clics para mantener el seguimiento actualizado?" },
+        { category: "Flujo asesor", text: "¿Qué campos o pasos hacen que un asesor deje de registrar información?" },
+        { category: "Datos y fuentes", text: "¿De dónde sale hoy la base de prospectos, socios o reactivaciones?" },
+        { category: "Datos y fuentes", text: "¿Qué export o muestra segura podríamos revisar para mapear campos?" },
+        { category: "Alcance de piloto", text: "¿Qué sucursal, proceso o grupo de asesores sería mejor para un piloto controlado?" },
+        { category: "Alcance de piloto", text: "¿Qué debe quedar fuera de V1 para no prometer demasiado?" },
+        { category: "Riesgos / exclusiones", text: "¿Qué integración, reporte o expectativa podría inflar el alcance del piloto?" },
+        { category: "Próximo paso", text: "¿Quién debe aprobar discovery, scope freeze y propuesta de piloto?" },
+      ];
+
+      const captureState = {
+        pains: [],
+        decisions: [],
+        risks: [],
+        data: [],
+        pilots: [],
+        lastCapture: "",
+      };
+
+      let questionIndex = 0;
+
+      const valMessage = document.querySelector("#valMessage");
+      const valOrb = document.querySelector("#valOrb");
+      const valWave = document.querySelector("#valWave");
+      const speechStatus = document.querySelector("#speechStatus");
+      const questionCategory = document.querySelector("#questionCategory");
+      const questionText = document.querySelector("#questionText");
+      const answerCapture = document.querySelector("#answerCapture");
+      const valObservation = document.querySelector("#valObservation");
+      const notesField = document.querySelector("#notesField");
+      const decisionsField = document.querySelector("#decisionsField");
+      const risksField = document.querySelector("#risksField");
+      const nextStepsField = document.querySelector("#nextStepsField");
+      const summaryOutput = document.querySelector("#summaryOutput");
+      const copyStatus = document.querySelector("#copyStatus");
+
+      function setSpeaking(active) {
+        valOrb.classList.toggle("speaking", active);
+        valWave.classList.toggle("speaking", active);
+      }
+
+      function setValMessage(text, shouldSpeak = false) {
+        valMessage.textContent = text;
+        if (shouldSpeak) {
+          speakText(text);
+        }
+      }
+
+      function speakText(text) {
+        if (!("speechSynthesis" in window)) {
+          speechStatus.textContent = "Voz no disponible en este navegador. Val queda en modo texto.";
+          return;
+        }
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = "es-PA";
+          utterance.rate = 0.92;
+          utterance.pitch = 0.82;
+          utterance.onstart = () => {
+            setSpeaking(true);
+            speechStatus.textContent = "Val hablando con voz nativa del navegador.";
+          };
+          utterance.onend = () => {
+            setSpeaking(false);
+            speechStatus.textContent = "Val listo. La voz es opcional y local del navegador.";
+          };
+          utterance.onerror = () => {
+            setSpeaking(false);
+            speechStatus.textContent = "La voz falló; la guía sigue disponible en texto.";
+          };
+          window.speechSynthesis.speak(utterance);
+        } catch (error) {
+          setSpeaking(false);
+          speechStatus.textContent = "La voz no pudo iniciar; use la guía en texto.";
+        }
+      }
+
+      function renderQuestion(index) {
+        const question = questionBank[index % questionBank.length];
+        questionCategory.textContent = question.category;
+        questionText.textContent = question.text;
+        setValMessage(`Pregunta sugerida: ${question.text}`);
+      }
+
+      function appendLine(field, label, text) {
+        const line = `- ${label}: ${text}`;
+        field.value = field.value ? `${field.value}\n${line}` : line;
+      }
+
+      function observationFor(type) {
+        if (type === "pain") return "Val sugiere profundizar: pregunte impacto, frecuencia y dónde se pierde dinero o tiempo.";
+        if (type === "decision") return "Val sugiere confirmar responsable, fecha y criterio de aceptación.";
+        if (type === "risk") return "Val sugiere moverlo a exclusiones, parking lot o fase dos antes de cotizar.";
+        if (type === "data") return "Val sugiere pedir fuente, export, muestra segura o diccionario de campos.";
+        if (type === "pilot") return "Val sugiere avanzar a scope freeze: sucursal, usuarios, campos, reportes y límites.";
+        return "Capture una respuesta para que Val sugiera el siguiente movimiento de discovery.";
+      }
+
+      function capture(type) {
+        const text = answerCapture.value.trim();
+        if (!text) {
+          valObservation.textContent = "Escriba primero una respuesta capturada para clasificarla.";
+          return;
+        }
+        captureState.lastCapture = type;
+        if (type === "pain") {
+          captureState.pains.push(text);
+          appendLine(notesField, "Dolor", text);
+        }
+        if (type === "decision") {
+          captureState.decisions.push(text);
+          appendLine(decisionsField, "Decisión", text);
+        }
+        if (type === "risk") {
+          captureState.risks.push(text);
+          appendLine(risksField, "Riesgo", text);
+        }
+        if (type === "data") {
+          captureState.data.push(text);
+          appendLine(nextStepsField, "Dato pendiente", text);
+        }
+        if (type === "pilot") {
+          captureState.pilots.push(text);
+          appendLine(nextStepsField, "Candidato para piloto", text);
+        }
+        valObservation.textContent = observationFor(type);
+        setValMessage(valObservation.textContent);
+        answerCapture.value = "";
+      }
+
+      function findQuestionByCategory(category) {
+        const foundIndex = questionBank.findIndex((question, index) => question.category === category && index > questionIndex);
+        if (foundIndex >= 0) return foundIndex;
+        return questionBank.findIndex((question) => question.category === category);
+      }
+
+      function smartNextQuestion() {
+        const map = {
+          pain: "Dolor operativo",
+          decision: "Próximo paso",
+          risk: "Riesgos / exclusiones",
+          data: "Datos y fuentes",
+          pilot: "Alcance de piloto",
+        };
+        const target = map[captureState.lastCapture] || "Visibilidad gerencial";
+        const nextIndex = findQuestionByCategory(target);
+        questionIndex = nextIndex >= 0 ? nextIndex : (questionIndex + 1) % questionBank.length;
+        renderQuestion(questionIndex);
+      }
+
+      function formatList(items) {
+        return items.length ? items.map((item) => `- ${item}`).join("\n") : "- Sin captura específica.";
+      }
+
+      function generateSummary() {
+        const summary = [
+          "Val Discovery Mode - resumen de reunión",
+          "",
+          "Dolores capturados:",
+          formatList(captureState.pains),
+          "",
+          "Decisiones:",
+          formatList(captureState.decisions),
+          "",
+          "Riesgos / parking lot:",
+          formatList(captureState.risks),
+          "",
+          "Datos pendientes:",
+          formatList(captureState.data),
+          "",
+          "Candidatos para piloto:",
+          formatList(captureState.pilots),
+          "",
+          "Notas generales:",
+          notesField.value || "- Sin notas generales.",
+          "",
+          "Próximos pasos:",
+          nextStepsField.value || "- Confirmar discovery, scope freeze y responsable de decisión.",
+          "",
+          "Guardrail: resumen local de demo; no hay persistencia ni datos reales conectados.",
+        ].join("\n");
+        summaryOutput.value = summary;
+        copyStatus.textContent = "Resumen generado localmente.";
+        setValMessage(scriptedLines.wrap);
+      }
+
+      function copySummary() {
+        const text = summaryOutput.value.trim();
+        if (!text) {
+          copyStatus.textContent = "Genere un resumen antes de copiar.";
+          return;
+        }
+        if (navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text)
+            .then(() => {
+              copyStatus.textContent = "Resumen copiado. Úselo en el seguimiento posterior a la reunión.";
+            })
+            .catch(() => {
+              copyStatus.textContent = "No se copió automáticamente. Seleccione el resumen y cópielo manualmente.";
+            });
+          return;
+        }
+        copyStatus.textContent = "Seleccione el resumen y cópielo manualmente.";
+      }
+
+      document.querySelector("#startSessionButton").addEventListener("click", () => {
+        setValMessage(scriptedLines.intro, true);
+        valObservation.textContent = scriptedLines.framing;
+      });
+
+      document.querySelector("#speakButton").addEventListener("click", () => speakText(valMessage.textContent));
+
+      document.querySelector("#nextQuestionButton").addEventListener("click", () => {
+        questionIndex = (questionIndex + 1) % questionBank.length;
+        renderQuestion(questionIndex);
+      });
+
+      document.querySelector("#smartQuestionButton").addEventListener("click", smartNextQuestion);
+      document.querySelector("#generateSummaryButton").addEventListener("click", generateSummary);
+      document.querySelector("#generateSummaryButtonBottom").addEventListener("click", generateSummary);
+      document.querySelector("#copySummaryButton").addEventListener("click", copySummary);
+      document.querySelector("#copySummaryButtonBottom").addEventListener("click", copySummary);
+
+      document.querySelectorAll("[data-capture]").forEach((button) => {
+        button.addEventListener("click", () => capture(button.dataset.capture));
+      });
+    </script>
+  </body>
+</html>
