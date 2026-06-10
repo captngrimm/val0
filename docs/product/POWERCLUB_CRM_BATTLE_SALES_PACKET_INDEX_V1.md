@@ -22,11 +22,15 @@ This is not runtime config, not a deployment instruction, and not permission to 
    `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md`
 4. Live meeting script:
    `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md`
-5. Meeting checklist:
+5. Rehearsal script:
+   `docs/product/POWERCLUB_CRM_REHEARSAL_SCRIPT_V1.md`
+6. Objection handling:
+   `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md`
+7. Meeting checklist:
    `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md`
-6. Executive leave-behind:
+8. Executive leave-behind:
    `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md`
-7. Discovery questionnaire:
+9. Discovery questionnaire:
    `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md`
 
 ## Recommended Meeting Order
@@ -47,6 +51,8 @@ This is not runtime config, not a deployment instruction, and not permission to 
 | Static PowerClub CRM demo | `docs/demo/powerclub_crm/index.html` | Yes | Show dashboard-first narrative and operator workflow |
 | Karen alignment message | `docs/product/POWERCLUB_CRM_KAREN_ALIGNMENT_MESSAGE_V1.md` | Before meeting | Align with Karen before asking for boss/GM time |
 | Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Operator only | Prepare objective, flow, questions, and close options |
+| Rehearsal script | `docs/product/POWERCLUB_CRM_REHEARSAL_SCRIPT_V1.md` | Operator only | Practice the 60-second, Karen, boss/GM, and discovery talk tracks |
+| Objection handling | `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md` | Operator only | Answer price, timeline, CRM, WhatsApp, AI, production, and scope questions safely |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Operator only | Keep talk track crisp |
 | Meeting checklist | `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md` | Operator only | Keep meeting sequence controlled |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | Optional | Use if they ask for a concise summary |
@@ -71,6 +77,8 @@ Do not send raw internal docs unless Frank intentionally wants to expose the wor
 | Fake data requirements | `docs/product/POWERCLUB_CRM_FAKE_DATA_REQUIREMENTS_V1.md` | Fixture/data design, not sales material |
 | 01C QA/polish doc | `docs/product/POWERCLUB_CRM_BATTLE_01C_BROWSER_VISUAL_QA_POLISH.md` | Internal QA method and limitations |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Talk track and do-not-say notes |
+| Rehearsal script | `docs/product/POWERCLUB_CRM_REHEARSAL_SCRIPT_V1.md` | Practice script for Frank before Karen/boss/GM conversation |
+| Objection handling | `docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md` | Internal answer bank for objections and scope protection |
 | Proposal pricing model | `docs/product/POWERCLUB_CRM_PROPOSAL_PRICING_MODEL_V1.md` | Internal pricing guardrails |
 | Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Frank's prep before leadership conversation |
 | Discovery questionnaire | `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md` | Question bank; use selectively |
@@ -94,6 +102,8 @@ Do not send before discovery:
 - Internal pricing guardrails.
 - QA limitation doc.
 - Meeting script.
+- Rehearsal script.
+- Objection handling guide.
 - Discovery questionnaire as a full questionnaire dump.
 
 Reason:
@@ -169,6 +179,28 @@ Keeps Frank's talk track sharp.
 
 When to use:
 Before and during the meeting.
+
+### Rehearsal Script
+
+Path:
+`docs/product/POWERCLUB_CRM_REHEARSAL_SCRIPT_V1.md`
+
+What it is for:
+Gives Frank a timed script for Karen review, boss/GM demo, discovery, and closing.
+
+When to use:
+Practice before the call; keep nearby during meeting prep.
+
+### Objection Handling
+
+Path:
+`docs/product/POWERCLUB_CRM_OBJECTION_HANDLING_V1.md`
+
+What it is for:
+Prepares safe answers for production readiness, CRM category, HubSpot/Salesforce/Zoho, price, timeline, WhatsApp, payments, fields, AI, real data, maintenance, future scope, sales impact, and starting requirements.
+
+When to use:
+Before the meeting and when preparing follow-up notes.
 
 ### Executive Leave-Behind
 
