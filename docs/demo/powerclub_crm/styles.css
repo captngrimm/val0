@@ -651,6 +651,24 @@ option {
   color: var(--ink);
 }
 
+.kpi-board {
+  display: grid;
+  gap: 14px;
+}
+
+.kpi-group {
+  display: grid;
+  gap: 8px;
+}
+
+.kpi-group h3 {
+  margin-bottom: 0;
+  color: var(--deep);
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -658,7 +676,7 @@ option {
 }
 
 .metric-card {
-  padding: 16px;
+  padding: 14px;
   border-top: 5px solid var(--green);
 }
 
@@ -670,6 +688,7 @@ option {
 }
 
 .metric-icon {
+  position: relative;
   display: inline-grid;
   width: 36px;
   height: 36px;
@@ -677,8 +696,188 @@ option {
   border-radius: 8px;
   background: #e8f3f0;
   color: var(--green);
-  font-size: 0.7rem;
-  font-weight: 900;
+}
+
+.metric-icon::before,
+.metric-icon::after {
+  position: absolute;
+  content: "";
+}
+
+.icon-target::before {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.icon-target::after {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.icon-calendar::before {
+  width: 18px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+}
+
+.icon-calendar::after {
+  width: 12px;
+  height: 2px;
+  top: 13px;
+  background: currentColor;
+  box-shadow: 0 6px 0 currentColor;
+}
+
+.icon-rate::before,
+.icon-progress::before {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #c8d5d2;
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  border-radius: 50%;
+}
+
+.icon-check::before,
+.icon-done::before {
+  width: 16px;
+  height: 9px;
+  border-bottom: 3px solid currentColor;
+  border-left: 3px solid currentColor;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.icon-phone::before {
+  width: 17px;
+  height: 17px;
+  border: 3px solid currentColor;
+  border-top-color: transparent;
+  border-right-color: transparent;
+  border-radius: 0 0 0 12px;
+  transform: rotate(-35deg);
+}
+
+.icon-chat::before {
+  width: 20px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+}
+
+.icon-chat::after {
+  bottom: 8px;
+  left: 12px;
+  border-width: 5px 5px 0 0;
+  border-style: solid;
+  border-color: currentColor transparent transparent transparent;
+}
+
+.icon-pulse::before {
+  width: 22px;
+  height: 12px;
+  border-bottom: 3px solid currentColor;
+  clip-path: polygon(0 70%, 22% 70%, 34% 20%, 48% 90%, 62% 40%, 75% 70%, 100% 70%, 100% 100%, 0 100%);
+  background: currentColor;
+}
+
+.icon-handshake::before {
+  width: 22px;
+  height: 10px;
+  border-top: 3px solid currentColor;
+  border-bottom: 3px solid currentColor;
+  transform: rotate(-12deg);
+}
+
+.icon-branch::before {
+  width: 2px;
+  height: 21px;
+  background: currentColor;
+  box-shadow: -8px 7px 0 currentColor, 8px 7px 0 currentColor;
+}
+
+.icon-branch::after {
+  width: 20px;
+  height: 12px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  border-radius: 8px 8px 0 0;
+}
+
+.icon-source::before {
+  width: 20px;
+  height: 20px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.icon-source::after {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: -7px -2px 0 currentColor, 7px 4px 0 currentColor;
+}
+
+.icon-clock::before {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.icon-clock::after {
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translate(2px, -2px);
+}
+
+.icon-warning::before {
+  border-right: 11px solid transparent;
+  border-bottom: 22px solid currentColor;
+  border-left: 11px solid transparent;
+}
+
+.icon-warning::after {
+  width: 3px;
+  height: 11px;
+  background: #fff;
+  box-shadow: 0 14px 0 #fff;
+}
+
+.icon-alert::before {
+  width: 20px;
+  height: 20px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.icon-alert::after {
+  width: 3px;
+  height: 12px;
+  background: currentColor;
+  box-shadow: 0 15px 0 currentColor;
+}
+
+.icon-stuck::before {
+  width: 19px;
+  height: 19px;
+  border: 2px solid currentColor;
+  border-radius: 5px;
+}
+
+.icon-stuck::after {
+  width: 13px;
+  height: 3px;
+  background: currentColor;
+  transform: rotate(45deg);
 }
 
 .help-dot {
@@ -727,6 +926,11 @@ option {
 .metric-card strong,
 .metric-card em {
   display: block;
+}
+
+.metric-card .metric-icon,
+.metric-card .help-dot {
+  display: inline-grid;
 }
 
 .metric-head > span:not(.metric-icon):not(.help-dot) {
@@ -1112,6 +1316,49 @@ option {
   font-size: 1.4rem;
 }
 
+.advanced-insights-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.insight-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.insight-grid article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.insight-grid span,
+.insight-grid strong,
+.insight-grid p {
+  display: block;
+}
+
+.insight-grid span {
+  color: var(--green);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.insight-grid strong {
+  margin-top: 5px;
+  color: var(--deep);
+  font-size: 1.55rem;
+}
+
+.insight-grid p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .future-bi-panel {
   display: grid;
   gap: 12px;
@@ -1445,7 +1692,8 @@ th {
     grid-template-columns: repeat(2, minmax(140px, 1fr));
   }
 
-  .bi-preview-grid {
+  .bi-preview-grid,
+  .insight-grid {
     grid-template-columns: repeat(2, minmax(170px, 1fr));
   }
 
@@ -1484,6 +1732,7 @@ th {
   .metrics-grid,
   .coaching-summary,
   .bi-preview-grid,
+  .insight-grid,
   .narrative-steps,
   .recovery-grid,
   .ranking-grid,

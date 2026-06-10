@@ -300,78 +300,173 @@
           </div>
         </div>
 
-        <div class="metrics-grid" aria-label="Métricas del piloto">
-          <article class="metric-card">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">OP</span>
-              <span>Oportunidades activas</span>
-              <span class="help-dot" tabindex="0" aria-label="Registros abiertos despues de aplicar filtros.">?</span>
+        <section class="kpi-board" aria-label="Métricas gerenciales del piloto">
+          <div class="kpi-group">
+            <h3>Core Management KPIs</h3>
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <div class="metric-head">
+                  <span class="metric-icon icon-target" aria-hidden="true"></span>
+                  <span>Oportunidades activas</span>
+                  <span class="help-dot" tabindex="0" aria-label="Muestra el volumen abierto despues de aplicar filtros. Decision: revisar carga por sucursal y asesor.">?</span>
+                </div>
+                <strong id="assignedMetric">0</strong>
+                <em>Socios/prospectos asignados</em>
+              </article>
+              <article class="metric-card warning">
+                <div class="metric-head">
+                  <span class="metric-icon icon-calendar" aria-hidden="true"></span>
+                  <span>Seguimientos para hoy</span>
+                  <span class="help-dot" tabindex="0" aria-label="Acciones que deben gestionarse hoy. Decision: priorizar el turno antes de perder intencion.">?</span>
+                </div>
+                <strong id="pendingMetric">0</strong>
+                <em>Control operativo inmediato</em>
+              </article>
+              <article class="metric-card blue">
+                <div class="metric-head">
+                  <span class="metric-icon icon-rate" aria-hidden="true"></span>
+                  <span>Conversion rate</span>
+                  <span class="help-dot" tabindex="0" aria-label="Ventas sobre registros filtrados. Decision: comparar calidad de gestion, sucursal y canal.">?</span>
+                </div>
+                <strong id="conversionMetric">0%</strong>
+                <em>Ventas / base filtrada</em>
+              </article>
+              <article class="metric-card success">
+                <div class="metric-head">
+                  <span class="metric-icon icon-check" aria-hidden="true"></span>
+                  <span>Ventas</span>
+                  <span class="help-dot" tabindex="0" aria-label="Cierres ficticios dentro de la muestra demo. Decision: entender resultado, no solo actividad.">?</span>
+                </div>
+                <strong id="salesMetric">0</strong>
+                <em>Resultado demo cerrado</em>
+              </article>
             </div>
-            <strong id="assignedMetric">0</strong>
-            <em>Socios/prospectos asignados</em>
-          </article>
-          <article class="metric-card warning">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">HOY</span>
-              <span>Seguimientos para hoy</span>
-              <span class="help-dot" tabindex="0" aria-label="Acciones que deben gestionarse durante el dia.">?</span>
+          </div>
+
+          <div class="kpi-group">
+            <h3>Advisor Productivity KPIs</h3>
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <div class="metric-head">
+                  <span class="metric-icon icon-phone" aria-hidden="true"></span>
+                  <span>Contactos / asesor / dia</span>
+                  <span class="help-dot" tabindex="0" aria-label="Promedio sintetico de llamadas, mensajes y visitas por asesor activo. Decision: detectar ritmo bajo.">?</span>
+                </div>
+                <strong id="contactPaceMetric">0</strong>
+                <em>Ritmo comercial diario</em>
+              </article>
+              <article class="metric-card">
+                <div class="metric-head">
+                  <span class="metric-icon icon-chat" aria-hidden="true"></span>
+                  <span>Seguimientos</span>
+                </div>
+                <strong id="followUpsMetric">0</strong>
+                <em>En conversacion o cita</em>
+              </article>
+              <article class="metric-card blue">
+                <div class="metric-head">
+                  <span class="metric-icon icon-done" aria-hidden="true"></span>
+                  <span>Completados hoy</span>
+                  <span class="help-dot" tabindex="0" aria-label="Interacciones del dia ya registradas en la demo. Decision: separar carga pendiente de trabajo ejecutado.">?</span>
+                </div>
+                <strong id="completedTodayMetric">0</strong>
+                <em>Actividad registrada</em>
+              </article>
+              <article class="metric-card blue">
+                <div class="metric-head">
+                  <span class="metric-icon icon-pulse" aria-hidden="true"></span>
+                  <span>Ritmo vs sucursal</span>
+                  <span class="help-dot" tabindex="0" aria-label="Compara actividad promedio de asesores filtrados contra la media de sucursal. Decision: coaching o redistribucion.">?</span>
+                </div>
+                <strong id="rhythmMetric">0%</strong>
+                <em>Actividad relativa</em>
+              </article>
             </div>
-            <strong id="pendingMetric">0</strong>
-            <em>Control operativo inmediato</em>
-          </article>
-          <article class="metric-card blue">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">PX</span>
-              <span>Promesas de compra</span>
-              <span class="help-dot" tabindex="0" aria-label="Interes declarado que requiere seguimiento cercano.">?</span>
+          </div>
+
+          <div class="kpi-group">
+            <h3>Sales Quality KPIs</h3>
+            <div class="metrics-grid">
+              <article class="metric-card blue">
+                <div class="metric-head">
+                  <span class="metric-icon icon-handshake" aria-hidden="true"></span>
+                  <span>Promesas de compra</span>
+                  <span class="help-dot" tabindex="0" aria-label="Interes declarado que requiere seguimiento cercano. Decision: proteger leads con intencion.">?</span>
+                </div>
+                <strong id="promisesMetric">0</strong>
+                <em>Intencion comercial visible</em>
+              </article>
+              <article class="metric-card">
+                <div class="metric-head">
+                  <span class="metric-icon icon-branch" aria-hidden="true"></span>
+                  <span>Branch conversion</span>
+                  <span class="help-dot" tabindex="0" aria-label="Mejor conversion por sucursal en el filtro actual. Decision: replicar practica o investigar diferencias.">?</span>
+                </div>
+                <strong id="branchConversionMetric">0%</strong>
+                <em>Comparacion por sucursal</em>
+              </article>
+              <article class="metric-card">
+                <div class="metric-head">
+                  <span class="metric-icon icon-source" aria-hidden="true"></span>
+                  <span>Source quality</span>
+                  <span class="help-dot" tabindex="0" aria-label="Canal con mejor relacion entre volumen y conversion. Decision: mover esfuerzo comercial al canal correcto.">?</span>
+                </div>
+                <strong id="sourceQualityMetric">-</strong>
+                <em>Canal recomendado</em>
+              </article>
+              <article class="metric-card blue">
+                <div class="metric-head">
+                  <span class="metric-icon icon-progress" aria-hidden="true"></span>
+                  <span>Avance del mes</span>
+                </div>
+                <strong id="monthProgressMetric">0%</strong>
+                <em>Gestionados vs. base demo</em>
+              </article>
             </div>
-            <strong id="promisesMetric">0</strong>
-            <em>Intencion comercial visible</em>
-          </article>
-          <article class="metric-card success">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">OK</span>
-              <span>Ventas</span>
-              <span class="help-dot" tabindex="0" aria-label="Cierres ficticios dentro de la muestra demo.">?</span>
+          </div>
+
+          <div class="kpi-group">
+            <h3>Risk / Recovery KPIs</h3>
+            <div class="metrics-grid">
+              <article class="metric-card warning">
+                <div class="metric-head">
+                  <span class="metric-icon icon-clock" aria-hidden="true"></span>
+                  <span>Seguimientos atrasados</span>
+                  <span class="help-dot" tabindex="0" aria-label="Registros con proxima accion anterior al corte demo. Decision: intervenir antes de que el lead se enfrie.">?</span>
+                </div>
+                <strong id="noContactMetric">0</strong>
+                <em>Donde gerencia interviene</em>
+              </article>
+              <article class="metric-card warning">
+                <div class="metric-head">
+                  <span class="metric-icon icon-warning" aria-hidden="true"></span>
+                  <span>Atraso sobre abiertos</span>
+                  <span class="help-dot" tabindex="0" aria-label="Porcentaje de oportunidades abiertas con atraso. Decision: medir disciplina de seguimiento.">?</span>
+                </div>
+                <strong id="overdueRateCardMetric">0%</strong>
+                <em>Follow-up health</em>
+              </article>
+              <article class="metric-card warning">
+                <div class="metric-head">
+                  <span class="metric-icon icon-alert" aria-hidden="true"></span>
+                  <span>Oportunidades en riesgo</span>
+                  <span class="help-dot" tabindex="0" aria-label="Leads atrasados, trabados o calientes sin proximo paso claro. Decision: rescate, reasignacion o coaching.">?</span>
+                </div>
+                <strong id="unreachableMetric">0</strong>
+                <em>Prioridad de rescate</em>
+              </article>
+              <article class="metric-card warning">
+                <div class="metric-head">
+                  <span class="metric-icon icon-stuck" aria-hidden="true"></span>
+                  <span>Stuck opportunities</span>
+                  <span class="help-dot" tabindex="0" aria-label="Oportunidades sin desenlace claro. Decision: exigir proxima accion o cerrar aprendizaje.">?</span>
+                </div>
+                <strong id="stuckCountMetric">0</strong>
+                <em>Sin desenlace claro</em>
+              </article>
             </div>
-            <strong id="salesMetric">0</strong>
-            <em>Resultado demo cerrado</em>
-          </article>
-          <article class="metric-card">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">FU</span>
-              <span>Seguimientos</span>
-            </div>
-            <strong id="followUpsMetric">0</strong>
-            <em>En conversacion o cita</em>
-          </article>
-          <article class="metric-card warning">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">AT</span>
-              <span>Seguimientos atrasados</span>
-              <span class="help-dot" tabindex="0" aria-label="Registros con proxima accion anterior al corte demo.">?</span>
-            </div>
-            <strong id="noContactMetric">0</strong>
-            <em>Donde gerencia interviene</em>
-          </article>
-          <article class="metric-card warning">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">RG</span>
-              <span>Oportunidades en riesgo</span>
-              <span class="help-dot" tabindex="0" aria-label="Leads atrasados, trabados o calientes sin proximo paso claro.">?</span>
-            </div>
-            <strong id="unreachableMetric">0</strong>
-            <em>Prioridad de rescate</em>
-          </article>
-          <article class="metric-card blue">
-            <div class="metric-head">
-              <span class="metric-icon" aria-hidden="true">%</span>
-              <span>Avance del mes</span>
-            </div>
-            <strong id="monthProgressMetric">0%</strong>
-            <em>Gestionados vs. base demo</em>
-          </article>
-        </div>
+          </div>
+        </section>
 
         <section class="panel executive-narrative" aria-labelledby="executiveNarrativeTitle">
           <div>
@@ -563,6 +658,39 @@
               <article><span>Atraso sobre abiertos</span><strong id="overdueRateMetric">0%</strong></article>
               <article><span>Riesgo sobre abiertos</span><strong id="riskRateMetric">0%</strong></article>
             </div>
+          </div>
+        </section>
+
+        <section class="panel advanced-insights-panel" aria-labelledby="advancedInsightsTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Advanced manager insights</p>
+              <h3 id="advancedInsightsTitle">Senales que gerencia puede no estar midiendo todavia</h3>
+              <p class="panel-subcopy">La demo traduce actividad diaria en senales de coaching, productividad y calidad de canal. Todo es sintetico y sirve para conversacion de piloto.</p>
+            </div>
+            <span class="count-pill">Fake data model</span>
+          </div>
+          <div class="insight-grid">
+            <article>
+              <span>Average days without contact</span>
+              <strong id="avgNoContactMetric">0.0</strong>
+              <p>Mientras mas sube, mas probable es que la oportunidad pierda temperatura. Accion: revisar atrasos por asesor.</p>
+            </article>
+            <article>
+              <span>Advisor activity vs branch average</span>
+              <strong id="activityVsBranchMetric">0%</strong>
+              <p>Muestra si el equipo filtrado trabaja por encima o debajo del ritmo esperado. Accion: coaching o redistribucion.</p>
+            </article>
+            <article>
+              <span>Coaching alerts</span>
+              <strong id="coachingAlertsMetric">0</strong>
+              <p>Asesores con riesgo alto, baja conversion o atraso concentrado. Accion: conversar con datos, no con percepcion.</p>
+            </article>
+            <article>
+              <span>Channel quality signal</span>
+              <strong id="channelQualityMetric">-</strong>
+              <p>Senala el canal que combina conversion y volumen. Accion: enfocar esfuerzo donde el lead responde mejor.</p>
+            </article>
           </div>
         </section>
 

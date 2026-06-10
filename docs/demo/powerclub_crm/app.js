@@ -641,18 +641,31 @@ function renderManager() {
   const recoverable = riskRows.reduce((sum, lead) => sum + lead.estimatedValue * recoveryProbability(lead), 0);
   const atRiskValue = riskRows.reduce((sum, lead) => sum + lead.estimatedValue, 0);
   const recoverableRate = pct(recoverable, atRiskValue);
+  const activeAdvisorCount = Math.max(new Set(rows.map((lead) => lead.advisor)).size, 1);
+  const totalContacts = rows.reduce((sum, lead) => sum + lead.calls + lead.messages + lead.visits, 0);
+  const contactPace = Math.round(totalContacts / activeAdvisorCount / 7);
+  const completedToday = rows.filter((lead) => lead.createdDay === 9).reduce((sum, lead) => sum + lead.activities, 0);
+  const avgDaysWithoutContact = overdueRows.length
+    ? overdueRows.reduce((sum, lead) => sum + lead.overdueHours / 24, 0) / overdueRows.length
+    : 0;
 
   document.querySelector("#assignedMetric").textContent = activeRows.length.toLocaleString("en-US");
   document.querySelector("#pendingMetric").textContent = dueTodayRows.length.toLocaleString("en-US");
   document.querySelector("#promisesMetric").textContent = statusCount(rows, "Interesado").toLocaleString("en-US");
   document.querySelector("#salesMetric").textContent = statusCount(rows, "Venta").toLocaleString("en-US");
+  document.querySelector("#conversionMetric").textContent = `${pct(statusCount(rows, "Venta"), rows.length)}%`;
   document.querySelector("#followUpsMetric").textContent = rows.filter((lead) => lead.status === "Contactado" || lead.status === "Cita agendada").length.toLocaleString("en-US");
+  document.querySelector("#contactPaceMetric").textContent = contactPace.toLocaleString("en-US");
+  document.querySelector("#completedTodayMetric").textContent = completedToday.toLocaleString("en-US");
   document.querySelector("#noContactMetric").textContent = overdueRows.length.toLocaleString("en-US");
   document.querySelector("#unreachableMetric").textContent = riskRows.length.toLocaleString("en-US");
+  document.querySelector("#overdueRateCardMetric").textContent = `${pct(overdueRows.length, activeRows.length)}%`;
+  document.querySelector("#stuckCountMetric").textContent = rows.filter((lead) => lead.isStuck).length.toLocaleString("en-US");
   document.querySelector("#atRiskValueMetric").textContent = formatMoney(atRiskValue);
   document.querySelector("#recoverableValueMetric").textContent = formatMoney(recoverable);
   document.querySelector("#riskCountMetric").textContent = riskRows.length.toLocaleString("en-US");
   document.querySelector("#hotRiskMetric").textContent = riskRows.filter((lead) => lead.temperature === "Hot").length.toLocaleString("en-US");
+  document.querySelector("#avgNoContactMetric").textContent = avgDaysWithoutContact.toFixed(1);
   document.querySelector("#recoveryNarrativeValue").textContent = `${riskRows.length.toLocaleString("en-US")} registros priorizados por reglas ficticias.`;
   document.querySelector("#riskModelLabel").textContent = `${recoverableRate}% del valor base ficticio`;
   document.querySelector("#riskModelBar").style.width = `${Math.max(4, Math.min(100, recoverableRate))}%`;
@@ -667,6 +680,16 @@ function renderManager() {
   document.querySelector("#monthProgressBar").style.width = `${monthProgress}%`;
 
   const branchNames = [...new Set(rows.map((lead) => lead.branch))];
+  const bestBranchConversion = branchNames
+    .map((branch) => {
+      const branchRows = rows.filter((lead) => lead.branch === branch);
+      return {
+        branch,
+        conversion: pct(statusCount(branchRows, "Venta"), branchRows.length),
+      };
+    })
+    .sort((a, b) => b.conversion - a.conversion)[0];
+  document.querySelector("#branchConversionMetric").textContent = bestBranchConversion ? `${bestBranchConversion.conversion}%` : "0%";
   document.querySelector("#branchTableBody").innerHTML = branchNames.length
     ? branchNames
         .map((branch) => {
@@ -691,6 +714,18 @@ function renderManager() {
 
   const breakdownRows = rows;
   const advisorRows = advisorStats(breakdownRows);
+  const baselineAdvisorRows = advisorStats(branchRowsForBreakdown());
+  const selectedActivityAverage = advisorRows.length
+    ? advisorRows.reduce((sum, row) => sum + row.activity, 0) / advisorRows.length
+    : 0;
+  const baselineActivityAverage = baselineAdvisorRows.length
+    ? baselineAdvisorRows.reduce((sum, row) => sum + row.activity, 0) / baselineAdvisorRows.length
+    : selectedActivityAverage;
+  const rhythmVsBranch = baselineActivityAverage ? Math.round((selectedActivityAverage / baselineActivityAverage) * 100) : 0;
+  const coachingAlerts = advisorRows.filter((row) => row.risk >= 8 || row.overdue >= 5 || (row.assigned >= 12 && row.conversion < 8)).length;
+  document.querySelector("#rhythmMetric").textContent = `${rhythmVsBranch}%`;
+  document.querySelector("#activityVsBranchMetric").textContent = `${rhythmVsBranch}%`;
+  document.querySelector("#coachingAlertsMetric").textContent = coachingAlerts.toLocaleString("en-US");
   document.querySelector("#advisorTableBody").innerHTML = advisorRows.length
     ? advisorRows
         .sort((a, b) => b.assigned - a.assigned)
@@ -785,6 +820,9 @@ function renderManager() {
     }))
     .sort((a, b) => b.conversion - a.conversion || b.count - a.count)
     .slice(0, 8);
+  const bestSource = sourceRows[0];
+  document.querySelector("#sourceQualityMetric").textContent = bestSource ? bestSource.source : "-";
+  document.querySelector("#channelQualityMetric").textContent = bestSource ? `${bestSource.source} (${bestSource.conversion}%)` : "-";
   renderBars("#sourcePerformance", sourceRows, "source", "count", (row) => `${row.converted} ventas - ${row.conversion}% conversion`);
   renderFutureBiPreview(rows, activeRows, riskRows, sourceRows, advisorRows);
 
