@@ -246,6 +246,7 @@ const advisorFilter = document.querySelector("#advisorFilter");
 const sourceFilter = document.querySelector("#sourceFilter");
 const statusFilter = document.querySelector("#statusFilter");
 const temperatureFilter = document.querySelector("#temperatureFilter");
+const scorecardAdvisorSelect = document.querySelector("#scorecardAdvisorSelect");
 
 const EXECUTIVE_RECORDS = 1800;
 const EXECUTIVE_ADVISOR_COUNT = 56;
@@ -632,6 +633,78 @@ function renderFutureBiPreview(rows, activeRows, riskRows, sourceRows, advisorRo
     .join("");
 }
 
+function advisorDemoCode(advisorName) {
+  const number = advisorName.match(/\d+/)?.[0] || "000";
+  return `PC-ADV-${String(number).padStart(3, "0")}`;
+}
+
+function advisorActionPrompt(row, avgDaysWithoutContact) {
+  if (!row) return "Seleccione un asesor para ver la accion recomendada.";
+  if (row.overdue >= 5 || avgDaysWithoutContact >= 3) {
+    return "Accion recomendada: revisar atrasos hoy, confirmar proximo paso y reasignar carga si el asesor no puede actuar.";
+  }
+  if (row.risk >= 8) {
+    return "Accion recomendada: hacer coaching corto sobre leads en riesgo y exigir cierre de proxima accion por oportunidad.";
+  }
+  if (row.conversion < 8 && row.assigned >= 12) {
+    return "Accion recomendada: revisar calidad de contacto y comparar guion con asesores de mejor conversion.";
+  }
+  if (row.conversion >= 14) {
+    return "Accion recomendada: documentar practica del asesor y replicarla con el equipo de sucursal.";
+  }
+  return "Accion recomendada: mantener seguimiento diario y revisar que las promesas de compra no queden sin contacto.";
+}
+
+function renderAdvisorScorecard(rows, advisorRows, baselineAdvisorRows) {
+  const orderedAdvisors = [...advisorRows].sort((a, b) => b.risk - a.risk || b.overdue - a.overdue || b.activity - a.activity);
+  const previousValue = scorecardAdvisorSelect.value;
+  scorecardAdvisorSelect.innerHTML = orderedAdvisors.length
+    ? orderedAdvisors.map((row) => `<option value="${row.advisor}">${row.advisor} - ${row.branch}</option>`).join("")
+    : `<option value="">Sin asesores</option>`;
+  scorecardAdvisorSelect.value = orderedAdvisors.some((row) => row.advisor === previousValue)
+    ? previousValue
+    : orderedAdvisors[0]?.advisor || "";
+
+  const selected = advisorRows.find((row) => row.advisor === scorecardAdvisorSelect.value) || orderedAdvisors[0];
+  const advisorLeadRows = selected ? rows.filter((lead) => lead.advisor === selected.advisor) : [];
+  const active = advisorLeadRows.filter((lead) => lead.status !== "Venta" && lead.status !== "Perdido").length;
+  const pending = advisorLeadRows.filter((lead) => lead.isDueToday).length;
+  const overdueRows = advisorLeadRows.filter((lead) => lead.isOverdue);
+  const avgDaysWithoutContact = overdueRows.length
+    ? overdueRows.reduce((sum, lead) => sum + lead.overdueHours / 24, 0) / overdueRows.length
+    : 0;
+  const contactPace = advisorLeadRows.length
+    ? Math.round(advisorLeadRows.reduce((sum, lead) => sum + lead.calls + lead.messages + lead.visits, 0) / 7)
+    : 0;
+  const branchBaseline = selected
+    ? baselineAdvisorRows.filter((row) => row.branch === selected.branch)
+    : [];
+  const branchAverage = branchBaseline.length
+    ? branchBaseline.reduce((sum, row) => sum + row.activity, 0) / branchBaseline.length
+    : selected?.activity || 0;
+  const vsBranch = branchAverage && selected ? Math.round((selected.activity / branchAverage) * 100) : 0;
+  const status = selected && (selected.overdue >= 5 || selected.risk >= 8)
+    ? "Requiere atencion"
+    : selected && selected.conversion >= 14
+      ? "Buen desempeno"
+      : "Monitorear";
+
+  document.querySelector("#scoreAdvisorName").textContent = selected ? selected.advisor : "Sin asesor";
+  document.querySelector("#scoreAdvisorMeta").textContent = selected ? `${selected.branch} - ${advisorDemoCode(selected.advisor)}` : "-";
+  document.querySelector("#scoreAdvisorStatus").textContent = status;
+  document.querySelector("#scoreActiveMetric").textContent = active.toLocaleString("en-US");
+  document.querySelector("#scorePendingMetric").textContent = pending.toLocaleString("en-US");
+  document.querySelector("#scoreOverdueMetric").textContent = overdueRows.length.toLocaleString("en-US");
+  document.querySelector("#scoreContactsMetric").textContent = contactPace.toLocaleString("en-US");
+  document.querySelector("#scoreConversionMetric").textContent = `${selected ? selected.conversion : 0}%`;
+  document.querySelector("#scoreSalesMetric").textContent = selected ? selected.converted.toLocaleString("en-US") : "0";
+  document.querySelector("#scorePromisesMetric").textContent = statusCount(advisorLeadRows, "Interesado").toLocaleString("en-US");
+  document.querySelector("#scoreAvgNoContactMetric").textContent = avgDaysWithoutContact.toFixed(1);
+  document.querySelector("#scoreVsBranchMetric").textContent = `${vsBranch}%`;
+  document.querySelector("#scoreVsBranchBar").style.width = `${Math.max(4, Math.min(100, vsBranch))}%`;
+  document.querySelector("#scoreActionPrompt").textContent = advisorActionPrompt(selected, avgDaysWithoutContact);
+}
+
 function renderManager() {
   const rows = managerRows();
   const activeRows = rows.filter((lead) => lead.status !== "Venta" && lead.status !== "Perdido");
@@ -726,6 +799,7 @@ function renderManager() {
   document.querySelector("#rhythmMetric").textContent = `${rhythmVsBranch}%`;
   document.querySelector("#activityVsBranchMetric").textContent = `${rhythmVsBranch}%`;
   document.querySelector("#coachingAlertsMetric").textContent = coachingAlerts.toLocaleString("en-US");
+  renderAdvisorScorecard(rows, advisorRows, baselineAdvisorRows);
   document.querySelector("#advisorTableBody").innerHTML = advisorRows.length
     ? advisorRows
         .sort((a, b) => b.assigned - a.assigned)
@@ -937,6 +1011,7 @@ advisorFilter.addEventListener("change", renderManager);
 sourceFilter.addEventListener("change", renderManager);
 statusFilter.addEventListener("change", renderManager);
 temperatureFilter.addEventListener("change", renderManager);
+scorecardAdvisorSelect.addEventListener("change", renderManager);
 
 populateFilters();
 renderLeadList();

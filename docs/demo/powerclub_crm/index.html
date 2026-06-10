@@ -635,6 +635,48 @@
           <p class="microcopy">Uso gerencial: coaching, staffing, salidas o bonos. El ranking usa datos sinteticos para mostrar decisiones posibles.</p>
         </section>
 
+        <section class="panel advisor-scorecard-panel" aria-labelledby="advisorScorecardTitle">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow dark">Ficha del asesor</p>
+              <h3 id="advisorScorecardTitle">Advisor Scorecard - lectura gerencial individual</h3>
+              <p class="panel-subcopy">Vista compacta para inspeccionar un asesor, entender desempeno/riesgo y decidir la proxima accion. Datos sinteticos de demo.</p>
+            </div>
+            <label class="scorecard-select">
+              <span>Asesor</span>
+              <select id="scorecardAdvisorSelect" aria-label="Seleccionar asesor para ficha gerencial"></select>
+            </label>
+          </div>
+          <div class="scorecard-shell">
+            <div class="scorecard-profile">
+              <span class="score-avatar" aria-hidden="true"></span>
+              <div>
+                <strong id="scoreAdvisorName">Asesor Demo</strong>
+                <span id="scoreAdvisorMeta">Sucursal - PC-ADV-000</span>
+              </div>
+              <em id="scoreAdvisorStatus">Revision gerencial</em>
+            </div>
+            <div class="scorecard-metrics">
+              <article><span>Activas</span><strong id="scoreActiveMetric">0</strong></article>
+              <article><span>Pendientes hoy</span><strong id="scorePendingMetric">0</strong></article>
+              <article><span>Atrasadas</span><strong id="scoreOverdueMetric">0</strong></article>
+              <article><span>Contactos/dia</span><strong id="scoreContactsMetric">0</strong></article>
+              <article><span>Conversion</span><strong id="scoreConversionMetric">0%</strong></article>
+              <article><span>Ventas</span><strong id="scoreSalesMetric">0</strong></article>
+              <article><span>Promesas</span><strong id="scorePromisesMetric">0</strong></article>
+              <article><span>Dias sin contacto</span><strong id="scoreAvgNoContactMetric">0.0</strong></article>
+            </div>
+            <div class="scorecard-action">
+              <div>
+                <span>Performance vs branch average</span>
+                <strong id="scoreVsBranchMetric">0%</strong>
+              </div>
+              <div class="score-track" aria-hidden="true"><span id="scoreVsBranchBar"></span></div>
+              <p id="scoreActionPrompt">Seleccione un asesor para ver la accion recomendada.</p>
+            </div>
+          </div>
+        </section>
+
         <section class="panel visual-summary-panel" aria-labelledby="visualSummaryTitle">
           <div class="panel-heading">
             <div>
