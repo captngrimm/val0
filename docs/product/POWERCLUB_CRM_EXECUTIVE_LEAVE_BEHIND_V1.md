@@ -171,6 +171,17 @@ Example tier ranges to scope after discovery:
 
 These are planning ranges, not a final quote.
 
+Proposal reference:
+
+- Pricing model: `docs/product/POWERCLUB_CRM_PROPOSAL_PRICING_MODEL_V1.md`
+- Scope freeze checklist: `docs/product/POWERCLUB_CRM_SCOPE_FREEZE_CHECKLIST_V1.md`
+
+Recommended default to discuss after discovery:
+
+```text
+$2,500 setup + $1,000/month for 3 months, adjustable based on final scope.
+```
+
 ## Optional Future Add-On: Val PowerClub Copilot
 
 PowerClub could later add a Val corporate/copilot layer that helps managers ask questions about the dashboard and pilot.
