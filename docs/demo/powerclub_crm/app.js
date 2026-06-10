@@ -554,6 +554,84 @@ function renderBars(containerId, rows, labelKey, valueKey, detail) {
     .join("");
 }
 
+function renderStatusDonut(rows) {
+  const statusColors = {
+    Nuevo: "#a4adb5",
+    Contactado: "#286aa6",
+    Interesado: "#c46d1e",
+    "Cita agendada": "#6b58a8",
+    Visitado: "#11715f",
+    Venta: "#0f8b62",
+    Perdido: "#9d3d34",
+  };
+  const total = Math.max(rows.length, 1);
+  let cursor = 0;
+  const segments = EXECUTIVE_STATUSES.map((status) => {
+    const count = statusCount(rows, status);
+    const start = cursor;
+    const end = cursor + (count / total) * 360;
+    cursor = end;
+    return `${statusColors[status]} ${start}deg ${end}deg`;
+  });
+  document.querySelector("#statusDonut").style.background = `conic-gradient(${segments.join(", ")})`;
+  document.querySelector("#statusDonutTotal").textContent = rows.length.toLocaleString("en-US");
+}
+
+function renderMiniBars(containerId, rows, labelKey, valueKey) {
+  if (!rows.length) {
+    document.querySelector(containerId).innerHTML = `<div><span>Sin datos</span><strong>0</strong><i><b style="width: 4%"></b></i></div>`;
+    return;
+  }
+  const max = Math.max(...rows.map((row) => row[valueKey]), 1);
+  document.querySelector(containerId).innerHTML = rows
+    .map(
+      (row) => `
+        <div>
+          <span>${row[labelKey]}</span>
+          <strong>${row[valueKey]}</strong>
+          <i><b style="width: ${Math.max(8, Math.round((row[valueKey] / max) * 100))}%"></b></i>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderFutureBiPreview(rows, activeRows, riskRows, sourceRows, advisorRows) {
+  const branchRows = Object.entries(groupBy(rows, "branch"))
+    .map(([branch, branchLeads]) => ({
+      branch,
+      count: branchLeads.length,
+      conversion: pct(statusCount(branchLeads, "Venta"), branchLeads.length),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4);
+  const advisorPreviewRows = [...advisorRows]
+    .sort((a, b) => b.conversion - a.conversion || b.converted - a.converted)
+    .slice(0, 4)
+    .map((row) => ({
+      advisor: row.advisor.replace("Asesor Demo ", "A"),
+      score: row.conversion,
+    }));
+  const sourceTrendRows = sourceRows.slice(0, 6).map((row, index) => ({
+    source: row.source,
+    conversion: row.conversion,
+    height: Math.max(18, 34 + row.conversion + index * 4),
+  }));
+  const riskRate = pct(riskRows.length, activeRows.length);
+
+  renderMiniBars("#biBranchBars", branchRows, "branch", "count");
+  renderMiniBars("#biAdvisorBars", advisorPreviewRows, "advisor", "score");
+  document.querySelector("#biBranchLeader").textContent = branchRows[0] ? `${branchRows[0].count} regs.` : "-";
+  document.querySelector("#biAdvisorLeader").textContent = advisorPreviewRows[0] ? `${advisorPreviewRows[0].score}%` : "-";
+  document.querySelector("#biRiskRate").textContent = `${riskRate}%`;
+  document.querySelector("#biRiskGauge").style.width = `${Math.max(4, Math.min(100, riskRate))}%`;
+  document.querySelector("#biRiskLabel").textContent = `${riskRows.length.toLocaleString("en-US")} registros sinteticos priorizados`;
+  document.querySelector("#biSourceLeader").textContent = sourceTrendRows[0] ? sourceTrendRows[0].source : "-";
+  document.querySelector("#biSourceTrend").innerHTML = sourceTrendRows
+    .map((row) => `<span style="height: ${Math.min(110, row.height)}px"><b>${row.conversion}%</b></span>`)
+    .join("");
+}
+
 function renderManager() {
   const rows = managerRows();
   const activeRows = rows.filter((lead) => lead.status !== "Venta" && lead.status !== "Perdido");
@@ -562,6 +640,7 @@ function renderManager() {
   const riskRows = rows.filter(isAtRisk);
   const recoverable = riskRows.reduce((sum, lead) => sum + lead.estimatedValue * recoveryProbability(lead), 0);
   const atRiskValue = riskRows.reduce((sum, lead) => sum + lead.estimatedValue, 0);
+  const recoverableRate = pct(recoverable, atRiskValue);
 
   document.querySelector("#assignedMetric").textContent = activeRows.length.toLocaleString("en-US");
   document.querySelector("#pendingMetric").textContent = dueTodayRows.length.toLocaleString("en-US");
@@ -572,8 +651,15 @@ function renderManager() {
   document.querySelector("#unreachableMetric").textContent = riskRows.length.toLocaleString("en-US");
   document.querySelector("#atRiskValueMetric").textContent = formatMoney(atRiskValue);
   document.querySelector("#recoverableValueMetric").textContent = formatMoney(recoverable);
+  document.querySelector("#riskCountMetric").textContent = riskRows.length.toLocaleString("en-US");
   document.querySelector("#hotRiskMetric").textContent = riskRows.filter((lead) => lead.temperature === "Hot").length.toLocaleString("en-US");
-  document.querySelector("#recoveryNarrativeValue").textContent = `Estimacion demo: ${formatMoney(recoverable)} de oportunidad protegible.`;
+  document.querySelector("#recoveryNarrativeValue").textContent = `${riskRows.length.toLocaleString("en-US")} registros priorizados por reglas ficticias.`;
+  document.querySelector("#riskModelLabel").textContent = `${recoverableRate}% del valor base ficticio`;
+  document.querySelector("#riskModelBar").style.width = `${Math.max(4, Math.min(100, recoverableRate))}%`;
+  document.querySelector("#conversionVisualMetric").textContent = `${pct(statusCount(rows, "Venta"), rows.length)}%`;
+  document.querySelector("#overdueRateMetric").textContent = `${pct(overdueRows.length, activeRows.length)}%`;
+  document.querySelector("#riskRateMetric").textContent = `${pct(riskRows.length, activeRows.length)}%`;
+  renderStatusDonut(rows);
 
   const monthProgress = progressPercent(rows);
   document.querySelector("#monthProgressMetric").textContent = `${monthProgress}%`;
@@ -645,13 +731,21 @@ function renderManager() {
   document.querySelector("#activityRankingList").innerHTML = [...advisorRows]
     .sort((a, b) => b.activity - a.activity)
     .slice(0, 8)
-    .map((row) => `<li><strong>${row.advisor}</strong><span>${row.activity} actividades - ${row.branch}</span></li>`)
+    .map((row, index, list) => {
+      const maxActivity = Math.max(list[0]?.activity || 1, 1);
+      const width = Math.max(8, Math.round((row.activity / maxActivity) * 100));
+      return `<li><div><strong>${row.advisor}</strong><span>${row.activity} actividades - ${row.branch}</span></div><b class="rank-index">${index + 1}</b><i class="rank-bar"><span style="width: ${width}%"></span></i></li>`;
+    })
     .join("") || "<li>Sin datos para este filtro.</li>";
 
   document.querySelector("#resultRankingList").innerHTML = [...advisorRows]
     .sort((a, b) => b.converted - a.converted || b.conversion - a.conversion)
     .slice(0, 8)
-    .map((row) => `<li><strong>${row.advisor}</strong><span>${row.converted} ventas - ${row.conversion}% conversion</span></li>`)
+    .map((row, index, list) => {
+      const maxConverted = Math.max(list[0]?.converted || 1, 1);
+      const width = Math.max(8, Math.round((row.converted / maxConverted) * 100));
+      return `<li><div><strong>${row.advisor}</strong><span>${row.converted} ventas - ${row.conversion}% conversion</span></div><b class="rank-index">${index + 1}</b><i class="rank-bar"><span style="width: ${width}%"></span></i></li>`;
+    })
     .join("") || "<li>Sin datos para este filtro.</li>";
 
   document.querySelector("#riskList").innerHTML = riskRows
@@ -692,6 +786,7 @@ function renderManager() {
     .sort((a, b) => b.conversion - a.conversion || b.count - a.count)
     .slice(0, 8);
   renderBars("#sourcePerformance", sourceRows, "source", "count", (row) => `${row.converted} ventas - ${row.conversion}% conversion`);
+  renderFutureBiPreview(rows, activeRows, riskRows, sourceRows, advisorRows);
 
   const maxActivity = Math.max(...executiveActivitiesByDay.map((item) => item.count), 1);
   document.querySelector("#activityTrend").innerHTML = executiveActivitiesByDay
