@@ -1844,10 +1844,46 @@ option {
   background: linear-gradient(180deg, #ffffff, #f8fbfc);
 }
 
+.copilot-roadmap-panel {
+  display: grid;
+  gap: 12px;
+}
+
 .bi-preview-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(170px, 1fr));
   gap: 12px;
+}
+
+.copilot-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.copilot-grid article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfb;
+}
+
+.copilot-grid span,
+.copilot-grid strong {
+  display: block;
+}
+
+.copilot-grid span {
+  color: var(--green);
+  font-size: 0.74rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.copilot-grid strong {
+  margin-top: 6px;
+  color: var(--ink);
+  font-size: 0.92rem;
 }
 
 .bi-tile {
@@ -2151,6 +2187,7 @@ body[data-theme="dark"] .donut-wrap,
 body[data-theme="dark"] .mini-kpi-stack article,
 body[data-theme="dark"] .insight-grid article,
 body[data-theme="dark"] .bi-tile,
+body[data-theme="dark"] .copilot-grid article,
 body[data-theme="dark"] .rank-list li,
 body[data-theme="dark"] .kpi-explain-body section {
   background: var(--soft);
@@ -2299,6 +2336,7 @@ th {
   }
 
   .bi-preview-grid,
+  .copilot-grid,
   .insight-grid {
     grid-template-columns: repeat(2, minmax(170px, 1fr));
   }
@@ -2340,6 +2378,7 @@ th {
   .coaching-summary,
   .scorecard-metrics,
   .bi-preview-grid,
+  .copilot-grid,
   .insight-grid,
   .narrative-steps,
   .recovery-grid,

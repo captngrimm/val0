@@ -263,6 +263,7 @@ const SECTION_HELP = {
   "advisor-scorecard": "Resumen individual para coaching, riesgo y proxima accion.",
   "advanced-manager-insights": "Metricas mas profundas para analizar patrones y prioridades.",
   "future-bi-view": "Ejemplo conceptual de una capa BI avanzada despues del piloto.",
+  "copilot-roadmap": "Evolucion futura de Val como copiloto gerencial, sujeta a datos aprobados y alcance separado.",
 };
 const VIEW_PRESETS = {
   executive: ["core-kpis", "sales-quality-kpis"],

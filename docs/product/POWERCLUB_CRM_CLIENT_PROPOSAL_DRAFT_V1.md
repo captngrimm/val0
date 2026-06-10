@@ -246,22 +246,24 @@ Before proposal approval:
 
 ## 15. Val PowerClub Copilot Future Add-On
 
-Val PowerClub Copilot can be discussed as a future/add-on layer, not a V1 core promise.
+Val PowerClub Copilot can be discussed as a future/add-on layer, not a V1 core promise. It would be considered after the pilot, once PowerClub approves real data sources, access rules, formulas, and decision boundaries.
 
 Possible later value:
 
-- Managers ask questions about dashboard metrics.
-- Copilot explains what metrics mean.
-- Copilot suggests next questions.
-- Copilot helps decide what to request or change.
-- Copilot summarizes pilot feedback.
+- Managers ask natural-language questions about branch, advisor, channel, follow-up, conversion, and risk.
+- Copilot explains what KPIs mean and how formulas are applied.
+- Copilot suggests next questions for management review.
+- Copilot drafts weekly management summaries for human review.
+- Copilot suggests advisor coaching prompts based on approved metrics.
+- Copilot helps prioritize risk/opportunity rescue lists.
+- Copilot summarizes pilot feedback and change requests.
 
 Boundaries:
 
 - Separately scoped.
-- Permissioned and transparent.
-- Scoped to approved PowerClub knowledge.
-- No full autonomy.
+- Requires approved data sources and operating rules.
+- Formulas and decisions require discovery and scope freeze.
+- Val assists management; it does not replace management judgment.
 - No claim that Val already operates PowerClub.
 
 ## 16. Next Steps

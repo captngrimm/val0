@@ -224,6 +224,7 @@ Before and during discovery.
 - Frank can offer package ranges without improvising.
 - Frank can freeze scope before the client asks for everything.
 - Frank can position Val PowerClub Copilot as future/add-on without overpromising.
+- Frank can describe future AI use cases clearly: KPI explanations, manager questions, weekly summaries, coaching prompts, and risk prioritization after approved real data exists.
 - Frank can move from demo to discovery to paid pilot with a clear path.
 
 ## Guardrail Reminder
@@ -236,3 +237,5 @@ Before and during discovery.
 - No final production CRM promise.
 - No unlimited customization.
 - Val PowerClub Copilot remains future/add-on only unless separately scoped.
+- Val assists management; it does not replace management decisions.
+- Real AI use requires approved data sources, reviewed formulas, and scope freeze.

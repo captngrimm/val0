@@ -186,22 +186,23 @@ $2,500 setup + $1,000/month for 3 months, adjustable based on final scope.
 
 ## Optional Future Add-On: Val PowerClub Copilot
 
-PowerClub could later add a Val corporate/copilot layer that helps managers ask questions about the dashboard and pilot.
+PowerClub could later add a Val corporate/copilot layer after the pilot. The purpose would be to help managers understand the dashboard, ask better questions, prioritize follow-up, and prepare management summaries using approved real data sources.
 
 Potential use:
 
-- Explain metrics.
-- Suggest next questions.
-- Help managers decide what to request or change.
-- Summarize pilot feedback.
-- Keep project knowledge accessible.
+- Explain KPI meaning and demo/formula logic in plain language.
+- Help managers ask natural-language questions about branch, advisor, channel, risk, and follow-up patterns.
+- Draft weekly management summaries for review.
+- Suggest advisor coaching prompts based on approved metrics.
+- Help prioritize risk/opportunity rescue lists.
+- Prepare meeting/report notes from approved pilot data.
 
 Boundaries:
 
 - Future/add-on, not V1 core promise.
-- Transparent and permissioned.
-- Scoped to PowerClub-approved knowledge.
-- No full autonomy.
+- Requires approved data sources, access rules, discovery, and scope freeze.
+- Formulas and decision logic must be reviewed with PowerClub before real use.
+- Val assists management; it does not replace management decisions.
 - No claim that Val already operates PowerClub.
 
 ## Next Step

@@ -118,6 +118,12 @@ If X is WhatsApp, payments, mobile app, full SaaS, SLA, or Copilot:
 Eso se puede evaluar despues, pero no lo venderia escondido dentro de V1. Tiene otro nivel de riesgo, soporte y precio.
 ```
 
+If X is Val PowerClub Copilot / AI:
+
+```text
+La forma correcta de verlo es como una evolucion futura: primero validamos datos, KPIs y flujo operativo. Despues Val podria ayudar a explicar metricas, responder preguntas gerenciales, preparar resumenes y priorizar riesgos, siempre con datos aprobados y decisiones humanas.
+```
+
 ## How To Close
 
 Close with one of these:
@@ -182,6 +188,7 @@ After the meeting, capture:
 - Objections.
 - Red flags.
 - Whether Copilot came up.
+- Whether Copilot was understood as future/add-on, not included in V1.
 - Whether WhatsApp/payments/integrations came up.
 - Recommended next lane.
 
@@ -192,6 +199,7 @@ After the meeting, capture:
 - Frank can offer package ranges without improvising.
 - Frank can freeze scope before the client asks for everything.
 - Frank can position Val PowerClub Copilot as future/add-on without overpromising.
+- Frank can explain AI as KPI understanding, management questions, summaries, coaching prompts, and risk prioritization after approved data exists.
 
 ## Guardrails
 
@@ -204,3 +212,4 @@ After the meeting, capture:
 - No final production CRM promise.
 - No unlimited customization.
 - Val PowerClub Copilot remains future/add-on only unless separately scoped.
+- Val assists management; it does not replace management decisions.
