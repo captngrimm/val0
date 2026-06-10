@@ -155,9 +155,21 @@
           <p class="eyebrow dark">Vista de reunión</p>
           <h2>CRM operativo ligero</h2>
         </div>
-        <div class="view-tabs" role="tablist" aria-label="Cambiar vista">
-          <button id="operatorTab" class="tab" type="button" aria-selected="false">Vista asesores</button>
-          <button id="managerTab" class="tab active" type="button" aria-selected="true">Vista gerencial</button>
+        <div class="toolbar-controls">
+          <div class="view-tabs" role="tablist" aria-label="Cambiar vista">
+            <button id="operatorTab" class="tab" type="button" aria-selected="false">Vista asesores</button>
+            <button id="managerTab" class="tab active" type="button" aria-selected="true">Vista gerencial</button>
+          </div>
+          <div class="presentation-controls" aria-label="Controles de presentación">
+            <div class="segmented-control" aria-label="Tema visual">
+              <button id="lightThemeButton" class="active" type="button" aria-pressed="true">Claro</button>
+              <button id="darkThemeButton" type="button" aria-pressed="false">Oscuro</button>
+            </div>
+            <div class="segmented-control" aria-label="Densidad de vista">
+              <button id="comfortableDensityButton" class="active" type="button" aria-pressed="true">Comodo</button>
+              <button id="compactDensityButton" type="button" aria-pressed="false">Compacto</button>
+            </div>
+          </div>
         </div>
       </section>
 

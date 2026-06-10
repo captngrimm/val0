@@ -12,6 +12,9 @@
   --red: #9d3d34;
   --violet: #6b58a8;
   --shadow: 0 18px 45px rgba(23, 33, 38, 0.09);
+  --soft: #fbfcfb;
+  --input: #ffffff;
+  --control: #f7faf8;
 }
 
 * {
@@ -31,6 +34,25 @@ body {
   color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.45;
+}
+
+body[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #edf5f2;
+  --muted: #a9b8b4;
+  --line: #29413f;
+  --panel: #142221;
+  --wash: #0b1414;
+  --deep: #f2faf7;
+  --green: #51c5a9;
+  --blue: #73afe4;
+  --amber: #f0a654;
+  --red: #f07f73;
+  --violet: #a998e0;
+  --shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+  --soft: #192928;
+  --input: #101d1c;
+  --control: #172927;
 }
 
 button,
@@ -268,12 +290,53 @@ h3 {
   padding: 16px;
 }
 
+.toolbar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .view-tabs,
 .quick-filters,
-.status-actions {
+.status-actions,
+.presentation-controls,
+.segmented-control {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.presentation-controls {
+  justify-content: flex-end;
+}
+
+.segmented-control {
+  gap: 4px;
+  border: 1px solid #bed0cc;
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--control);
+}
+
+.segmented-control button {
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: transparent;
+  color: var(--deep);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.segmented-control button:hover {
+  background: #e8f3f0;
+}
+
+.segmented-control button.active {
+  background: var(--green);
+  color: #fff;
 }
 
 .operator-select {
@@ -535,7 +598,7 @@ textarea {
   border: 1px solid #bdc9ce;
   border-radius: 6px;
   padding: 8px 10px;
-  background: #fff;
+  background: var(--input);
   color: var(--ink);
   color-scheme: light;
 }
@@ -642,7 +705,7 @@ select {
   border: 1px solid #bdc9ce;
   border-radius: 6px;
   padding: 0 10px;
-  background: #fff;
+  background: var(--input);
   color: var(--ink);
   color-scheme: light;
   accent-color: var(--green);
@@ -654,7 +717,7 @@ select:focus {
 }
 
 option {
-  background: #fff;
+  background: var(--input);
   color: var(--ink);
 }
 
@@ -2061,6 +2124,133 @@ option {
   background: var(--green);
 }
 
+body[data-theme="dark"] .workflow-strip article,
+body[data-theme="dark"] .role-model article,
+body[data-theme="dark"] .operator-summary article,
+body[data-theme="dark"] .detail-list div,
+body[data-theme="dark"] .notes-box,
+body[data-theme="dark"] .context-box,
+body[data-theme="dark"] .form-box,
+body[data-theme="dark"] .coaching-summary article,
+body[data-theme="dark"] .narrative-steps article,
+body[data-theme="dark"] .recovery-grid article,
+body[data-theme="dark"] .action-prompt-grid article,
+body[data-theme="dark"] .ranking-grid > div,
+body[data-theme="dark"] .queue-grid > div,
+body[data-theme="dark"] .manager-option-grid article,
+body[data-theme="dark"] .scorecard-profile,
+body[data-theme="dark"] .scorecard-action,
+body[data-theme="dark"] .scorecard-metrics article,
+body[data-theme="dark"] .donut-wrap,
+body[data-theme="dark"] .mini-kpi-stack article,
+body[data-theme="dark"] .insight-grid article,
+body[data-theme="dark"] .bi-tile,
+body[data-theme="dark"] .rank-list li,
+body[data-theme="dark"] .kpi-explain-body section {
+  background: var(--soft);
+}
+
+body[data-theme="dark"] .tab,
+body[data-theme="dark"] .chip,
+body[data-theme="dark"] .status-actions button,
+body[data-theme="dark"] .collapse-toggle,
+body[data-theme="dark"] .kpi-explain-close {
+  border-color: var(--line);
+  background: var(--control);
+  color: var(--deep);
+}
+
+body[data-theme="dark"] .segmented-control,
+body[data-theme="dark"] .collapse-premium-header,
+body[data-theme="dark"] .kpi-explain-panel,
+body[data-theme="dark"] .risk-model-shell,
+body[data-theme="dark"] .future-bi-panel {
+  border-color: var(--line);
+  background: var(--panel);
+}
+
+body[data-theme="dark"] .tab.active,
+body[data-theme="dark"] .chip.active,
+body[data-theme="dark"] .status-actions button.active,
+body[data-theme="dark"] .segmented-control button.active {
+  background: var(--green);
+  color: #081211;
+}
+
+body[data-theme="dark"] .segmented-control button:hover {
+  background: #213633;
+}
+
+body[data-theme="dark"] .bar-track,
+body[data-theme="dark"] .rank-bar,
+body[data-theme="dark"] .progress-track,
+body[data-theme="dark"] .score-track,
+body[data-theme="dark"] .risk-track {
+  background: #263936;
+}
+
+body[data-theme="dark"] .donut-chart::before,
+body[data-theme="dark"] .risk-meter-ring {
+  background: var(--panel);
+}
+
+body[data-theme="dark"] input,
+body[data-theme="dark"] textarea,
+body[data-theme="dark"] select {
+  border-color: var(--line);
+  color-scheme: dark;
+}
+
+body[data-density="compact"] .app-shell {
+  gap: 12px;
+  padding-bottom: 30px;
+}
+
+body[data-density="compact"] .panel,
+body[data-density="compact"] .toolbar,
+body[data-density="compact"] .notice,
+body[data-density="compact"] .workflow-strip,
+body[data-density="compact"] .role-model,
+body[data-density="compact"] .manager-topline {
+  padding: 12px;
+}
+
+body[data-density="compact"] .metric-card,
+body[data-density="compact"] .narrative-steps article,
+body[data-density="compact"] .recovery-grid article,
+body[data-density="compact"] .action-prompt-grid article,
+body[data-density="compact"] .ranking-grid > div,
+body[data-density="compact"] .queue-grid > div,
+body[data-density="compact"] .manager-option-grid article,
+body[data-density="compact"] .scorecard-metrics article,
+body[data-density="compact"] .insight-grid article,
+body[data-density="compact"] .bi-tile {
+  padding: 10px;
+}
+
+body[data-density="compact"] .manager-view,
+body[data-density="compact"] .kpi-board,
+body[data-density="compact"] .manager-grid,
+body[data-density="compact"] .scorecard-shell,
+body[data-density="compact"] .visual-summary-grid,
+body[data-density="compact"] .bi-preview-grid {
+  gap: 12px;
+}
+
+body[data-density="compact"] .metric-card strong {
+  font-size: 1.7rem;
+}
+
+body[data-density="compact"] .metric-icon {
+  width: 34px;
+  height: 34px;
+}
+
+body[data-density="compact"] .metric-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -2130,6 +2320,7 @@ th {
   .toolbar,
   .panel-heading,
   .manager-topline,
+  .toolbar-controls,
   .lead-top,
   .lead-meta {
     align-items: stretch;

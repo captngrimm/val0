@@ -240,6 +240,10 @@ const operatorView = document.querySelector("#operatorView");
 const managerView = document.querySelector("#managerView");
 const operatorTab = document.querySelector("#operatorTab");
 const managerTab = document.querySelector("#managerTab");
+const lightThemeButton = document.querySelector("#lightThemeButton");
+const darkThemeButton = document.querySelector("#darkThemeButton");
+const comfortableDensityButton = document.querySelector("#comfortableDensityButton");
+const compactDensityButton = document.querySelector("#compactDensityButton");
 const operatorAdvisorFilter = document.querySelector("#operatorAdvisorFilter");
 const branchFilter = document.querySelector("#branchFilter");
 const advisorFilter = document.querySelector("#advisorFilter");
@@ -259,6 +263,22 @@ const SECTION_HELP = {
   "advanced-manager-insights": "Metricas mas profundas para analizar patrones y prioridades.",
   "future-bi-view": "Ejemplo conceptual de una capa BI avanzada despues del piloto.",
 };
+
+function setTheme(theme) {
+  document.body.dataset.theme = theme;
+  lightThemeButton.classList.toggle("active", theme === "light");
+  darkThemeButton.classList.toggle("active", theme === "dark");
+  lightThemeButton.setAttribute("aria-pressed", String(theme === "light"));
+  darkThemeButton.setAttribute("aria-pressed", String(theme === "dark"));
+}
+
+function setDensity(density) {
+  document.body.dataset.density = density;
+  comfortableDensityButton.classList.toggle("active", density === "comfortable");
+  compactDensityButton.classList.toggle("active", density === "compact");
+  comfortableDensityButton.setAttribute("aria-pressed", String(density === "comfortable"));
+  compactDensityButton.setAttribute("aria-pressed", String(density === "compact"));
+}
 
 const KPI_EXPLANATIONS = {
   activeOpportunities: {
@@ -1265,6 +1285,10 @@ document.querySelector("#managementNoteInput").addEventListener("input", (event)
 
 operatorTab.addEventListener("click", () => switchView("operator"));
 managerTab.addEventListener("click", () => switchView("manager"));
+lightThemeButton.addEventListener("click", () => setTheme("light"));
+darkThemeButton.addEventListener("click", () => setTheme("dark"));
+comfortableDensityButton.addEventListener("click", () => setDensity("comfortable"));
+compactDensityButton.addEventListener("click", () => setDensity("compact"));
 branchFilter.addEventListener("change", renderManager);
 advisorFilter.addEventListener("change", renderManager);
 sourceFilter.addEventListener("change", renderManager);
@@ -1273,6 +1297,8 @@ temperatureFilter.addEventListener("change", renderManager);
 scorecardAdvisorSelect.addEventListener("change", renderManager);
 
 populateFilters();
+setTheme("light");
+setDensity("comfortable");
 initializeCollapsibleSections();
 renderLeadList();
 renderDetail();
