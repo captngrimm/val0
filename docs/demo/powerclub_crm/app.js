@@ -250,6 +250,15 @@ const scorecardAdvisorSelect = document.querySelector("#scorecardAdvisorSelect")
 const kpiExplainDrawer = document.querySelector("#kpiExplainDrawer");
 const kpiExplainClose = document.querySelector("#kpiExplainClose");
 const sectionOpenState = {};
+const SECTION_HELP = {
+  "core-kpis": "Indicadores basicos para saber si la operacion esta bajo control.",
+  "advisor-productivity-kpis": "Mide ritmo de trabajo, seguimiento y actividad por asesor.",
+  "sales-quality-kpis": "Mide calidad comercial: conversion, promesas, fuente y cierre.",
+  "risk-recovery-kpis": "Detecta oportunidades en riesgo antes de que se pierdan.",
+  "advisor-scorecard": "Resumen individual para coaching, riesgo y proxima accion.",
+  "advanced-manager-insights": "Metricas mas profundas para analizar patrones y prioridades.",
+  "future-bi-view": "Ejemplo conceptual de una capa BI avanzada despues del piloto.",
+};
 
 const KPI_EXPLANATIONS = {
   activeOpportunities: {
@@ -1097,9 +1106,11 @@ function initializeCollapsibleSections() {
     if (section.dataset.collapseReady === "true") return;
     const id = section.dataset.collapseId;
     const label = section.dataset.collapseLabel || "Seccion";
+    const help = SECTION_HELP[id] || "Abrir o cerrar esta seccion.";
     const isPanel = section.classList.contains("panel");
     const heading = isPanel ? section.querySelector(":scope > .panel-heading") : section.querySelector(":scope > h3");
     if (!heading) return;
+    heading.title = help;
 
     const body = document.createElement("div");
     body.className = "collapse-body";
@@ -1117,6 +1128,7 @@ function initializeCollapsibleSections() {
     button.className = "collapse-toggle";
     button.type = "button";
     button.setAttribute("aria-controls", body.id);
+    button.title = help;
     button.innerHTML = `<span class="collapse-chevron" aria-hidden="true"></span><span>${label}</span>`;
 
     if (isPanel) {
@@ -1135,8 +1147,18 @@ function initializeCollapsibleSections() {
     const initialOpen = Object.prototype.hasOwnProperty.call(sectionOpenState, id) ? sectionOpenState[id] : defaultOpen;
     setCollapsibleState(section, button, body, initialOpen);
 
-    button.addEventListener("click", () => {
+    const toggleSection = () => {
       setCollapsibleState(section, button, body, button.getAttribute("aria-expanded") !== "true");
+    };
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleSection();
+    });
+
+    heading.addEventListener("click", (event) => {
+      if (event.target.closest("select, button, input, textarea, a, [data-kpi]")) return;
+      toggleSection();
     });
 
     section.dataset.collapseReady = "true";

@@ -725,6 +725,10 @@ option {
   animation: collapseReveal 0.16s ease;
 }
 
+.collapse-body[hidden] {
+  display: none;
+}
+
 .kpi-group .collapse-body {
   gap: 0;
 }
