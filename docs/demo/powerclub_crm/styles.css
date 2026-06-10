@@ -176,8 +176,9 @@ h3 {
   flex: 0 0 auto;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.72);
-  object-fit: cover;
+  object-fit: contain;
   background: #fff;
+  padding: 4px;
 }
 
 .partner-card p {

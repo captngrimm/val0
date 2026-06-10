@@ -14,6 +14,7 @@ JS = DEMO_DIR / "app.js"
 DOC = ROOT / "docs/product/POWERCLUB_CRM_01B_STATIC_DUMMY_DEMO.md"
 LOGO_HORIZONTAL = ASSET_DIR / "powerclub-logo-horizontal.png"
 LOGO_SQUARE = ASSET_DIR / "powerclub-logo-square.png"
+ISTHMUS_MARK = ASSET_DIR / "isthmus-dynamics-mark.png"
 PROTECTED = (
     "bot.py",
     "core",
@@ -46,7 +47,7 @@ def read_demo() -> str:
 
 
 def test_required_files_exist() -> None:
-    for path in (HTML, CSS, JS, DOC, LOGO_HORIZONTAL, LOGO_SQUARE):
+    for path in (HTML, CSS, JS, DOC, LOGO_HORIZONTAL, LOGO_SQUARE, ISTHMUS_MARK):
         assert_true(path.exists(), f"{path.relative_to(ROOT)} exists")
 
 
@@ -59,7 +60,7 @@ def test_spanish_labels_and_branding() -> None:
         "Power Club CRM Pilot",
         "CRM Operativo Ligero",
         "./assets/powerclub-logo-horizontal.png",
-        "./assets/powerclub-logo-square.png",
+        "./assets/isthmus-dynamics-mark.png",
         "powerclub-wordmark",
         "powerclub-mark",
         "Vista asesores",
