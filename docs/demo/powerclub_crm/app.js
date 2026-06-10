@@ -9,6 +9,50 @@ const STATUS_CLASSES = {
 const TODAY = "2026-06-09";
 const TOTAL_FAKE_RECORDS = 60;
 const PLAN_OPTIONS = ["Mensual $49", "Prepagado 1 mes", "Trimestral", "Semestral", "Anual", "Otro plan"];
+const ADVISOR_MESSAGE_TEMPLATES = {
+  "primer-contacto": {
+    subject: (lead) => `Consulta PowerClub - ${lead.offeredPlan}`,
+    message: (lead) =>
+      `Hola ${lead.name}, le saluda ${lead.advisor} de PowerClub. Vi su interés en ${lead.interest.toLowerCase()} y quería ayudarle con las opciones disponibles para ${lead.offeredPlan}. ¿Le queda bien que conversemos hoy?`,
+    body: (lead) =>
+      `Hola ${lead.name},\n\nLe saluda ${lead.advisor} de PowerClub. Vi su interés en ${lead.interest.toLowerCase()} y quería compartirle las opciones disponibles para ${lead.offeredPlan}.\n\nQuedo atento para coordinar el mejor horario de seguimiento.\n\nSaludos.`,
+  },
+  "seguimiento-amable": {
+    subject: (lead) => "Seguimiento PowerClub",
+    message: (lead) =>
+      `Hola ${lead.name}, solo paso a darle seguimiento a la información de PowerClub. Si todavía le interesa ${lead.offeredPlan}, puedo ayudarle a resolver dudas y coordinar el próximo paso.`,
+    body: (lead) =>
+      `Hola ${lead.name},\n\nSolo paso a darle seguimiento a la información de PowerClub. Si todavía le interesa ${lead.offeredPlan}, puedo ayudarle a resolver dudas y coordinar el próximo paso.\n\nSaludos.`,
+  },
+  "promesa-compra": {
+    subject: (lead) => "Confirmación de próxima compra PowerClub",
+    message: (lead) =>
+      `Hola ${lead.name}, le escribo para confirmar su promesa de compra de ${lead.offeredPlan}. ¿Mantenemos el seguimiento para ${lead.nextFollowUp}?`,
+    body: (lead) =>
+      `Hola ${lead.name},\n\nLe escribo para confirmar su promesa de compra de ${lead.offeredPlan}. ¿Mantenemos el seguimiento para ${lead.nextFollowUp}?\n\nQuedo atento a su confirmación.\n\nSaludos.`,
+  },
+  "reagendar-visita": {
+    subject: (lead) => "Reagendar visita PowerClub",
+    message: (lead) =>
+      `Hola ${lead.name}, podemos reagendar su visita a PowerClub. Tengo anotado seguimiento para ${lead.nextFollowUp}. ¿Qué horario le funciona mejor?`,
+    body: (lead) =>
+      `Hola ${lead.name},\n\nPodemos reagendar su visita a PowerClub. Tengo anotado seguimiento para ${lead.nextFollowUp}. ¿Qué horario le funciona mejor?\n\nSaludos.`,
+  },
+  "no-respondio": {
+    subject: (lead) => "Intento de contacto PowerClub",
+    message: (lead) =>
+      `Hola ${lead.name}, intenté contactarle para darle seguimiento a PowerClub. Cuando pueda, me confirma si desea que retomemos la información de ${lead.offeredPlan}.`,
+    body: (lead) =>
+      `Hola ${lead.name},\n\nIntenté contactarle para darle seguimiento a PowerClub. Cuando pueda, me confirma si desea que retomemos la información de ${lead.offeredPlan}.\n\nSaludos.`,
+  },
+  "recordatorio-membresia": {
+    subject: (lead) => "Recordatorio de membresía PowerClub",
+    message: (lead) =>
+      `Hola ${lead.name}, le recuerdo que tenemos opciones de membresía como ${lead.offeredPlan}. Si desea, le puedo orientar para elegir la mejor opción según su horario y objetivo.`,
+    body: (lead) =>
+      `Hola ${lead.name},\n\nLe recuerdo que tenemos opciones de membresía como ${lead.offeredPlan}. Si desea, le puedo orientar para elegir la mejor opción según su horario y objetivo.\n\nSaludos.`,
+  },
+};
 
 const leads = [
   {
@@ -256,6 +300,12 @@ const kpiExplainClose = document.querySelector("#kpiExplainClose");
 const advisorQuickNoteInput = document.querySelector("#advisorQuickNoteInput");
 const advisorNextFollowUpInput = document.querySelector("#advisorNextFollowUpInput");
 const saveAndNextButton = document.querySelector("#saveAndNextButton");
+const advisorTemplateSelect = document.querySelector("#advisorTemplateSelect");
+const advisorWhatsAppPreview = document.querySelector("#advisorWhatsAppPreview");
+const advisorEmailSubjectPreview = document.querySelector("#advisorEmailSubjectPreview");
+const advisorEmailBodyPreview = document.querySelector("#advisorEmailBodyPreview");
+const copyTemplateButton = document.querySelector("#copyTemplateButton");
+const copyTemplateStatus = document.querySelector("#copyTemplateStatus");
 const sectionOpenState = {};
 const collapsibleRegistry = {};
 const SECTION_HELP = {
@@ -534,6 +584,33 @@ function statusPill(status) {
   return `<span class="status-pill ${STATUS_CLASSES[status]}">${status}</span>`;
 }
 
+function selectedLead() {
+  return leads.find((item) => item.id === selectedId) || leads[0];
+}
+
+function renderAdvisorTemplates(lead) {
+  const template = ADVISOR_MESSAGE_TEMPLATES[advisorTemplateSelect.value] || ADVISOR_MESSAGE_TEMPLATES["primer-contacto"];
+  advisorWhatsAppPreview.value = template.message(lead);
+  advisorEmailSubjectPreview.value = template.subject(lead);
+  advisorEmailBodyPreview.value = template.body(lead);
+  copyTemplateStatus.textContent = "Sin envío automático: copie, pegue y envíe desde la herramienta aprobada.";
+}
+
+function templateCopyText() {
+  return [
+    "WhatsApp manual:",
+    advisorWhatsAppPreview.value,
+    "",
+    "Email sugerido:",
+    `Asunto: ${advisorEmailSubjectPreview.value}`,
+    advisorEmailBodyPreview.value,
+  ].join("\n");
+}
+
+function setCopyFallbackMessage() {
+  copyTemplateStatus.textContent = "No se copió automáticamente. Seleccione el texto de la vista previa y cópielo manualmente.";
+}
+
 function renderAdvisorWorkflow(assignedRows) {
   const lead = assignedRows.find((item) => item.id === selectedId) || assignedRows[0] || leads[0];
   const queueIndex = Math.max(assignedRows.findIndex((item) => item.id === lead.id), 0);
@@ -542,6 +619,7 @@ function renderAdvisorWorkflow(assignedRows) {
   document.querySelector("#advisorWorkflowQueuePosition").textContent = `${queueIndex + 1} de ${assignedRows.length}`;
   advisorQuickNoteInput.value = lead.managementNote || "";
   advisorNextFollowUpInput.value = lead.nextFollowUp || TODAY;
+  renderAdvisorTemplates(lead);
 }
 
 function renderAdvisorProgress(assignedRows) {
@@ -1355,10 +1433,29 @@ document.querySelectorAll("[data-advisor-outcome]").forEach((button) => {
   });
 });
 
+advisorTemplateSelect.addEventListener("change", () => {
+  renderAdvisorTemplates(selectedLead());
+});
+
+copyTemplateButton.addEventListener("click", () => {
+  const text = templateCopyText();
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        copyTemplateStatus.textContent = "Mensaje copiado. Péguelo y envíelo manualmente desde la herramienta aprobada.";
+      })
+      .catch(setCopyFallbackMessage);
+    return;
+  }
+  setCopyFallbackMessage();
+});
+
 document.querySelector("#offeredPlanSelect").addEventListener("change", (event) => {
   const lead = leads.find((item) => item.id === selectedId);
   lead.offeredPlan = event.target.value;
   renderDetail();
+  renderAdvisorTemplates(lead);
 });
 
 document.querySelector("#nextActionInput").addEventListener("input", (event) => {

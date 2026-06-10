@@ -289,6 +289,41 @@
                 <button type="button" class="manual-action">Llamar</button>
                 <button type="button" class="manual-action">WhatsApp manual</button>
               </div>
+              <section class="advisor-template-box" aria-labelledby="advisorTemplateTitle">
+                <div class="advisor-panel-head">
+                  <div>
+                    <p class="eyebrow dark">Plantillas rápidas</p>
+                    <h4 id="advisorTemplateTitle">Mensaje para copiar y enviar manualmente</h4>
+                  </div>
+                </div>
+                <label>
+                  <span>Tipo de mensaje</span>
+                  <select id="advisorTemplateSelect" aria-label="Seleccionar plantilla de comunicación">
+                    <option value="primer-contacto">Primer contacto</option>
+                    <option value="seguimiento-amable">Seguimiento amable</option>
+                    <option value="promesa-compra">Promesa de compra</option>
+                    <option value="reagendar-visita">Reagendar visita</option>
+                    <option value="no-respondio">No respondió / intento de contacto</option>
+                    <option value="recordatorio-membresia">Recordatorio de membresía o promoción</option>
+                  </select>
+                </label>
+                <label class="template-preview">
+                  <span>WhatsApp manual</span>
+                  <textarea id="advisorWhatsAppPreview" rows="4" readonly aria-label="Vista previa de mensaje WhatsApp"></textarea>
+                </label>
+                <div class="email-preview-grid">
+                  <label>
+                    <span>Asunto email</span>
+                    <input id="advisorEmailSubjectPreview" type="text" readonly aria-label="Asunto de email sugerido">
+                  </label>
+                  <label class="template-preview">
+                    <span>Cuerpo email</span>
+                    <textarea id="advisorEmailBodyPreview" rows="4" readonly aria-label="Cuerpo de email sugerido"></textarea>
+                  </label>
+                </div>
+                <button id="copyTemplateButton" class="copy-template-button" type="button">Copiar mensaje</button>
+                <p id="copyTemplateStatus" class="microcopy" role="status">Sin envío automático: copie, pegue y envíe desde la herramienta aprobada.</p>
+              </section>
               <div class="quick-outcomes" aria-label="Resultado rápido">
                 <button type="button" data-advisor-outcome="No contacto">No respondió</button>
                 <button type="button" data-advisor-outcome="Seguimiento">Interesado</button>
@@ -300,6 +335,7 @@
               <label class="fast-note">
                 <span>Nota rápida</span>
                 <textarea id="advisorQuickNoteInput" rows="3" aria-label="Nota rápida del asesor"></textarea>
+                <small>Dictado nativo: en Windows use Win + H; en móvil use el micrófono del teclado. Sin STT propio en fase 1.</small>
               </label>
               <div class="advisor-schedule-row">
                 <label>

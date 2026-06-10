@@ -19,11 +19,12 @@ The mobile-first layout should prioritize one active client at a time:
 1. Advisor selector or assigned advisor context.
 2. "Next client" card with name, branch, priority, interest, last contact, and next follow-up.
 3. Manual action buttons: Call and WhatsApp manual.
-4. Quick outcome buttons.
-5. Fast note field.
-6. Next follow-up date/time.
-7. Save and next.
-8. "Mi progreso" card below or above the queue depending on screen height.
+4. Communication template selector and copy button.
+5. Quick outcome buttons.
+6. Fast note field.
+7. Next follow-up date/time.
+8. Save and next.
+9. "Mi progreso" card below or above the queue depending on screen height.
 
 Mobile screens should avoid dense tables, manager charts, peer rankings, and long forms. The advisor should be able to complete the common workflow with one thumb and minimal scrolling.
 
@@ -72,7 +73,40 @@ Phase 1 should show the actions as manual/conceptual:
 - Call button: indicates the advisor should call the client manually.
 - WhatsApp button: indicates the advisor may use the existing manual WhatsApp workflow.
 
-This lane does not include real call integration, WhatsApp automation, message sending, templates, or communication logs.
+This lane does not include real call integration, WhatsApp automation, message sending, or communication logs.
+
+## Communication Templates
+
+Advisors should be able to work faster by choosing a suggested message, copying it, and sending it manually from the approved communication tool.
+
+Recommended phase 1 templates:
+
+- Primer contacto.
+- Seguimiento amable.
+- Promesa de compra.
+- Reagendar visita.
+- No respondió / intento de contacto.
+- Recordatorio de membresía o promoción.
+
+Template previews should include:
+
+- WhatsApp/manual chat message.
+- Email subject.
+- Email body.
+- Copy message button.
+- Clear note that the system is not sending the message automatically.
+
+Template text can use fake current-client fields in the demo, such as client display name, advisor name, plan offered, next follow-up date, and interest type. Real message wording must be approved by PowerClub before production use.
+
+Phase 1 template behavior:
+
+- Generate text locally in the browser.
+- Let the advisor copy the message.
+- If clipboard access is not available, allow manual select/copy from the preview field.
+- Do not call a WhatsApp API.
+- Do not send email.
+- Do not create communication logs automatically.
+- Do not imply campaign automation.
 
 ## Quick Outcome Buttons
 
@@ -106,7 +140,7 @@ Phase 1 should rely on native device tools:
 - Mobile users can use the keyboard microphone when available.
 - No custom speech-to-text is included in phase 1.
 
-Custom transcription, AI note cleanup, or voice commands can be considered later only if the pilot proves the need and the data/privacy rules are approved.
+Custom transcription, AI note cleanup, voice commands, or Val Voice/STT can be considered later only if the pilot proves the need and the data/privacy rules are approved. A future module could support transcription, summarization, and outcome extraction, but it is not part of phase 1.
 
 ## Follow-Up Scheduling
 
@@ -194,6 +228,7 @@ Do not overload phase 1 with:
 - Full manager analytics.
 - Peer comparison leaderboard in the advisor view.
 - Real WhatsApp automation.
+- Email sending automation.
 - Payment integration.
 - Custom mobile app.
 - Custom speech-to-text.
@@ -208,6 +243,9 @@ MVP:
 - Assigned advisor queue.
 - Current client card.
 - Manual call and WhatsApp action indicators.
+- Local communication template selector.
+- WhatsApp and email preview fields.
+- Copy message button with manual fallback.
 - Quick outcome buttons.
 - Fast notes.
 - Next follow-up date.
@@ -222,6 +260,7 @@ Phase 2:
 - Manager-approved status taxonomy.
 - Basic reminder rules.
 - Better queue prioritization.
+- Approved communication templates and governance.
 - Optional team/branch comparison if leadership wants it.
 - Advisor coaching prompts based on approved formulas.
 
@@ -229,6 +268,7 @@ Later:
 
 - Approved communication integrations.
 - AI note cleanup or summary assist.
+- Val Voice/STT for transcription, summarization, and outcome extraction if approved.
 - Voice input enhancements beyond native device dictation.
 - Advanced role permissions.
 - Production reporting pipeline.
@@ -241,6 +281,9 @@ The static demo can safely include:
 - Fake next-client queue.
 - Current client card.
 - Large manual action buttons.
+- Template selector.
+- WhatsApp and email previews.
+- Copy message button.
 - Quick outcome buttons.
 - Notes box.
 - Follow-up date.

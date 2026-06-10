@@ -453,6 +453,57 @@ h3 {
   gap: 10px;
 }
 
+.advisor-template-box {
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel);
+}
+
+.advisor-template-box h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.advisor-template-box label,
+.template-preview {
+  display: grid;
+  gap: 6px;
+}
+
+.advisor-template-box label span,
+.template-preview span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.email-preview-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.template-preview textarea,
+#advisorEmailSubjectPreview {
+  background: #f9fcfb;
+}
+
+.copy-template-button {
+  min-height: 38px;
+  border: 1px solid var(--green);
+  border-radius: 8px;
+  background: #e8f3f0;
+  color: var(--deep);
+  font-weight: 900;
+}
+
+.copy-template-button:hover {
+  background: var(--green);
+  color: #fff;
+}
+
 .advisor-current-client {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -505,6 +556,13 @@ h3 {
 .fast-note {
   display: grid;
   gap: 6px;
+}
+
+.fast-note small {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.45;
 }
 
 .advisor-schedule-row {
@@ -2311,6 +2369,7 @@ body[data-theme="dark"] .operator-summary article,
 body[data-theme="dark"] .advisor-progress-panel,
 body[data-theme="dark"] .advisor-workflow-panel,
 body[data-theme="dark"] .advisor-progress-grid article,
+body[data-theme="dark"] .advisor-template-box,
 body[data-theme="dark"] .advisor-current-client,
 body[data-theme="dark"] .detail-list div,
 body[data-theme="dark"] .notes-box,
@@ -2341,6 +2400,7 @@ body[data-theme="dark"] .chip,
 body[data-theme="dark"] .status-actions button,
 body[data-theme="dark"] .quick-outcomes button,
 body[data-theme="dark"] .manual-action,
+body[data-theme="dark"] .copy-template-button,
 body[data-theme="dark"] #saveAndNextButton,
 body[data-theme="dark"] .collapse-toggle,
 body[data-theme="dark"] .kpi-explain-close {
@@ -2416,7 +2476,8 @@ body[data-density="compact"] .scorecard-metrics article,
 body[data-density="compact"] .insight-grid article,
 body[data-density="compact"] .bi-tile,
 body[data-density="compact"] .advisor-progress-panel,
-body[data-density="compact"] .advisor-workflow-panel {
+body[data-density="compact"] .advisor-workflow-panel,
+body[data-density="compact"] .advisor-template-box {
   padding: 10px;
 }
 
