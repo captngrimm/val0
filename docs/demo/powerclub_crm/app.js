@@ -247,6 +247,139 @@ const sourceFilter = document.querySelector("#sourceFilter");
 const statusFilter = document.querySelector("#statusFilter");
 const temperatureFilter = document.querySelector("#temperatureFilter");
 const scorecardAdvisorSelect = document.querySelector("#scorecardAdvisorSelect");
+const kpiExplainDrawer = document.querySelector("#kpiExplainDrawer");
+const kpiExplainClose = document.querySelector("#kpiExplainClose");
+
+const KPI_EXPLANATIONS = {
+  activeOpportunities: {
+    title: "Oportunidades activas",
+    meaning: "Cantidad de socios o prospectos abiertos que todavia requieren gestion comercial.",
+    formula: "Oportunidades activas = registros filtrados que no estan marcados como Venta ni Perdido.",
+    data: "Usa estado comercial, sucursal, asesor, canal y filtros de la muestra sintetica.",
+    why: "Ayuda a ver carga real de trabajo y si una sucursal o asesor tiene demasiados casos abiertos.",
+    action: "Revisar distribucion de carga, reasignar si hace falta y asegurar que cada oportunidad tenga proximo paso.",
+  },
+  todayFollowUps: {
+    title: "Seguimientos para hoy",
+    meaning: "Acciones que deben gestionarse en el corte actual de la demo.",
+    formula: "Seguimientos para hoy = oportunidades abiertas con proxima accion en el dia demo.",
+    data: "Usa fecha de proximo seguimiento, estado comercial y filtros activos.",
+    why: "Permite dirigir el turno de trabajo antes de que los leads pierdan temperatura.",
+    action: "Pedir al gerente de sucursal que confirme responsables y revise el avance antes del cierre del dia.",
+  },
+  conversionRate: {
+    title: "Conversion rate",
+    meaning: "Porcentaje de la base filtrada que termino como venta en la muestra demo.",
+    formula: "Conversion rate = ventas cerradas / base filtrada.",
+    data: "Usa registros sinteticos marcados como Venta y el total filtrado.",
+    why: "Muestra resultado comercial, no solo actividad. Sirve para comparar sucursal, asesor y canal.",
+    action: "Investigar que hacen distinto los equipos con mejor conversion y revisar los filtros con baja conversion.",
+  },
+  sales: {
+    title: "Ventas",
+    meaning: "Cantidad de cierres comerciales registrados en la muestra demo.",
+    formula: "Ventas = registros filtrados con estado Venta.",
+    data: "Usa estado comercial sintetico y filtros activos.",
+    why: "Da una lectura directa de resultado y permite separar volumen de cierre.",
+    action: "Comparar ventas con oportunidades activas, promesas y atrasos para entender si el problema es cierre o seguimiento.",
+  },
+  contactsPerAdvisorDay: {
+    title: "Contactos / asesor / dia",
+    meaning: "Ritmo promedio de contacto por asesor activo durante el periodo demo.",
+    formula: "Contactos por asesor por dia = contactos registrados / asesores activos / dias del periodo.",
+    data: "Usa llamadas, mensajes, visitas, asesores activos y un periodo demo de 7 dias.",
+    why: "Ayuda a detectar productividad baja aunque el asesor tenga oportunidades asignadas.",
+    action: "Si el ritmo cae, revisar carga, agenda, disciplina de contacto o necesidad de coaching.",
+  },
+  followUps: {
+    title: "Seguimientos",
+    meaning: "Oportunidades en conversacion o con cita, todavia sin cierre final.",
+    formula: "Seguimientos = registros Contactado + Cita agendada.",
+    data: "Usa estado comercial sintetico y filtros activos.",
+    why: "Muestra la parte viva del embudo donde se gana o se pierde continuidad.",
+    action: "Pedir proxima accion clara para cada seguimiento y separar los casos listos para cierre.",
+  },
+  completedToday: {
+    title: "Completados hoy",
+    meaning: "Actividad registrada en el dia de corte de la demo.",
+    formula: "Completados hoy = actividades sinteticas registradas en el dia demo.",
+    data: "Usa dia de creacion/actividad y conteo de interacciones ficticias.",
+    why: "Evita confundir mucho pendiente con poca gestion: muestra trabajo ya ejecutado.",
+    action: "Comparar completados contra pendientes para decidir si el equipo necesita apoyo antes del cierre.",
+  },
+  advisorRhythm: {
+    title: "Ritmo vs sucursal",
+    meaning: "Compara el ritmo de actividad del filtro actual contra el promedio de su sucursal.",
+    formula: "Ritmo vs sucursal = actividad promedio filtrada / actividad promedio de sucursal.",
+    data: "Usa actividades, asesores, sucursal y filtros activos de la muestra sintetica.",
+    why: "Ayuda a encontrar asesores o grupos por debajo del ritmo esperado sin juzgar solo por ventas.",
+    action: "Usar para coaching, redistribucion de carga o investigacion de buenas practicas.",
+  },
+  purchasePromises: {
+    title: "Promesas de compra",
+    meaning: "Leads con intencion declarada que todavia necesitan seguimiento para cerrar.",
+    formula: "Promesas de compra = registros en estado Interesado dentro del filtro.",
+    data: "Usa estado comercial sintetico y filtros activos.",
+    why: "Son oportunidades con intencion; si no se gestionan, pueden convertirse en venta perdida.",
+    action: "Priorizar contacto cercano, confirmar objeciones y pedir siguiente paso con fecha.",
+  },
+  branchConversion: {
+    title: "Branch conversion",
+    meaning: "La mejor conversion por sucursal dentro del filtro actual.",
+    formula: "Branch conversion = ventas de una sucursal / registros de esa sucursal.",
+    data: "Usa sucursal, ventas y total de registros sinteticos filtrados.",
+    why: "Permite separar problemas de sucursal, volumen y calidad de gestion.",
+    action: "Comparar sucursales: replicar practicas del mejor resultado o investigar donde cae la conversion.",
+  },
+  sourceQuality: {
+    title: "Source quality",
+    meaning: "Canal que combina mejor conversion y volumen dentro del filtro.",
+    formula: "Source quality = ranking de canales por conversion, usando volumen como desempate.",
+    data: "Usa canal/fuente, ventas y cantidad de registros sinteticos.",
+    why: "Ayuda a decidir donde invertir energia comercial y donde un canal consume tiempo sin convertir.",
+    action: "Revisar canales con alto volumen y baja conversion; reforzar los canales que si cierran.",
+  },
+  monthProgress: {
+    title: "Avance del mes",
+    meaning: "Porcentaje de la base demo que ya tiene alguna gestion registrada.",
+    formula: "Avance del mes = registros gestionados / base filtrada.",
+    data: "Usa registros cuyo estado ya no es Nuevo y filtros activos.",
+    why: "Permite saber si el equipo esta avanzando sobre la base o acumulando trabajo sin tocar.",
+    action: "Si el avance es bajo, priorizar primeros contactos y revisar capacidad por sucursal.",
+  },
+  overdueFollowUps: {
+    title: "Seguimientos atrasados",
+    meaning: "Oportunidades cuya proxima accion ya debio ocurrir en el corte demo.",
+    formula: "Seguimientos atrasados = oportunidades abiertas con fecha de seguimiento anterior al dia demo.",
+    data: "Usa fecha de proximo seguimiento, estado comercial y filtros activos.",
+    why: "Es una de las senales mas claras de posible venta perdida por falta de control.",
+    action: "Escalar los atrasos importantes, reasignar si el asesor no puede actuar y cerrar proximo paso.",
+  },
+  overdueRate: {
+    title: "Atraso sobre abiertos",
+    meaning: "Porcentaje de oportunidades abiertas que ya tienen seguimiento atrasado.",
+    formula: "Atraso sobre abiertos = seguimientos atrasados / oportunidades activas.",
+    data: "Usa oportunidades activas, fechas de seguimiento y estado comercial sintetico.",
+    why: "Mide salud operativa: no solo cuantos atrasos existen, sino que tan grande es el problema.",
+    action: "Definir umbral gerencial y revisar asesores o sucursales que superen ese limite.",
+  },
+  riskOpportunities: {
+    title: "Oportunidades en riesgo",
+    meaning: "Leads atrasados, trabados o calientes sin proximo paso claro.",
+    formula: "Riesgo = atrasado o stuck opportunity o lead Hot sin gestion clara.",
+    data: "Usa temperatura, atraso, estado, stuck flag y filtros de la muestra demo.",
+    why: "Prioriza donde gerencia puede intervenir antes de perder una oportunidad con intencion.",
+    action: "Revisar lista de riesgo, contactar hoy los Hot leads y decidir reasignacion o coaching.",
+  },
+  stuckOpportunities: {
+    title: "Stuck opportunities",
+    meaning: "Oportunidades que siguen abiertas sin desenlace claro despues de varias senales.",
+    formula: "Stuck opportunities = registros abiertos marcados como trabados por reglas demo.",
+    data: "Usa estado comercial, visitas, atraso y reglas sinteticas de la demo.",
+    why: "Evita que el equipo acumule oportunidades que parecen vivas pero no avanzan.",
+    action: "Exigir proxima accion, cerrar aprendizaje o escalar los casos de mayor prioridad.",
+  },
+};
 
 const EXECUTIVE_RECORDS = 1800;
 const EXECUTIVE_ADVISOR_COUNT = 56;
@@ -933,6 +1066,24 @@ function renderManager() {
     .join("");
 }
 
+function openKpiExplanation(kpiKey) {
+  const detail = KPI_EXPLANATIONS[kpiKey];
+  if (!detail) return;
+  document.querySelector("#kpiExplainTitle").textContent = detail.title;
+  document.querySelector("#kpiExplainMeaning").textContent = detail.meaning;
+  document.querySelector("#kpiExplainFormula").textContent = detail.formula;
+  document.querySelector("#kpiExplainData").textContent = `${detail.data} Todo es fake/sintetico para demo; no usa datos reales de Power Club.`;
+  document.querySelector("#kpiExplainWhy").textContent = detail.why;
+  document.querySelector("#kpiExplainAction").textContent = detail.action;
+  kpiExplainDrawer.classList.add("open");
+  kpiExplainDrawer.setAttribute("aria-hidden", "false");
+}
+
+function closeKpiExplanation() {
+  kpiExplainDrawer.classList.remove("open");
+  kpiExplainDrawer.setAttribute("aria-hidden", "true");
+}
+
 function switchView(view) {
   const managerActive = view === "manager";
   operatorView.classList.toggle("active-view", !managerActive);
@@ -961,6 +1112,31 @@ document.querySelectorAll(".chip").forEach((button) => {
     document.querySelectorAll(".chip").forEach((chip) => chip.classList.toggle("active", chip === button));
     renderLeadList();
   });
+});
+
+document.querySelectorAll("[data-kpi]").forEach((card) => {
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `Explicar KPI: ${card.querySelector(".metric-head > span:not(.metric-icon):not(.help-dot)")?.textContent || "metrica"}`);
+  card.addEventListener("click", () => openKpiExplanation(card.dataset.kpi));
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openKpiExplanation(card.dataset.kpi);
+    }
+  });
+});
+
+kpiExplainClose.addEventListener("click", closeKpiExplanation);
+kpiExplainDrawer.addEventListener("click", (event) => {
+  if (event.target === kpiExplainDrawer) {
+    closeKpiExplanation();
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeKpiExplanation();
+  }
 });
 
 operatorAdvisorFilter.addEventListener("change", () => {

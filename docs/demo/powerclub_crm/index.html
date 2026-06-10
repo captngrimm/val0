@@ -389,7 +389,7 @@
           <div class="kpi-group">
             <h3>Core Management KPIs</h3>
             <div class="metrics-grid">
-              <article class="metric-card">
+              <article class="metric-card" data-kpi="activeOpportunities" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-pipeline"></use></svg></span>
                   <span>Oportunidades activas</span>
@@ -398,7 +398,7 @@
                 <strong id="assignedMetric">0</strong>
                 <em>Socios/prospectos asignados</em>
               </article>
-              <article class="metric-card warning">
+              <article class="metric-card warning" data-kpi="todayFollowUps" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-calendar-check"></use></svg></span>
                   <span>Seguimientos para hoy</span>
@@ -407,7 +407,7 @@
                 <strong id="pendingMetric">0</strong>
                 <em>Control operativo inmediato</em>
               </article>
-              <article class="metric-card blue">
+              <article class="metric-card blue" data-kpi="conversionRate" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-conversion"></use></svg></span>
                   <span>Conversion rate</span>
@@ -416,7 +416,7 @@
                 <strong id="conversionMetric">0%</strong>
                 <em>Ventas / base filtrada</em>
               </article>
-              <article class="metric-card success">
+              <article class="metric-card success" data-kpi="sales" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-sale"></use></svg></span>
                   <span>Ventas</span>
@@ -431,7 +431,7 @@
           <div class="kpi-group">
             <h3>Advisor Productivity KPIs</h3>
             <div class="metrics-grid">
-              <article class="metric-card">
+              <article class="metric-card" data-kpi="contactsPerAdvisorDay" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-phone"></use></svg></span>
                   <span>Contactos / asesor / dia</span>
@@ -440,7 +440,7 @@
                 <strong id="contactPaceMetric">0</strong>
                 <em>Ritmo comercial diario</em>
               </article>
-              <article class="metric-card">
+              <article class="metric-card" data-kpi="followUps" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-chat"></use></svg></span>
                   <span>Seguimientos</span>
@@ -448,7 +448,7 @@
                 <strong id="followUpsMetric">0</strong>
                 <em>En conversacion o cita</em>
               </article>
-              <article class="metric-card blue">
+              <article class="metric-card blue" data-kpi="completedToday" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-check-stack"></use></svg></span>
                   <span>Completados hoy</span>
@@ -457,7 +457,7 @@
                 <strong id="completedTodayMetric">0</strong>
                 <em>Actividad registrada</em>
               </article>
-              <article class="metric-card blue">
+              <article class="metric-card blue" data-kpi="advisorRhythm" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-pulse"></use></svg></span>
                   <span>Ritmo vs sucursal</span>
@@ -472,7 +472,7 @@
           <div class="kpi-group">
             <h3>Sales Quality KPIs</h3>
             <div class="metrics-grid">
-              <article class="metric-card blue">
+              <article class="metric-card blue" data-kpi="purchasePromises" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-handshake"></use></svg></span>
                   <span>Promesas de compra</span>
@@ -481,7 +481,7 @@
                 <strong id="promisesMetric">0</strong>
                 <em>Intencion comercial visible</em>
               </article>
-              <article class="metric-card">
+              <article class="metric-card" data-kpi="branchConversion" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-branch"></use></svg></span>
                   <span>Branch conversion</span>
@@ -490,7 +490,7 @@
                 <strong id="branchConversionMetric">0%</strong>
                 <em>Comparacion por sucursal</em>
               </article>
-              <article class="metric-card">
+              <article class="metric-card" data-kpi="sourceQuality" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-channel"></use></svg></span>
                   <span>Source quality</span>
@@ -499,7 +499,7 @@
                 <strong id="sourceQualityMetric">-</strong>
                 <em>Canal recomendado</em>
               </article>
-              <article class="metric-card blue">
+              <article class="metric-card blue" data-kpi="monthProgress" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-conversion"></use></svg></span>
                   <span>Avance del mes</span>
@@ -513,7 +513,7 @@
           <div class="kpi-group">
             <h3>Risk / Recovery KPIs</h3>
             <div class="metrics-grid">
-              <article class="metric-card warning">
+              <article class="metric-card warning" data-kpi="overdueFollowUps" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-clock-warning"></use></svg></span>
                   <span>Seguimientos atrasados</span>
@@ -522,7 +522,7 @@
                 <strong id="noContactMetric">0</strong>
                 <em>Donde gerencia interviene</em>
               </article>
-              <article class="metric-card warning">
+              <article class="metric-card warning" data-kpi="overdueRate" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-alert"></use></svg></span>
                   <span>Atraso sobre abiertos</span>
@@ -531,7 +531,7 @@
                 <strong id="overdueRateCardMetric">0%</strong>
                 <em>Follow-up health</em>
               </article>
-              <article class="metric-card warning">
+              <article class="metric-card warning" data-kpi="riskOpportunities" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-risk"></use></svg></span>
                   <span>Oportunidades en riesgo</span>
@@ -540,7 +540,7 @@
                 <strong id="unreachableMetric">0</strong>
                 <em>Prioridad de rescate</em>
               </article>
-              <article class="metric-card warning">
+              <article class="metric-card warning" data-kpi="stuckOpportunities" tabindex="0">
                 <div class="metric-head">
                   <span class="metric-icon" aria-hidden="true"><svg><use href="#icon-blocked-path"></use></svg></span>
                   <span>Stuck opportunities</span>
@@ -1018,6 +1018,41 @@
         </section>
       </section>
     </main>
+
+    <aside id="kpiExplainDrawer" class="kpi-explain-drawer" aria-labelledby="kpiExplainTitle" aria-hidden="true">
+      <div class="kpi-explain-panel" role="dialog" aria-modal="false">
+        <div class="kpi-explain-heading">
+          <div>
+            <p class="eyebrow dark">KPI explainability</p>
+            <h3 id="kpiExplainTitle">Seleccione una métrica</h3>
+          </div>
+          <button id="kpiExplainClose" class="kpi-explain-close" type="button" aria-label="Cerrar explicación">Cerrar</button>
+        </div>
+        <div class="kpi-explain-body">
+          <section>
+            <span>Qué significa</span>
+            <p id="kpiExplainMeaning">Haga click en una tarjeta KPI para ver su explicación.</p>
+          </section>
+          <section>
+            <span>Cálculo demo</span>
+            <p id="kpiExplainFormula">La fórmula se muestra en lenguaje ejecutivo.</p>
+          </section>
+          <section>
+            <span>Datos usados</span>
+            <p id="kpiExplainData">La demo usa datos ficticios/sintéticos.</p>
+          </section>
+          <section>
+            <span>Por qué importa</span>
+            <p id="kpiExplainWhy">Explica qué decisión gerencial soporta.</p>
+          </section>
+          <section>
+            <span>Acción sugerida</span>
+            <p id="kpiExplainAction">Define una conversación o intervención posible.</p>
+          </section>
+        </div>
+        <p class="microcopy">Nota: estas fórmulas son lógica de demo pendiente de discovery y scope freeze. No usan datos reales de Power Club y no representan una definición final de producción.</p>
+      </div>
+    </aside>
 
     <script src="./app.js"></script>
   </body>
