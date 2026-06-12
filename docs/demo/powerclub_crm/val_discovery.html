@@ -153,6 +153,52 @@
         justify-content: flex-end;
       }
 
+      .presentation-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+      }
+
+      .mode-toggle {
+        display: inline-flex;
+        gap: 4px;
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 14px;
+        padding: 4px;
+        background: rgba(255, 255, 255, 0.045);
+      }
+
+      .mode-toggle button {
+        min-height: 32px;
+        border: 0;
+        border-radius: 10px;
+        padding: 0 10px;
+        color: var(--muted);
+        background: transparent;
+        font-size: 0.78rem;
+        font-weight: 900;
+      }
+
+      .mode-toggle button.active {
+        color: var(--text);
+        background: rgba(99, 232, 255, 0.16);
+        box-shadow: inset 0 0 0 1px rgba(99, 232, 255, 0.2);
+      }
+
+      .skin-picker {
+        min-height: 40px;
+        min-width: 178px;
+        border: 1px solid rgba(99, 232, 255, 0.2);
+        border-radius: 12px;
+        padding: 0 10px;
+        color: var(--text);
+        background: rgba(1, 5, 10, 0.56);
+        font-size: 0.82rem;
+        font-weight: 850;
+      }
+
       .stage-link {
         display: inline-flex;
         min-height: 38px;
@@ -183,7 +229,7 @@
 
       .cockpit-grid {
         display: grid;
-        grid-template-columns: minmax(260px, 0.85fr) minmax(340px, 1.15fr) minmax(280px, 0.95fr);
+        grid-template-columns: minmax(240px, 0.82fr) minmax(320px, 1.18fr) minmax(260px, 0.92fr);
         gap: 18px;
         align-items: start;
       }
@@ -199,7 +245,7 @@
 
       .orb-stage {
         display: grid;
-        min-height: 260px;
+        min-height: clamp(210px, 25vw, 252px);
         place-items: center;
         overflow: hidden;
         border: 1px solid rgba(99, 232, 255, 0.16);
@@ -222,16 +268,16 @@
       .orb-stage::after {
         content: "";
         position: absolute;
-        width: 420px;
-        height: 420px;
+        width: min(420px, 96vw);
+        height: min(420px, 96vw);
         border: 1px solid rgba(99, 232, 255, 0.09);
         border-radius: 50%;
         animation: rotateRing 18s linear infinite;
       }
 
       .orb-stage::after {
-        width: 280px;
-        height: 280px;
+        width: min(280px, 78vw);
+        height: min(280px, 78vw);
         border-color: rgba(255, 49, 77, 0.12);
         animation-duration: 11s;
         animation-direction: reverse;
@@ -256,8 +302,8 @@
       .val-orb {
         position: relative;
         z-index: 1;
-        width: 154px;
-        height: 154px;
+        width: clamp(118px, 12vw, 148px);
+        height: clamp(118px, 12vw, 148px);
         border-radius: 50%;
         background:
           radial-gradient(circle at 50% 45%, #ffeff1 0 4%, #ff6b7c 5% 17%, #e91534 18% 38%, #3b0912 39% 64%, #06080c 65%);
@@ -390,6 +436,41 @@
 
       .ghost {
         background: rgba(255, 255, 255, 0.045);
+      }
+
+      .operator-drawer {
+        border: 1px solid rgba(99, 232, 255, 0.14);
+        border-radius: 14px;
+        padding: 10px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .operator-drawer summary {
+        cursor: pointer;
+        color: var(--text);
+        font-size: 0.82rem;
+        font-weight: 900;
+        list-style: none;
+      }
+
+      .operator-drawer summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .operator-drawer summary::after {
+        content: "Abrir";
+        float: right;
+        color: var(--cyan);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+      }
+
+      .operator-drawer[open] summary::after {
+        content: "Cerrar";
+      }
+
+      .operator-drawer > :not(summary) {
+        margin-top: 10px;
       }
 
       .val-says {
@@ -721,6 +802,116 @@
         line-height: 1.5;
       }
 
+      .mode-note {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.45;
+      }
+
+      body[data-mode="presentation"] .operator-mode-only,
+      body[data-mode="presentation"] .setup-panel,
+      body[data-mode="presentation"] .flow-panel,
+      body[data-mode="presentation"] .capture-column,
+      body[data-mode="presentation"] .summary-panel {
+        display: none;
+      }
+
+      body[data-mode="presentation"] .stage-shell {
+        width: min(1240px, 100%);
+        gap: 16px;
+      }
+
+      body[data-mode="presentation"] .cockpit-grid {
+        grid-template-columns: minmax(240px, 0.8fr) minmax(360px, 1.3fr) minmax(260px, 0.9fr);
+      }
+
+      body[data-mode="presentation"] .presence-panel,
+      body[data-mode="presentation"] .val-panel,
+      body[data-mode="presentation"] .question-panel {
+        padding: 16px;
+      }
+
+      body[data-mode="presentation"] .positioning {
+        max-width: 680px;
+      }
+
+      body[data-mode="presentation"] .guardrail {
+        font-size: 0.8rem;
+      }
+
+      body[data-mode="presentation"] .whiteboard-panel .guardrail {
+        display: none;
+      }
+
+      body[data-mode="presentation"] .whiteboard-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      body[data-mode="presentation"] .whiteboard-lane {
+        min-height: 122px;
+      }
+
+      body[data-mode="presentation"] .whiteboard-lane:nth-of-type(n+4) {
+        display: none;
+      }
+
+      body[data-mode="presentation"] .question-text {
+        font-size: 1.18rem;
+      }
+
+      body[data-mode="presentation"] .val-says {
+        min-height: 210px;
+      }
+
+      body[data-mode="presentation"] .val-says p {
+        font-size: 1.18rem;
+      }
+
+      body[data-skin="executive"] {
+        --panel: rgba(16, 23, 31, 0.88);
+        --panel-strong: rgba(21, 29, 39, 0.96);
+        --line: rgba(176, 208, 214, 0.18);
+        --cyan: #8ee8f4;
+        --cyan-soft: rgba(142, 232, 244, 0.13);
+        --red: #e24a5c;
+        --muted: #adbdc5;
+      }
+
+      body[data-skin="executive"] .val-orb {
+        box-shadow:
+          0 0 16px rgba(226, 74, 92, 0.38),
+          0 0 52px rgba(142, 232, 244, 0.12),
+          inset 0 0 22px rgba(255, 255, 255, 0.18);
+      }
+
+      body[data-skin="signature"] {
+        --panel: rgba(13, 20, 30, 0.82);
+        --panel-strong: rgba(18, 28, 40, 0.94);
+        --cyan: #63e8ff;
+        --cyan-soft: rgba(99, 232, 255, 0.18);
+        --red: #ff314d;
+        --muted: #9db2bd;
+      }
+
+      body[data-skin="tactical"] {
+        --panel: rgba(9, 18, 17, 0.9);
+        --panel-strong: rgba(11, 23, 21, 0.96);
+        --line: rgba(147, 219, 168, 0.22);
+        --cyan: #a7f3be;
+        --cyan-soft: rgba(167, 243, 190, 0.14);
+        --red: #f15a45;
+        --gold: #d3c27a;
+        --text: #effbf1;
+        --muted: #aebfad;
+        background:
+          linear-gradient(rgba(167, 243, 190, 0.022) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(167, 243, 190, 0.018) 1px, transparent 1px),
+          radial-gradient(circle at 50% 12%, rgba(167, 243, 190, 0.11), transparent 30%),
+          linear-gradient(145deg, #040604, #0b1411 46%, #050807);
+        background-size: 22px 22px, 22px 22px, auto, auto;
+      }
+
       @keyframes idlePulse {
         0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(255, 49, 77, 0.46), 0 0 72px rgba(255, 49, 77, 0.25); }
         50% { transform: scale(1.035); box-shadow: 0 0 28px rgba(255, 49, 77, 0.72), 0 0 92px rgba(99, 232, 255, 0.18); }
@@ -783,6 +974,15 @@
         .stage-actions {
           justify-content: flex-start;
         }
+
+        .presentation-controls {
+          justify-content: flex-start;
+        }
+
+        body[data-mode="presentation"] .cockpit-grid,
+        body[data-mode="presentation"] .whiteboard-grid {
+          grid-template-columns: 1fr;
+        }
       }
 
       @media (max-width: 640px) {
@@ -797,7 +997,7 @@
       }
     </style>
   </head>
-  <body>
+  <body data-mode="presentation" data-skin="executive">
     <main class="stage-shell">
       <header class="stage-header">
         <div class="brand-lockup">
@@ -811,6 +1011,17 @@
         <div class="stage-badge" aria-label="Estado de demo">
           <strong>Meeting Ops cockpit</strong>
           <span>Interno · estático · sin servicios externos</span>
+          <div class="presentation-controls" aria-label="Controles de presentación">
+            <div class="mode-toggle" role="group" aria-label="Modo de vista">
+              <button id="presentationModeButton" class="active" type="button">Presentación</button>
+              <button id="operatorModeButton" type="button">Operador</button>
+            </div>
+            <select id="skinSelect" class="skin-picker" aria-label="Skin visual">
+              <option value="executive">Executive Clean</option>
+              <option value="signature">Isthmus Signature</option>
+              <option value="tactical">Retro Tactical</option>
+            </select>
+          </div>
           <div class="stage-actions">
             <a class="stage-link" href="./index.html">Volver al CRM demo</a>
           </div>
@@ -895,26 +1106,29 @@
           <div id="valStateBadge" class="val-state" aria-live="polite"><span></span>Estado: en espera</div>
           <div class="control-grid" aria-label="Controles principales">
             <button id="valQuestionButton" class="primary" type="button">Val pregunta</button>
-            <button id="listenResponseButton" class="secondary" type="button">Escuchar respuesta</button>
-            <button id="confirmResponseButton" class="ghost" type="button">Confirmar respuesta</button>
+            <button id="listenResponseButton" class="secondary operator-mode-only" type="button">Escuchar respuesta</button>
+            <button id="confirmResponseButton" class="ghost operator-mode-only" type="button">Confirmar respuesta</button>
             <button id="organizeWhiteboardButton" class="ghost" type="button">Organizar en whiteboard</button>
-            <button id="generateSummaryButton" class="secondary" type="button">Generar resumen</button>
+            <button id="generateSummaryButton" class="secondary operator-mode-only" type="button">Generar resumen</button>
           </div>
-          <label class="voice-control">
-            <span class="field-label">Voz de Val</span>
-            <select id="voiceSelect" aria-label="Seleccionar voz del navegador"></select>
-          </label>
-          <div class="voice-tuning" aria-label="Ajustes de voz">
-            <label>
-              <span class="field-label">Velocidad</span>
-              <input id="voiceRateInput" type="range" min="0.75" max="1.25" step="0.05" value="1.05" aria-label="Velocidad de voz">
+          <details class="operator-drawer operator-mode-only">
+            <summary>Voz de Val / fallback navegador</summary>
+            <label class="voice-control">
+              <span class="field-label">Voz de Val</span>
+              <select id="voiceSelect" aria-label="Seleccionar voz del navegador"></select>
             </label>
-            <label>
-              <span class="field-label">Tono</span>
-              <input id="voicePitchInput" type="range" min="0.9" max="1.15" step="0.05" value="1" aria-label="Tono de voz">
-            </label>
-          </div>
-          <p id="speechStatus" class="status-line">Las voces dependen del navegador y del sistema operativo. Para demo ejecutiva, audio premium local puede reemplazar la voz del navegador.</p>
+            <div class="voice-tuning" aria-label="Ajustes de voz">
+              <label>
+                <span class="field-label">Velocidad</span>
+                <input id="voiceRateInput" type="range" min="0.75" max="1.25" step="0.05" value="1.05" aria-label="Velocidad de voz">
+              </label>
+              <label>
+                <span class="field-label">Tono</span>
+                <input id="voicePitchInput" type="range" min="0.9" max="1.15" step="0.05" value="1" aria-label="Tono de voz">
+              </label>
+            </div>
+            <p id="speechStatus" class="status-line">Las voces dependen del navegador y del sistema operativo. Para demo ejecutiva, audio premium local puede reemplazar la voz del navegador.</p>
+          </details>
         </section>
 
         <section class="val-panel" aria-labelledby="valSaysTitle">
@@ -926,8 +1140,8 @@
             <p id="valMessage">Listo para iniciar. Esta pantalla ayuda a ordenar discovery, decisiones, riesgos y próximos pasos.</p>
           </div>
 
-          <div>
-            <p class="eyebrow">Agenda</p>
+          <details class="operator-drawer operator-mode-only">
+            <summary>Agenda</summary>
             <ul class="agenda-list">
               <li>Validar dolor operativo</li>
               <li>Revisar vista gerencial</li>
@@ -936,10 +1150,10 @@
               <li>Definir alcance de piloto</li>
               <li>Acordar próximo paso</li>
             </ul>
-          </div>
+          </details>
 
-          <div>
-            <p class="eyebrow">Uso en reunión</p>
+          <details class="operator-drawer operator-mode-only">
+            <summary>Uso en reunión</summary>
             <ol class="agenda-list">
               <li>Frank introduce Val como herramienta interna.</li>
               <li>Frank usa Val para mostrar el marco de la sesión.</li>
@@ -948,7 +1162,12 @@
               <li>Se capturan notas, decisiones, riesgos y próximos pasos.</li>
               <li>Frank genera un resumen local para seguimiento.</li>
             </ol>
-          </div>
+          </details>
+
+          <details class="operator-drawer operator-mode-only">
+            <summary>Guardrails / límites</summary>
+            <p class="mode-note">Herramienta interna en desarrollo. No graba, no persiste datos, no llama APIs externas y no opera PowerClub. Frank confirma la información antes de usarla.</p>
+          </details>
         </section>
 
         <section class="question-panel" aria-labelledby="questionTitle">
@@ -962,15 +1181,15 @@
             <p id="questionText" class="question-text">¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?</p>
           </div>
 
-          <label>
+          <label class="operator-mode-only">
             <span class="field-label">Respuesta capturada</span>
             <textarea id="answerCapture" class="answer-capture" rows="5" placeholder="Frank escribe la respuesta o idea clave escuchada en la reunión."></textarea>
           </label>
-          <p class="status-line">Modo seguro: Frank puede escribir o corregir la respuesta antes de organizarla.</p>
-          <p id="sttStatus" class="status-line">Transcripción experimental del navegador en Español LatAm. Si no está disponible, escriba la respuesta o use dictado del sistema.</p>
+          <p class="status-line operator-mode-only">Modo seguro: Frank puede escribir o corregir la respuesta antes de organizarla.</p>
+          <p id="sttStatus" class="status-line operator-mode-only">STT experimental del navegador. Modo seguro: escribir/corregir respuesta.</p>
 
-          <div>
-            <p class="eyebrow">Categoría opcional</p>
+          <details class="operator-drawer operator-mode-only">
+            <summary>Categorías</summary>
             <div class="category-chips" aria-label="Categorías de respuesta">
               <button type="button" data-category="leads">Leads</button>
               <button type="button" data-category="seguimiento">Seguimiento</button>
@@ -981,24 +1200,26 @@
               <button type="button" data-category="alcance">Alcance/piloto</button>
               <button type="button" data-category="riesgo">Riesgo/exclusión</button>
             </div>
-          </div>
+          </details>
 
-          <p class="eyebrow">Captura avanzada opcional</p>
-          <div class="quick-capture" aria-label="Captura avanzada opcional">
-            <button type="button" data-capture="pain">Capturar dolor</button>
-            <button type="button" data-capture="decision">Capturar decisión</button>
-            <button type="button" data-capture="risk">Marcar riesgo</button>
-            <button type="button" data-capture="data">Dato pendiente</button>
-            <button type="button" data-capture="pilot">Candidato para piloto</button>
-          </div>
+          <details class="operator-drawer operator-mode-only">
+            <summary>Captura avanzada</summary>
+            <div class="quick-capture" aria-label="Captura avanzada opcional">
+              <button type="button" data-capture="pain">Capturar dolor</button>
+              <button type="button" data-capture="decision">Capturar decisión</button>
+              <button type="button" data-capture="risk">Marcar riesgo</button>
+              <button type="button" data-capture="data">Dato pendiente</button>
+              <button type="button" data-capture="pilot">Candidato para piloto</button>
+            </div>
+          </details>
 
           <div class="observation-panel" aria-labelledby="observationTitle">
             <p class="eyebrow">Val observa</p>
             <p id="valObservation">Capture una respuesta para que Val sugiera el siguiente movimiento de discovery.</p>
           </div>
 
-          <div>
-            <p class="eyebrow">Banco de categorías</p>
+          <details class="operator-drawer operator-mode-only">
+            <summary>Banco de categorías</summary>
             <ul class="question-bank">
               <li>Dolor operativo</li>
               <li>Visibilidad gerencial</li>
@@ -1008,7 +1229,7 @@
               <li>Riesgos / exclusiones</li>
               <li>Próximo paso</li>
             </ul>
-          </div>
+          </details>
         </section>
       </div>
 
@@ -1089,17 +1310,20 @@
       </section>
 
       <section class="summary-panel" aria-labelledby="summaryTitle">
-        <div>
-          <p class="eyebrow">Resumen local</p>
-          <h2 id="summaryTitle">Salida para seguimiento</h2>
-          <p class="guardrail">El resumen se genera en esta página desde lo capturado. No hay persistencia ni servicios externos.</p>
-        </div>
-        <textarea id="summaryOutput" class="summary-output" rows="12" placeholder="Genere un resumen cuando termine la conversación."></textarea>
-        <div class="summary-actions">
-          <button id="generateSummaryButtonBottom" class="secondary" type="button">Generar resumen</button>
-          <button id="copySummaryButtonBottom" class="ghost" type="button">Copiar resumen</button>
-        </div>
-        <p id="copyStatus" class="status-line">Listo para generar resumen.</p>
+        <details class="operator-drawer" open>
+          <summary>Resumen local</summary>
+          <div>
+            <p class="eyebrow">Resumen local</p>
+            <h2 id="summaryTitle">Salida para seguimiento</h2>
+            <p class="guardrail">El resumen se genera en esta página desde lo capturado. No hay persistencia ni servicios externos.</p>
+          </div>
+          <textarea id="summaryOutput" class="summary-output" rows="12" placeholder="Genere un resumen cuando termine la conversación."></textarea>
+          <div class="summary-actions">
+            <button id="generateSummaryButtonBottom" class="secondary" type="button">Generar resumen</button>
+            <button id="copySummaryButtonBottom" class="ghost" type="button">Copiar resumen</button>
+          </div>
+          <p id="copyStatus" class="status-line">Listo para generar resumen.</p>
+        </details>
       </section>
     </main>
 
@@ -1147,7 +1371,15 @@
       let recognition = null;
       let availableVoices = [];
       let selectedVoice = null;
+      const typingConfig = {
+        stepShort: 2,
+        stepLong: 3,
+        delayMs: 24,
+      };
 
+      const presentationModeButton = document.querySelector("#presentationModeButton");
+      const operatorModeButton = document.querySelector("#operatorModeButton");
+      const skinSelect = document.querySelector("#skinSelect");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -1194,6 +1426,22 @@
       let valTypingTimer = null;
       let valPacingTimer = null;
 
+      function setMode(mode) {
+        const nextMode = mode === "operator" ? "operator" : "presentation";
+        document.body.dataset.mode = nextMode;
+        presentationModeButton.classList.toggle("active", nextMode === "presentation");
+        operatorModeButton.classList.toggle("active", nextMode === "operator");
+        presentationModeButton.setAttribute("aria-pressed", String(nextMode === "presentation"));
+        operatorModeButton.setAttribute("aria-pressed", String(nextMode === "operator"));
+      }
+
+      function setSkin(skin) {
+        const allowed = ["executive", "signature", "tactical"];
+        const nextSkin = allowed.includes(skin) ? skin : "executive";
+        document.body.dataset.skin = nextSkin;
+        skinSelect.value = nextSkin;
+      }
+
       function setValState(state) {
         const safeState = valStateLabels[state] ? state : "idle";
         valOrb.classList.remove("thinking", "speaking", "listening", "organizing", "ready");
@@ -1215,7 +1463,7 @@
       function setValMessage(text, shouldSpeak = false, state = "speaking") {
         window.clearTimeout(valTypingTimer);
         const cleanText = text || "";
-        const revealStep = cleanText.length > 180 ? 4 : 3;
+        const revealStep = cleanText.length > 180 ? typingConfig.stepLong : typingConfig.stepShort;
         let cursor = 0;
         setValState(state);
         valMessage.textContent = "";
@@ -1223,7 +1471,7 @@
           cursor += revealStep;
           valMessage.textContent = cleanText.slice(0, cursor);
           if (cursor < cleanText.length) {
-            valTypingTimer = window.setTimeout(reveal, 14);
+            valTypingTimer = window.setTimeout(reveal, typingConfig.delayMs);
             return;
           }
           valMessage.textContent = cleanText;
@@ -1633,6 +1881,11 @@
 
       document.querySelector("#confirmResponseButton").addEventListener("click", confirmResponse);
       document.querySelector("#organizeWhiteboardButton").addEventListener("click", () => {
+        if (document.body.dataset.mode === "presentation" && !answerCapture.value.trim()) {
+          smartNextQuestion();
+          stageValResponse("Siguiente paso sugerido: avanzar con la pregunta guiada y capturar solo lo que el cliente confirme. Si aparece un dolor claro, Frank puede pasar a Modo Operador para organizarlo en el whiteboard.", { state: "organizing", delay: 260 });
+          return;
+        }
         if (confirmResponse()) {
           window.setTimeout(() => capture("signal"), 260);
         }
@@ -1695,6 +1948,20 @@
         speechStatus.textContent = `Tono ajustado a ${voicePitchInput.value}.`;
       });
 
+      presentationModeButton.addEventListener("click", () => {
+        setMode("presentation");
+        stageValResponse("Modo presentación activo. Mantengo visible solo la presencia de Val, la pregunta actual, el mensaje principal y los highlights del whiteboard.", { state: "ready", delay: 120 });
+      });
+
+      operatorModeButton.addEventListener("click", () => {
+        setMode("operator");
+        stageValResponse("Modo operador activo. Frank puede ajustar voz, STT, categorías, captura avanzada y resumen sin mostrarlo todo al cliente.", { state: "ready", delay: 120 });
+      });
+
+      skinSelect.addEventListener("change", () => {
+        setSkin(skinSelect.value);
+      });
+
       if ("speechSynthesis" in window) {
         window.speechSynthesis.onvoiceschanged = loadVoices;
         loadVoices();
@@ -1704,6 +1971,8 @@
 
       renderWhiteboard();
       setValState("idle");
+      setMode("presentation");
+      setSkin("executive");
     </script>
   </body>
 </html>
