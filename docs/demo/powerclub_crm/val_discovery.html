@@ -409,6 +409,101 @@
         max-width: 100%;
       }
 
+      .command-hub {
+        display: none;
+        position: relative;
+        min-height: 154px;
+        place-items: center;
+      }
+
+      .command-core {
+        z-index: 2;
+        width: 86px;
+        height: 86px;
+        border: 1px solid rgba(99, 232, 255, 0.34);
+        border-radius: 50%;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.18), transparent 26%),
+          linear-gradient(145deg, rgba(99, 232, 255, 0.22), rgba(255, 49, 77, 0.14));
+        box-shadow: 0 0 34px rgba(99, 232, 255, 0.18);
+        font-size: 0.74rem;
+        font-weight: 950;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .command-ring {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .command-hub.open .command-ring {
+        pointer-events: auto;
+      }
+
+      .command-action {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 54px;
+        height: 54px;
+        border: 1px solid rgba(99, 232, 255, 0.28);
+        border-radius: 50%;
+        color: var(--text);
+        background: rgba(12, 19, 28, 0.9);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.82);
+        transition: opacity 160ms ease, transform 180ms ease, border-color 180ms ease;
+      }
+
+      .command-hub.open .command-action {
+        opacity: 1;
+      }
+
+      .command-action:hover,
+      .command-action:focus-visible {
+        border-color: var(--cyan);
+        outline: 0;
+        background: var(--cyan-soft);
+      }
+
+      .command-action span {
+        display: block;
+        font-size: 1.05rem;
+        font-weight: 900;
+      }
+
+      .command-action small {
+        display: block;
+        color: var(--muted);
+        font-size: 0.58rem;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .command-hub.open [data-command="ask"] { transform: translate(-50%, -152%) scale(1); }
+      .command-hub.open [data-command="present"] { transform: translate(18%, -140%) scale(1); }
+      .command-hub.open [data-command="qa"] { transform: translate(58%, -82%) scale(1); }
+      .command-hub.open [data-command="confirm"] { transform: translate(58%, -18%) scale(1); }
+      .command-hub.open [data-command="organize"] { transform: translate(18%, 42%) scale(1); }
+      .command-hub.open [data-command="summary"] { transform: translate(-50%, 58%) scale(1); }
+      .command-hub.open [data-command="next"] { transform: translate(-118%, 42%) scale(1); }
+      .command-hub.open [data-command="mode"] { transform: translate(-158%, -18%) scale(1); }
+      .command-hub.open [data-command="back"] { transform: translate(-118%, -82%) scale(1); }
+
+      .hotkey-hint {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-align: center;
+        text-transform: uppercase;
+      }
+
       .primary,
       .secondary,
       .ghost,
@@ -550,6 +645,7 @@
       }
 
       .answer-capture,
+      .qa-input,
       .capture-grid textarea,
       .summary-output {
         width: 100%;
@@ -562,6 +658,12 @@
       }
 
       .quick-capture {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .qa-quick-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;
@@ -725,6 +827,33 @@
         animation: cardPlace 520ms cubic-bezier(0.2, 0.75, 0.18, 1) both;
       }
 
+      .floating-capture-card {
+        position: fixed;
+        z-index: 20;
+        left: min(48vw, 720px);
+        top: 34vh;
+        width: min(320px, 78vw);
+        border: 1px solid rgba(99, 232, 255, 0.38);
+        border-radius: 16px;
+        padding: 12px;
+        color: var(--text);
+        background:
+          linear-gradient(145deg, rgba(99, 232, 255, 0.14), rgba(255, 49, 77, 0.08)),
+          rgba(10, 17, 25, 0.94);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42), 0 0 34px rgba(99, 232, 255, 0.16);
+        pointer-events: none;
+        animation: ideaTransfer 760ms cubic-bezier(0.22, 0.78, 0.2, 1) forwards;
+      }
+
+      .floating-capture-card strong {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--cyan);
+        font-size: 0.72rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
       .card-meta {
         display: flex;
         flex-wrap: wrap;
@@ -773,10 +902,22 @@
       }
 
       .quick-capture button:hover,
+      .qa-quick-grid button:hover,
       .secondary:hover,
       .ghost:hover {
         border-color: var(--cyan);
         background: var(--cyan-soft);
+      }
+
+      .qa-quick-grid button {
+        min-height: 38px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0 10px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.05);
+        font-size: 0.8rem;
+        font-weight: 850;
       }
 
       .observation-panel {
@@ -857,6 +998,36 @@
         display: none;
       }
 
+      body[data-mode="presentation"] .stage-badge > strong,
+      body[data-mode="presentation"] .stage-badge > span,
+      body[data-mode="presentation"] .presentation-controls,
+      body[data-mode="presentation"] .presence-panel > div:first-child,
+      body[data-mode="presentation"] .val-panel > div:first-child,
+      body[data-mode="presentation"] .question-panel > div:first-child,
+      body[data-mode="presentation"] .control-grid,
+      body[data-mode="presentation"] .observation-panel,
+      body[data-mode="presentation"] .recommendation-panel h2,
+      body[data-mode="presentation"] .recommendation-panel .eyebrow {
+        display: none;
+      }
+
+      body[data-mode="presentation"] .command-hub {
+        display: grid;
+      }
+
+      body[data-mode="presentation"] .stage-header {
+        grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
+        padding: 16px;
+      }
+
+      body[data-mode="presentation"] h1 {
+        font-size: clamp(1.8rem, 3.2vw, 3.2rem);
+      }
+
+      body[data-mode="presentation"] .positioning {
+        font-size: 0.9rem;
+      }
+
       body[data-mode="presentation"] .stage-shell {
         width: min(1240px, 100%);
         gap: 16px;
@@ -896,8 +1067,17 @@
         font-size: 0.82rem;
       }
 
-      body[data-mode="presentation"] .whiteboard-lane:nth-of-type(n+4) {
+      body[data-mode="presentation"] .whiteboard-lane:nth-of-type(n+4):not(.has-items),
+      body[data-mode="presentation"] .whiteboard-grid.has-content .whiteboard-lane:not(.has-items) {
         display: none;
+      }
+
+      body[data-mode="presentation"] .recommendation-panel {
+        padding: 12px;
+      }
+
+      body[data-mode="presentation"] .recommendation-grid {
+        grid-template-columns: 1fr 1fr;
       }
 
       body[data-mode="presentation"] .question-text {
@@ -1006,6 +1186,24 @@
           opacity: 1;
           transform: translateY(0) scale(1);
           filter: blur(0);
+        }
+      }
+
+      @keyframes ideaTransfer {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -8px) scale(0.96);
+          filter: blur(3px);
+        }
+        26% {
+          opacity: 1;
+          transform: translate(-50%, 0) scale(1);
+          filter: blur(0);
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-18vw, 24vh) scale(0.78);
+          filter: blur(1px);
         }
       }
 
@@ -1166,6 +1364,21 @@
             </div>
           </div>
           <div id="valStateBadge" class="val-state" aria-live="polite"><span></span>Estado: en espera</div>
+          <div id="commandHub" class="command-hub" aria-label="Comando radial Val">
+            <button id="commandCoreButton" class="command-core" type="button" aria-expanded="false" aria-controls="commandRing">Comando</button>
+            <div id="commandRing" class="command-ring">
+              <button class="command-action" type="button" data-command="ask" title="Val pregunta (V)"><span>V</span><small>Pregunta</small></button>
+              <button class="command-action" type="button" data-command="present" title="Val se presenta (P)"><span>P</span><small>Intro</small></button>
+              <button class="command-action" type="button" data-command="qa" title="Q&A seguro (Q)"><span>Q</span><small>Q&amp;A</small></button>
+              <button class="command-action" type="button" data-command="confirm" title="Confirmar respuesta (C)"><span>C</span><small>Confirma</small></button>
+              <button class="command-action" type="button" data-command="organize" title="Organizar whiteboard (O)"><span>O</span><small>Ordena</small></button>
+              <button class="command-action" type="button" data-command="summary" title="Generar resumen (R)"><span>R</span><small>Resumen</small></button>
+              <button class="command-action" type="button" data-command="next" title="Siguiente pregunta (N)"><span>N</span><small>Sigue</small></button>
+              <button class="command-action" type="button" data-command="mode" title="Cambiar modo (M)"><span>M</span><small>Modo</small></button>
+              <button class="command-action" type="button" data-command="back" title="Volver al CRM demo"><span>&lt;</span><small>CRM</small></button>
+            </div>
+          </div>
+          <p class="hotkey-hint">Ring-ready: P · Q · V · C · O · R · N · M · H</p>
           <div class="control-grid" aria-label="Controles principales">
             <button id="valQuestionButton" class="primary" type="button">Val pregunta</button>
             <button id="listenResponseButton" class="secondary operator-mode-only" type="button">Escuchar respuesta</button>
@@ -1182,7 +1395,7 @@
             <div class="voice-tuning" aria-label="Ajustes de voz">
               <label>
                 <span class="field-label">Velocidad</span>
-                <input id="voiceRateInput" type="range" min="0.75" max="1.25" step="0.05" value="1.05" aria-label="Velocidad de voz">
+                <input id="voiceRateInput" type="range" min="0.75" max="1.25" step="0.05" value="1.2" aria-label="Velocidad de voz">
               </label>
               <label>
                 <span class="field-label">Tono</span>
@@ -1229,6 +1442,25 @@
           <details class="operator-drawer operator-mode-only">
             <summary>Guardrails / límites</summary>
             <p class="mode-note">Herramienta interna en desarrollo. No graba, no persiste datos, no llama APIs externas y no opera PowerClub. Frank confirma la información antes de usarla.</p>
+          </details>
+
+          <details id="qaDrawer" class="operator-drawer operator-mode-only">
+            <summary>Q&amp;A seguro de Val</summary>
+            <p class="mode-note">Cápsula local/scripted. Frank puede escribir una pregunta y Val responde solo si hay una respuesta segura preparada.</p>
+            <div class="qa-quick-grid" aria-label="Preguntas rápidas para Val">
+              <button type="button" data-qa="intro">Val, preséntate</button>
+              <button type="button" data-qa="capabilities">¿Qué puedes hacer?</button>
+              <button type="button" data-qa="crm">¿Esto es parte del CRM?</button>
+              <button type="button" data-qa="chatgpt">¿Esto es ChatGPT?</button>
+              <button type="button" data-qa="powerclub">¿Cómo ayuda a PowerClub?</button>
+              <button type="button" data-qa="name">¿Por qué Val?</button>
+              <button type="button" data-qa="discovery">Empecemos discovery</button>
+            </div>
+            <label>
+              <span class="field-label">Pregunta escrita</span>
+              <input id="qaInput" class="qa-input" type="text" placeholder="Ejemplo: ¿esto es chatgpt?">
+            </label>
+            <button id="qaAskButton" class="secondary" type="button">Responder pregunta</button>
           </details>
         </section>
 
@@ -1445,6 +1677,11 @@
       const presentationModeButton = document.querySelector("#presentationModeButton");
       const operatorModeButton = document.querySelector("#operatorModeButton");
       const skinSelect = document.querySelector("#skinSelect");
+      const commandHub = document.querySelector("#commandHub");
+      const commandCoreButton = document.querySelector("#commandCoreButton");
+      const qaDrawer = document.querySelector("#qaDrawer");
+      const qaInput = document.querySelector("#qaInput");
+      const qaAskButton = document.querySelector("#qaAskButton");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -1471,6 +1708,7 @@
       const copyStatus = document.querySelector("#copyStatus");
       const recommendedSection = document.querySelector("#recommendedSection");
       const recommendedQuestion = document.querySelector("#recommendedQuestion");
+      const whiteboardGrid = document.querySelector(".whiteboard-grid");
       const boardLists = {
         pains: document.querySelector("#painBoard"),
         signals: document.querySelector("#signalBoard"),
@@ -1492,6 +1730,35 @@
       let valTypingTimer = null;
       let valPacingTimer = null;
 
+      function audienceName() {
+        const raw = clientNameInput.value.trim();
+        if (!raw || raw.toLowerCase() === "powerclub") return "";
+        return `, ${raw}`;
+      }
+
+      const qaResponses = {
+        intro: () => `Hola${audienceName()}. Soy Val, una herramienta interna de Isthmus Dynamics en desarrollo. Hoy ayudo a Frank a guiar discovery, capturar decisiones y ordenar próximos pasos. No soy el CRM de PowerClub; soy el cockpit que usamos para conducir esta conversación.`,
+        capabilities: () => "En esta versión puedo guiar preguntas, capturar respuestas, organizar señales en un whiteboard, sugerir qué parte del demo revisar y generar un resumen local. Algunas funciones son asistidas por Frank y otras son reglas locales. No estoy conectada a datos reales de PowerClub.",
+        crm: () => "No exactamente. El CRM demo muestra lo que PowerClub podría usar en un piloto. Yo soy una herramienta interna de Isthmus Dynamics para correr la reunión y ordenar discovery.",
+        chatgpt: () => "No estoy usando ChatGPT en esta pantalla. Esta versión funciona de forma local y determinística. Más adelante podríamos conectar un modelo de lenguaje mediante backend seguro, si el alcance lo justifica.",
+        powerclub: () => "Si el problema es seguimiento, visibilidad o pérdida de oportunidades, puedo ayudar a estructurar la conversación para descubrir dónde se rompe el proceso y qué debe entrar en un piloto controlado.",
+        name: () => "Val es el nombre de nuestra línea de asistentes operativos. La idea es que sea una presencia clara, útil y discreta: no una persona, sino una capa de apoyo para ordenar trabajo, decisiones y seguimiento.",
+        discovery: () => "Perfecto. Empecemos por una pregunta simple: ¿dónde sienten que se pierden más oportunidades hoy: generación de leads, seguimiento, cierre o visibilidad gerencial?",
+        unknown: () => "Todavía no tengo esa respuesta en este modo. Frank puede tomar esa pregunta y la dejamos como pendiente.",
+      };
+
+      function qaIntentFromText(text) {
+        const lower = text.toLowerCase();
+        if (lower.includes("present") || lower.includes("quien eres") || lower.includes("quién eres") || lower.includes("qué eres") || lower.includes("que eres")) return "intro";
+        if (lower.includes("puedes") || lower.includes("haces") || lower.includes("funcion")) return "capabilities";
+        if (lower.includes("crm") || lower.includes("parte del sistema")) return "crm";
+        if (lower.includes("chatgpt") || lower.includes("openai") || lower.includes("gpt")) return "chatgpt";
+        if (lower.includes("powerclub") || lower.includes("ayuda") || lower.includes("beneficio")) return "powerclub";
+        if (lower.includes("valeria") || lower.includes("por qué val") || lower.includes("porque val") || lower.includes("nombre")) return "name";
+        if (lower.includes("empecemos") || lower.includes("discovery") || lower.includes("comenzar") || lower.includes("arrancar")) return "discovery";
+        return "unknown";
+      }
+
       function setMode(mode) {
         const nextMode = mode === "operator" ? "operator" : "presentation";
         document.body.dataset.mode = nextMode;
@@ -1506,6 +1773,19 @@
         const nextSkin = allowed.includes(skin) ? skin : "executive";
         document.body.dataset.skin = nextSkin;
         skinSelect.value = nextSkin;
+      }
+
+      function setCommandHub(open) {
+        commandHub.classList.toggle("open", open);
+        commandCoreButton.setAttribute("aria-expanded", String(open));
+      }
+
+      function toggleCommandHub() {
+        setCommandHub(!commandHub.classList.contains("open"));
+      }
+
+      function toggleMode() {
+        setMode(document.body.dataset.mode === "presentation" ? "operator" : "presentation");
       }
 
       function setValState(state) {
@@ -1587,7 +1867,7 @@
           const utterance = new SpeechSynthesisUtterance(text);
           utterance.voice = selectedVoice;
           utterance.lang = selectedVoice.lang || "es-419";
-          utterance.rate = Number(voiceRateInput.value) || 1.05;
+          utterance.rate = Number(voiceRateInput.value) || 1.2;
           utterance.pitch = Number(voicePitchInput.value) || 1;
           utterance.onstart = () => {
             setSpeaking(true);
@@ -1870,8 +2150,28 @@
         window.setTimeout(() => lane.classList.remove("receiving"), 900);
       }
 
+      function showFloatingCaptureCard(card) {
+        const floating = document.createElement("div");
+        floating.className = "floating-capture-card";
+        floating.innerHTML = `<strong>${escapeHtml(card.category || "captura")}</strong><span>${escapeHtml(card.text)}</span>`;
+        document.body.appendChild(floating);
+        window.setTimeout(() => floating.remove(), 820);
+      }
+
       function renderWhiteboard() {
         const empty = "<li>Sin captura todavía.</li>";
+        const entries = {
+          pains: captureState.pains,
+          signals: captureState.signals,
+          data: captureState.data,
+          decisions: captureState.decisions,
+          risks: captureState.risks,
+          next: captureState.pilots,
+        };
+        Object.entries(entries).forEach(([key, items]) => {
+          boardLanes[key]?.classList.toggle("has-items", items.length > 0);
+        });
+        whiteboardGrid.classList.toggle("has-content", Object.values(entries).some((items) => items.length > 0));
         boardLists.pains.innerHTML = captureState.pains.length ? captureState.pains.map(renderWhiteboardItem).join("") : empty;
         boardLists.signals.innerHTML = captureState.signals.length ? captureState.signals.map(renderWhiteboardItem).join("") : empty;
         boardLists.data.innerHTML = captureState.data.length ? captureState.data.map(renderWhiteboardItem).join("") : empty;
@@ -1972,7 +2272,8 @@
         captureState.recommendedQuestion = reasoning.nextQuestion;
         recommendedSection.textContent = reasoning.demo;
         recommendedQuestion.textContent = reasoning.nextQuestion;
-        renderWhiteboard();
+        showFloatingCaptureCard(card);
+        window.setTimeout(renderWhiteboard, 420);
         valObservation.textContent = `${reasoning.line} Recomiendo mostrar: ${reasoning.demo}. Siguiente pregunta: ${reasoning.nextQuestion}`;
         stageValResponse(valObservation.textContent, { state: "organizing", delay: 260 });
         answerCapture.value = "";
@@ -2084,6 +2385,63 @@
         copyStatus.textContent = "Seleccione el resumen y cópielo manualmente.";
       }
 
+      function runCommand(command) {
+        const actions = {
+          ask: () => document.querySelector("#valQuestionButton").click(),
+          present: () => respondToQa("intro"),
+          qa: () => openQaCapsule(),
+          confirm: () => document.querySelector("#confirmResponseButton").click(),
+          organize: () => document.querySelector("#organizeWhiteboardButton").click(),
+          summary: () => generateSummary(),
+          next: () => smartNextQuestion(),
+          mode: () => toggleMode(),
+          back: () => { window.location.href = "./index.html"; },
+        };
+        actions[command]?.();
+      }
+
+      function respondToQa(intent, rawQuestion = "") {
+        const safeIntent = qaResponses[intent] ? intent : "unknown";
+        const response = qaResponses[safeIntent]();
+        if (safeIntent === "unknown" && rawQuestion) {
+          appendLine(nextStepsField, "Pregunta pendiente", rawQuestion);
+          captureState.pilots.push(makeWhiteboardCard(rawQuestion, "pregunta pendiente", "qa", {
+            demo: "Scope freeze / piloto",
+            lane: "next",
+          }));
+          captureState.lastBoardTarget = "next";
+          captureState.lastCardId = captureState.pilots[captureState.pilots.length - 1].id;
+          renderWhiteboard();
+        }
+        stageValResponse(response, { state: "speaking", delay: 160, speak: true });
+        valObservation.textContent = safeIntent === "unknown"
+          ? "Pregunta enviada a pendientes. Esta cápsula no genera respuestas libres."
+          : "Respuesta Q&A segura entregada desde cápsula local.";
+      }
+
+      function openQaCapsule() {
+        if (document.body.dataset.mode === "presentation") {
+          respondToQa("capabilities");
+          return;
+        }
+        qaDrawer.open = true;
+        qaInput.focus();
+      }
+
+      function answerTypedQuestion() {
+        const question = qaInput.value.trim();
+        if (!question) {
+          respondToQa("unknown", "Pregunta Q&A vacía");
+          return;
+        }
+        respondToQa(qaIntentFromText(question), question);
+        qaInput.value = "";
+      }
+
+      function isTypingTarget(target) {
+        return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
+      }
+
       document.querySelector("#valQuestionButton").addEventListener("click", () => {
         const person = clientNameInput.value.trim() || "PowerClub";
         const objective = meetingObjectiveInput.value;
@@ -2183,6 +2541,54 @@
         setSkin(skinSelect.value);
       });
 
+      commandCoreButton.addEventListener("click", toggleCommandHub);
+
+      document.querySelectorAll("[data-command]").forEach((button) => {
+        button.addEventListener("click", () => {
+          runCommand(button.dataset.command);
+          setCommandHub(false);
+        });
+      });
+
+      document.querySelectorAll("[data-qa]").forEach((button) => {
+        button.addEventListener("click", () => respondToQa(button.dataset.qa));
+      });
+
+      qaAskButton.addEventListener("click", answerTypedQuestion);
+
+      qaInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        answerTypedQuestion();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          setCommandHub(false);
+          return;
+        }
+        if (isTypingTarget(event.target)) return;
+        const key = event.key.toLowerCase();
+        const hotkeys = {
+          p: "present",
+          q: "qa",
+          v: "ask",
+          c: "confirm",
+          o: "organize",
+          r: "summary",
+          n: "next",
+          m: "mode",
+        };
+        if (key === "h") {
+          event.preventDefault();
+          toggleCommandHub();
+          return;
+        }
+        if (!hotkeys[key]) return;
+        event.preventDefault();
+        runCommand(hotkeys[key]);
+      });
+
       if ("speechSynthesis" in window) {
         window.speechSynthesis.onvoiceschanged = loadVoices;
         loadVoices();
@@ -2194,6 +2600,7 @@
       setValState("idle");
       setMode("presentation");
       setSkin("executive");
+      setCommandHub(false);
     </script>
   </body>
 </html>
