@@ -669,6 +669,61 @@
         gap: 8px;
       }
 
+      .presentation-capture {
+        display: grid;
+        gap: 8px;
+      }
+
+      .presentation-capture textarea {
+        min-height: 86px;
+      }
+
+      .presentation-capture.highlight textarea {
+        border-color: rgba(210, 179, 106, 0.72);
+        box-shadow: 0 0 0 3px rgba(210, 179, 106, 0.16);
+      }
+
+      .capture-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .next-action-card {
+        border: 1px solid rgba(210, 179, 106, 0.25);
+        border-radius: 14px;
+        padding: 12px;
+        color: #f6e9c6;
+        background: rgba(210, 179, 106, 0.08);
+        font-weight: 850;
+        line-height: 1.45;
+      }
+
+      .voice-mini {
+        justify-self: center;
+        min-height: 34px;
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 999px;
+        padding: 0 12px;
+        color: var(--text);
+        background: rgba(255, 255, 255, 0.045);
+        font-size: 0.76rem;
+        font-weight: 900;
+      }
+
+      .quick-qa-panel {
+        display: none;
+        gap: 8px;
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 16px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .quick-qa-panel.open {
+        display: grid;
+      }
+
       .setup-panel,
       .flow-panel,
       .whiteboard-panel,
@@ -1379,6 +1434,7 @@
             </div>
           </div>
           <p class="hotkey-hint">Ring-ready: P · Q · V · C · O · R · N · M · H</p>
+          <button id="voiceMuteButton" class="voice-mini" type="button" aria-pressed="true">Voz: texto</button>
           <div class="control-grid" aria-label="Controles principales">
             <button id="valQuestionButton" class="primary" type="button">Val pregunta</button>
             <button id="listenResponseButton" class="secondary operator-mode-only" type="button">Escuchar respuesta</button>
@@ -1413,6 +1469,17 @@
           </div>
           <div class="val-says">
             <p id="valMessage">Listo para iniciar. Esta pantalla ayuda a ordenar discovery, decisiones, riesgos y próximos pasos.</p>
+          </div>
+          <div id="quickQaPanel" class="quick-qa-panel" aria-label="Preguntas rápidas">
+            <p class="mode-note">Preguntas rápidas</p>
+            <div class="qa-quick-grid">
+              <button type="button" data-qa="intro">Preséntate</button>
+              <button type="button" data-qa="capabilities">¿Qué eres?</button>
+              <button type="button" data-qa="crm">¿Eres parte del CRM?</button>
+              <button type="button" data-qa="chatgpt">¿Esto es ChatGPT?</button>
+              <button type="button" data-qa="powerclub">¿Qué puedes hacer hoy?</button>
+              <button type="button" data-qa="discovery">Empecemos discovery</button>
+            </div>
           </div>
 
           <details class="operator-drawer operator-mode-only">
@@ -1475,11 +1542,16 @@
             <p id="questionText" class="question-text">¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?</p>
           </div>
 
-          <label class="operator-mode-only">
-            <span class="field-label">Respuesta capturada</span>
-            <textarea id="answerCapture" class="answer-capture" rows="5" placeholder="Frank escribe la respuesta o idea clave escuchada en la reunión."></textarea>
+          <div id="nextActionCard" class="next-action-card">Ahora: haz la pregunta.</div>
+          <label id="presentationCapture" class="presentation-capture">
+            <span class="field-label">Respuesta del cliente</span>
+            <textarea id="answerCapture" class="answer-capture" rows="5" placeholder="Escribe aquí una frase corta de lo que dijo el cliente..."></textarea>
           </label>
-          <p class="status-line operator-mode-only">Modo seguro: Frank puede escribir o corregir la respuesta antes de organizarla.</p>
+          <div class="capture-actions">
+            <button id="captureResponseButton" class="secondary" type="button">Capturar respuesta</button>
+            <button id="presentationOrganizeButton" class="ghost" type="button">Organizar en whiteboard</button>
+          </div>
+          <p class="status-line">Modo seguro: Frank puede escribir o corregir la respuesta antes de organizarla.</p>
           <p id="sttStatus" class="status-line operator-mode-only">STT experimental del navegador. Modo seguro: escribir/corregir respuesta.</p>
 
           <details class="operator-drawer operator-mode-only">
@@ -1667,6 +1739,7 @@
       let recognition = null;
       let availableVoices = [];
       let selectedVoice = null;
+      let voiceEnabled = false;
       let whiteboardCardId = 0;
       const typingConfig = {
         stepShort: 2,
@@ -1680,8 +1753,10 @@
       const commandHub = document.querySelector("#commandHub");
       const commandCoreButton = document.querySelector("#commandCoreButton");
       const qaDrawer = document.querySelector("#qaDrawer");
+      const quickQaPanel = document.querySelector("#quickQaPanel");
       const qaInput = document.querySelector("#qaInput");
       const qaAskButton = document.querySelector("#qaAskButton");
+      const voiceMuteButton = document.querySelector("#voiceMuteButton");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -1699,6 +1774,8 @@
       const questionCategory = document.querySelector("#questionCategory");
       const questionText = document.querySelector("#questionText");
       const answerCapture = document.querySelector("#answerCapture");
+      const presentationCapture = document.querySelector("#presentationCapture");
+      const nextActionCard = document.querySelector("#nextActionCard");
       const valObservation = document.querySelector("#valObservation");
       const notesField = document.querySelector("#notesField");
       const decisionsField = document.querySelector("#decisionsField");
@@ -1788,6 +1865,25 @@
         setMode(document.body.dataset.mode === "presentation" ? "operator" : "presentation");
       }
 
+      function setNextAction(message) {
+        nextActionCard.textContent = message;
+      }
+
+      function focusCaptureField() {
+        presentationCapture.classList.add("highlight");
+        answerCapture.focus();
+        window.setTimeout(() => presentationCapture.classList.remove("highlight"), 1300);
+      }
+
+      function setVoiceEnabled(enabled) {
+        voiceEnabled = enabled;
+        voiceMuteButton.textContent = enabled ? "Voz: on" : "Voz: texto";
+        voiceMuteButton.setAttribute("aria-pressed", String(enabled));
+        speechStatus.textContent = enabled
+          ? "Voz del navegador activada. Si suena incorrecta, vuelva a modo texto."
+          : "Voz silenciada. Val sigue en modo texto/typewriter.";
+      }
+
       function setValState(state) {
         const safeState = valStateLabels[state] ? state : "idle";
         valOrb.classList.remove("thinking", "speaking", "listening", "organizing", "ready");
@@ -1852,6 +1948,11 @@
       }
 
       function speakText(text) {
+        if (!voiceEnabled) {
+          speechStatus.textContent = "Voz en modo texto. Val no usará audio del navegador.";
+          setValState("ready");
+          return;
+        }
         if (!("speechSynthesis" in window)) {
           speechStatus.textContent = "Voz no disponible en este navegador. Val queda en modo texto.";
           setValState("ready");
@@ -2201,6 +2302,8 @@
         const text = answerCapture.value.trim();
         if (!text) {
           valObservation.textContent = "Escriba o capture una respuesta antes de confirmar.";
+          setNextAction("Ahora: captura la respuesta.");
+          focusCaptureField();
           return false;
         }
         const inferred = categoryFromText(text);
@@ -2219,6 +2322,7 @@
         }
         const reasoning = consultantReasoning(captureState.lastCategory, "signal", text);
         valObservation.textContent = `${reasoning.line} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
+        setNextAction("Ahora: organiza en whiteboard.");
         stageValResponse(valObservation.textContent, { state: "ready", delay: 120 });
         return true;
       }
@@ -2226,7 +2330,10 @@
       function capture(type, explicitText = "") {
         const text = (explicitText || captureState.pendingResponse || answerCapture.value).trim();
         if (!text) {
-          valObservation.textContent = "Escriba primero una respuesta capturada para clasificarla.";
+          valObservation.textContent = "Primero captura una respuesta del cliente. Puedes escribir una frase corta y luego organizarla.";
+          setNextAction("Ahora: captura la respuesta.");
+          focusCaptureField();
+          stageValResponse(valObservation.textContent, { state: "thinking", delay: 120 });
           return;
         }
         const inferredCategory = categoryFromText(text);
@@ -2275,6 +2382,7 @@
         showFloatingCaptureCard(card);
         window.setTimeout(renderWhiteboard, 420);
         valObservation.textContent = `${reasoning.line} Recomiendo mostrar: ${reasoning.demo}. Siguiente pregunta: ${reasoning.nextQuestion}`;
+        setNextAction("Ahora: muestra el demo recomendado.");
         stageValResponse(valObservation.textContent, { state: "organizing", delay: 260 });
         answerCapture.value = "";
         captureState.pendingResponse = "";
@@ -2421,7 +2529,8 @@
 
       function openQaCapsule() {
         if (document.body.dataset.mode === "presentation") {
-          respondToQa("capabilities");
+          quickQaPanel.classList.toggle("open");
+          setNextAction(quickQaPanel.classList.contains("open") ? "Ahora: elige una pregunta rápida." : "Ahora: haz la pregunta.");
           return;
         }
         qaDrawer.open = true;
@@ -2455,20 +2564,26 @@
           setValMessage(`Pregunta para ${person}: ${question.text} Objetivo de la sesión: ${objective.toLowerCase()}.`, true);
           questionIndex = (questionIndex + 1) % questionBank.length;
           valObservation.textContent = scriptedLines.framing;
+          setNextAction("Ahora: captura la respuesta.");
+          window.setTimeout(focusCaptureField, 650);
         }, 260);
       });
 
       document.querySelector("#confirmResponseButton").addEventListener("click", confirmResponse);
       document.querySelector("#organizeWhiteboardButton").addEventListener("click", () => {
-        if (document.body.dataset.mode === "presentation" && !answerCapture.value.trim()) {
-          smartNextQuestion();
-          stageValResponse("Siguiente paso sugerido: avanzar con la pregunta guiada y capturar solo lo que el cliente confirme. Si aparece un dolor claro, Frank puede pasar a Modo Operador para organizarlo en el whiteboard.", { state: "organizing", delay: 260 });
+        if (!answerCapture.value.trim()) {
+          valObservation.textContent = "Primero captura una respuesta del cliente. Puedes escribir una frase corta y luego organizarla.";
+          setNextAction("Ahora: captura la respuesta.");
+          focusCaptureField();
+          stageValResponse(valObservation.textContent, { state: "thinking", delay: 120 });
           return;
         }
         if (confirmResponse()) {
           window.setTimeout(() => capture("signal"), 260);
         }
       });
+      document.querySelector("#captureResponseButton").addEventListener("click", confirmResponse);
+      document.querySelector("#presentationOrganizeButton").addEventListener("click", () => document.querySelector("#organizeWhiteboardButton").click());
       document.querySelector("#generateSummaryButton").addEventListener("click", generateSummary);
       document.querySelector("#generateSummaryButtonBottom").addEventListener("click", generateSummary);
       document.querySelector("#copySummaryButtonBottom").addEventListener("click", copySummary);
@@ -2527,6 +2642,10 @@
         speechStatus.textContent = `Tono ajustado a ${voicePitchInput.value}.`;
       });
 
+      voiceMuteButton.addEventListener("click", () => {
+        setVoiceEnabled(!voiceEnabled);
+      });
+
       presentationModeButton.addEventListener("click", () => {
         setMode("presentation");
         stageValResponse("Modo presentación activo. Mantengo visible solo la presencia de Val, la pregunta actual, el mensaje principal y los highlights del whiteboard.", { state: "ready", delay: 120 });
@@ -2551,7 +2670,10 @@
       });
 
       document.querySelectorAll("[data-qa]").forEach((button) => {
-        button.addEventListener("click", () => respondToQa(button.dataset.qa));
+        button.addEventListener("click", () => {
+          respondToQa(button.dataset.qa);
+          quickQaPanel.classList.remove("open");
+        });
       });
 
       qaAskButton.addEventListener("click", answerTypedQuestion);
@@ -2565,6 +2687,7 @@
       document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
           setCommandHub(false);
+          quickQaPanel.classList.remove("open");
           return;
         }
         if (isTypingTarget(event.target)) return;
@@ -2601,6 +2724,8 @@
       setMode("presentation");
       setSkin("executive");
       setCommandHub(false);
+      setVoiceEnabled(false);
+      setNextAction("Ahora: haz la pregunta.");
     </script>
   </body>
 </html>
