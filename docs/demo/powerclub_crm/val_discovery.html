@@ -180,7 +180,7 @@
 
       .cockpit-grid {
         display: grid;
-        grid-template-columns: minmax(280px, 0.85fr) minmax(360px, 1.2fr) minmax(300px, 0.95fr);
+        grid-template-columns: minmax(260px, 0.85fr) minmax(340px, 1.15fr) minmax(280px, 0.95fr);
         gap: 18px;
         align-items: start;
       }
@@ -190,12 +190,13 @@
       .question-panel {
         display: grid;
         gap: 14px;
+        min-width: 0;
         padding: 18px;
       }
 
       .orb-stage {
         display: grid;
-        min-height: 310px;
+        min-height: 260px;
         place-items: center;
         overflow: hidden;
         border: 1px solid rgba(99, 232, 255, 0.16);
@@ -272,9 +273,10 @@
       }
 
       .control-grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        display: flex;
+        flex-wrap: wrap;
         gap: 9px;
+        max-width: 100%;
       }
 
       .primary,
@@ -282,11 +284,15 @@
       .ghost,
       .category-chips button,
       .quick-capture button {
+        flex: 1 1 132px;
+        max-width: 100%;
         min-height: 42px;
         border: 1px solid var(--line);
         border-radius: 12px;
+        padding: 0 10px;
         color: var(--text);
         font-weight: 850;
+        overflow-wrap: anywhere;
       }
 
       .primary {
@@ -397,6 +403,7 @@
 
       .setup-grid label,
       .voice-control,
+      .voice-tuning,
       .speech-actions {
         display: grid;
         gap: 7px;
@@ -411,6 +418,20 @@
         padding: 0 12px;
         color: var(--text);
         background: rgba(1, 5, 10, 0.56);
+      }
+
+      .voice-tuning {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .voice-tuning label {
+        display: grid;
+        gap: 6px;
+      }
+
+      .voice-tuning input {
+        width: 100%;
+        accent-color: var(--cyan);
       }
 
       .flow-steps {
@@ -757,7 +778,17 @@
             <span class="field-label">Voz de Val</span>
             <select id="voiceSelect" aria-label="Seleccionar voz del navegador"></select>
           </label>
-          <p id="speechStatus" class="status-line">Voz opcional del navegador. Si no está disponible, Val funciona en texto.</p>
+          <div class="voice-tuning" aria-label="Ajustes de voz">
+            <label>
+              <span class="field-label">Velocidad</span>
+              <input id="voiceRateInput" type="range" min="0.75" max="1.25" step="0.05" value="1.05" aria-label="Velocidad de voz">
+            </label>
+            <label>
+              <span class="field-label">Tono</span>
+              <input id="voicePitchInput" type="range" min="0.9" max="1.15" step="0.05" value="1" aria-label="Tono de voz">
+            </label>
+          </div>
+          <p id="speechStatus" class="status-line">Las voces dependen del navegador y del sistema operativo. Para demo ejecutiva, audio premium local puede reemplazar la voz del navegador.</p>
         </section>
 
         <section class="val-panel" aria-labelledby="valSaysTitle">
@@ -996,6 +1027,8 @@
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
       const sttLanguageSelect = document.querySelector("#sttLanguageSelect");
       const voiceSelect = document.querySelector("#voiceSelect");
+      const voiceRateInput = document.querySelector("#voiceRateInput");
+      const voicePitchInput = document.querySelector("#voicePitchInput");
       const valMessage = document.querySelector("#valMessage");
       const valOrb = document.querySelector("#valOrb");
       const valWave = document.querySelector("#valWave");
@@ -1049,8 +1082,8 @@
           const utterance = new SpeechSynthesisUtterance(text);
           utterance.voice = selectedVoice;
           utterance.lang = selectedVoice.lang || "es-419";
-          utterance.rate = 0.92;
-          utterance.pitch = 0.82;
+          utterance.rate = Number(voiceRateInput.value) || 1.05;
+          utterance.pitch = Number(voicePitchInput.value) || 1;
           utterance.onstart = () => {
             setSpeaking(true);
             speechStatus.textContent = "Val hablando con voz nativa del navegador.";
@@ -1083,7 +1116,11 @@
         }
         availableVoices = window.speechSynthesis.getVoices();
         const spanishVoices = availableVoices.filter((voice) => voice.lang.toLowerCase().startsWith("es"));
-        const preferred = spanishVoices.find(voiceLooksFemale) || spanishVoices.find((voice) => voice.lang.toLowerCase().includes("419")) || spanishVoices[0];
+        const premiumSpanish = spanishVoices.find((voice) => {
+          const name = voice.name.toLowerCase();
+          return name.includes("google") || name.includes("microsoft");
+        });
+        const preferred = spanishVoices.find(voiceLooksFemale) || premiumSpanish || spanishVoices.find((voice) => voice.lang.toLowerCase().includes("419")) || spanishVoices[0];
 
         if (!availableVoices.length) {
           voiceSelect.innerHTML = `<option>Cargando voces...</option>`;
@@ -1102,7 +1139,7 @@
           selectedVoice = preferred;
           speechStatus.textContent = voiceLooksFemale(preferred)
             ? `Voz preferida: ${preferred.name} (${preferred.lang}).`
-            : "Voz femenina en español no disponible en este navegador. Se seleccionó una voz en español; Frank puede cambiarla o usar texto.";
+            : `Voz femenina en español no disponible en este navegador. Se seleccionó ${preferred.name}; Frank puede ajustar velocidad/tono, cambiar voz o usar texto.`;
         } else {
           selectedVoice = null;
           voiceSelect.value = "";
@@ -1456,6 +1493,14 @@
         speechStatus.textContent = selectedVoice
           ? `Voz seleccionada: ${selectedVoice.name} (${selectedVoice.lang}).`
           : "Modo texto seleccionado. Val no hablará con voz del navegador.";
+      });
+
+      voiceRateInput.addEventListener("input", () => {
+        speechStatus.textContent = `Velocidad ajustada a ${voiceRateInput.value}.`;
+      });
+
+      voicePitchInput.addEventListener("input", () => {
+        speechStatus.textContent = `Tono ajustado a ${voicePitchInput.value}.`;
       });
 
       if ("speechSynthesis" in window) {

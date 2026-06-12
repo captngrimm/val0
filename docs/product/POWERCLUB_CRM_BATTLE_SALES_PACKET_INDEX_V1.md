@@ -48,9 +48,11 @@ This is not runtime config, not a deployment instruction, and not permission to 
    `docs/product/POWERCLUB_CRM_VAL_LIVE_DISCOVERY_WHITEBOARD_02C_V1.md`
 17. Val Discovery UX simplification:
    `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_UX_SIMPLIFICATION_02C1_V1.md`
-18. Executive leave-behind:
+18. Val Discovery layout/voice polish:
+   `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_LAYOUT_VOICE_POLISH_02C2_V1.md`
+19. Executive leave-behind:
    `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md`
-19. Discovery questionnaire:
+20. Discovery questionnaire:
    `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md`
 
 ## Recommended Meeting Order
@@ -83,6 +85,7 @@ This is not runtime config, not a deployment instruction, and not permission to 
 | Day 1 Frank machine QA | `docs/product/POWERCLUB_CRM_DAY1_FRANK_MACHINE_QA_02B_V1.md` | Operator only | Exact browser paths/checklist for Frank's laptop visual QA |
 | Val live discovery whiteboard | `docs/product/POWERCLUB_CRM_VAL_LIVE_DISCOVERY_WHITEBOARD_02C_V1.md` | Operator only | Documents assisted speech/manual capture, whiteboard lanes, deterministic routing, and summary behavior |
 | Val Discovery UX simplification | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_UX_SIMPLIFICATION_02C1_V1.md` | Operator only | Documents simplified live flow, Spanish STT controls, and voice selector behavior |
+| Val Discovery layout/voice polish | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_LAYOUT_VOICE_POLISH_02C2_V1.md` | Operator only | Documents presence-card overflow fix plus voice speed/pitch controls |
 | Live meeting script | `docs/product/POWERCLUB_CRM_BATTLE_01D_LIVE_MEETING_SCRIPT.md` | Operator only | Keep talk track crisp |
 | Meeting checklist | `docs/product/POWERCLUB_CRM_MEETING_CHECKLIST_V1.md` | Operator only | Keep meeting sequence controlled |
 | Executive leave-behind | `docs/product/POWERCLUB_CRM_EXECUTIVE_LEAVE_BEHIND_V1.md` | Optional | Use if they ask for a concise summary |
@@ -117,6 +120,7 @@ Do not send raw internal docs unless Frank intentionally wants to expose the wor
 | Day 1 Frank machine QA | `docs/product/POWERCLUB_CRM_DAY1_FRANK_MACHINE_QA_02B_V1.md` | Internal QA checklist for browser review on Frank's actual machine |
 | Val live discovery whiteboard | `docs/product/POWERCLUB_CRM_VAL_LIVE_DISCOVERY_WHITEBOARD_02C_V1.md` | Internal behavior spec for Day 2 live discovery capture and whiteboard prototype |
 | Val Discovery UX simplification | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_UX_SIMPLIFICATION_02C1_V1.md` | Internal behavior note for simplified controls and Spanish voice/STT fallbacks |
+| Val Discovery layout/voice polish | `docs/product/POWERCLUB_CRM_VAL_DISCOVERY_LAYOUT_VOICE_POLISH_02C2_V1.md` | Internal QA note for layout overflow and browser voice tuning |
 | Proposal pricing model | `docs/product/POWERCLUB_CRM_PROPOSAL_PRICING_MODEL_V1.md` | Internal pricing guardrails |
 | Boss meeting prep | `docs/product/POWERCLUB_CRM_BOSS_MEETING_PREP_V1.md` | Frank's prep before leadership conversation |
 | Discovery questionnaire | `docs/product/POWERCLUB_CRM_DISCOVERY_QUESTIONNAIRE_V1.md` | Question bank; use selectively |
@@ -152,6 +156,7 @@ Do not send before discovery:
 - Day 1 Frank machine QA checklist.
 - Val live discovery whiteboard spec.
 - Val Discovery UX simplification note.
+- Val Discovery layout/voice polish note.
 - Discovery questionnaire as a full questionnaire dump.
 
 Reason:
