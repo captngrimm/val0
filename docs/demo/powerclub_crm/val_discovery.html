@@ -29,9 +29,12 @@
         color: var(--text);
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         background:
+          linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
           radial-gradient(circle at 50% 10%, rgba(89, 222, 255, 0.16), transparent 30%),
           radial-gradient(circle at 85% 20%, rgba(255, 49, 77, 0.12), transparent 26%),
           linear-gradient(145deg, #030407, #091018 46%, #04060a);
+        background-size: 34px 34px, 34px 34px, auto, auto, auto;
       }
 
       button,
@@ -202,9 +205,17 @@
         border: 1px solid rgba(99, 232, 255, 0.16);
         border-radius: 22px;
         background:
+          linear-gradient(90deg, rgba(99, 232, 255, 0.04), transparent 45%, rgba(255, 49, 77, 0.04)),
+          linear-gradient(rgba(99, 232, 255, 0.045) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 232, 255, 0.03) 1px, transparent 1px),
           radial-gradient(circle at center, rgba(255, 49, 77, 0.13), transparent 28%),
           linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
+        background-size: auto, 24px 24px, 24px 24px, auto, auto;
         position: relative;
+      }
+
+      .orb-stage::before {
+        opacity: 0.72;
       }
 
       .orb-stage::before,
@@ -226,6 +237,22 @@
         animation-direction: reverse;
       }
 
+      .orb-stage[data-val-state="thinking"]::before {
+        border-color: rgba(99, 232, 255, 0.2);
+        animation-duration: 9s;
+      }
+
+      .orb-stage[data-val-state="listening"]::after {
+        border-color: rgba(210, 179, 106, 0.3);
+        animation-duration: 7s;
+      }
+
+      .orb-stage[data-val-state="organizing"]::before,
+      .orb-stage[data-val-state="organizing"]::after {
+        border-radius: 28%;
+        border-color: rgba(99, 232, 255, 0.24);
+      }
+
       .val-orb {
         position: relative;
         z-index: 1;
@@ -243,6 +270,53 @@
 
       .val-orb.speaking {
         animation: speakPulse 0.9s ease-in-out infinite;
+      }
+
+      .val-orb.thinking {
+        animation: thinkingPulse 1.5s ease-in-out infinite;
+        box-shadow:
+          0 0 18px rgba(99, 232, 255, 0.5),
+          0 0 78px rgba(99, 232, 255, 0.18),
+          inset 0 0 24px rgba(255, 255, 255, 0.2);
+      }
+
+      .val-orb.listening {
+        animation: listeningPulse 1.1s ease-in-out infinite;
+        box-shadow:
+          0 0 22px rgba(210, 179, 106, 0.52),
+          0 0 88px rgba(210, 179, 106, 0.18),
+          inset 0 0 24px rgba(255, 255, 255, 0.2);
+      }
+
+      .val-orb.organizing {
+        animation: organizePulse 0.85s ease-in-out infinite;
+      }
+
+      .val-orb.ready {
+        animation: readyPulse 2.4s ease-in-out infinite;
+      }
+
+      .val-state {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(99, 232, 255, 0.16);
+        border-radius: 999px;
+        padding: 8px 11px;
+        color: #dff9ff;
+        background: rgba(255, 255, 255, 0.045);
+        font-size: 0.8rem;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .val-state span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--cyan);
+        box-shadow: 0 0 12px rgba(99, 232, 255, 0.7);
       }
 
       .wave {
@@ -270,6 +344,16 @@
 
       .wave.speaking {
         opacity: 0.84;
+      }
+
+      .wave.thinking,
+      .wave.listening,
+      .wave.organizing {
+        opacity: 0.42;
+      }
+
+      .wave.listening path {
+        stroke: var(--gold);
       }
 
       .control-grid {
@@ -313,7 +397,12 @@
         border: 1px solid rgba(99, 232, 255, 0.18);
         border-radius: 14px;
         padding: 14px;
-        background: var(--panel-strong);
+        background:
+          linear-gradient(180deg, rgba(99, 232, 255, 0.05), transparent 46%),
+          repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 9px),
+          var(--panel-strong);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.025);
+        position: relative;
       }
 
       .val-says p {
@@ -321,6 +410,17 @@
         color: #dff9ff;
         font-size: 1.08rem;
         line-height: 1.55;
+      }
+
+      .val-says p::after {
+        content: "";
+        display: inline-block;
+        width: 0.55em;
+        height: 1em;
+        margin-left: 3px;
+        border-right: 2px solid rgba(99, 232, 255, 0.8);
+        transform: translateY(2px);
+        animation: cursorBlink 0.9s steps(1) infinite;
       }
 
       .agenda-list,
@@ -631,6 +731,31 @@
         50% { transform: scale(1.12); }
       }
 
+      @keyframes thinkingPulse {
+        0%, 100% { transform: scale(1); filter: hue-rotate(0deg); }
+        50% { transform: scale(1.045); filter: hue-rotate(18deg); }
+      }
+
+      @keyframes listeningPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.075); }
+      }
+
+      @keyframes organizePulse {
+        0%, 100% { transform: scale(1.02); }
+        50% { transform: scale(0.96); }
+      }
+
+      @keyframes readyPulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 16px rgba(99, 232, 255, 0.26), 0 0 54px rgba(99, 232, 255, 0.14); }
+        50% { transform: scale(1.025); box-shadow: 0 0 22px rgba(99, 232, 255, 0.38), 0 0 68px rgba(99, 232, 255, 0.16); }
+      }
+
+      @keyframes cursorBlink {
+        0%, 45% { opacity: 1; }
+        46%, 100% { opacity: 0; }
+      }
+
       @keyframes rotateRing {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
@@ -767,6 +892,7 @@
               </svg>
             </div>
           </div>
+          <div id="valStateBadge" class="val-state" aria-live="polite"><span></span>Estado: en espera</div>
           <div class="control-grid" aria-label="Controles principales">
             <button id="valQuestionButton" class="primary" type="button">Val pregunta</button>
             <button id="listenResponseButton" class="secondary" type="button">Escuchar respuesta</button>
@@ -1030,8 +1156,10 @@
       const voiceRateInput = document.querySelector("#voiceRateInput");
       const voicePitchInput = document.querySelector("#voicePitchInput");
       const valMessage = document.querySelector("#valMessage");
+      const orbStage = document.querySelector(".orb-stage");
       const valOrb = document.querySelector("#valOrb");
       const valWave = document.querySelector("#valWave");
+      const valStateBadge = document.querySelector("#valStateBadge");
       const speechStatus = document.querySelector("#speechStatus");
       const sttStatus = document.querySelector("#sttStatus");
       const questionCategory = document.querySelector("#questionCategory");
@@ -1055,26 +1183,83 @@
         next: document.querySelector("#nextStepBoard"),
       };
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const valStateLabels = {
+        idle: "en espera",
+        thinking: "pensando",
+        speaking: "hablando",
+        listening: "capturando",
+        organizing: "organizando",
+        ready: "listo",
+      };
+      let valTypingTimer = null;
+      let valPacingTimer = null;
 
-      function setSpeaking(active) {
-        valOrb.classList.toggle("speaking", active);
-        valWave.classList.toggle("speaking", active);
+      function setValState(state) {
+        const safeState = valStateLabels[state] ? state : "idle";
+        valOrb.classList.remove("thinking", "speaking", "listening", "organizing", "ready");
+        valWave.classList.remove("thinking", "speaking", "listening", "organizing", "ready");
+        if (safeState !== "idle") {
+          valOrb.classList.add(safeState);
+        }
+        if (["thinking", "speaking", "listening", "organizing"].includes(safeState)) {
+          valWave.classList.add(safeState);
+        }
+        orbStage.dataset.valState = safeState;
+        valStateBadge.lastChild.textContent = `Estado: ${valStateLabels[safeState]}`;
       }
 
-      function setValMessage(text, shouldSpeak = false) {
-        valMessage.textContent = text;
+      function setSpeaking(active) {
+        setValState(active ? "speaking" : "ready");
+      }
+
+      function setValMessage(text, shouldSpeak = false, state = "speaking") {
+        window.clearTimeout(valTypingTimer);
+        const cleanText = text || "";
+        const revealStep = cleanText.length > 180 ? 4 : 3;
+        let cursor = 0;
+        setValState(state);
+        valMessage.textContent = "";
+        function reveal() {
+          cursor += revealStep;
+          valMessage.textContent = cleanText.slice(0, cursor);
+          if (cursor < cleanText.length) {
+            valTypingTimer = window.setTimeout(reveal, 14);
+            return;
+          }
+          valMessage.textContent = cleanText;
+          if (!shouldSpeak) {
+            setValState("ready");
+          }
+        }
+        reveal();
         if (shouldSpeak) {
           speakText(text);
         }
       }
 
+      function stageValResponse(text, options = {}) {
+        const {
+          state = "thinking",
+          delay = 280,
+          speak = false,
+          finalState = speak ? "speaking" : "ready",
+        } = options;
+        window.clearTimeout(valPacingTimer);
+        setValState(state);
+        valPacingTimer = window.setTimeout(() => {
+          setValMessage(text, speak, finalState);
+        }, delay);
+      }
+
       function speakText(text) {
         if (!("speechSynthesis" in window)) {
           speechStatus.textContent = "Voz no disponible en este navegador. Val queda en modo texto.";
+          setValState("ready");
           return;
         }
         if (!selectedVoice) {
           speechStatus.textContent = "Voz femenina en español no disponible en este navegador. Val queda en modo texto o seleccione otra voz.";
+          setValState("ready");
           return;
         }
         try {
@@ -1151,7 +1336,7 @@
         const question = questionBank[index % questionBank.length];
         questionCategory.textContent = question.category;
         questionText.textContent = question.text;
-        setValMessage(`Pregunta sugerida: ${question.text}`);
+        stageValResponse(`Pregunta sugerida: ${question.text}`, { state: "thinking", delay: 180 });
         captureState.recommendedQuestion = question.text;
         recommendedQuestion.textContent = question.text;
       }
@@ -1273,11 +1458,11 @@
         }
         if (!captureState.lastCategory && !inferred) {
           valObservation.textContent = "Necesito que Frank confirme si esto pertenece a seguimiento, visibilidad, datos o alcance.";
-          setValMessage(valObservation.textContent);
+          stageValResponse(valObservation.textContent, { state: "thinking", delay: 220 });
           return false;
         }
         valObservation.textContent = `${acknowledgementFor(captureState.lastCategory)} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
-        setValMessage(valObservation.textContent);
+        stageValResponse(valObservation.textContent, { state: "ready", delay: 120 });
         return true;
       }
 
@@ -1291,7 +1476,7 @@
         const finalCategory = captureState.lastCategory || inferredCategory;
         if (!finalCategory) {
           valObservation.textContent = "Necesito que Frank confirme si esto pertenece a seguimiento, visibilidad, datos o alcance.";
-          setValMessage(valObservation.textContent);
+          stageValResponse(valObservation.textContent, { state: "thinking", delay: 220 });
           return;
         }
         captureState.lastCapture = type;
@@ -1324,7 +1509,7 @@
         updateRecommendations(finalCategory);
         renderWhiteboard();
         valObservation.textContent = `${acknowledgementFor(finalCategory)} ${observationFor(type)}`;
-        setValMessage(valObservation.textContent);
+        stageValResponse(valObservation.textContent, { state: "organizing", delay: 260 });
         answerCapture.value = "";
         captureState.pendingResponse = "";
       }
@@ -1408,7 +1593,7 @@
         ].join("\n");
         summaryOutput.value = summary;
         copyStatus.textContent = "Resumen generado localmente.";
-        setValMessage(scriptedLines.wrap);
+        stageValResponse(scriptedLines.wrap, { state: "organizing", delay: 260 });
       }
 
       function copySummary() {
@@ -1433,16 +1618,23 @@
       document.querySelector("#valQuestionButton").addEventListener("click", () => {
         const person = clientNameInput.value.trim() || "PowerClub";
         const objective = meetingObjectiveInput.value;
-        renderQuestion(questionIndex);
-        setValMessage(`Pregunta para ${person}: ${questionText.textContent} Objetivo de la sesión: ${objective.toLowerCase()}.`, true);
-        questionIndex = (questionIndex + 1) % questionBank.length;
-        valObservation.textContent = scriptedLines.framing;
+        setValState("thinking");
+        window.setTimeout(() => {
+          const question = questionBank[questionIndex % questionBank.length];
+          questionCategory.textContent = question.category;
+          questionText.textContent = question.text;
+          captureState.recommendedQuestion = question.text;
+          recommendedQuestion.textContent = question.text;
+          setValMessage(`Pregunta para ${person}: ${question.text} Objetivo de la sesión: ${objective.toLowerCase()}.`, true);
+          questionIndex = (questionIndex + 1) % questionBank.length;
+          valObservation.textContent = scriptedLines.framing;
+        }, 260);
       });
 
       document.querySelector("#confirmResponseButton").addEventListener("click", confirmResponse);
       document.querySelector("#organizeWhiteboardButton").addEventListener("click", () => {
         if (confirmResponse()) {
-          capture("signal");
+          window.setTimeout(() => capture("signal"), 260);
         }
       });
       document.querySelector("#generateSummaryButton").addEventListener("click", generateSummary);
@@ -1460,19 +1652,19 @@
         recognition.continuous = false;
         recognition.onstart = () => {
           sttStatus.textContent = `Escuchando con transcripción experimental del navegador (${sttLanguageSelect.options[sttLanguageSelect.selectedIndex].text}). No se guarda audio.`;
-          setSpeaking(true);
+          setValState("listening");
         };
         recognition.onresult = (event) => {
           const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
           answerCapture.value = transcript;
           sttStatus.textContent = "Respuesta transcrita. Frank debe revisar/corregir antes de confirmar.";
-          setSpeaking(false);
+          setValState("ready");
         };
         recognition.onerror = () => {
           sttStatus.textContent = "STT no pudo capturar. Escribe la respuesta o usa dictado del sistema.";
-          setSpeaking(false);
+          setValState("ready");
         };
-        recognition.onend = () => setSpeaking(false);
+        recognition.onend = () => setValState("ready");
         recognition.start();
       });
 
@@ -1511,6 +1703,7 @@
       }
 
       renderWhiteboard();
+      setValState("idle");
     </script>
   </body>
 </html>
