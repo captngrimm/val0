@@ -672,6 +672,13 @@
         border-radius: 16px;
         padding: 12px;
         background: rgba(255, 255, 255, 0.035);
+        transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+      }
+
+      .whiteboard-lane.receiving {
+        border-color: rgba(99, 232, 255, 0.48);
+        box-shadow: 0 0 28px rgba(99, 232, 255, 0.16), inset 0 0 0 1px rgba(99, 232, 255, 0.18);
+        transform: translateY(-2px);
       }
 
       .whiteboard-lane h3 {
@@ -707,6 +714,39 @@
         background: rgba(210, 179, 106, 0.08);
         font-size: 0.88rem;
         line-height: 1.45;
+      }
+
+      .whiteboard-card {
+        display: grid;
+        gap: 7px;
+      }
+
+      .whiteboard-card.entering {
+        animation: cardPlace 520ms cubic-bezier(0.2, 0.75, 0.18, 1) both;
+      }
+
+      .card-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .card-badge {
+        width: fit-content;
+        border: 1px solid rgba(99, 232, 255, 0.22);
+        border-radius: 999px;
+        padding: 3px 7px;
+        color: var(--cyan);
+        background: rgba(99, 232, 255, 0.08);
+        font-size: 0.68rem;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .card-badge.demo {
+        border-color: rgba(210, 179, 106, 0.28);
+        color: var(--gold);
+        background: rgba(210, 179, 106, 0.08);
       }
 
       .recommendation-grid {
@@ -852,6 +892,10 @@
         min-height: 122px;
       }
 
+      body[data-mode="presentation"] .whiteboard-list li {
+        font-size: 0.82rem;
+      }
+
       body[data-mode="presentation"] .whiteboard-lane:nth-of-type(n+4) {
         display: none;
       }
@@ -945,6 +989,24 @@
       @keyframes cursorBlink {
         0%, 45% { opacity: 1; }
         46%, 100% { opacity: 0; }
+      }
+
+      @keyframes cardPlace {
+        0% {
+          opacity: 0;
+          transform: translateY(-14px) scale(0.98);
+          filter: blur(3px);
+        }
+        62% {
+          opacity: 1;
+          transform: translateY(3px) scale(1.01);
+          filter: blur(0);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+          filter: blur(0);
+        }
       }
 
       @keyframes rotateRing {
@@ -1362,6 +1424,8 @@
         responses: [],
         lastCapture: "",
         lastCategory: "",
+        lastBoardTarget: "",
+        lastCardId: "",
         recommendedSection: "Vista gerencial",
         recommendedQuestion: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?",
         pendingResponse: "",
@@ -1371,6 +1435,7 @@
       let recognition = null;
       let availableVoices = [];
       let selectedVoice = null;
+      let whiteboardCardId = 0;
       const typingConfig = {
         stepShort: 2,
         stepLong: 3,
@@ -1414,6 +1479,7 @@
         risks: document.querySelector("#riskBoard"),
         next: document.querySelector("#nextStepBoard"),
       };
+      const boardLanes = Object.fromEntries(Object.entries(boardLists).map(([key, list]) => [key, list.closest(".whiteboard-lane")]));
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const valStateLabels = {
         idle: "en espera",
@@ -1494,6 +1560,12 @@
         } = options;
         window.clearTimeout(valPacingTimer);
         setValState(state);
+        if (state === "organizing") {
+          valMessage.textContent = "Val organizando...";
+        }
+        if (state === "thinking") {
+          valMessage.textContent = "Val preparando la siguiente pregunta...";
+        }
         valPacingTimer = window.setTimeout(() => {
           setValMessage(text, speak, finalState);
         }, delay);
@@ -1613,6 +1685,106 @@
         return "Capture una respuesta para que Val sugiera el siguiente movimiento de discovery.";
       }
 
+      function consultantReasoning(category, type, text) {
+        const base = {
+          lane: "signals",
+          demo: "Vista gerencial",
+          nextQuestion: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?",
+          line: "Ok, esto lo coloco como señal de discovery. Antes de avanzar, conviene confirmar impacto, frecuencia y responsable.",
+        };
+        const map = {
+          leads: {
+            lane: "signals",
+            demo: "Vista gerencial",
+            nextQuestion: "¿El problema es que entran pocos leads, que no se asignan bien, o que se pierden después de entrar?",
+            line: "Esto suena a problema de entrada o calidad de leads. Lo separo para no mezclarlo con seguimiento.",
+          },
+          seguimiento: {
+            lane: "pains",
+            demo: "Riesgo y rescate + Cola del asesor",
+            nextQuestion: "¿Cuántas oportunidades sienten que se enfrían por falta de contacto a tiempo?",
+            line: "Ok, esto lo voy a tratar como dolor principal de seguimiento. Antes de mostrar el demo, conviene validar impacto y frecuencia.",
+          },
+          cierre: {
+            lane: "signals",
+            demo: "Riesgo y rescate",
+            nextQuestion: "¿Qué señales indican que una promesa está cerca de compra?",
+            line: "Esto suena más a calidad de cierre. Lo coloco como señal comercial para conectar con promesas, conversión y oportunidades en riesgo.",
+          },
+          visibilidad: {
+            lane: "pains",
+            demo: "Vista gerencial",
+            nextQuestion: "¿Qué necesita ver gerencia cada mañana para decidir dónde intervenir?",
+            line: "Esto apunta a visibilidad gerencial. Lo coloco como una necesidad de control diario.",
+          },
+          asesor: {
+            lane: "signals",
+            demo: "Cola del asesor",
+            nextQuestion: "¿Qué necesita hacer el asesor en menos clics para mantener el seguimiento actualizado?",
+            line: "Esto conecta con la operación diaria del asesor. Lo separo como señal de fricción para revisar la cola de seguimiento.",
+          },
+          datos: {
+            lane: "data",
+            demo: "Scope freeze / piloto",
+            nextQuestion: "¿De dónde saldría la base aprobada para el piloto?",
+            line: "No lo vendería todavía como feature. Lo dejaría como dato pendiente antes de cotizar.",
+          },
+          alcance: {
+            lane: "next",
+            demo: "Scope freeze / piloto",
+            nextQuestion: "¿Esto debe entrar en V1 o quedar para fase dos?",
+            line: "Esto apunta a definición de piloto. Lo coloco como próximo paso para separar V1, fase dos y deseos futuros.",
+          },
+          riesgo: {
+            lane: "risks",
+            demo: "Scope freeze / piloto",
+            nextQuestion: "¿Esto debe entrar en V1 o quedar para fase dos?",
+            line: "Esto puede crecer el alcance. Lo voy a dejar como riesgo o exclusión para proteger el piloto.",
+          },
+        };
+        const reasoning = { ...base, ...(map[category] || {}) };
+        if (type === "decision") {
+          return {
+            ...reasoning,
+            lane: "decisions",
+            demo: "Scope freeze / piloto",
+            nextQuestion: "¿Quién sería responsable de confirmar este punto?",
+            line: "Esto suena a decisión de reunión. Falta confirmar dueño y fecha.",
+          };
+        }
+        if (type === "risk") {
+          return {
+            ...reasoning,
+            lane: "risks",
+            demo: "Scope freeze / piloto",
+            nextQuestion: "¿Esto debe entrar en V1 o quedar para fase dos?",
+            line: "Esto puede crecer el alcance. Lo voy a dejar como riesgo o exclusión para proteger el piloto.",
+          };
+        }
+        if (type === "data") {
+          return {
+            ...reasoning,
+            lane: "data",
+            demo: "Scope freeze / piloto",
+            nextQuestion: "¿De dónde saldría la base aprobada para el piloto?",
+            line: "No lo vendería todavía como feature. Lo dejaría como dato pendiente antes de cotizar.",
+          };
+        }
+        if (type === "pilot") {
+          return {
+            ...reasoning,
+            lane: "next",
+            demo: "Scope freeze / piloto",
+            nextQuestion: "¿Qué sucursal, usuarios y campos entran al primer piloto?",
+            line: "Esto conecta con el piloto. Lo coloco como próximo paso para cerrar alcance antes de cotizar.",
+          };
+        }
+        if (type === "pain" && reasoning.lane === "signals") {
+          return { ...reasoning, lane: "pains" };
+        }
+        return reasoning;
+      }
+
       function categoryFromText(text) {
         const lower = text.toLowerCase();
         if (lower.includes("lead") || lower.includes("prospect") || lower.includes("socio")) return "leads";
@@ -1629,7 +1801,7 @@
       function recommendationFor(category) {
         const map = {
           leads: ["Vista gerencial", "¿De dónde llegan los leads y cómo se asignan hoy?"],
-          seguimiento: ["Riesgo y rescate", "¿Qué seguimiento atrasado se debería rescatar primero?"],
+          seguimiento: ["Riesgo y rescate + Cola del asesor", "¿Qué seguimiento atrasado se debería rescatar primero?"],
           cierre: ["Riesgo y rescate", "¿Qué señales indican que una promesa está cerca de compra?"],
           visibilidad: ["Vista gerencial", "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?"],
           asesor: ["Cola del asesor", "¿Qué necesita hacer el asesor en menos clics para mantener el seguimiento actualizado?"],
@@ -1663,14 +1835,50 @@
         return "signals";
       }
 
+      function makeWhiteboardCard(text, category, type, reasoning) {
+        whiteboardCardId += 1;
+        return {
+          id: `wb-${whiteboardCardId}`,
+          text,
+          category,
+          type,
+          demo: reasoning.demo,
+        };
+      }
+
+      function renderWhiteboardItem(item) {
+        if (typeof item === "string") {
+          return `<li>${escapeHtml(item)}</li>`;
+        }
+        const entering = item.id === captureState.lastCardId ? " entering" : "";
+        return [
+          `<li class="whiteboard-card${entering}">`,
+          `<div class="card-meta">`,
+          `<span class="card-badge">${escapeHtml(item.category || "señal")}</span>`,
+          item.demo ? `<span class="card-badge demo">${escapeHtml(item.demo)}</span>` : "",
+          `</div>`,
+          `<span>${escapeHtml(item.text)}</span>`,
+          `</li>`,
+        ].join("");
+      }
+
+      function pulseWhiteboardLane(target) {
+        Object.values(boardLanes).forEach((lane) => lane?.classList.remove("receiving"));
+        const lane = boardLanes[target];
+        if (!lane) return;
+        lane.classList.add("receiving");
+        window.setTimeout(() => lane.classList.remove("receiving"), 900);
+      }
+
       function renderWhiteboard() {
         const empty = "<li>Sin captura todavía.</li>";
-        boardLists.pains.innerHTML = captureState.pains.length ? captureState.pains.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
-        boardLists.signals.innerHTML = captureState.signals.length ? captureState.signals.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
-        boardLists.data.innerHTML = captureState.data.length ? captureState.data.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
-        boardLists.decisions.innerHTML = captureState.decisions.length ? captureState.decisions.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
-        boardLists.risks.innerHTML = captureState.risks.length ? captureState.risks.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
-        boardLists.next.innerHTML = captureState.pilots.length ? captureState.pilots.map((item) => `<li>${escapeHtml(item)}</li>`).join("") : empty;
+        boardLists.pains.innerHTML = captureState.pains.length ? captureState.pains.map(renderWhiteboardItem).join("") : empty;
+        boardLists.signals.innerHTML = captureState.signals.length ? captureState.signals.map(renderWhiteboardItem).join("") : empty;
+        boardLists.data.innerHTML = captureState.data.length ? captureState.data.map(renderWhiteboardItem).join("") : empty;
+        boardLists.decisions.innerHTML = captureState.decisions.length ? captureState.decisions.map(renderWhiteboardItem).join("") : empty;
+        boardLists.risks.innerHTML = captureState.risks.length ? captureState.risks.map(renderWhiteboardItem).join("") : empty;
+        boardLists.next.innerHTML = captureState.pilots.length ? captureState.pilots.map(renderWhiteboardItem).join("") : empty;
+        pulseWhiteboardLane(captureState.lastBoardTarget);
       }
 
       function updateRecommendations(category) {
@@ -1709,7 +1917,8 @@
           stageValResponse(valObservation.textContent, { state: "thinking", delay: 220 });
           return false;
         }
-        valObservation.textContent = `${acknowledgementFor(captureState.lastCategory)} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
+        const reasoning = consultantReasoning(captureState.lastCategory, "signal", text);
+        valObservation.textContent = `${reasoning.line} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
         stageValResponse(valObservation.textContent, { state: "ready", delay: 120 });
         return true;
       }
@@ -1730,33 +1939,41 @@
         captureState.lastCapture = type;
         captureState.lastCategory = finalCategory;
         captureState.responses.push(`[${finalCategory}] ${text}`);
+        const reasoning = consultantReasoning(finalCategory, type, text);
+        const card = makeWhiteboardCard(text, finalCategory, type, reasoning);
         if (type === "pain") {
-          captureState.pains.push(text);
           appendLine(notesField, "Dolor", text);
         }
         if (type === "decision") {
-          captureState.decisions.push(text);
           appendLine(decisionsField, "Decisión", text);
         }
         if (type === "risk") {
-          captureState.risks.push(text);
           appendLine(risksField, "Riesgo", text);
         }
         if (type === "data") {
-          captureState.data.push(text);
           appendLine(nextStepsField, "Dato pendiente", text);
         }
         if (type === "pilot") {
-          captureState.pilots.push(text);
           appendLine(nextStepsField, "Candidato para piloto", text);
         }
-        const target = boardTargetFor(type, finalCategory);
-        if (target === "signals") {
-          captureState.signals.push(text);
-        }
-        updateRecommendations(finalCategory);
+        const target = reasoning.lane || boardTargetFor(type, finalCategory);
+        const targetMap = {
+          pains: captureState.pains,
+          signals: captureState.signals,
+          data: captureState.data,
+          decisions: captureState.decisions,
+          risks: captureState.risks,
+          next: captureState.pilots,
+        };
+        targetMap[target]?.push(card);
+        captureState.lastBoardTarget = target;
+        captureState.lastCardId = card.id;
+        captureState.recommendedSection = reasoning.demo;
+        captureState.recommendedQuestion = reasoning.nextQuestion;
+        recommendedSection.textContent = reasoning.demo;
+        recommendedQuestion.textContent = reasoning.nextQuestion;
         renderWhiteboard();
-        valObservation.textContent = `${acknowledgementFor(finalCategory)} ${observationFor(type)}`;
+        valObservation.textContent = `${reasoning.line} Recomiendo mostrar: ${reasoning.demo}. Siguiente pregunta: ${reasoning.nextQuestion}`;
         stageValResponse(valObservation.textContent, { state: "organizing", delay: 260 });
         answerCapture.value = "";
         captureState.pendingResponse = "";
@@ -1793,7 +2010,11 @@
       }
 
       function formatList(items) {
-        return items.length ? items.map((item) => `- ${item}`).join("\n") : "- Sin captura específica.";
+        return items.length ? items.map((item) => {
+          if (typeof item === "string") return `- ${item}`;
+          const demo = item.demo ? ` | demo: ${item.demo}` : "";
+          return `- [${item.category || "señal"}] ${item.text}${demo}`;
+        }).join("\n") : "- Sin captura específica.";
       }
 
       function generateSummary() {
