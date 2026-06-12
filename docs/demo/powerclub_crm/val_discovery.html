@@ -495,13 +495,23 @@
       .command-hub.open [data-command="back"] { transform: translate(-118%, -82%) scale(1); }
 
       .hotkey-hint {
+        display: grid;
+        gap: 4px;
         margin: 0;
         color: var(--muted);
         font-size: 0.72rem;
         font-weight: 850;
-        letter-spacing: 0.08em;
         text-align: center;
+      }
+
+      .hotkey-hint strong {
+        color: var(--cyan);
+        font-size: 0.78rem;
         text-transform: uppercase;
+      }
+
+      .hotkey-hint span {
+        overflow-wrap: anywhere;
       }
 
       .primary,
@@ -1420,7 +1430,7 @@
           </div>
           <div id="valStateBadge" class="val-state" aria-live="polite"><span></span>Estado: en espera</div>
           <div id="commandHub" class="command-hub" aria-label="Comando radial Val">
-            <button id="commandCoreButton" class="command-core" type="button" aria-expanded="false" aria-controls="commandRing">Comando</button>
+            <button id="commandCoreButton" class="command-core" type="button" title="Acción actual">Iniciar</button>
             <div id="commandRing" class="command-ring">
               <button class="command-action" type="button" data-command="ask" title="Val pregunta (V)"><span>V</span><small>Pregunta</small></button>
               <button class="command-action" type="button" data-command="present" title="Val se presenta (P)"><span>P</span><small>Intro</small></button>
@@ -1433,8 +1443,13 @@
               <button class="command-action" type="button" data-command="back" title="Volver al CRM demo"><span>&lt;</span><small>CRM</small></button>
             </div>
           </div>
-          <p class="hotkey-hint">Ring-ready: P · Q · V · C · O · R · N · M · H</p>
-          <button id="voiceMuteButton" class="voice-mini" type="button" aria-pressed="true">Voz: texto</button>
+          <p class="hotkey-hint">
+            <strong id="currentStepLabel">Paso: intro</strong>
+            <span id="ringActionLabel">Centro: iniciar discovery</span>
+            <span>→ siguiente · ← corregir · ↓ resumen · mantener: menú</span>
+          </p>
+          <button id="audioModeButton" class="voice-mini" type="button" aria-label="Cambiar modo de audio">Audio: Texto</button>
+          <p id="audioModeStatus" class="mode-note">Audio en modo texto. Cambia a Voz navegador si quieres probar TTS.</p>
           <div class="control-grid" aria-label="Controles principales">
             <button id="valQuestionButton" class="primary" type="button">Val pregunta</button>
             <button id="listenResponseButton" class="secondary operator-mode-only" type="button">Escuchar respuesta</button>
@@ -1740,6 +1755,8 @@
       let availableVoices = [];
       let selectedVoice = null;
       let voiceEnabled = false;
+      let audioMode = "text";
+      let meetingStep = "intro";
       let whiteboardCardId = 0;
       const typingConfig = {
         stepShort: 2,
@@ -1756,7 +1773,10 @@
       const quickQaPanel = document.querySelector("#quickQaPanel");
       const qaInput = document.querySelector("#qaInput");
       const qaAskButton = document.querySelector("#qaAskButton");
-      const voiceMuteButton = document.querySelector("#voiceMuteButton");
+      const audioModeButton = document.querySelector("#audioModeButton");
+      const audioModeStatus = document.querySelector("#audioModeStatus");
+      const currentStepLabel = document.querySelector("#currentStepLabel");
+      const ringActionLabel = document.querySelector("#ringActionLabel");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -1869,19 +1889,102 @@
         nextActionCard.textContent = message;
       }
 
+      function setMeetingStep(step, message = "") {
+        const ringLabels = {
+          intro: "Centro: iniciar discovery",
+          ask: "Centro: hacer pregunta",
+          capture: "Centro: confirmar respuesta",
+          confirm: "Centro: confirmar respuesta",
+          organize: "Centro: organizar whiteboard",
+          recommend: "Centro: siguiente pregunta",
+          summary: "Centro: generar resumen",
+        };
+        const stepLabels = {
+          intro: "intro",
+          ask: "pregunta",
+          capture: "captura",
+          confirm: "confirmacion",
+          organize: "organizar",
+          recommend: "recomendar",
+          summary: "resumen",
+        };
+        const coreLabels = {
+          intro: "Iniciar",
+          ask: "Pregunta",
+          capture: "Confirmar",
+          confirm: "Confirmar",
+          organize: "Ordenar",
+          recommend: "Siguiente",
+          summary: "Resumen",
+        };
+        meetingStep = ringLabels[step] ? step : "intro";
+        currentStepLabel.textContent = `Paso: ${stepLabels[meetingStep]}`;
+        ringActionLabel.textContent = ringLabels[meetingStep];
+        commandCoreButton.textContent = coreLabels[meetingStep];
+        if (message) setNextAction(message);
+      }
+
+      function runContextAction() {
+        const actions = {
+          intro: () => runCommand("ask"),
+          ask: () => runCommand("ask"),
+          capture: () => runCommand("confirm"),
+          confirm: () => runCommand("confirm"),
+          organize: () => runCommand("organize"),
+          recommend: () => runCommand("next"),
+          summary: () => runCommand("summary"),
+        };
+        actions[meetingStep]?.();
+      }
+
+      function runBackAction() {
+        if (meetingStep === "capture" || meetingStep === "confirm" || meetingStep === "organize") {
+          focusCaptureField();
+          setMeetingStep("capture", "Ahora: corrige o captura la respuesta.");
+          return;
+        }
+        setMeetingStep("ask", "Ahora: haz o repite la pregunta.");
+        smartNextQuestion();
+      }
+
       function focusCaptureField() {
         presentationCapture.classList.add("highlight");
         answerCapture.focus();
         window.setTimeout(() => presentationCapture.classList.remove("highlight"), 1300);
       }
 
-      function setVoiceEnabled(enabled) {
-        voiceEnabled = enabled;
-        voiceMuteButton.textContent = enabled ? "Voz: on" : "Voz: texto";
-        voiceMuteButton.setAttribute("aria-pressed", String(enabled));
-        speechStatus.textContent = enabled
-          ? "Voz del navegador activada. Si suena incorrecta, vuelva a modo texto."
-          : "Voz silenciada. Val sigue en modo texto/typewriter.";
+      function setAudioMode(mode) {
+        const modes = ["text", "browser", "premium"];
+        audioMode = modes.includes(mode) ? mode : "text";
+        voiceEnabled = audioMode === "browser";
+        const labels = {
+          text: "Audio: Texto",
+          browser: "Audio: Voz navegador",
+          premium: "Audio: Premium futuro",
+        };
+        audioModeButton.textContent = labels[audioMode];
+        if (audioMode === "text") {
+          audioModeStatus.textContent = "Audio en modo texto. Cambia a Voz navegador si quieres probar TTS.";
+          speechStatus.textContent = "Audio en modo texto. Cambia a Voz navegador en ajustes si quieres probar TTS.";
+        }
+        if (audioMode === "browser") {
+          audioModeStatus.textContent = selectedVoice
+            ? "Voz navegador activa."
+            : "Voz navegador sin voz disponible; revise Operador.";
+          speechStatus.textContent = selectedVoice
+            ? "Voz navegador activa. Val usará speechSynthesis si el navegador lo permite."
+            : "Voz navegador seleccionada, pero no hay voz disponible todavía. Revise Modo Operador.";
+        }
+        if (audioMode === "premium") {
+          voiceEnabled = false;
+          audioModeStatus.textContent = "Premium futuro: no activo en esta demo.";
+          speechStatus.textContent = "Premium futuro es solo referencia. En esta demo Val sigue en texto.";
+        }
+      }
+
+      function cycleAudioMode() {
+        const next = audioMode === "text" ? "browser" : audioMode === "browser" ? "premium" : "text";
+        setAudioMode(next);
       }
 
       function setValState(state) {
@@ -2302,7 +2405,7 @@
         const text = answerCapture.value.trim();
         if (!text) {
           valObservation.textContent = "Escriba o capture una respuesta antes de confirmar.";
-          setNextAction("Ahora: captura la respuesta.");
+          setMeetingStep("capture", "Ahora: captura la respuesta.");
           focusCaptureField();
           return false;
         }
@@ -2322,7 +2425,7 @@
         }
         const reasoning = consultantReasoning(captureState.lastCategory, "signal", text);
         valObservation.textContent = `${reasoning.line} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
-        setNextAction("Ahora: organiza en whiteboard.");
+        setMeetingStep("organize", "Ahora: organiza en whiteboard.");
         stageValResponse(valObservation.textContent, { state: "ready", delay: 120 });
         return true;
       }
@@ -2331,7 +2434,7 @@
         const text = (explicitText || captureState.pendingResponse || answerCapture.value).trim();
         if (!text) {
           valObservation.textContent = "Primero captura una respuesta del cliente. Puedes escribir una frase corta y luego organizarla.";
-          setNextAction("Ahora: captura la respuesta.");
+          setMeetingStep("capture", "Ahora: captura la respuesta.");
           focusCaptureField();
           stageValResponse(valObservation.textContent, { state: "thinking", delay: 120 });
           return;
@@ -2382,7 +2485,7 @@
         showFloatingCaptureCard(card);
         window.setTimeout(renderWhiteboard, 420);
         valObservation.textContent = `${reasoning.line} Recomiendo mostrar: ${reasoning.demo}. Siguiente pregunta: ${reasoning.nextQuestion}`;
-        setNextAction("Ahora: muestra el demo recomendado.");
+        setMeetingStep("recommend", "Ahora: muestra el demo recomendado.");
         stageValResponse(valObservation.textContent, { state: "organizing", delay: 260 });
         answerCapture.value = "";
         captureState.pendingResponse = "";
@@ -2416,6 +2519,7 @@
         const nextIndex = findQuestionByCategory(target);
         questionIndex = nextIndex >= 0 ? nextIndex : (questionIndex + 1) % questionBank.length;
         renderQuestion(questionIndex);
+        setMeetingStep("capture", "Ahora: captura la respuesta.");
       }
 
       function formatList(items) {
@@ -2471,6 +2575,7 @@
         ].join("\n");
         summaryOutput.value = summary;
         copyStatus.textContent = "Resumen generado localmente.";
+        setMeetingStep("summary", "Ahora: revisa o copia el resumen.");
         stageValResponse(scriptedLines.wrap, { state: "organizing", delay: 260 });
       }
 
@@ -2530,7 +2635,7 @@
       function openQaCapsule() {
         if (document.body.dataset.mode === "presentation") {
           quickQaPanel.classList.toggle("open");
-          setNextAction(quickQaPanel.classList.contains("open") ? "Ahora: elige una pregunta rápida." : "Ahora: haz la pregunta.");
+          setMeetingStep(meetingStep, quickQaPanel.classList.contains("open") ? "Ahora: elige una pregunta rápida." : "Ahora: haz la pregunta.");
           return;
         }
         qaDrawer.open = true;
@@ -2564,7 +2669,7 @@
           setValMessage(`Pregunta para ${person}: ${question.text} Objetivo de la sesión: ${objective.toLowerCase()}.`, true);
           questionIndex = (questionIndex + 1) % questionBank.length;
           valObservation.textContent = scriptedLines.framing;
-          setNextAction("Ahora: captura la respuesta.");
+          setMeetingStep("capture", "Ahora: captura la respuesta.");
           window.setTimeout(focusCaptureField, 650);
         }, 260);
       });
@@ -2573,7 +2678,7 @@
       document.querySelector("#organizeWhiteboardButton").addEventListener("click", () => {
         if (!answerCapture.value.trim()) {
           valObservation.textContent = "Primero captura una respuesta del cliente. Puedes escribir una frase corta y luego organizarla.";
-          setNextAction("Ahora: captura la respuesta.");
+          setMeetingStep("capture", "Ahora: captura la respuesta.");
           focusCaptureField();
           stageValResponse(valObservation.textContent, { state: "thinking", delay: 120 });
           return;
@@ -2629,8 +2734,12 @@
 
       voiceSelect.addEventListener("change", () => {
         selectedVoice = voiceSelect.value === "" ? null : availableVoices[Number(voiceSelect.value)];
+        if (audioMode === "browser") {
+          setAudioMode("browser");
+          return;
+        }
         speechStatus.textContent = selectedVoice
-          ? `Voz seleccionada: ${selectedVoice.name} (${selectedVoice.lang}).`
+          ? `Voz seleccionada: ${selectedVoice.name} (${selectedVoice.lang}). Cambie a Voz navegador para probar audio.`
           : "Modo texto seleccionado. Val no hablará con voz del navegador.";
       });
 
@@ -2642,9 +2751,7 @@
         speechStatus.textContent = `Tono ajustado a ${voicePitchInput.value}.`;
       });
 
-      voiceMuteButton.addEventListener("click", () => {
-        setVoiceEnabled(!voiceEnabled);
-      });
+      audioModeButton.addEventListener("click", cycleAudioMode);
 
       presentationModeButton.addEventListener("click", () => {
         setMode("presentation");
@@ -2660,7 +2767,7 @@
         setSkin(skinSelect.value);
       });
 
-      commandCoreButton.addEventListener("click", toggleCommandHub);
+      commandCoreButton.addEventListener("click", runContextAction);
 
       document.querySelectorAll("[data-command]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -2692,6 +2799,19 @@
         }
         if (isTypingTarget(event.target)) return;
         const key = event.key.toLowerCase();
+        const ringKeys = {
+          " ": () => runContextAction(),
+          enter: () => runContextAction(),
+          arrowup: () => smartNextQuestion(),
+          arrowright: () => smartNextQuestion(),
+          arrowdown: () => generateSummary(),
+          arrowleft: () => runBackAction(),
+        };
+        if (ringKeys[key]) {
+          event.preventDefault();
+          ringKeys[key]();
+          return;
+        }
         const hotkeys = {
           p: "present",
           q: "qa",
@@ -2724,8 +2844,8 @@
       setMode("presentation");
       setSkin("executive");
       setCommandHub(false);
-      setVoiceEnabled(false);
-      setNextAction("Ahora: haz la pregunta.");
+      setAudioMode("text");
+      setMeetingStep("intro", "Ahora: haz la pregunta.");
     </script>
   </body>
 </html>
