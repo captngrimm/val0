@@ -889,7 +889,7 @@
       }
 
       .whiteboard-card.entering {
-        animation: cardPlace 520ms cubic-bezier(0.2, 0.75, 0.18, 1) both;
+        animation: cardPlace 780ms cubic-bezier(0.2, 0.75, 0.18, 1) both;
       }
 
       .floating-capture-card {
@@ -907,7 +907,7 @@
           rgba(10, 17, 25, 0.94);
         box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42), 0 0 34px rgba(99, 232, 255, 0.16);
         pointer-events: none;
-        animation: ideaTransfer 760ms cubic-bezier(0.22, 0.78, 0.2, 1) forwards;
+        animation: ideaTransfer 1040ms cubic-bezier(0.22, 0.78, 0.2, 1) forwards;
       }
 
       .floating-capture-card strong {
@@ -1272,6 +1272,15 @@
         }
       }
 
+      @media (prefers-reduced-motion: reduce) {
+        .floating-capture-card,
+        .whiteboard-card.entering,
+        .whiteboard-lane.receiving {
+          animation: none;
+          transition: none;
+        }
+      }
+
       @keyframes rotateRing {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
@@ -1446,9 +1455,10 @@
           <p class="hotkey-hint">
             <strong id="currentStepLabel">Paso: intro</strong>
             <span id="ringActionLabel">Centro: iniciar discovery</span>
-            <span>→ siguiente · ← corregir · ↓ resumen · mantener: menú</span>
+            <span>↑ N8 · → N6 · ↓ N2 · ← N4 · centro N5 · mantener H</span>
           </p>
           <button id="audioModeButton" class="voice-mini" type="button" aria-label="Cambiar modo de audio">Audio: Texto</button>
+          <button id="voiceTestButton" class="voice-mini" type="button">Probar voz</button>
           <p id="audioModeStatus" class="mode-note">Audio en modo texto. Cambia a Voz navegador si quieres probar TTS.</p>
           <div class="control-grid" aria-label="Controles principales">
             <button id="valQuestionButton" class="primary" type="button">Val pregunta</button>
@@ -1774,6 +1784,7 @@
       const qaInput = document.querySelector("#qaInput");
       const qaAskButton = document.querySelector("#qaAskButton");
       const audioModeButton = document.querySelector("#audioModeButton");
+      const voiceTestButton = document.querySelector("#voiceTestButton");
       const audioModeStatus = document.querySelector("#audioModeStatus");
       const currentStepLabel = document.querySelector("#currentStepLabel");
       const ringActionLabel = document.querySelector("#ringActionLabel");
@@ -1987,6 +1998,20 @@
         setAudioMode(next);
       }
 
+      function testBrowserVoice() {
+        if (audioMode !== "browser") {
+          setAudioMode("browser");
+        }
+        if (!("speechSynthesis" in window) || !selectedVoice) {
+          const message = "No se pudo reproducir voz del navegador. Usa modo texto o revisa permisos/voz del sistema.";
+          audioModeStatus.textContent = message;
+          speechStatus.textContent = message;
+          setValState("ready");
+          return;
+        }
+        stageValResponse("Val lista. Voz del navegador activa.", { state: "speaking", delay: 80, speak: true });
+      }
+
       function setValState(state) {
         const safeState = valStateLabels[state] ? state : "idle";
         valOrb.classList.remove("thinking", "speaking", "listening", "organizing", "ready");
@@ -2181,13 +2206,13 @@
             lane: "signals",
             demo: "Vista gerencial",
             nextQuestion: "¿El problema es que entran pocos leads, que no se asignan bien, o que se pierden después de entrar?",
-            line: "Esto suena a problema de entrada o calidad de leads. Lo separo para no mezclarlo con seguimiento.",
+            line: "Estoy moviendo esta señal al whiteboard como entrada o calidad de leads. La separo para no mezclarla con seguimiento.",
           },
           seguimiento: {
             lane: "pains",
             demo: "Riesgo y rescate + Cola del asesor",
             nextQuestion: "¿Cuántas oportunidades sienten que se enfrían por falta de contacto a tiempo?",
-            line: "Ok, esto lo voy a tratar como dolor principal de seguimiento. Antes de mostrar el demo, conviene validar impacto y frecuencia.",
+            line: "Estoy colocando esto como dolor operativo de seguimiento. Antes de mostrar el demo, conviene validar impacto y frecuencia.",
           },
           cierre: {
             lane: "signals",
@@ -2199,7 +2224,7 @@
             lane: "pains",
             demo: "Vista gerencial",
             nextQuestion: "¿Qué necesita ver gerencia cada mañana para decidir dónde intervenir?",
-            line: "Esto apunta a visibilidad gerencial. Lo coloco como una necesidad de control diario.",
+            line: "Estoy colocando esto como necesidad de visibilidad gerencial y control diario.",
           },
           asesor: {
             lane: "signals",
@@ -2211,7 +2236,7 @@
             lane: "data",
             demo: "Scope freeze / piloto",
             nextQuestion: "¿De dónde saldría la base aprobada para el piloto?",
-            line: "No lo vendería todavía como feature. Lo dejaría como dato pendiente antes de cotizar.",
+            line: "La separo como dato pendiente. No lo vendería todavía como feature antes de confirmar fuente y muestra aprobada.",
           },
           alcance: {
             lane: "next",
@@ -2752,6 +2777,7 @@
       });
 
       audioModeButton.addEventListener("click", cycleAudioMode);
+      voiceTestButton.addEventListener("click", testBrowserVoice);
 
       presentationModeButton.addEventListener("click", () => {
         setMode("presentation");
@@ -2802,10 +2828,15 @@
         const ringKeys = {
           " ": () => runContextAction(),
           enter: () => runContextAction(),
+          numpad5: () => runContextAction(),
           arrowup: () => smartNextQuestion(),
+          numpad8: () => smartNextQuestion(),
           arrowright: () => smartNextQuestion(),
+          numpad6: () => smartNextQuestion(),
           arrowdown: () => generateSummary(),
+          numpad2: () => generateSummary(),
           arrowleft: () => runBackAction(),
+          numpad4: () => runBackAction(),
         };
         if (ringKeys[key]) {
           event.preventDefault();
