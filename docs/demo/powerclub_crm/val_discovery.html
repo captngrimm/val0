@@ -56,6 +56,7 @@
       .stage-header,
       .cockpit-grid > section,
       .setup-panel,
+      .flow-panel,
       .whiteboard-panel,
       .recommendation-panel,
       .capture-column,
@@ -380,6 +381,7 @@
       }
 
       .setup-panel,
+      .flow-panel,
       .whiteboard-panel,
       .recommendation-panel {
         display: grid;
@@ -389,18 +391,20 @@
 
       .setup-grid {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 12px;
       }
 
       .setup-grid label,
+      .voice-control,
       .speech-actions {
         display: grid;
         gap: 7px;
       }
 
       .setup-grid input,
-      .setup-grid select {
+      .setup-grid select,
+      .voice-control select {
         min-height: 42px;
         border: 1px solid rgba(99, 232, 255, 0.2);
         border-radius: 12px;
@@ -409,8 +413,30 @@
         background: rgba(1, 5, 10, 0.56);
       }
 
-      .speech-actions {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+      .flow-steps {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .flow-steps article {
+        border: 1px solid rgba(99, 232, 255, 0.16);
+        border-radius: 14px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .flow-steps span {
+        display: block;
+        color: var(--cyan);
+        font-size: 0.72rem;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .flow-steps strong {
+        display: block;
+        margin-top: 6px;
       }
 
       .category-chips {
@@ -597,6 +623,7 @@
         .stage-header,
         .cockpit-grid,
         .setup-grid,
+        .flow-steps,
         .whiteboard-grid,
         .recommendation-grid,
         .capture-grid {
@@ -614,7 +641,6 @@
 
       @media (max-width: 640px) {
         .control-grid,
-        .speech-actions,
         .quick-capture {
           grid-template-columns: 1fr;
         }
@@ -669,6 +695,39 @@
               <option>Cerrar siguiente paso comercial</option>
             </select>
           </label>
+          <label>
+            <span class="field-label">Idioma STT</span>
+            <select id="sttLanguageSelect" aria-label="Idioma de transcripción experimental">
+              <option value="es-419">Español LatAm</option>
+              <option value="es-ES">Español España</option>
+              <option value="en-US">English</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="flow-panel" aria-labelledby="flowTitle">
+        <div>
+          <p class="eyebrow">Flujo guiado</p>
+          <h2 id="flowTitle">Cuatro pasos para operar en vivo</h2>
+        </div>
+        <div class="flow-steps">
+          <article>
+            <span>Paso 1</span>
+            <strong>Val pregunta</strong>
+          </article>
+          <article>
+            <span>Paso 2</span>
+            <strong>Capturar respuesta</strong>
+          </article>
+          <article>
+            <span>Paso 3</span>
+            <strong>Confirmar y organizar</strong>
+          </article>
+          <article>
+            <span>Paso 4</span>
+            <strong>Mostrar recomendación / resumen</strong>
+          </article>
         </div>
       </section>
 
@@ -688,13 +747,16 @@
             </div>
           </div>
           <div class="control-grid" aria-label="Controles principales">
-            <button id="startSessionButton" class="primary" type="button">Iniciar sesión</button>
-            <button id="speakButton" class="secondary" type="button">Hablar como Val</button>
-            <button id="nextQuestionButton" class="ghost" type="button">Siguiente pregunta</button>
-            <button id="smartQuestionButton" class="ghost" type="button">Siguiente pregunta inteligente</button>
+            <button id="valQuestionButton" class="primary" type="button">Val pregunta</button>
+            <button id="listenResponseButton" class="secondary" type="button">Escuchar respuesta</button>
+            <button id="confirmResponseButton" class="ghost" type="button">Confirmar respuesta</button>
+            <button id="organizeWhiteboardButton" class="ghost" type="button">Organizar en whiteboard</button>
             <button id="generateSummaryButton" class="secondary" type="button">Generar resumen</button>
-            <button id="copySummaryButton" class="ghost" type="button">Copiar resumen</button>
           </div>
+          <label class="voice-control">
+            <span class="field-label">Voz de Val</span>
+            <select id="voiceSelect" aria-label="Seleccionar voz del navegador"></select>
+          </label>
           <p id="speechStatus" class="status-line">Voz opcional del navegador. Si no está disponible, Val funciona en texto.</p>
         </section>
 
@@ -747,14 +809,11 @@
             <span class="field-label">Respuesta capturada</span>
             <textarea id="answerCapture" class="answer-capture" rows="5" placeholder="Frank escribe la respuesta o idea clave escuchada en la reunión."></textarea>
           </label>
-          <div class="speech-actions" aria-label="Captura de respuesta">
-            <button id="listenResponseButton" class="secondary" type="button">Escuchar respuesta</button>
-            <button id="useWrittenResponseButton" class="ghost" type="button">Usar respuesta escrita</button>
-          </div>
-          <p id="sttStatus" class="status-line">Transcripción experimental del navegador. Si no está disponible, escriba la respuesta o use dictado del sistema.</p>
+          <p class="status-line">Modo seguro: Frank puede escribir o corregir la respuesta antes de organizarla.</p>
+          <p id="sttStatus" class="status-line">Transcripción experimental del navegador en Español LatAm. Si no está disponible, escriba la respuesta o use dictado del sistema.</p>
 
           <div>
-            <p class="eyebrow">Categoría de discovery</p>
+            <p class="eyebrow">Categoría opcional</p>
             <div class="category-chips" aria-label="Categorías de respuesta">
               <button type="button" data-category="leads">Leads</button>
               <button type="button" data-category="seguimiento">Seguimiento</button>
@@ -767,7 +826,8 @@
             </div>
           </div>
 
-          <div class="quick-capture" aria-label="Captura rápida">
+          <p class="eyebrow">Captura avanzada opcional</p>
+          <div class="quick-capture" aria-label="Captura avanzada opcional">
             <button type="button" data-capture="pain">Capturar dolor</button>
             <button type="button" data-capture="decision">Capturar decisión</button>
             <button type="button" data-capture="risk">Marcar riesgo</button>
@@ -920,17 +980,22 @@
         signals: [],
         responses: [],
         lastCapture: "",
-        lastCategory: "visibilidad",
+        lastCategory: "",
         recommendedSection: "Vista gerencial",
         recommendedQuestion: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?",
+        pendingResponse: "",
       };
 
       let questionIndex = 0;
       let recognition = null;
+      let availableVoices = [];
+      let selectedVoice = null;
 
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
+      const sttLanguageSelect = document.querySelector("#sttLanguageSelect");
+      const voiceSelect = document.querySelector("#voiceSelect");
       const valMessage = document.querySelector("#valMessage");
       const valOrb = document.querySelector("#valOrb");
       const valWave = document.querySelector("#valWave");
@@ -975,10 +1040,15 @@
           speechStatus.textContent = "Voz no disponible en este navegador. Val queda en modo texto.";
           return;
         }
+        if (!selectedVoice) {
+          speechStatus.textContent = "Voz femenina en español no disponible en este navegador. Val queda en modo texto o seleccione otra voz.";
+          return;
+        }
         try {
           window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = "es-PA";
+          utterance.voice = selectedVoice;
+          utterance.lang = selectedVoice.lang || "es-419";
           utterance.rate = 0.92;
           utterance.pitch = 0.82;
           utterance.onstart = () => {
@@ -997,6 +1067,46 @@
         } catch (error) {
           setSpeaking(false);
           speechStatus.textContent = "La voz no pudo iniciar; use la guía en texto.";
+        }
+      }
+
+      function voiceLooksFemale(voice) {
+        const name = voice.name.toLowerCase();
+        return ["female", "mujer", "mónica", "monica", "paulina", "sabina", "helena", "laura", "luciana", "sofia", "soledad", "maria", "elena"].some((hint) => name.includes(hint));
+      }
+
+      function loadVoices() {
+        if (!("speechSynthesis" in window)) {
+          voiceSelect.innerHTML = `<option>Voz no disponible</option>`;
+          speechStatus.textContent = "Voz del navegador no disponible. Use modo texto.";
+          return;
+        }
+        availableVoices = window.speechSynthesis.getVoices();
+        const spanishVoices = availableVoices.filter((voice) => voice.lang.toLowerCase().startsWith("es"));
+        const preferred = spanishVoices.find(voiceLooksFemale) || spanishVoices.find((voice) => voice.lang.toLowerCase().includes("419")) || spanishVoices[0];
+
+        if (!availableVoices.length) {
+          voiceSelect.innerHTML = `<option>Cargando voces...</option>`;
+          speechStatus.textContent = "Cargando voces del navegador. Si no aparecen, Val queda en texto.";
+          return;
+        }
+
+        voiceSelect.innerHTML = [
+          `<option value="">Texto solamente</option>`,
+          ...availableVoices.map((voice, index) => `<option value="${index}">${voice.name} · ${voice.lang}</option>`),
+        ].join("");
+
+        if (preferred) {
+          const preferredIndex = availableVoices.indexOf(preferred);
+          voiceSelect.value = String(preferredIndex);
+          selectedVoice = preferred;
+          speechStatus.textContent = voiceLooksFemale(preferred)
+            ? `Voz preferida: ${preferred.name} (${preferred.lang}).`
+            : "Voz femenina en español no disponible en este navegador. Se seleccionó una voz en español; Frank puede cambiarla o usar texto.";
+        } else {
+          selectedVoice = null;
+          voiceSelect.value = "";
+          speechStatus.textContent = "Voz femenina en español no disponible en este navegador. Val queda en texto o Frank puede elegir otra voz.";
         }
       }
 
@@ -1024,12 +1134,12 @@
       }
 
       function observationFor(type) {
-        if (type === "pain") return "Val sugiere profundizar: pregunte impacto, frecuencia y dónde se pierde dinero o tiempo.";
-        if (type === "decision") return "Val sugiere confirmar responsable, fecha y criterio de aceptación.";
-        if (type === "risk") return "Val sugiere moverlo a exclusiones, parking lot o fase dos antes de cotizar.";
-        if (type === "data") return "Val sugiere pedir fuente, export, muestra segura o diccionario de campos.";
-        if (type === "pilot") return "Val sugiere avanzar a scope freeze: sucursal, usuarios, campos, reportes y límites.";
-        if (type === "signal") return "Val sugiere convertir esta señal en una pregunta de impacto o alcance.";
+        if (type === "pain") return "Antes de mostrar más demo, conviene confirmar impacto y frecuencia.";
+        if (type === "decision") return "Buen punto para cerrar: confirme responsable, fecha y criterio de aceptación.";
+        if (type === "risk") return "Esto debe ir a alcance o exclusiones para proteger el piloto.";
+        if (type === "data") return "Antes de cotizar, falta confirmar fuente, campos obligatorios y muestra aprobada.";
+        if (type === "pilot") return "Esto ya suena a candidato de piloto; conviene llevarlo a scope freeze.";
+        if (type === "signal") return "Val lo deja como señal y sugiere convertirlo en una pregunta de impacto o alcance.";
         return "Capture una respuesta para que Val sugiera el siguiente movimiento de discovery.";
       }
 
@@ -1043,7 +1153,7 @@
         if (lower.includes("dato") || lower.includes("excel") || lower.includes("fuente") || lower.includes("export") || lower.includes("campo")) return "datos";
         if (lower.includes("piloto") || lower.includes("alcance") || lower.includes("sucursal") || lower.includes("v1")) return "alcance";
         if (lower.includes("riesgo") || lower.includes("exclusion") || lower.includes("exclusión") || lower.includes("whatsapp") || lower.includes("pago")) return "riesgo";
-        return captureState.lastCategory || "visibilidad";
+        return "";
       }
 
       function recommendationFor(category) {
@@ -1062,16 +1172,16 @@
 
       function acknowledgementFor(category) {
         const map = {
-          leads: "Entendido. Si el dolor está en leads, conviene revisar origen, asignación y seguimiento inicial.",
-          seguimiento: "Entendido. Si el dolor principal es seguimiento, conviene revisar oportunidades en riesgo, atrasos y cola diaria del asesor.",
-          cierre: "Entendido. Si el foco es cierre, conviene mirar promesas, conversión y señales de compra.",
+          leads: "Entendido. Esto apunta al origen o asignación de leads; conviene preguntar cómo entran y quién los atiende primero.",
+          seguimiento: "Entendido. Esto apunta a un problema de seguimiento. Antes de mostrar el demo, conviene confirmar impacto: ¿cuántas oportunidades sienten que se enfrían por falta de contacto a tiempo?",
+          cierre: "Entendido. Si el foco es cierre, conviene preguntar qué señales muestran intención real de compra.",
           visibilidad: "Entendido. Si el dolor es visibilidad gerencial, conviene empezar por KPIs, sucursales y asesores.",
-          asesor: "Entendido. Si el dolor está en flujo asesor, conviene mostrar cola diaria, resultado rápido y notas.",
-          datos: "Antes de cotizar, falta confirmar fuente de datos, campos obligatorios y una muestra aprobada.",
-          alcance: "Esto apunta a piloto. Conviene separar V1, fase dos y deseos futuros antes de cotizar.",
-          riesgo: "Esto debe ir a alcance o exclusiones para proteger el piloto.",
+          asesor: "Entendido. Si el dolor está en flujo asesor, conviene preguntar qué paso consume más tiempo o se deja sin registrar.",
+          datos: "Entendido. Antes de cotizar, falta confirmar fuente de datos, campos obligatorios y una muestra aprobada.",
+          alcance: "Entendido. Esto apunta a piloto; conviene separar V1, fase dos y deseos futuros antes de cotizar.",
+          riesgo: "Entendido. Esto debe ir a alcance o exclusiones para proteger el piloto.",
         };
-        return map[category] || map.visibilidad;
+        return map[category] || "Necesito que Frank confirme si esto pertenece a seguimiento, visibilidad, datos o alcance.";
       }
 
       function boardTargetFor(type, category) {
@@ -1109,15 +1219,44 @@
         updateRecommendations(category);
       }
 
+      function confirmResponse() {
+        const text = answerCapture.value.trim();
+        if (!text) {
+          valObservation.textContent = "Escriba o capture una respuesta antes de confirmar.";
+          return false;
+        }
+        const inferred = categoryFromText(text);
+        captureState.pendingResponse = text;
+        if (!captureState.lastCategory && inferred) {
+          captureState.lastCategory = inferred;
+          document.querySelectorAll("[data-category]").forEach((button) => {
+            button.classList.toggle("active", button.dataset.category === inferred);
+          });
+          updateRecommendations(inferred);
+        }
+        if (!captureState.lastCategory && !inferred) {
+          valObservation.textContent = "Necesito que Frank confirme si esto pertenece a seguimiento, visibilidad, datos o alcance.";
+          setValMessage(valObservation.textContent);
+          return false;
+        }
+        valObservation.textContent = `${acknowledgementFor(captureState.lastCategory)} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
+        setValMessage(valObservation.textContent);
+        return true;
+      }
+
       function capture(type, explicitText = "") {
-        const text = (explicitText || answerCapture.value).trim();
+        const text = (explicitText || captureState.pendingResponse || answerCapture.value).trim();
         if (!text) {
           valObservation.textContent = "Escriba primero una respuesta capturada para clasificarla.";
           return;
         }
-        const category = captureState.lastCategory || categoryFromText(text);
         const inferredCategory = categoryFromText(text);
         const finalCategory = captureState.lastCategory || inferredCategory;
+        if (!finalCategory) {
+          valObservation.textContent = "Necesito que Frank confirme si esto pertenece a seguimiento, visibilidad, datos o alcance.";
+          setValMessage(valObservation.textContent);
+          return;
+        }
         captureState.lastCapture = type;
         captureState.lastCategory = finalCategory;
         captureState.responses.push(`[${finalCategory}] ${text}`);
@@ -1150,6 +1289,7 @@
         valObservation.textContent = `${acknowledgementFor(finalCategory)} ${observationFor(type)}`;
         setValMessage(valObservation.textContent);
         answerCapture.value = "";
+        captureState.pendingResponse = "";
       }
 
       function findQuestionByCategory(category) {
@@ -1253,26 +1393,24 @@
         copyStatus.textContent = "Seleccione el resumen y cópielo manualmente.";
       }
 
-      document.querySelector("#startSessionButton").addEventListener("click", () => {
+      document.querySelector("#valQuestionButton").addEventListener("click", () => {
         const person = clientNameInput.value.trim() || "PowerClub";
         const objective = meetingObjectiveInput.value;
-        setValMessage(`Hola. Esta sesión con ${person} busca ${objective.toLowerCase()}. Frank opera la conversación y Val organiza preguntas, capturas y próximos pasos con reglas locales.`, true);
+        renderQuestion(questionIndex);
+        setValMessage(`Pregunta para ${person}: ${questionText.textContent} Objetivo de la sesión: ${objective.toLowerCase()}.`, true);
+        questionIndex = (questionIndex + 1) % questionBank.length;
         valObservation.textContent = scriptedLines.framing;
       });
 
-      document.querySelector("#speakButton").addEventListener("click", () => speakText(valMessage.textContent));
-
-      document.querySelector("#nextQuestionButton").addEventListener("click", () => {
-        questionIndex = (questionIndex + 1) % questionBank.length;
-        renderQuestion(questionIndex);
+      document.querySelector("#confirmResponseButton").addEventListener("click", confirmResponse);
+      document.querySelector("#organizeWhiteboardButton").addEventListener("click", () => {
+        if (confirmResponse()) {
+          capture("signal");
+        }
       });
-
-      document.querySelector("#smartQuestionButton").addEventListener("click", smartNextQuestion);
       document.querySelector("#generateSummaryButton").addEventListener("click", generateSummary);
       document.querySelector("#generateSummaryButtonBottom").addEventListener("click", generateSummary);
-      document.querySelector("#copySummaryButton").addEventListener("click", copySummary);
       document.querySelector("#copySummaryButtonBottom").addEventListener("click", copySummary);
-      document.querySelector("#useWrittenResponseButton").addEventListener("click", () => capture("signal"));
 
       document.querySelector("#listenResponseButton").addEventListener("click", () => {
         if (!SpeechRecognition) {
@@ -1280,17 +1418,17 @@
           return;
         }
         recognition = recognition || new SpeechRecognition();
-        recognition.lang = "es-PA";
+        recognition.lang = sttLanguageSelect.value || "es-419";
         recognition.interimResults = false;
         recognition.continuous = false;
         recognition.onstart = () => {
-          sttStatus.textContent = "Escuchando con transcripción experimental del navegador. No se guarda audio.";
+          sttStatus.textContent = `Escuchando con transcripción experimental del navegador (${sttLanguageSelect.options[sttLanguageSelect.selectedIndex].text}). No se guarda audio.`;
           setSpeaking(true);
         };
         recognition.onresult = (event) => {
           const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
           answerCapture.value = transcript;
-          sttStatus.textContent = "Respuesta transcrita. Frank debe revisar y clasificar antes de capturar.";
+          sttStatus.textContent = "Respuesta transcrita. Frank debe revisar/corregir antes de confirmar.";
           setSpeaking(false);
         };
         recognition.onerror = () => {
@@ -1309,7 +1447,24 @@
         button.addEventListener("click", () => setActiveCategory(button.dataset.category));
       });
 
-      setActiveCategory("visibilidad");
+      sttLanguageSelect.addEventListener("change", () => {
+        sttStatus.textContent = `Idioma STT seleccionado: ${sttLanguageSelect.options[sttLanguageSelect.selectedIndex].text}.`;
+      });
+
+      voiceSelect.addEventListener("change", () => {
+        selectedVoice = voiceSelect.value === "" ? null : availableVoices[Number(voiceSelect.value)];
+        speechStatus.textContent = selectedVoice
+          ? `Voz seleccionada: ${selectedVoice.name} (${selectedVoice.lang}).`
+          : "Modo texto seleccionado. Val no hablará con voz del navegador.";
+      });
+
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+        loadVoices();
+      } else {
+        loadVoices();
+      }
+
       renderWhiteboard();
     </script>
   </body>
