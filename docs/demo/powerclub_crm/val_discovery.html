@@ -721,6 +721,11 @@
         font-weight: 900;
       }
 
+      .voice-mini.active {
+        border-color: rgba(99, 232, 255, 0.45);
+        background: var(--cyan-soft);
+      }
+
       .quick-qa-panel {
         display: none;
         gap: 8px;
@@ -732,6 +737,23 @@
 
       .quick-qa-panel.open {
         display: grid;
+      }
+
+      .debug-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .debug-grid code {
+        display: block;
+        min-height: 34px;
+        border: 1px solid rgba(99, 232, 255, 0.16);
+        border-radius: 10px;
+        padding: 8px;
+        color: #dff9ff;
+        background: rgba(1, 5, 10, 0.42);
+        overflow-wrap: anywhere;
       }
 
       .setup-panel,
@@ -1457,6 +1479,7 @@
             <span id="ringActionLabel">Centro: iniciar discovery</span>
             <span>Centro: NumpadEnter · ↑ N8 · → N6 · ↓ N2 · ← N4 · N5 fallback</span>
           </p>
+          <button id="ringControlButton" class="voice-mini active" type="button" aria-pressed="true">Ring: ON</button>
           <button id="audioModeButton" class="voice-mini" type="button" aria-label="Cambiar modo de audio">Audio: Texto</button>
           <button id="voiceTestButton" class="voice-mini" type="button">Probar voz</button>
           <p id="audioModeStatus" class="mode-note">Audio en modo texto. Cambia a Voz navegador si quieres probar TTS.</p>
@@ -1483,7 +1506,20 @@
                 <input id="voicePitchInput" type="range" min="0.9" max="1.15" step="0.05" value="1" aria-label="Tono de voz">
               </label>
             </div>
-            <p id="speechStatus" class="status-line">Las voces dependen del navegador y del sistema operativo. Para demo ejecutiva, audio premium local puede reemplazar la voz del navegador.</p>
+            <p id="voiceStatus" class="status-line">Voz actual: texto, sin voz de navegador seleccionada.</p>
+            <p id="speechStatus" class="status-line">Modo audio: Texto. Para demo ejecutiva, audio premium local puede reemplazar la voz del navegador.</p>
+          </details>
+          <details class="operator-drawer operator-mode-only">
+            <summary>ArcX / teclado debug</summary>
+            <p class="mode-note">Use este panel para confirmar qué key/code emite el anillo. Ring Control ON intercepta Numpad y números 8/6/2/4/5 como comandos.</p>
+            <div class="debug-grid" aria-label="Debug de teclado ArcX">
+              <div><span class="field-label">event.key</span><code id="debugKey">-</code></div>
+              <div><span class="field-label">event.code</span><code id="debugCode">-</code></div>
+              <div><span class="field-label">location</span><code id="debugLocation">-</code></div>
+              <div><span class="field-label">target editable</span><code id="debugEditable">-</code></div>
+              <div><span class="field-label">handled</span><code id="debugHandled">-</code></div>
+              <div><span class="field-label">Val action</span><code id="debugAction">-</code></div>
+            </div>
           </details>
         </section>
 
@@ -1766,6 +1802,7 @@
       let selectedVoice = null;
       let voiceEnabled = false;
       let audioMode = "text";
+      let ringControlEnabled = true;
       let meetingStep = "intro";
       let whiteboardCardId = 0;
       const typingConfig = {
@@ -1785,6 +1822,7 @@
       const qaAskButton = document.querySelector("#qaAskButton");
       const audioModeButton = document.querySelector("#audioModeButton");
       const voiceTestButton = document.querySelector("#voiceTestButton");
+      const ringControlButton = document.querySelector("#ringControlButton");
       const audioModeStatus = document.querySelector("#audioModeStatus");
       const currentStepLabel = document.querySelector("#currentStepLabel");
       const ringActionLabel = document.querySelector("#ringActionLabel");
@@ -1801,6 +1839,7 @@
       const valWave = document.querySelector("#valWave");
       const valStateBadge = document.querySelector("#valStateBadge");
       const speechStatus = document.querySelector("#speechStatus");
+      const voiceStatus = document.querySelector("#voiceStatus");
       const sttStatus = document.querySelector("#sttStatus");
       const questionCategory = document.querySelector("#questionCategory");
       const questionText = document.querySelector("#questionText");
@@ -1827,6 +1866,14 @@
       };
       const boardLanes = Object.fromEntries(Object.entries(boardLists).map(([key, list]) => [key, list.closest(".whiteboard-lane")]));
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const debugFields = {
+        key: document.querySelector("#debugKey"),
+        code: document.querySelector("#debugCode"),
+        location: document.querySelector("#debugLocation"),
+        editable: document.querySelector("#debugEditable"),
+        handled: document.querySelector("#debugHandled"),
+        action: document.querySelector("#debugAction"),
+      };
       const valStateLabels = {
         idle: "en espera",
         thinking: "pensando",
@@ -1974,6 +2021,9 @@
           premium: "Audio: Premium futuro",
         };
         audioModeButton.textContent = labels[audioMode];
+        voiceStatus.textContent = selectedVoice
+          ? `Voz actual: ${selectedVoice.name} (${selectedVoice.lang}).`
+          : "Voz actual: texto, sin voz de navegador seleccionada.";
         if (audioMode === "text") {
           audioModeStatus.textContent = "Audio en modo texto. Cambia a Voz navegador si quieres probar TTS.";
           speechStatus.textContent = "Audio en modo texto. Cambia a Voz navegador en ajustes si quieres probar TTS.";
@@ -1981,10 +2031,10 @@
         if (audioMode === "browser") {
           audioModeStatus.textContent = selectedVoice
             ? "Voz navegador activa."
-            : "Voz navegador sin voz disponible; revise Operador.";
+            : "Selecciona una voz en Operador o usa modo texto.";
           speechStatus.textContent = selectedVoice
             ? "Voz navegador activa. Val usará speechSynthesis si el navegador lo permite."
-            : "Voz navegador seleccionada, pero no hay voz disponible todavía. Revise Modo Operador.";
+            : "No se encontró voz femenina en español. Selecciona otra voz o usa modo texto.";
         }
         if (audioMode === "premium") {
           voiceEnabled = false;
@@ -2000,7 +2050,10 @@
 
       function testBrowserVoice() {
         if (audioMode !== "browser") {
-          setAudioMode("browser");
+          const message = "Audio está en modo texto. Cambia a Voz navegador para probar TTS.";
+          audioModeStatus.textContent = message;
+          speechStatus.textContent = message;
+          return;
         }
         if (!("speechSynthesis" in window) || !selectedVoice) {
           const message = "No se pudo reproducir voz del navegador. Usa modo texto o revisa permisos/voz del sistema.";
@@ -2130,11 +2183,7 @@
         }
         availableVoices = window.speechSynthesis.getVoices();
         const spanishVoices = availableVoices.filter((voice) => voice.lang.toLowerCase().startsWith("es"));
-        const premiumSpanish = spanishVoices.find((voice) => {
-          const name = voice.name.toLowerCase();
-          return name.includes("google") || name.includes("microsoft");
-        });
-        const preferred = spanishVoices.find(voiceLooksFemale) || premiumSpanish || spanishVoices.find((voice) => voice.lang.toLowerCase().includes("419")) || spanishVoices[0];
+        const preferred = spanishVoices.find(voiceLooksFemale);
 
         if (!availableVoices.length) {
           voiceSelect.innerHTML = `<option>Cargando voces...</option>`;
@@ -2151,14 +2200,15 @@
           const preferredIndex = availableVoices.indexOf(preferred);
           voiceSelect.value = String(preferredIndex);
           selectedVoice = preferred;
-          speechStatus.textContent = voiceLooksFemale(preferred)
-            ? `Voz preferida: ${preferred.name} (${preferred.lang}).`
-            : `Voz femenina en español no disponible en este navegador. Se seleccionó ${preferred.name}; Frank puede ajustar velocidad/tono, cambiar voz o usar texto.`;
+          voiceStatus.textContent = `Voz actual: ${preferred.name} (${preferred.lang}).`;
+          speechStatus.textContent = `Voz preferida: ${preferred.name} (${preferred.lang}).`;
         } else {
           selectedVoice = null;
           voiceSelect.value = "";
-          speechStatus.textContent = "Voz femenina en español no disponible en este navegador. Val queda en texto o Frank puede elegir otra voz.";
+          voiceStatus.textContent = "Voz actual: texto, sin voz femenina en español seleccionada.";
+          speechStatus.textContent = "No se encontró voz femenina en español. Selecciona otra voz o usa modo texto.";
         }
+        setAudioMode(audioMode);
       }
 
       function renderQuestion(index) {
@@ -2681,6 +2731,74 @@
         return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
       }
 
+      function setRingControl(enabled) {
+        ringControlEnabled = enabled;
+        ringControlButton.textContent = enabled ? "Ring: ON" : "Ring: OFF";
+        ringControlButton.classList.toggle("active", enabled);
+        ringControlButton.setAttribute("aria-pressed", String(enabled));
+      }
+
+      function actionForKeyEvent(event) {
+        const key = event.key.toLowerCase();
+        const code = event.code.toLowerCase();
+        if (ringControlEnabled && (key === "numpadenter" || key === "numpad5" || code === "numpadenter" || code === "numpad5")) {
+          return { action: "current action", fn: runContextAction, source: "ring" };
+        }
+        if (key === " " || key === "enter") {
+          return { action: "current action", fn: runContextAction, source: "keyboard-center" };
+        }
+        const keyboardDirectional = [
+          { keys: ["arrowup"], codes: ["arrowup"], action: "alternate question", fn: smartNextQuestion },
+          { keys: ["arrowright"], codes: ["arrowright"], action: "next question", fn: smartNextQuestion },
+          { keys: ["arrowdown"], codes: ["arrowdown"], action: "summary", fn: generateSummary },
+          { keys: ["arrowleft"], codes: ["arrowleft"], action: "back/correct", fn: runBackAction },
+        ];
+        const keyboardFound = keyboardDirectional.find((item) => item.keys.includes(key) || item.codes.includes(code));
+        if (keyboardFound) return { action: keyboardFound.action, fn: keyboardFound.fn, source: "keyboard-direction" };
+        if (ringControlEnabled) {
+          const ringDirectional = [
+            { keys: ["numpad8"], codes: ["numpad8"], action: "alternate question", fn: smartNextQuestion },
+            { keys: ["numpad6"], codes: ["numpad6"], action: "next question", fn: smartNextQuestion },
+            { keys: ["numpad2"], codes: ["numpad2"], action: "summary", fn: generateSummary },
+            { keys: ["numpad4"], codes: ["numpad4"], action: "back/correct", fn: runBackAction },
+          ];
+          const ringFound = ringDirectional.find((item) => item.keys.includes(key) || item.codes.includes(code));
+          if (ringFound) return { action: ringFound.action, fn: ringFound.fn, source: "ring" };
+          const plainNumberMap = {
+            "8": { action: "alternate question", fn: smartNextQuestion },
+            "6": { action: "next question", fn: smartNextQuestion },
+            "2": { action: "summary", fn: generateSummary },
+            "4": { action: "back/correct", fn: runBackAction },
+            "5": { action: "current action", fn: runContextAction },
+          };
+          if (plainNumberMap[key] || plainNumberMap[code.replace("digit", "")]) {
+            return { ...(plainNumberMap[key] || plainNumberMap[code.replace("digit", "")]), source: "plain-number-ring" };
+          }
+        }
+        const hotkeys = {
+          p: { action: "intro", fn: () => runCommand("present") },
+          q: { action: "quick Q&A", fn: () => runCommand("qa") },
+          v: { action: "ask", fn: () => runCommand("ask") },
+          c: { action: "confirm", fn: () => runCommand("confirm") },
+          o: { action: "organize", fn: () => runCommand("organize") },
+          r: { action: "summary", fn: () => runCommand("summary") },
+          n: { action: "next", fn: () => runCommand("next") },
+          m: { action: "mode", fn: () => runCommand("mode") },
+          h: { action: "menu", fn: toggleCommandHub },
+        };
+        return hotkeys[key] ? { ...hotkeys[key], source: "legacy-hotkey" } : null;
+      }
+
+      function updateKeyDebug(event, handled, action = "-") {
+        const editable = isTypingTarget(event.target);
+        debugFields.key.textContent = event.key || "-";
+        debugFields.code.textContent = event.code || "-";
+        debugFields.location.textContent = String(event.location ?? "-");
+        debugFields.editable.textContent = editable ? "yes" : "no";
+        debugFields.handled.textContent = handled ? "yes" : "no";
+        debugFields.action.textContent = action;
+      }
+
       document.querySelector("#valQuestionButton").addEventListener("click", () => {
         const person = clientNameInput.value.trim() || "PowerClub";
         const objective = meetingObjectiveInput.value;
@@ -2759,6 +2877,9 @@
 
       voiceSelect.addEventListener("change", () => {
         selectedVoice = voiceSelect.value === "" ? null : availableVoices[Number(voiceSelect.value)];
+        voiceStatus.textContent = selectedVoice
+          ? `Voz actual: ${selectedVoice.name} (${selectedVoice.lang}).`
+          : "Voz actual: texto, sin voz de navegador seleccionada.";
         if (audioMode === "browser") {
           setAudioMode("browser");
           return;
@@ -2778,6 +2899,7 @@
 
       audioModeButton.addEventListener("click", cycleAudioMode);
       voiceTestButton.addEventListener("click", testBrowserVoice);
+      ringControlButton.addEventListener("click", () => setRingControl(!ringControlEnabled));
 
       presentationModeButton.addEventListener("click", () => {
         setMode("presentation");
@@ -2821,47 +2943,23 @@
         if (event.key === "Escape") {
           setCommandHub(false);
           quickQaPanel.classList.remove("open");
+          updateKeyDebug(event, true, "close overlays");
           return;
         }
-        if (isTypingTarget(event.target)) return;
-        const key = event.key.toLowerCase();
-        const ringKeys = {
-          " ": () => runContextAction(),
-          enter: () => runContextAction(),
-          numpadenter: () => runContextAction(),
-          numpad5: () => runContextAction(),
-          arrowup: () => smartNextQuestion(),
-          numpad8: () => smartNextQuestion(),
-          arrowright: () => smartNextQuestion(),
-          numpad6: () => smartNextQuestion(),
-          arrowdown: () => generateSummary(),
-          numpad2: () => generateSummary(),
-          arrowleft: () => runBackAction(),
-          numpad4: () => runBackAction(),
-        };
-        if (ringKeys[key]) {
-          event.preventDefault();
-          ringKeys[key]();
+        const mapped = actionForKeyEvent(event);
+        const editable = isTypingTarget(event.target);
+        const shouldHandleInEditable = ringControlEnabled && mapped && ["ring", "plain-number-ring"].includes(mapped.source);
+        if (editable && !shouldHandleInEditable) {
+          updateKeyDebug(event, false, mapped?.action || "-");
           return;
         }
-        const hotkeys = {
-          p: "present",
-          q: "qa",
-          v: "ask",
-          c: "confirm",
-          o: "organize",
-          r: "summary",
-          n: "next",
-          m: "mode",
-        };
-        if (key === "h") {
-          event.preventDefault();
-          toggleCommandHub();
+        if (!mapped) {
+          updateKeyDebug(event, false);
           return;
         }
-        if (!hotkeys[key]) return;
         event.preventDefault();
-        runCommand(hotkeys[key]);
+        updateKeyDebug(event, true, mapped.action);
+        mapped.fn();
       });
 
       if ("speechSynthesis" in window) {
@@ -2876,6 +2974,7 @@
       setMode("presentation");
       setSkin("executive");
       setCommandHub(false);
+      setRingControl(true);
       setAudioMode("text");
       setMeetingStep("intro", "Ahora: haz la pregunta.");
     </script>

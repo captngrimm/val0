@@ -53,7 +53,7 @@ Presentation Mode now includes a `Probar voz` button.
 
 When clicked:
 
-- If audio mode is not `Voz navegador`, Val switches to browser voice mode.
+- If audio mode is not `Voz navegador`, Val stays in text mode and tells Frank to switch to browser voice before testing TTS.
 - If `speechSynthesis` and a selected voice are available, Val says:
   - `Val lista. Voz del navegador activa.`
 - If browser voice is unavailable or no voice is selected, Val shows:
