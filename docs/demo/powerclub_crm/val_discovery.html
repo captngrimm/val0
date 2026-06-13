@@ -1455,7 +1455,7 @@
           <p class="hotkey-hint">
             <strong id="currentStepLabel">Paso: intro</strong>
             <span id="ringActionLabel">Centro: iniciar discovery</span>
-            <span>↑ N8 · → N6 · ↓ N2 · ← N4 · centro N5 · mantener H</span>
+            <span>Centro: NumpadEnter · ↑ N8 · → N6 · ↓ N2 · ← N4 · N5 fallback</span>
           </p>
           <button id="audioModeButton" class="voice-mini" type="button" aria-label="Cambiar modo de audio">Audio: Texto</button>
           <button id="voiceTestButton" class="voice-mini" type="button">Probar voz</button>
@@ -2828,6 +2828,7 @@
         const ringKeys = {
           " ": () => runContextAction(),
           enter: () => runContextAction(),
+          numpadenter: () => runContextAction(),
           numpad5: () => runContextAction(),
           arrowup: () => smartNextQuestion(),
           numpad8: () => smartNextQuestion(),

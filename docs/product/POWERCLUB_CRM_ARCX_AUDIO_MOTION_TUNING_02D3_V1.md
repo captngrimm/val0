@@ -14,7 +14,7 @@ Recommended ArcX profile:
 
 | ArcX Ring action | Browser key | Val behavior |
 | --- | --- | --- |
-| Center / button press | `Numpad5` | Current recommended action |
+| Center / button press | `NumpadEnter` | Current recommended action |
 | Up | `Numpad8` | Previous / alternate question |
 | Right | `Numpad6` | Next question / next step |
 | Down | `Numpad2` | Generate or show summary |
@@ -36,7 +36,7 @@ Hotkeys still do not trigger while Frank is typing in inputs, textareas, or sele
 
 Presentation Mode now shows compact conceptual and numpad mapping:
 
-- center = current action / `Numpad5`
+- center = current action / `NumpadEnter`
 - up = alternate / `Numpad8`
 - right = next / `Numpad6`
 - down = summary / `Numpad2`
@@ -44,6 +44,8 @@ Presentation Mode now shows compact conceptual and numpad mapping:
 - hold = menu / `H`
 
 The visible mental model is the ring, not a long hotkey list.
+
+`Numpad5` remains supported as a fallback center-action alias if the ring profile is changed later.
 
 ## Audio Test Behavior
 

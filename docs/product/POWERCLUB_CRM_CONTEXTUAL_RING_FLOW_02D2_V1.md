@@ -44,7 +44,7 @@ Recommended ArcX mental model:
 
 | Ring action | Browser fallback | Meaning |
 | --- | --- | --- |
-| Center / button | `Space` or `Enter` | Perform current recommended action |
+| Center / button | `NumpadEnter` | Perform current recommended action |
 | Up | `ArrowUp` | Previous/alternate question |
 | Right | `ArrowRight` | Next question / next step |
 | Down | `ArrowDown` | Generate or show summary |
@@ -54,6 +54,8 @@ Recommended ArcX mental model:
 
 Legacy hotkeys still exist quietly:
 
+- `Space` / `Enter` current action fallback
+- `Numpad5` center-action fallback
 - `P` intro
 - `Q` quick Q&A
 - `V` Val pregunta
