@@ -412,14 +412,14 @@
       .command-hub {
         display: none;
         position: relative;
-        min-height: 154px;
+        min-height: 178px;
         place-items: center;
       }
 
       .command-core {
         z-index: 2;
-        width: 86px;
-        height: 86px;
+        width: 104px;
+        height: 104px;
         border: 1px solid rgba(99, 232, 255, 0.34);
         border-radius: 50%;
         color: var(--text);
@@ -435,7 +435,7 @@
 
       .command-ring {
         position: absolute;
-        inset: 0;
+        inset: 10px;
         pointer-events: none;
       }
 
@@ -447,10 +447,10 @@
         position: absolute;
         left: 50%;
         top: 50%;
-        width: 54px;
-        height: 54px;
+        width: 72px;
+        min-height: 38px;
         border: 1px solid rgba(99, 232, 255, 0.28);
-        border-radius: 50%;
+        border-radius: 999px;
         color: var(--text);
         background: rgba(12, 19, 28, 0.9);
         box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
@@ -471,28 +471,23 @@
       }
 
       .command-action span {
-        display: block;
-        font-size: 1.05rem;
+        display: none;
+        font-size: 0.9rem;
         font-weight: 900;
       }
 
       .command-action small {
         display: block;
         color: var(--muted);
-        font-size: 0.58rem;
+        font-size: 0.64rem;
         font-weight: 900;
         text-transform: uppercase;
       }
 
-      .command-hub.open [data-command="ask"] { transform: translate(-50%, -152%) scale(1); }
-      .command-hub.open [data-command="present"] { transform: translate(18%, -140%) scale(1); }
-      .command-hub.open [data-command="qa"] { transform: translate(58%, -82%) scale(1); }
-      .command-hub.open [data-command="confirm"] { transform: translate(58%, -18%) scale(1); }
-      .command-hub.open [data-command="organize"] { transform: translate(18%, 42%) scale(1); }
-      .command-hub.open [data-command="summary"] { transform: translate(-50%, 58%) scale(1); }
-      .command-hub.open [data-command="next"] { transform: translate(-118%, 42%) scale(1); }
-      .command-hub.open [data-command="mode"] { transform: translate(-158%, -18%) scale(1); }
-      .command-hub.open [data-command="back"] { transform: translate(-118%, -82%) scale(1); }
+      .command-hub.open [data-command="alternate"] { transform: translate(-50%, -184%) scale(1); }
+      .command-hub.open [data-command="next"] { transform: translate(82%, -50%) scale(1); }
+      .command-hub.open [data-command="summary"] { transform: translate(-50%, 84%) scale(1); }
+      .command-hub.open [data-command="back"] { transform: translate(-182%, -50%) scale(1); }
 
       .hotkey-hint {
         display: grid;
@@ -512,6 +507,20 @@
 
       .hotkey-hint span {
         overflow-wrap: anywhere;
+      }
+
+      .ring-map {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px;
+      }
+
+      .ring-map span {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        padding: 3px 7px;
+        background: rgba(255, 255, 255, 0.035);
       }
 
       .primary,
@@ -697,6 +706,15 @@
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+      }
+
+      .operator-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 800;
       }
 
       .next-action-card {
@@ -1463,21 +1481,23 @@
           <div id="commandHub" class="command-hub" aria-label="Comando radial Val">
             <button id="commandCoreButton" class="command-core" type="button" title="Acción actual">Iniciar</button>
             <div id="commandRing" class="command-ring">
-              <button class="command-action" type="button" data-command="ask" title="Val pregunta (V)"><span>V</span><small>Pregunta</small></button>
-              <button class="command-action" type="button" data-command="present" title="Val se presenta (P)"><span>P</span><small>Intro</small></button>
-              <button class="command-action" type="button" data-command="qa" title="Q&A seguro (Q)"><span>Q</span><small>Q&amp;A</small></button>
-              <button class="command-action" type="button" data-command="confirm" title="Confirmar respuesta (C)"><span>C</span><small>Confirma</small></button>
-              <button class="command-action" type="button" data-command="organize" title="Organizar whiteboard (O)"><span>O</span><small>Ordena</small></button>
-              <button class="command-action" type="button" data-command="summary" title="Generar resumen (R)"><span>R</span><small>Resumen</small></button>
-              <button class="command-action" type="button" data-command="next" title="Siguiente pregunta (N)"><span>N</span><small>Sigue</small></button>
-              <button class="command-action" type="button" data-command="mode" title="Cambiar modo (M)"><span>M</span><small>Modo</small></button>
-              <button class="command-action" type="button" data-command="back" title="Volver al CRM demo"><span>&lt;</span><small>CRM</small></button>
+              <button class="command-action" type="button" data-command="alternate" title="Pregunta alternativa"><span>↑</span><small>Alterna</small></button>
+              <button class="command-action" type="button" data-command="next" title="Siguiente paso"><span>→</span><small>Siguiente</small></button>
+              <button class="command-action" type="button" data-command="summary" title="Resumen"><span>↓</span><small>Resumen</small></button>
+              <button class="command-action" type="button" data-command="back" title="Corregir"><span>←</span><small>Corregir</small></button>
             </div>
           </div>
           <p class="hotkey-hint">
             <strong id="currentStepLabel">Paso: intro</strong>
             <span id="ringActionLabel">Centro: iniciar discovery</span>
-            <span>Centro: NumpadEnter · ↑ N8 · → N6 · ↓ N2 · ← N4 · N5 fallback</span>
+            <span id="captureModeHint">Modo seguro: escribe/corrige la respuesta cuando Val lo indique.</span>
+            <span class="ring-map" aria-label="Guía compacta del anillo">
+              <span>→ siguiente</span>
+              <span>← corregir</span>
+              <span>↑ alternativa</span>
+              <span>↓ resumen</span>
+              <span>Mantener: menú</span>
+            </span>
           </p>
           <button id="ringControlButton" class="voice-mini active" type="button" aria-pressed="true">Ring: ON</button>
           <button id="audioModeButton" class="voice-mini" type="button" aria-label="Cambiar modo de audio">Audio: Texto</button>
@@ -1631,6 +1651,10 @@
 
           <details class="operator-drawer operator-mode-only">
             <summary>Captura avanzada</summary>
+            <label class="operator-toggle">
+              <input id="sttCenterToggle" type="checkbox">
+              Centro puede intentar STT experimental si el navegador lo permite.
+            </label>
             <div class="quick-capture" aria-label="Captura avanzada opcional">
               <button type="button" data-capture="pain">Capturar dolor</button>
               <button type="button" data-capture="decision">Capturar decisión</button>
@@ -1803,6 +1827,7 @@
       let voiceEnabled = false;
       let audioMode = "text";
       let ringControlEnabled = true;
+      let isListening = false;
       let meetingStep = "intro";
       let whiteboardCardId = 0;
       const typingConfig = {
@@ -1826,6 +1851,7 @@
       const audioModeStatus = document.querySelector("#audioModeStatus");
       const currentStepLabel = document.querySelector("#currentStepLabel");
       const ringActionLabel = document.querySelector("#ringActionLabel");
+      const captureModeHint = document.querySelector("#captureModeHint");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -1841,6 +1867,7 @@
       const speechStatus = document.querySelector("#speechStatus");
       const voiceStatus = document.querySelector("#voiceStatus");
       const sttStatus = document.querySelector("#sttStatus");
+      const sttCenterToggle = document.querySelector("#sttCenterToggle");
       const questionCategory = document.querySelector("#questionCategory");
       const questionText = document.querySelector("#questionText");
       const answerCapture = document.querySelector("#answerCapture");
@@ -1949,13 +1976,24 @@
 
       function setMeetingStep(step, message = "") {
         const ringLabels = {
-          intro: "Centro: iniciar discovery",
+          intro: "Centro: presentar e iniciar",
           ask: "Centro: hacer pregunta",
-          capture: "Centro: confirmar respuesta",
+          capture: "Centro: capturar respuesta",
           confirm: "Centro: confirmar respuesta",
           organize: "Centro: organizar whiteboard",
           recommend: "Centro: siguiente pregunta",
           summary: "Centro: generar resumen",
+        };
+        const captureHints = {
+          intro: "Centro inicia una guía breve para la reunión.",
+          ask: "Centro hace la pregunta actual.",
+          capture: SpeechRecognition
+            ? "Modo seguro: escribe la respuesta. STT solo se usa si Frank lo activa en Operador."
+            : "Modo seguro: escribe la respuesta y presiona centro para confirmar.",
+          confirm: "Centro confirma lo capturado.",
+          organize: "Centro mueve la señal al whiteboard.",
+          recommend: "Centro avanza a la siguiente pregunta o recomendación.",
+          summary: "Centro genera o muestra el resumen local.",
         };
         const stepLabels = {
           intro: "intro",
@@ -1969,7 +2007,7 @@
         const coreLabels = {
           intro: "Iniciar",
           ask: "Pregunta",
-          capture: "Confirmar",
+          capture: "Capturar",
           confirm: "Confirmar",
           organize: "Ordenar",
           recommend: "Siguiente",
@@ -1978,21 +2016,40 @@
         meetingStep = ringLabels[step] ? step : "intro";
         currentStepLabel.textContent = `Paso: ${stepLabels[meetingStep]}`;
         ringActionLabel.textContent = ringLabels[meetingStep];
+        captureModeHint.textContent = captureHints[meetingStep];
         commandCoreButton.textContent = coreLabels[meetingStep];
         if (message) setNextAction(message);
       }
 
       function runContextAction() {
         const actions = {
-          intro: () => runCommand("ask"),
+          intro: () => runCommand("present"),
           ask: () => runCommand("ask"),
-          capture: () => runCommand("confirm"),
+          capture: () => runCaptureCenterAction(),
           confirm: () => runCommand("confirm"),
           organize: () => runCommand("organize"),
           recommend: () => runCommand("next"),
           summary: () => runCommand("summary"),
         };
         actions[meetingStep]?.();
+      }
+
+      function runCaptureCenterAction() {
+        if (answerCapture.value.trim()) {
+          runCommand("confirm");
+          return;
+        }
+        if (SpeechRecognition && sttCenterToggle.checked) {
+          toggleListening();
+          return;
+        }
+        focusCaptureField();
+        const message = "Ahora captura la respuesta. Modo seguro: escribe o corrige una frase corta y presiona centro para confirmar.";
+        sttStatus.textContent = SpeechRecognition
+          ? "STT disponible pero no activado para el centro. Use texto manual o active STT experimental en Operador."
+          : "STT no disponible en este navegador. Use texto manual o dictado del sistema.";
+        setMeetingStep("capture", message);
+        stageValResponse(message, { state: "ready", delay: 120 });
       }
 
       function runBackAction() {
@@ -2063,6 +2120,46 @@
           return;
         }
         stageValResponse("Val lista. Voz del navegador activa.", { state: "speaking", delay: 80, speak: true });
+      }
+
+      function toggleListening() {
+        if (!SpeechRecognition) {
+          sttStatus.textContent = "STT no disponible en este navegador. Escribe la respuesta o usa dictado del sistema.";
+          focusCaptureField();
+          return;
+        }
+        if (isListening && recognition) {
+          recognition.stop();
+          sttStatus.textContent = "Captura experimental detenida. Frank puede corregir la respuesta antes de confirmar.";
+          setValState("ready");
+          isListening = false;
+          return;
+        }
+        recognition = recognition || new SpeechRecognition();
+        recognition.lang = sttLanguageSelect.value || "es-419";
+        recognition.interimResults = false;
+        recognition.continuous = false;
+        recognition.onstart = () => {
+          isListening = true;
+          sttStatus.textContent = `Escuchando con transcripción experimental del navegador (${sttLanguageSelect.options[sttLanguageSelect.selectedIndex].text}). No se guarda audio.`;
+          setValState("listening");
+        };
+        recognition.onresult = (event) => {
+          const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
+          answerCapture.value = transcript;
+          sttStatus.textContent = "Respuesta transcrita. Frank debe revisar/corregir antes de confirmar.";
+          setMeetingStep("capture", "Ahora: revisa la respuesta y presiona centro para confirmar.");
+          setValState("ready");
+        };
+        recognition.onerror = () => {
+          sttStatus.textContent = "STT no pudo capturar. Escribe la respuesta o usa dictado del sistema.";
+          setValState("ready");
+        };
+        recognition.onend = () => {
+          isListening = false;
+          setValState("ready");
+        };
+        recognition.start();
       }
 
       function setValState(state) {
@@ -2683,7 +2780,7 @@
           summary: () => generateSummary(),
           next: () => smartNextQuestion(),
           mode: () => toggleMode(),
-          back: () => { window.location.href = "./index.html"; },
+          back: () => runBackAction(),
         };
         actions[command]?.();
       }
@@ -2705,6 +2802,12 @@
         valObservation.textContent = safeIntent === "unknown"
           ? "Pregunta enviada a pendientes. Esta cápsula no genera respuestas libres."
           : "Respuesta Q&A segura entregada desde cápsula local.";
+        if (safeIntent === "intro") {
+          setMeetingStep("ask", "Ahora: haz la primera pregunta.");
+        }
+        if (safeIntent === "discovery") {
+          setMeetingStep("capture", "Ahora: captura la respuesta.");
+        }
       }
 
       function openQaCapsule() {
@@ -2837,30 +2940,7 @@
       document.querySelector("#copySummaryButtonBottom").addEventListener("click", copySummary);
 
       document.querySelector("#listenResponseButton").addEventListener("click", () => {
-        if (!SpeechRecognition) {
-          sttStatus.textContent = "STT no disponible en este navegador. Escribe la respuesta o usa dictado del sistema.";
-          return;
-        }
-        recognition = recognition || new SpeechRecognition();
-        recognition.lang = sttLanguageSelect.value || "es-419";
-        recognition.interimResults = false;
-        recognition.continuous = false;
-        recognition.onstart = () => {
-          sttStatus.textContent = `Escuchando con transcripción experimental del navegador (${sttLanguageSelect.options[sttLanguageSelect.selectedIndex].text}). No se guarda audio.`;
-          setValState("listening");
-        };
-        recognition.onresult = (event) => {
-          const transcript = Array.from(event.results).map((result) => result[0].transcript).join(" ");
-          answerCapture.value = transcript;
-          sttStatus.textContent = "Respuesta transcrita. Frank debe revisar/corregir antes de confirmar.";
-          setValState("ready");
-        };
-        recognition.onerror = () => {
-          sttStatus.textContent = "STT no pudo capturar. Escribe la respuesta o usa dictado del sistema.";
-          setValState("ready");
-        };
-        recognition.onend = () => setValState("ready");
-        recognition.start();
+        toggleListening();
       });
 
       document.querySelectorAll("[data-capture]").forEach((button) => {
@@ -2873,6 +2953,13 @@
 
       sttLanguageSelect.addEventListener("change", () => {
         sttStatus.textContent = `Idioma STT seleccionado: ${sttLanguageSelect.options[sttLanguageSelect.selectedIndex].text}.`;
+      });
+
+      sttCenterToggle.addEventListener("change", () => {
+        sttStatus.textContent = sttCenterToggle.checked
+          ? "Centro puede intentar STT experimental. Frank debe revisar/corregir antes de confirmar."
+          : "Centro vuelve a modo seguro manual: enfoca/captura texto escrito.";
+        setMeetingStep(meetingStep);
       });
 
       voiceSelect.addEventListener("change", () => {
@@ -2919,7 +3006,11 @@
 
       document.querySelectorAll("[data-command]").forEach((button) => {
         button.addEventListener("click", () => {
-          runCommand(button.dataset.command);
+          if (button.dataset.command === "alternate") {
+            smartNextQuestion();
+          } else {
+            runCommand(button.dataset.command);
+          }
           setCommandHub(false);
         });
       });
