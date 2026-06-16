@@ -12,6 +12,7 @@ Command:
 
 ```bash
 python3 scripts/quality/powerclub_val_llm_stub_smoke.py
+python3 scripts/quality/powerclub_val_demo_server_smoke.py
 ```
 
 Checks:
@@ -23,6 +24,8 @@ Checks:
 - invalid demo section is rejected
 - frontend contains the Operator Mode integration seam
 - frontend does not expose API key env names
+- local browser harness serves Val Discovery and the mock endpoint from one origin
+- mock mentor endpoint returns a valid structured suggestion through the harness
 
 ## Existing Required Smokes
 
@@ -48,19 +51,23 @@ git diff --check
 
 ## Manual Test - Mock Response Path
 
-1. Start the stub manually:
+1. Start the one-origin browser harness:
 
 ```bash
-VAL_POWERCLUB_LLM_MOCK_ENABLED=1 python3 tools/powerclub_val_llm_proxy_stub.py
+VAL_POWERCLUB_LLM_MOCK_ENABLED=1 python3 tools/powerclub_val_demo_server.py
 ```
 
-2. Serve or proxy the static page so `/powerclub/val/mentor-suggest` reaches the stub.
-3. Capture a short response in Val Discovery.
-4. Click `Sugerir con Val`.
-5. Expected:
+2. Open `http://127.0.0.1:8765/val_discovery.html`.
+3. Switch to Operator Mode.
+4. Capture a short response in Val Discovery.
+5. Click `Sugerir con Val`.
+6. Accept or ignore the suggestion.
+7. Expected:
    - status says mock suggestion received
    - response includes Val message, summary, follow-up, risk, and recommended demo section
    - Frank must still click `Usar sugerencia`
+
+The older two-server path remains possible, but the combined harness is preferred because it avoids port and CORS confusion.
 
 ## Manual Test - Invalid Response Fallback
 
@@ -100,7 +107,7 @@ Confirm:
 
 ## Known Limitations
 
-- Static file opening may not reach the stub endpoint without a local server/proxy.
+- Static file opening may not reach the stub endpoint without the local demo harness.
 - The stub is not production auth.
 - The stub does not call a real LLM.
 - Provider integration, secrets, rate limits, and deployment are future scope.
