@@ -484,8 +484,8 @@
         text-transform: uppercase;
       }
 
-      .command-hub.open [data-command="alternate"] { transform: translate(-50%, -184%) scale(1); }
-      .command-hub.open [data-command="next"] { transform: translate(82%, -50%) scale(1); }
+      .command-hub.open [data-command="rephrase"] { transform: translate(-50%, -184%) scale(1); }
+      .command-hub.open [data-command="advance"] { transform: translate(82%, -50%) scale(1); }
       .command-hub.open [data-command="summary"] { transform: translate(-50%, 84%) scale(1); }
       .command-hub.open [data-command="back"] { transform: translate(-182%, -50%) scale(1); }
 
@@ -1481,8 +1481,8 @@
           <div id="commandHub" class="command-hub" aria-label="Comando radial Val">
             <button id="commandCoreButton" class="command-core" type="button" title="Acción actual">Iniciar</button>
             <div id="commandRing" class="command-ring">
-              <button class="command-action" type="button" data-command="alternate" title="Pregunta alternativa"><span>↑</span><small>Alterna</small></button>
-              <button class="command-action" type="button" data-command="next" title="Siguiente paso"><span>→</span><small>Siguiente</small></button>
+              <button class="command-action" type="button" data-command="rephrase" title="Reformular pregunta"><span>↑</span><small>Reformula</small></button>
+              <button class="command-action" type="button" data-command="advance" title="Avanzar"><span>→</span><small>Avanzar</small></button>
               <button class="command-action" type="button" data-command="summary" title="Resumen"><span>↓</span><small>Resumen</small></button>
               <button class="command-action" type="button" data-command="back" title="Corregir"><span>←</span><small>Corregir</small></button>
             </div>
@@ -1492,10 +1492,10 @@
             <span id="ringActionLabel">Centro: iniciar discovery</span>
             <span id="captureModeHint">Modo seguro: escribe/corrige la respuesta cuando Val lo indique.</span>
             <span class="ring-map" aria-label="Guía compacta del anillo">
-              <span>→ siguiente</span>
+              <span>→ avanzar</span>
               <span>← corregir</span>
-              <span>↑ alternativa</span>
-              <span>↓ resumen</span>
+              <span>↑ reformular</span>
+              <span>↓ resumen/cierre</span>
               <span>Mantener: menú</span>
             </span>
           </p>
@@ -1803,6 +1803,21 @@
         { category: "Próximo paso", text: "¿Quién debe aprobar discovery, scope freeze y propuesta de piloto?" },
       ];
 
+      const questionRephrases = {
+        "¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?": "Lo pregunto de otra forma: ¿en qué punto del proceso sienten que una oportunidad se enfría o pierde dueño?",
+        "¿Con qué frecuencia gerencia se entera tarde de un seguimiento atrasado?": "Otra forma de verlo: ¿cada cuánto gerencia descubre tarde que una oportunidad necesitaba contacto?",
+        "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?": "Si mañana solo pudieran ver tres señales para decidir dónde actuar, ¿cuáles serían?",
+        "¿Qué indicador cambiaría una decisión diaria de sucursal o asesor?": "Lo reformulo: ¿qué número haría que gerencia llame a una sucursal o asesora ese mismo día?",
+        "¿Qué necesita hacer el asesor en menos clics para mantener el seguimiento actualizado?": "Pensándolo desde el asesor: ¿qué tendría que ser más rápido para que sí registre el seguimiento?",
+        "¿Qué campos o pasos hacen que un asesor deje de registrar información?": "Otra forma: ¿qué parte del registro se siente como fricción y termina quedando incompleta?",
+        "¿De dónde sale hoy la base de prospectos, socios o reactivaciones?": "Para aterrizar datos: ¿cuál sería la fuente aprobada de la base para un piloto?",
+        "¿Qué export o muestra segura podríamos revisar para mapear campos?": "Lo pregunto práctico: ¿qué archivo de ejemplo, sin datos sensibles si hace falta, podemos usar para diseñar campos?",
+        "¿Qué sucursal, proceso o grupo de asesores sería mejor para un piloto controlado?": "Si tuvieran que escoger un piloto pequeño y medible, ¿dónde tendría más sentido empezar?",
+        "¿Qué debe quedar fuera de V1 para no prometer demasiado?": "Para proteger el alcance: ¿qué cosas desean, pero deberían quedar para fase dos?",
+        "¿Qué integración, reporte o expectativa podría inflar el alcance del piloto?": "Lo pongo como riesgo: ¿qué pedido podría hacer que el piloto deje de ser controlado?",
+        "¿Quién debe aprobar discovery, scope freeze y propuesta de piloto?": "Para cerrar bien: ¿quién debe validar datos, alcance y decisión comercial después de esta reunión?",
+      };
+
       const captureState = {
         pains: [],
         decisions: [],
@@ -2055,11 +2070,32 @@
       function runBackAction() {
         if (meetingStep === "capture" || meetingStep === "confirm" || meetingStep === "organize") {
           focusCaptureField();
-          setMeetingStep("capture", "Ahora: corrige o captura la respuesta.");
+          const message = "Perfecto, corrijamos antes de seguir. Ajusta la respuesta y vuelve a presionar centro.";
+          setMeetingStep("capture", message);
+          stageValResponse(message, { state: "ready", delay: 120 });
           return;
         }
-        setMeetingStep("ask", "Ahora: haz o repite la pregunta.");
-        smartNextQuestion();
+        if (meetingStep === "recommend") {
+          const message = "Volvemos un paso para revisar el whiteboard antes de avanzar.";
+          setMeetingStep("organize", message);
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        if (meetingStep === "summary") {
+          const message = "Volvemos al cierre operativo. Puedes ajustar la recomendación antes de copiar el resumen.";
+          setMeetingStep("recommend", message);
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        if (meetingStep === "ask") {
+          const message = "Perfecto, ajustemos la forma de preguntar antes de seguir. Usa arriba para reformular o centro para preguntar.";
+          setMeetingStep("ask", message);
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        const message = "Estamos al inicio. Podemos avanzar o reformular.";
+        setMeetingStep("intro", message);
+        stageValResponse(message, { state: "ready", delay: 120 });
       }
 
       function focusCaptureField() {
@@ -2694,6 +2730,41 @@
         setMeetingStep("capture", "Ahora: captura la respuesta.");
       }
 
+      function rephraseCurrentQuestion() {
+        const current = questionText.textContent.trim();
+        const fallback = "Lo reformulo: ¿cuál es la señal más clara de que este proceso necesita más visibilidad o control?";
+        const alternate = questionRephrases[current] || questionRephrases[captureState.recommendedQuestion] || fallback;
+        questionText.textContent = alternate;
+        captureState.recommendedQuestion = alternate;
+        recommendedQuestion.textContent = alternate;
+        const message = `Lo reformulo. ${alternate}`;
+        setMeetingStep("capture", "Ahora: captura la respuesta a la reformulación.");
+        stageValResponse(message, { state: "thinking", delay: 140 });
+      }
+
+      function advanceMeetingFlow() {
+        if ((meetingStep === "capture" || meetingStep === "confirm") && answerCapture.value.trim()) {
+          const message = "Antes de avanzar, confirmemos la respuesta capturada.";
+          setMeetingStep("confirm", message);
+          focusCaptureField();
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        if (meetingStep === "organize" && captureState.pendingResponse) {
+          const message = "Antes de avanzar, organicemos la respuesta confirmada en el whiteboard.";
+          setMeetingStep("organize", message);
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        if (meetingStep === "intro") {
+          setMeetingStep("ask", "Avancemos con la primera pregunta.");
+          stageValResponse("Avancemos con la primera pregunta.", { state: "ready", delay: 120 });
+          return;
+        }
+        stageValResponse("Avancemos con la siguiente pregunta.", { state: "thinking", delay: 140 });
+        smartNextQuestion();
+      }
+
       function formatList(items) {
         return items.length ? items.map((item) => {
           if (typeof item === "string") return `- ${item}`;
@@ -2778,7 +2849,9 @@
           confirm: () => document.querySelector("#confirmResponseButton").click(),
           organize: () => document.querySelector("#organizeWhiteboardButton").click(),
           summary: () => generateSummary(),
-          next: () => smartNextQuestion(),
+          next: () => advanceMeetingFlow(),
+          advance: () => advanceMeetingFlow(),
+          rephrase: () => rephraseCurrentQuestion(),
           mode: () => toggleMode(),
           back: () => runBackAction(),
         };
@@ -2851,27 +2924,27 @@
           return { action: "current action", fn: runContextAction, source: "keyboard-center" };
         }
         const keyboardDirectional = [
-          { keys: ["arrowup"], codes: ["arrowup"], action: "alternate question", fn: smartNextQuestion },
-          { keys: ["arrowright"], codes: ["arrowright"], action: "next question", fn: smartNextQuestion },
-          { keys: ["arrowdown"], codes: ["arrowdown"], action: "summary", fn: generateSummary },
-          { keys: ["arrowleft"], codes: ["arrowleft"], action: "back/correct", fn: runBackAction },
+          { keys: ["arrowup"], codes: ["arrowup"], action: "rephrase question", fn: rephraseCurrentQuestion },
+          { keys: ["arrowright"], codes: ["arrowright"], action: "advance", fn: advanceMeetingFlow },
+          { keys: ["arrowdown"], codes: ["arrowdown"], action: "summary/close", fn: generateSummary },
+          { keys: ["arrowleft"], codes: ["arrowleft"], action: "correct/back", fn: runBackAction },
         ];
         const keyboardFound = keyboardDirectional.find((item) => item.keys.includes(key) || item.codes.includes(code));
         if (keyboardFound) return { action: keyboardFound.action, fn: keyboardFound.fn, source: "keyboard-direction" };
         if (ringControlEnabled) {
           const ringDirectional = [
-            { keys: ["numpad8"], codes: ["numpad8"], action: "alternate question", fn: smartNextQuestion },
-            { keys: ["numpad6"], codes: ["numpad6"], action: "next question", fn: smartNextQuestion },
-            { keys: ["numpad2"], codes: ["numpad2"], action: "summary", fn: generateSummary },
-            { keys: ["numpad4"], codes: ["numpad4"], action: "back/correct", fn: runBackAction },
+            { keys: ["numpad8"], codes: ["numpad8"], action: "rephrase question", fn: rephraseCurrentQuestion },
+            { keys: ["numpad6"], codes: ["numpad6"], action: "advance", fn: advanceMeetingFlow },
+            { keys: ["numpad2"], codes: ["numpad2"], action: "summary/close", fn: generateSummary },
+            { keys: ["numpad4"], codes: ["numpad4"], action: "correct/back", fn: runBackAction },
           ];
           const ringFound = ringDirectional.find((item) => item.keys.includes(key) || item.codes.includes(code));
           if (ringFound) return { action: ringFound.action, fn: ringFound.fn, source: "ring" };
           const plainNumberMap = {
-            "8": { action: "alternate question", fn: smartNextQuestion },
-            "6": { action: "next question", fn: smartNextQuestion },
-            "2": { action: "summary", fn: generateSummary },
-            "4": { action: "back/correct", fn: runBackAction },
+            "8": { action: "rephrase question", fn: rephraseCurrentQuestion },
+            "6": { action: "advance", fn: advanceMeetingFlow },
+            "2": { action: "summary/close", fn: generateSummary },
+            "4": { action: "correct/back", fn: runBackAction },
             "5": { action: "current action", fn: runContextAction },
           };
           if (plainNumberMap[key] || plainNumberMap[code.replace("digit", "")]) {
@@ -3006,11 +3079,7 @@
 
       document.querySelectorAll("[data-command]").forEach((button) => {
         button.addEventListener("click", () => {
-          if (button.dataset.command === "alternate") {
-            smartNextQuestion();
-          } else {
-            runCommand(button.dataset.command);
-          }
+          runCommand(button.dataset.command);
           setCommandHub(false);
         });
       });
