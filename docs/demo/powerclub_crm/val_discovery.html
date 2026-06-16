@@ -774,6 +774,31 @@
         overflow-wrap: anywhere;
       }
 
+      .llm-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .llm-suggestion {
+        display: grid;
+        gap: 8px;
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 14px;
+        padding: 12px;
+        background: rgba(99, 232, 255, 0.06);
+      }
+
+      .llm-suggestion strong {
+        color: var(--cyan);
+      }
+
+      .llm-suggestion ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+
       .setup-panel,
       .flow-panel,
       .whiteboard-panel,
@@ -1610,6 +1635,21 @@
             </label>
             <button id="qaAskButton" class="secondary" type="button">Responder pregunta</button>
           </details>
+
+          <details id="llmDrawer" class="operator-drawer operator-mode-only">
+            <summary>Val Mentor / sugerencia controlada</summary>
+            <p class="mode-note">Backend-ready seam. No hay API key en el navegador; si no existe backend, Val mantiene modo local determinístico.</p>
+            <div class="llm-actions">
+              <button id="llmSuggestButton" class="secondary" type="button">Sugerir con Val</button>
+              <button id="llmAcceptButton" class="ghost" type="button" disabled>Usar sugerencia</button>
+              <button id="llmIgnoreButton" class="ghost" type="button" disabled>Ignorar</button>
+            </div>
+            <p id="llmStatus" class="status-line">Modo local activo. Backend LLM no conectado.</p>
+            <div id="llmSuggestionPanel" class="llm-suggestion">
+              <strong>Sugerencia de Val</strong>
+              <p class="mode-note">Aún no hay sugerencia. Frank puede usar el modo local sin bloquear la reunión.</p>
+            </div>
+          </details>
         </section>
 
         <section class="question-panel" aria-labelledby="questionTitle">
@@ -1787,6 +1827,27 @@
         scope: "Antes de cotizar, conviene separar piloto, fase dos y deseos futuros.",
         wrap: "Cierre sugerido: confirmar dolor, datos necesarios, responsable de decisión y próximo paso.",
       };
+      const VAL_LLM_ENDPOINT = "/powerclub/val/mentor-suggest";
+      const VAL_LLM_REQUIRED_KEYS = [
+        "val_message",
+        "summary",
+        "detected_pain",
+        "follow_up_question",
+        "whiteboard_cards",
+        "recommended_demo_section",
+        "risk_flags",
+        "next_step",
+        "confidence",
+        "needs_frank_confirmation",
+      ];
+      const VAL_LLM_ALLOWED_DEMO_SECTIONS = [
+        "Vista gerencial",
+        "Riesgo y rescate",
+        "Ficha del asesor",
+        "Cola del asesor",
+        "Templates / dictado",
+        "Scope freeze / piloto",
+      ];
 
       const questionBank = [
         { category: "Dolor operativo", text: "¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?" },
@@ -1845,6 +1906,7 @@
       let isListening = false;
       let meetingStep = "intro";
       let whiteboardCardId = 0;
+      let pendingValMentorSuggestion = null;
       const typingConfig = {
         stepShort: 2,
         stepLong: 3,
@@ -1860,6 +1922,11 @@
       const quickQaPanel = document.querySelector("#quickQaPanel");
       const qaInput = document.querySelector("#qaInput");
       const qaAskButton = document.querySelector("#qaAskButton");
+      const llmSuggestButton = document.querySelector("#llmSuggestButton");
+      const llmAcceptButton = document.querySelector("#llmAcceptButton");
+      const llmIgnoreButton = document.querySelector("#llmIgnoreButton");
+      const llmStatus = document.querySelector("#llmStatus");
+      const llmSuggestionPanel = document.querySelector("#llmSuggestionPanel");
       const audioModeButton = document.querySelector("#audioModeButton");
       const voiceTestButton = document.querySelector("#voiceTestButton");
       const ringControlButton = document.querySelector("#ringControlButton");
@@ -2358,15 +2425,6 @@
         field.value = field.value ? `${field.value}\n${line}` : line;
       }
 
-      function escapeHtml(value) {
-        return value
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#039;");
-      }
-
       function observationFor(type) {
         if (type === "pain") return "Antes de mostrar más demo, conviene confirmar impacto y frecuencia.";
         if (type === "decision") return "Buen punto para cerrar: confirme responsable, fecha y criterio de aceptación.";
@@ -2773,6 +2831,165 @@
         }).join("\n") : "- Sin captura específica.";
       }
 
+      function escapeHtml(value) {
+        return String(value || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      function whiteboardStateForLlm() {
+        return {
+          pains: captureState.pains,
+          signals: captureState.signals,
+          data: captureState.data,
+          decisions: captureState.decisions,
+          risks: captureState.risks,
+          next: captureState.pilots,
+        };
+      }
+
+      function buildValLlmRequest() {
+        return {
+          meeting_context: {
+            client_or_person: clientNameInput.value.trim() || "PowerClub",
+            role_context: clientContextInput.value.trim() || "GM / gerencia comercial",
+            meeting_objective: meetingObjectiveInput.value,
+            current_step: meetingStep,
+          },
+          current_question: questionText.textContent.trim(),
+          captured_response: answerCapture.value.trim() || captureState.pendingResponse || "",
+          selected_category: captureState.lastCategory || "",
+          whiteboard_state: whiteboardStateForLlm(),
+          allowed_demo_sections: VAL_LLM_ALLOWED_DEMO_SECTIONS,
+          guardrails: [
+            "Spanish by default",
+            "Frank approves before use",
+            "No real PowerClub data",
+            "No production promise",
+            "No pricing/legal/commitment authority",
+          ],
+        };
+      }
+
+      function validateValMentorSuggestion(suggestion) {
+        if (!suggestion || typeof suggestion !== "object") return "Respuesta vacía o inválida.";
+        const missing = VAL_LLM_REQUIRED_KEYS.filter((key) => !(key in suggestion));
+        if (missing.length) return `Faltan campos: ${missing.join(", ")}.`;
+        if (!VAL_LLM_ALLOWED_DEMO_SECTIONS.includes(suggestion.recommended_demo_section)) {
+          return "La sección recomendada no está permitida.";
+        }
+        if (suggestion.needs_frank_confirmation !== true) return "La sugerencia debe requerir confirmación de Frank.";
+        if (!Array.isArray(suggestion.whiteboard_cards)) return "whiteboard_cards debe ser lista.";
+        if (!Array.isArray(suggestion.risk_flags)) return "risk_flags debe ser lista.";
+        return "";
+      }
+
+      function localValMentorSuggestion(reason = "backend_unavailable") {
+        const captured = answerCapture.value.trim() || captureState.pendingResponse || "Sin respuesta capturada todavía.";
+        const category = captureState.lastCategory || categoryFromText(captured) || "unknown";
+        const [section, followUp] = recommendationFor(category);
+        return {
+          val_message: "Modo local activo. Si entiendo bien, conviene confirmar el dolor, el impacto y el próximo paso antes de avanzar.",
+          summary: captured,
+          detected_pain: category,
+          follow_up_question: followUp,
+          whiteboard_cards: captured === "Sin respuesta capturada todavía." ? [] : [{
+            lane: "Señales / patrones",
+            title: "Señal pendiente de confirmar",
+            body: captured,
+            category,
+          }],
+          recommended_demo_section: section,
+          risk_flags: [`Fallback local: ${reason}. Frank debe confirmar antes de usar.`],
+          next_step: "Continuar con modo determinístico local y validar scope freeze si aparece una solicitud amplia.",
+          confidence: captured === "Sin respuesta capturada todavía." ? "low" : "medium",
+          needs_frank_confirmation: true,
+        };
+      }
+
+      function showValMentorSuggestion(suggestion, mode = "local") {
+        const validationError = validateValMentorSuggestion(suggestion);
+        if (validationError) {
+          pendingValMentorSuggestion = null;
+          llmAcceptButton.disabled = true;
+          llmIgnoreButton.disabled = true;
+          llmStatus.textContent = `Modo local activo: ${validationError}`;
+          return;
+        }
+        pendingValMentorSuggestion = suggestion;
+        llmAcceptButton.disabled = false;
+        llmIgnoreButton.disabled = false;
+        llmStatus.textContent = mode === "mock"
+          ? "Sugerencia mock recibida. Frank debe aprobar antes de usar."
+          : "Modo local activo. Sugerencia determinística lista para aprobación.";
+        const cards = suggestion.whiteboard_cards.length
+          ? suggestion.whiteboard_cards.map((card) => `<li>${escapeHtml(card.lane)}: ${escapeHtml(card.title || card.body)}</li>`).join("")
+          : "<li>Sin tarjetas sugeridas.</li>";
+        const risks = suggestion.risk_flags.length
+          ? suggestion.risk_flags.map((risk) => `<li>${escapeHtml(risk)}</li>`).join("")
+          : "<li>Sin riesgos adicionales.</li>";
+        llmSuggestionPanel.innerHTML = `
+          <strong>Sugerencia de Val</strong>
+          <p>${escapeHtml(suggestion.val_message)}</p>
+          <p><b>Resumen:</b> ${escapeHtml(suggestion.summary)}</p>
+          <p><b>Pregunta:</b> ${escapeHtml(suggestion.follow_up_question)}</p>
+          <p><b>Demo recomendado:</b> ${escapeHtml(suggestion.recommended_demo_section)}</p>
+          <p><b>Próximo paso:</b> ${escapeHtml(suggestion.next_step)}</p>
+          <p><b>Tarjetas sugeridas:</b></p>
+          <ul>${cards}</ul>
+          <p><b>Riesgos:</b></p>
+          <ul>${risks}</ul>
+        `;
+      }
+
+      async function suggestWithValMentor() {
+        llmStatus.textContent = "Intentando sugerencia controlada. Si el backend no responde, se usa modo local.";
+        const request = buildValLlmRequest();
+        try {
+          const response = await fetch(VAL_LLM_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(request),
+          });
+          if (!response.ok) throw new Error(`backend ${response.status}`);
+          const body = await response.json();
+          const suggestion = body?.suggestion;
+          const validationError = validateValMentorSuggestion(suggestion);
+          if (validationError) throw new Error(validationError);
+          showValMentorSuggestion(suggestion, body.mode || "backend");
+        } catch (error) {
+          showValMentorSuggestion(localValMentorSuggestion(error.message || "backend unavailable"), "local");
+        }
+      }
+
+      function acceptValMentorSuggestion() {
+        if (!pendingValMentorSuggestion) {
+          llmStatus.textContent = "No hay sugerencia para usar.";
+          return;
+        }
+        recommendedSection.textContent = pendingValMentorSuggestion.recommended_demo_section;
+        recommendedQuestion.textContent = pendingValMentorSuggestion.follow_up_question;
+        captureState.recommendedSection = pendingValMentorSuggestion.recommended_demo_section;
+        captureState.recommendedQuestion = pendingValMentorSuggestion.follow_up_question;
+        valObservation.textContent = `Sugerencia aprobada por Frank. Demo recomendado: ${pendingValMentorSuggestion.recommended_demo_section}.`;
+        stageValResponse(pendingValMentorSuggestion.val_message, { state: "speaking", delay: 160, speak: true });
+        llmStatus.textContent = "Sugerencia usada. Frank sigue a cargo de confirmar y organizar.";
+      }
+
+      function ignoreValMentorSuggestion() {
+        pendingValMentorSuggestion = null;
+        llmAcceptButton.disabled = true;
+        llmIgnoreButton.disabled = true;
+        llmStatus.textContent = "Sugerencia ignorada. Modo local determinístico disponible.";
+        llmSuggestionPanel.innerHTML = `
+          <strong>Sugerencia de Val</strong>
+          <p class="mode-note">Sugerencia descartada. Frank puede continuar con la guía local.</p>
+        `;
+      }
+
       function generateSummary() {
         const person = clientNameInput.value.trim() || "Sin nombre capturado";
         const context = clientContextInput.value.trim() || "Sin contexto capturado";
@@ -3092,6 +3309,9 @@
       });
 
       qaAskButton.addEventListener("click", answerTypedQuestion);
+      llmSuggestButton.addEventListener("click", suggestWithValMentor);
+      llmAcceptButton.addEventListener("click", acceptValMentorSuggestion);
+      llmIgnoreButton.addEventListener("click", ignoreValMentorSuggestion);
 
       qaInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
