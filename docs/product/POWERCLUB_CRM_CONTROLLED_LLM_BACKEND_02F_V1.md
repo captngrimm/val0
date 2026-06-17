@@ -99,7 +99,7 @@ It rejects missing keys, disallowed demo sections, non-list card/risk fields, an
 Operator Mode now includes:
 
 - `Sugerir con Val`
-- `Usar sugerencia`
+- `Usar y organizar`
 - `Ignorar`
 - status line
 - `Sugerencia de Val` panel

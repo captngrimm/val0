@@ -47,7 +47,7 @@ git diff --check
    - no crash
    - status shows `Modo local activo`
    - a deterministic local suggestion appears
-   - `Usar sugerencia` and `Ignorar` become available
+   - `Usar y organizar` and `Ignorar` become available
 
 ## Manual Test - Mock Response Path
 
@@ -65,7 +65,7 @@ VAL_POWERCLUB_LLM_MOCK_ENABLED=1 python3 tools/powerclub_val_demo_server.py
 7. Expected:
    - status says mock suggestion received
    - response includes Val message, summary, follow-up, risk, and recommended demo section
-   - Frank must still click `Usar sugerencia`
+   - Frank must still click `Usar y organizar`
 
 The older two-server path remains possible, but the combined harness is preferred because it avoids port and CORS confusion.
 
@@ -82,7 +82,7 @@ Expected:
 ## Manual Test - Frank Approval Flow
 
 1. Generate local or mock suggestion.
-2. Click `Usar sugerencia`.
+2. Click `Usar y organizar`.
 3. Expected:
    - Val says the approved suggestion
    - recommended CRM section updates

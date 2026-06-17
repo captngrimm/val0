@@ -587,6 +587,57 @@
         margin-top: 10px;
       }
 
+      .val-mentor-flow {
+        border-color: rgba(99, 232, 255, 0.28);
+        background:
+          linear-gradient(180deg, rgba(99, 232, 255, 0.07), rgba(255, 255, 255, 0.035)),
+          rgba(255, 255, 255, 0.035);
+      }
+
+      .val-mentor-flow summary {
+        color: #dff9ff;
+        letter-spacing: 0.01em;
+      }
+
+      .mentor-flow-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .mentor-mini-card,
+      .mentor-status-card {
+        min-width: 0;
+        border: 1px solid rgba(255, 255, 255, 0.09);
+        border-radius: 14px;
+        padding: 10px;
+        background: rgba(1, 5, 10, 0.28);
+      }
+
+      .mentor-mini-card .field-label,
+      .mentor-status-card .field-label {
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .mentor-value {
+        margin: 0;
+        color: var(--text);
+        font-size: 0.93rem;
+        font-weight: 850;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .mentor-status-card {
+        border-color: rgba(210, 179, 106, 0.24);
+        background: rgba(210, 179, 106, 0.07);
+      }
+
+      .mentor-status-card .mentor-value {
+        color: #f6e9c6;
+      }
+
       .val-says {
         min-height: 150px;
         border: 1px solid rgba(99, 232, 255, 0.18);
@@ -1636,12 +1687,34 @@
             <button id="qaAskButton" class="secondary" type="button">Responder pregunta</button>
           </details>
 
-          <details id="llmDrawer" class="operator-drawer operator-mode-only">
-            <summary>Val Mentor / sugerencia controlada</summary>
-            <p class="mode-note">Backend-ready seam. No hay API key en el navegador; si no existe backend, Val mantiene modo local determinístico.</p>
+          <details id="llmDrawer" class="operator-drawer val-mentor-flow operator-mode-only" open>
+            <summary>VAL MENTOR / flujo guiado</summary>
+            <p class="mode-note">Flujo principal de operador: captura, sugiere, aprueba y organiza. Frank decide antes de usar cualquier sugerencia.</p>
+            <div class="mentor-status-card">
+              <span class="field-label">Qué hago ahora</span>
+              <p id="mentorNextAction" class="mentor-value">Ahora: haz la pregunta.</p>
+            </div>
+            <div class="mentor-flow-grid" aria-label="Estado de Val Mentor">
+              <article class="mentor-mini-card">
+                <span class="field-label">Respuesta capturada</span>
+                <p id="mentorCapturedResponse" class="mentor-value">Sin respuesta capturada.</p>
+              </article>
+              <article class="mentor-mini-card">
+                <span class="field-label">Categoría detectada</span>
+                <p id="mentorDetectedCategory" class="mentor-value">Pendiente</p>
+              </article>
+              <article class="mentor-mini-card">
+                <span class="field-label">Demo recomendado</span>
+                <p id="mentorDemoRecommended" class="mentor-value">Vista gerencial</p>
+              </article>
+              <article class="mentor-mini-card">
+                <span class="field-label">Próxima pregunta</span>
+                <p id="mentorNextQuestion" class="mentor-value">¿Qué necesita ver gerencia cada mañana para saber dónde actuar?</p>
+              </article>
+            </div>
             <div class="llm-actions">
               <button id="llmSuggestButton" class="secondary" type="button">Sugerir con Val</button>
-              <button id="llmAcceptButton" class="ghost" type="button" disabled>Usar sugerencia</button>
+              <button id="llmAcceptButton" class="ghost" type="button" disabled>Usar y organizar</button>
               <button id="llmIgnoreButton" class="ghost" type="button" disabled>Ignorar</button>
             </div>
             <p id="llmStatus" class="status-line">Modo local activo. Backend LLM no conectado.</p>
@@ -1894,6 +1967,7 @@
         recommendedSection: "Vista gerencial",
         recommendedQuestion: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?",
         pendingResponse: "",
+        categorySource: "",
       };
 
       let questionIndex = 0;
@@ -1927,6 +2001,11 @@
       const llmIgnoreButton = document.querySelector("#llmIgnoreButton");
       const llmStatus = document.querySelector("#llmStatus");
       const llmSuggestionPanel = document.querySelector("#llmSuggestionPanel");
+      const mentorNextAction = document.querySelector("#mentorNextAction");
+      const mentorCapturedResponse = document.querySelector("#mentorCapturedResponse");
+      const mentorDetectedCategory = document.querySelector("#mentorDetectedCategory");
+      const mentorDemoRecommended = document.querySelector("#mentorDemoRecommended");
+      const mentorNextQuestion = document.querySelector("#mentorNextQuestion");
       const audioModeButton = document.querySelector("#audioModeButton");
       const voiceTestButton = document.querySelector("#voiceTestButton");
       const ringControlButton = document.querySelector("#ringControlButton");
@@ -2054,6 +2133,7 @@
 
       function setNextAction(message) {
         nextActionCard.textContent = message;
+        if (mentorNextAction) mentorNextAction.textContent = message;
       }
 
       function setMeetingStep(step, message = "") {
@@ -2537,21 +2617,55 @@
 
       function categoryFromText(text) {
         const lower = text.toLowerCase();
+        if (
+          lower.includes("seguimiento")
+          || lower.includes("whatsapp")
+          || lower.includes("contacto")
+          || lower.includes("contact")
+          || lower.includes("oportunidad perdida")
+          || lower.includes("oportunidades perdidas")
+          || lower.includes("no llaman")
+          || lower.includes("no llama")
+          || lower.includes("no responden")
+          || lower.includes("no responde")
+          || lower.includes("enfria")
+          || lower.includes("enfría")
+          || lower.includes("frio")
+          || lower.includes("frío")
+          || lower.includes("tarde")
+          || lower.includes("atras")
+          || lower.includes("llamar")
+          || lower.includes("pendiente")
+        ) return "seguimiento";
+        if (lower.includes("asesor") || lower.includes("vendedor") || lower.includes("usuario") || lower.includes("operador") || lower.includes("cola")) return "asesor";
+        if (lower.includes("gerente") || lower.includes("gerencia") || lower.includes("sucursal") || lower.includes("dashboard") || lower.includes("visibilidad") || lower.includes("reporte")) return "visibilidad";
         if (lower.includes("lead") || lower.includes("prospect") || lower.includes("socio")) return "leads";
-        if (lower.includes("seguimiento") || lower.includes("atras") || lower.includes("llamar") || lower.includes("contact")) return "seguimiento";
         if (lower.includes("venta") || lower.includes("cierre") || lower.includes("compr") || lower.includes("conversion")) return "cierre";
-        if (lower.includes("gerencia") || lower.includes("dashboard") || lower.includes("visibilidad") || lower.includes("reporte")) return "visibilidad";
-        if (lower.includes("asesor") || lower.includes("operador") || lower.includes("cola")) return "asesor";
         if (lower.includes("dato") || lower.includes("excel") || lower.includes("fuente") || lower.includes("export") || lower.includes("campo")) return "datos";
         if (lower.includes("piloto") || lower.includes("alcance") || lower.includes("sucursal") || lower.includes("v1")) return "alcance";
-        if (lower.includes("riesgo") || lower.includes("exclusion") || lower.includes("exclusión") || lower.includes("whatsapp") || lower.includes("pago")) return "riesgo";
+        if (lower.includes("riesgo") || lower.includes("exclusion") || lower.includes("exclusión") || lower.includes("integracion") || lower.includes("integración") || lower.includes("pago")) return "riesgo";
         return "";
+      }
+
+      function categoryLabel(category) {
+        const labels = {
+          leads: "Leads",
+          seguimiento: "Seguimiento",
+          cierre: "Cierre",
+          visibilidad: "Visibilidad gerencial",
+          asesor: "Flujo asesor",
+          datos: "Datos/fuentes",
+          alcance: "Alcance/piloto",
+          riesgo: "Riesgo/exclusión",
+          unknown: "Pendiente",
+        };
+        return labels[category] || "Pendiente";
       }
 
       function recommendationFor(category) {
         const map = {
           leads: ["Vista gerencial", "¿De dónde llegan los leads y cómo se asignan hoy?"],
-          seguimiento: ["Riesgo y rescate + Cola del asesor", "¿Qué seguimiento atrasado se debería rescatar primero?"],
+          seguimiento: ["Riesgo y rescate", "¿Qué seguimiento atrasado se debería rescatar primero?"],
           cierre: ["Riesgo y rescate", "¿Qué señales indican que una promesa está cerca de compra?"],
           visibilidad: ["Vista gerencial", "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?"],
           asesor: ["Cola del asesor", "¿Qué necesita hacer el asesor en menos clics para mantener el seguimiento actualizado?"],
@@ -2657,14 +2771,38 @@
         captureState.recommendedQuestion = question;
         recommendedSection.textContent = section;
         recommendedQuestion.textContent = question;
+        refreshMentorFlowStatus();
       }
 
-      function setActiveCategory(category) {
+      function setActiveCategory(category, source = "manual") {
         captureState.lastCategory = category;
+        captureState.categorySource = source;
         document.querySelectorAll("[data-category]").forEach((button) => {
           button.classList.toggle("active", button.dataset.category === category);
         });
         updateRecommendations(category);
+      }
+
+      function inferMentorCategory(text = "") {
+        const captured = text || answerCapture.value.trim() || captureState.pendingResponse;
+        const inferred = categoryFromText(captured);
+        if (captureState.categorySource === "manual" && captureState.lastCategory) return captureState.lastCategory;
+        if (inferred) {
+          setActiveCategory(inferred, "inferred");
+          return inferred;
+        }
+        return captureState.lastCategory || "";
+      }
+
+      function refreshMentorFlowStatus(message = "") {
+        const captured = answerCapture.value.trim() || captureState.pendingResponse || "";
+        const category = captureState.lastCategory || categoryFromText(captured) || "";
+        const [section, question] = recommendationFor(category);
+        if (mentorCapturedResponse) mentorCapturedResponse.textContent = captured || "Sin respuesta capturada.";
+        if (mentorDetectedCategory) mentorDetectedCategory.textContent = category ? categoryLabel(category) : "Pendiente";
+        if (mentorDemoRecommended) mentorDemoRecommended.textContent = section;
+        if (mentorNextQuestion) mentorNextQuestion.textContent = question;
+        if (message && mentorNextAction) mentorNextAction.textContent = message;
       }
 
       function confirmResponse() {
@@ -2678,11 +2816,7 @@
         const inferred = categoryFromText(text);
         captureState.pendingResponse = text;
         if (!captureState.lastCategory && inferred) {
-          captureState.lastCategory = inferred;
-          document.querySelectorAll("[data-category]").forEach((button) => {
-            button.classList.toggle("active", button.dataset.category === inferred);
-          });
-          updateRecommendations(inferred);
+          setActiveCategory(inferred, "inferred");
         }
         if (!captureState.lastCategory && !inferred) {
           valObservation.textContent = "Necesito que Frank confirme si esto pertenece a seguimiento, visibilidad, datos o alcance.";
@@ -2692,6 +2826,7 @@
         const reasoning = consultantReasoning(captureState.lastCategory, "signal", text);
         valObservation.textContent = `${reasoning.line} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
         setMeetingStep("organize", "Ahora: organiza en whiteboard.");
+        refreshMentorFlowStatus("Ahora: pide sugerencia a Val u organiza manualmente.");
         stageValResponse(valObservation.textContent, { state: "ready", delay: 120 });
         return true;
       }
@@ -2755,6 +2890,7 @@
         stageValResponse(valObservation.textContent, { state: "organizing", delay: 260 });
         answerCapture.value = "";
         captureState.pendingResponse = "";
+        refreshMentorFlowStatus("Ahora: muestra sección recomendada o avanza.");
       }
 
       function findQuestionByCategory(category) {
@@ -2852,6 +2988,9 @@
       }
 
       function buildValLlmRequest() {
+        const captured = answerCapture.value.trim() || captureState.pendingResponse || "";
+        const detectedCategory = inferMentorCategory(captured);
+        refreshMentorFlowStatus("Ahora: usa y organiza o ignora.");
         return {
           meeting_context: {
             client_or_person: clientNameInput.value.trim() || "PowerClub",
@@ -2860,8 +2999,8 @@
             current_step: meetingStep,
           },
           current_question: questionText.textContent.trim(),
-          captured_response: answerCapture.value.trim() || captureState.pendingResponse || "",
-          selected_category: captureState.lastCategory || "",
+          captured_response: captured,
+          selected_category: detectedCategory || "",
           whiteboard_state: whiteboardStateForLlm(),
           allowed_demo_sections: VAL_LLM_ALLOWED_DEMO_SECTIONS,
           guardrails: [
@@ -2925,6 +3064,14 @@
         llmStatus.textContent = mode === "mock"
           ? "Sugerencia mock recibida. Frank debe aprobar antes de usar."
           : "Modo local activo. Sugerencia determinística lista para aprobación.";
+        captureState.recommendedSection = suggestion.recommended_demo_section;
+        captureState.recommendedQuestion = suggestion.follow_up_question;
+        recommendedSection.textContent = suggestion.recommended_demo_section;
+        recommendedQuestion.textContent = suggestion.follow_up_question;
+        if (suggestion.detected_pain && suggestion.detected_pain !== "unknown") {
+          setActiveCategory(suggestion.detected_pain, captureState.categorySource || "inferred");
+        }
+        refreshMentorFlowStatus("Ahora: usa y organiza o ignora.");
         const cards = suggestion.whiteboard_cards.length
           ? suggestion.whiteboard_cards.map((card) => `<li>${escapeHtml(card.lane)}: ${escapeHtml(card.title || card.body)}</li>`).join("")
           : "<li>Sin tarjetas sugeridas.</li>";
@@ -2947,6 +3094,7 @@
 
       async function suggestWithValMentor() {
         llmStatus.textContent = "Intentando sugerencia controlada. Si el backend no responde, se usa modo local.";
+        setNextAction("Ahora: pide sugerencia a Val.");
         const request = buildValLlmRequest();
         try {
           const response = await fetch(VAL_LLM_ENDPOINT, {
@@ -2965,18 +3113,66 @@
         }
       }
 
+      function boardTargetFromMentorLane(lane = "", category = "") {
+        const normalized = lane.toLowerCase();
+        if (normalized.includes("dolor")) return "pains";
+        if (normalized.includes("dato")) return "data";
+        if (normalized.includes("decision") || normalized.includes("decisión")) return "decisions";
+        if (normalized.includes("riesgo") || normalized.includes("exclusion") || normalized.includes("exclusión")) return "risks";
+        if (normalized.includes("paso") || normalized.includes("piloto")) return "next";
+        return boardTargetFor("signal", category);
+      }
+
+      function organizeMentorSuggestion(suggestion) {
+        const captured = suggestion.summary || answerCapture.value.trim() || captureState.pendingResponse;
+        if (!captured || captured === "Sin respuesta capturada todavía.") return;
+        const category = suggestion.detected_pain && suggestion.detected_pain !== "unknown"
+          ? suggestion.detected_pain
+          : inferMentorCategory(captured) || "visibilidad";
+        setActiveCategory(category, captureState.categorySource || "inferred");
+        const mentorCard = suggestion.whiteboard_cards[0] || {};
+        const target = boardTargetFromMentorLane(mentorCard.lane || "", category);
+        const reasoning = consultantReasoning(category, "signal", captured);
+        const card = makeWhiteboardCard(captured, category, "signal", {
+          ...reasoning,
+          lane: target,
+          demo: suggestion.recommended_demo_section,
+          nextQuestion: suggestion.follow_up_question,
+          line: suggestion.val_message,
+        });
+        const targetMap = {
+          pains: captureState.pains,
+          signals: captureState.signals,
+          data: captureState.data,
+          decisions: captureState.decisions,
+          risks: captureState.risks,
+          next: captureState.pilots,
+        };
+        captureState.responses.push(`[${category}] ${captured}`);
+        targetMap[target]?.push(card);
+        captureState.lastBoardTarget = target;
+        captureState.lastCardId = card.id;
+        captureState.pendingResponse = "";
+        showFloatingCaptureCard(card);
+        renderWhiteboard();
+      }
+
       function acceptValMentorSuggestion() {
         if (!pendingValMentorSuggestion) {
           llmStatus.textContent = "No hay sugerencia para usar.";
           return;
         }
+        organizeMentorSuggestion(pendingValMentorSuggestion);
         recommendedSection.textContent = pendingValMentorSuggestion.recommended_demo_section;
         recommendedQuestion.textContent = pendingValMentorSuggestion.follow_up_question;
         captureState.recommendedSection = pendingValMentorSuggestion.recommended_demo_section;
         captureState.recommendedQuestion = pendingValMentorSuggestion.follow_up_question;
-        valObservation.textContent = `Sugerencia aprobada por Frank. Demo recomendado: ${pendingValMentorSuggestion.recommended_demo_section}.`;
+        const category = pendingValMentorSuggestion.detected_pain || captureState.lastCategory || "pendiente";
+        valObservation.textContent = `Listo. Val organizó la respuesta como ${categoryLabel(category)}. Demo recomendado: ${pendingValMentorSuggestion.recommended_demo_section}. Siguiente pregunta: ${pendingValMentorSuggestion.follow_up_question}`;
         stageValResponse(pendingValMentorSuggestion.val_message, { state: "speaking", delay: 160, speak: true });
-        llmStatus.textContent = "Sugerencia usada. Frank sigue a cargo de confirmar y organizar.";
+        llmStatus.textContent = valObservation.textContent;
+        setMeetingStep("recommend", "Ahora: muestra sección recomendada o avanza.");
+        refreshMentorFlowStatus("Ahora: muestra sección recomendada o avanza.");
       }
 
       function ignoreValMentorSuggestion() {
@@ -2984,6 +3180,7 @@
         llmAcceptButton.disabled = true;
         llmIgnoreButton.disabled = true;
         llmStatus.textContent = "Sugerencia ignorada. Modo local determinístico disponible.";
+        refreshMentorFlowStatus("Ahora: muestra sección recomendada o avanza.");
         llmSuggestionPanel.innerHTML = `
           <strong>Sugerencia de Val</strong>
           <p class="mode-note">Sugerencia descartada. Frank puede continuar con la guía local.</p>
@@ -3228,6 +3425,13 @@
       document.querySelector("#generateSummaryButton").addEventListener("click", generateSummary);
       document.querySelector("#generateSummaryButtonBottom").addEventListener("click", generateSummary);
       document.querySelector("#copySummaryButtonBottom").addEventListener("click", copySummary);
+      answerCapture.addEventListener("input", () => {
+        if (captureState.categorySource !== "manual") {
+          const inferred = categoryFromText(answerCapture.value.trim());
+          if (inferred) setActiveCategory(inferred, "inferred");
+        }
+        refreshMentorFlowStatus("Ahora: captura respuesta o pide sugerencia a Val.");
+      });
 
       document.querySelector("#listenResponseButton").addEventListener("click", () => {
         toggleListening();

@@ -66,8 +66,8 @@ Health check:
    - the request reaches the same-origin mock endpoint
    - status indicates mock suggestion or controlled suggestion received
    - `Sugerencia de Val` shows a structured recommendation
-   - `Usar sugerencia` and `Ignorar` become available
-9. Click `Usar sugerencia`.
+   - `Usar y organizar` and `Ignorar` become available
+9. Click `Usar y organizar`.
 10. Expected:
     - Val updates the visible message
     - the recommended demo section updates
