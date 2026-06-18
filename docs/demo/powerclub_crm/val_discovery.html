@@ -1357,6 +1357,139 @@
         font-weight: 900;
       }
 
+      .discovery-map-panel {
+        display: grid;
+        gap: 14px;
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 22px;
+        padding: 18px;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(99, 232, 255, 0.08), transparent 34%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
+          var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .map-header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .map-header h2 {
+        margin: 0;
+        color: #f4fbff;
+        font-size: clamp(1.15rem, 2.1vw, 1.7rem);
+      }
+
+      .map-stage {
+        position: relative;
+        min-height: 440px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        background:
+          linear-gradient(rgba(99, 232, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 232, 255, 0.035) 1px, transparent 1px),
+          rgba(1, 5, 10, 0.3);
+        background-size: 34px 34px;
+      }
+
+      .map-links {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .map-links line {
+        stroke: rgba(99, 232, 255, 0.28);
+        stroke-width: 1.2;
+      }
+
+      .map-node {
+        position: absolute;
+        min-width: 118px;
+        max-width: 190px;
+        transform: translate(-50%, -50%);
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 16px;
+        padding: 9px 11px;
+        color: var(--text);
+        background: rgba(4, 12, 20, 0.86);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
+        font-size: 0.82rem;
+        font-weight: 850;
+        line-height: 1.25;
+      }
+
+      .map-node small {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--muted);
+        font-size: 0.66rem;
+        text-transform: uppercase;
+      }
+
+      .map-node.root {
+        border-color: rgba(210, 179, 106, 0.5);
+        background: rgba(210, 179, 106, 0.13);
+        color: #f6e9c6;
+        font-size: 0.95rem;
+      }
+
+      .map-node.group {
+        border-color: rgba(99, 232, 255, 0.34);
+        color: #dff9ff;
+      }
+
+      .map-node.new {
+        animation: nodeSettle 0.95s ease both;
+      }
+
+      .map-float {
+        position: absolute;
+        left: 50%;
+        top: 46%;
+        transform: translate(-50%, -50%);
+        border: 1px solid rgba(210, 179, 106, 0.45);
+        border-radius: 999px;
+        padding: 7px 12px;
+        color: #f6e9c6;
+        background: rgba(8, 13, 18, 0.92);
+        box-shadow: 0 0 28px rgba(210, 179, 106, 0.18);
+        font-size: 0.78rem;
+        font-weight: 900;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .map-float.active {
+        animation: mapFloat 1.05s ease both;
+      }
+
+      @keyframes nodeSettle {
+        from {
+          opacity: 0;
+          transform: translate(-50%, -45%) scale(0.92);
+          filter: blur(3px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1);
+          filter: blur(0);
+        }
+      }
+
+      @keyframes mapFloat {
+        0% { opacity: 0; transform: translate(-50%, -35%) scale(0.94); }
+        20% { opacity: 1; }
+        75% { opacity: 1; transform: translate(-50%, -58%) scale(1); }
+        100% { opacity: 0; transform: translate(-50%, -70%) scale(0.96); }
+      }
+
       body[data-mode="presentation"] .operator-mode-only,
       body[data-mode="presentation"] .setup-panel,
       body[data-mode="presentation"] .flow-panel,
@@ -1716,6 +1849,21 @@
           <summary>Avanzado / cockpit</summary>
           <p class="mode-note">Cambia a Operador para ver setup, agenda, Q&A seguro, voz, ArcX debug, categorías, notas, whiteboard completo y controles técnicos.</p>
         </details>
+      </section>
+
+      <section class="discovery-map-panel" aria-labelledby="discoveryMapTitle">
+        <div class="map-header">
+          <div>
+            <p class="eyebrow">Mapa vivo de discovery</p>
+            <h2 id="discoveryMapTitle">Val convierte respuestas en estructura de negocio</h2>
+          </div>
+          <p id="mapUnderstandingCue" class="mode-note">Aún no hay señales capturadas. El mapa crecerá cuando Frank use y organice una respuesta.</p>
+        </div>
+        <div class="map-stage" aria-label="Mapa de negocio generado localmente">
+          <svg id="businessMapLinks" class="map-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div id="businessMapNodes"></div>
+          <div id="businessMapFloat" class="map-float">Val organizando señal...</div>
+        </div>
       </section>
 
       <section class="setup-panel" aria-labelledby="setupTitle">
@@ -2217,6 +2365,21 @@
         categorySource: "",
       };
 
+      const mapGroupConfig = {
+        structure: { label: "Estructura", x: 18, y: 20 },
+        people: { label: "Personas / roles", x: 82, y: 20 },
+        problems: { label: "Dolores", x: 18, y: 78 },
+        process: { label: "Proceso / canales", x: 82, y: 78 },
+        metrics: { label: "Métricas faltantes", x: 50, y: 16 },
+        risks: { label: "Riesgos / decisiones", x: 50, y: 84 },
+      };
+
+      const businessMapState = {
+        root: "PowerClub",
+        items: [],
+        lastItemId: "",
+      };
+
       let questionIndex = 0;
       let recognition = null;
       let availableVoices = [];
@@ -2278,6 +2441,10 @@
       const wizardEditButton = document.querySelector("#wizardEditButton");
       const wizardIgnoreButton = document.querySelector("#wizardIgnoreButton");
       const wizardAdvancedButton = document.querySelector("#wizardAdvancedButton");
+      const businessMapLinks = document.querySelector("#businessMapLinks");
+      const businessMapNodes = document.querySelector("#businessMapNodes");
+      const businessMapFloat = document.querySelector("#businessMapFloat");
+      const mapUnderstandingCue = document.querySelector("#mapUnderstandingCue");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -3256,6 +3423,7 @@
         recommendedSection.textContent = reasoning.demo;
         recommendedQuestion.textContent = reasoning.nextQuestion;
         showFloatingCaptureCard(card);
+        updateBusinessMapFromResponse(text, finalCategory, type);
         window.setTimeout(renderWhiteboard, 420);
         valObservation.textContent = `${reasoning.line} Recomiendo mostrar: ${reasoning.demo}. Siguiente pregunta: ${reasoning.nextQuestion}`;
         setMeetingStep("recommend", "Ahora: muestra el demo recomendado.");
@@ -3358,6 +3526,118 @@
           .replaceAll(">", "&gt;")
           .replaceAll('"', "&quot;")
           .replaceAll("'", "&#039;");
+      }
+
+      function compactLabel(value, max = 42) {
+        const text = String(value || "").trim().replace(/\s+/g, " ");
+        return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+      }
+
+      function addMapItem(group, label, source = "respuesta") {
+        const safeGroup = mapGroupConfig[group] ? group : "problems";
+        const cleanLabel = compactLabel(label);
+        if (!cleanLabel) return null;
+        const existing = businessMapState.items.find((item) => item.group === safeGroup && item.label.toLowerCase() === cleanLabel.toLowerCase());
+        if (existing) {
+          businessMapState.lastItemId = existing.id;
+          return existing;
+        }
+        const item = {
+          id: `map-${businessMapState.items.length + 1}`,
+          group: safeGroup,
+          label: cleanLabel,
+          source,
+        };
+        businessMapState.items.push(item);
+        businessMapState.lastItemId = item.id;
+        return item;
+      }
+
+      function extractBusinessMapInsights(text, category = "") {
+        const lower = text.toLowerCase();
+        const insights = [];
+        const branchMatch = lower.match(/(\d+)\s*(sucursales|sedes|gimnasios|branches|ubicaciones)/);
+        if (branchMatch) insights.push({ group: "structure", label: `${branchMatch[1]} ${branchMatch[2]}` });
+        if (lower.includes("sucursal") && !branchMatch) insights.push({ group: "structure", label: "Sucursales / sedes" });
+        if (lower.includes("asesor") || lower.includes("vendedor")) insights.push({ group: "people", label: "Asesores / vendedores" });
+        if (lower.includes("gerente") || lower.includes("gerencia")) insights.push({ group: "people", label: "Gerencia" });
+        if (lower.includes("operador") || lower.includes("usuario")) insights.push({ group: "people", label: "Operadores / usuarios" });
+        if (lower.includes("whatsapp")) insights.push({ group: "process", label: "WhatsApp" });
+        if (lower.includes("llamada") || lower.includes("llamar") || lower.includes("telefono") || lower.includes("teléfono")) insights.push({ group: "process", label: "Llamadas" });
+        if (lower.includes("excel")) insights.push({ group: "process", label: "Excel / export" });
+        if (lower.includes("crm")) insights.push({ group: "process", label: "CRM / registro" });
+        if (lower.includes("lead")) insights.push({ group: "problems", label: "Leads perdidos" });
+        if (lower.includes("tarde") || lower.includes("atras") || lower.includes("enfria") || lower.includes("enfría")) insights.push({ group: "problems", label: "Contacto tardío" });
+        if (lower.includes("visibilidad") || lower.includes("reporte") || lower.includes("dashboard")) insights.push({ group: "metrics", label: "Visibilidad gerencial" });
+        if (lower.includes("seguimiento") || category === "seguimiento") insights.push({ group: "problems", label: "Falta de seguimiento" });
+        if (category === "datos") insights.push({ group: "metrics", label: "Datos / campos por confirmar" });
+        if (category === "alcance") insights.push({ group: "risks", label: "Alcance de piloto" });
+        if (category === "riesgo") insights.push({ group: "risks", label: "Riesgo / exclusión" });
+        if (!insights.length && text.trim()) insights.push({ group: "problems", label: compactLabel(text, 34) });
+        return insights;
+      }
+
+      function positionForMapItem(item, indexInGroup) {
+        const group = mapGroupConfig[item.group];
+        const offsets = [
+          [-7, 9],
+          [7, 9],
+          [-8, 19],
+          [8, 19],
+          [0, 28],
+        ];
+        const [dx, dy] = offsets[indexInGroup % offsets.length];
+        const direction = group.y < 50 ? 1 : -1;
+        return {
+          x: Math.max(7, Math.min(93, group.x + dx)),
+          y: Math.max(8, Math.min(92, group.y + (dy * direction))),
+        };
+      }
+
+      function renderBusinessMap() {
+        businessMapState.root = clientNameInput.value.trim() || "PowerClub";
+        const groupCounts = {};
+        const lines = [];
+        const nodes = [];
+        nodes.push(`<div class="map-node root" style="left:50%;top:50%"><small>Cliente</small>${escapeHtml(businessMapState.root)}</div>`);
+        Object.entries(mapGroupConfig).forEach(([key, group]) => {
+          nodes.push(`<div class="map-node group" style="left:${group.x}%;top:${group.y}%"><small>Rama</small>${escapeHtml(group.label)}</div>`);
+          lines.push(`<line x1="50" y1="50" x2="${group.x}" y2="${group.y}"></line>`);
+          groupCounts[key] = 0;
+        });
+        businessMapState.items.slice(-18).forEach((item) => {
+          const index = groupCounts[item.group] || 0;
+          groupCounts[item.group] = index + 1;
+          const group = mapGroupConfig[item.group];
+          const point = positionForMapItem(item, index);
+          const fresh = item.id === businessMapState.lastItemId ? " new" : "";
+          lines.push(`<line x1="${group.x}" y1="${group.y}" x2="${point.x}" y2="${point.y}"></line>`);
+          nodes.push(`<div class="map-node${fresh}" style="left:${point.x}%;top:${point.y}%"><small>${escapeHtml(group.label)}</small>${escapeHtml(item.label)}</div>`);
+        });
+        businessMapLinks.innerHTML = lines.join("");
+        businessMapNodes.innerHTML = nodes.join("");
+        mapUnderstandingCue.textContent = businessMapState.items.length
+          ? `Val ha organizado ${businessMapState.items.length} señal(es). Rama fuerte: ${categoryLabel(captureState.lastCategory || "unknown")}.`
+          : "Aún no hay señales capturadas. El mapa crecerá cuando Frank use y organice una respuesta.";
+      }
+
+      function pulseBusinessMap(label) {
+        if (!businessMapFloat) return;
+        businessMapFloat.textContent = `Val ubicando: ${compactLabel(label, 36)}`;
+        businessMapFloat.classList.remove("active");
+        void businessMapFloat.offsetWidth;
+        businessMapFloat.classList.add("active");
+      }
+
+      function updateBusinessMapFromResponse(text, category = "", source = "respuesta") {
+        const insights = extractBusinessMapInsights(text, category);
+        let first = null;
+        insights.forEach((insight) => {
+          const item = addMapItem(insight.group, insight.label, source);
+          if (!first && item) first = item;
+        });
+        if (first) pulseBusinessMap(first.label);
+        renderBusinessMap();
       }
 
       function whiteboardStateForLlm() {
@@ -3548,6 +3828,7 @@
         captureState.pendingResponse = "";
         answerCapture.value = "";
         showFloatingCaptureCard(card);
+        updateBusinessMapFromResponse(captured, category, "mentor");
         renderWhiteboard();
       }
 
@@ -3957,6 +4238,7 @@
       });
       wizardIgnoreButton.addEventListener("click", ignoreValMentorSuggestion);
       wizardAdvancedButton.addEventListener("click", () => setMode("operator"));
+      clientNameInput.addEventListener("input", renderBusinessMap);
 
       qaInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
@@ -3995,6 +4277,7 @@
       }
 
       renderWhiteboard();
+      renderBusinessMap();
       setValState("idle");
       setMode("presentation");
       setSkin("executive");
