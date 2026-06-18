@@ -1926,17 +1926,17 @@
 
       <section class="wizard-card" aria-labelledby="wizardTitle">
         <div class="wizard-topline">
-          <span id="wizardStepPill" class="wizard-step-pill">Paso 1 de 5</span>
+          <span id="wizardStepPill" class="wizard-step-pill">Mapa de proceso</span>
           <span class="wizard-step-pill">Val Discovery · reunión guiada</span>
         </div>
         <div>
-          <h2 id="wizardTitle" class="wizard-title">Preguntar</h2>
-          <p id="wizardInstruction" class="wizard-instruction">AHORA: haz esta pregunta al cliente.</p>
+          <h2 id="wizardTitle" class="wizard-title">Val mapea la operación</h2>
+          <p id="wizardInstruction" class="wizard-instruction">AHORA: captura la respuesta y deja que Val la ubique en el proceso.</p>
         </div>
         <div class="wizard-working-area">
           <article class="wizard-question-card" aria-label="Pregunta actual">
             <span class="field-label">Val pregunta</span>
-            <p id="wizardQuestionText">¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?</p>
+            <p id="wizardQuestionText">Para mapear PowerClub bien, empecemos por estructura. ¿Cuántas sucursales tienen actualmente y cómo se organizan?</p>
           </article>
           <label id="wizardAnswerLabel">
             <span class="field-label">Respuesta del cliente</span>
@@ -1951,7 +1951,7 @@
             <p id="wizardResultText">Aún no hay resultado organizado.</p>
           </article>
         </div>
-        <button id="wizardPrimaryButton" class="wizard-primary" type="button">Ya pregunté / capturar respuesta</button>
+        <button id="wizardPrimaryButton" class="wizard-primary" type="button">Procesar respuesta</button>
         <div class="wizard-secondary" aria-label="Acciones secundarias">
           <button id="wizardEditButton" type="button">Editar</button>
           <button id="wizardIgnoreButton" type="button">Ignorar</button>
@@ -1986,13 +1986,16 @@
         <aside class="business-memory-card" aria-labelledby="businessMemoryTitle">
           <h3 id="businessMemoryTitle">Memoria de negocio</h3>
           <div class="memory-grid">
-            <div><span>Estructura</span><p id="memoryStructure">Pendiente</p></div>
-            <div><span>Personas</span><p id="memoryPeople">Pendiente</p></div>
-            <div><span>Dolor principal</span><p id="memoryPain">Pendiente</p></div>
-            <div><span>Canal crítico</span><p id="memoryChannel">Pendiente</p></div>
-            <div><span>Métrica pendiente</span><p id="memoryMetric">Oportunidades enfriadas por semana</p></div>
-            <div><span>Demo recomendado</span><p id="memoryDemo">Vista gerencial</p></div>
+            <div><span>Estructura</span><p id="memoryStructure">por validar</p></div>
+            <div><span>Roles</span><p id="memoryPeople">por validar</p></div>
+            <div><span>Canales</span><p id="memoryChannel">por validar</p></div>
+            <div><span>Dolor principal</span><p id="memoryPain">por validar</p></div>
+            <div><span>Métrica a validar</span><p id="memoryMetric">por validar</p></div>
+            <div><span>Vista recomendada</span><p id="memoryDemo">Vista gerencial</p></div>
+            <div><span>Próxima pregunta</span><p id="memoryNextQuestion">por validar</p></div>
+            <div><span>Roadmap / piloto</span><p id="memoryRoadmap">por validar</p></div>
           </div>
+          <p id="powerValRoadmapHint" class="mode-note">La memoria operativa aparecerá cuando Val capture estructura, roles, canales o dolor operativo.</p>
         </aside>
       </section>
 
@@ -2251,7 +2254,7 @@
 
           <div class="question-card">
             <span id="questionCategory" class="question-category">Dolor operativo</span>
-            <p id="questionText" class="question-text">¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?</p>
+            <p id="questionText" class="question-text">Para mapear PowerClub bien, empecemos por estructura. ¿Cuántas sucursales tienen actualmente y cómo se organizan?</p>
           </div>
 
           <div id="nextActionCard" class="next-action-card">Ahora: haz la pregunta.</div>
@@ -2368,7 +2371,7 @@
           </article>
           <article class="recommendation-card">
             <span class="field-label">Siguiente pregunta sugerida</span>
-            <strong id="recommendedQuestion">¿Qué necesita ver gerencia cada mañana para saber dónde actuar?</strong>
+            <strong id="recommendedQuestion">Para mapear PowerClub bien, empecemos por estructura. ¿Cuántas sucursales tienen actualmente y cómo se organizan?</strong>
           </article>
         </div>
       </section>
@@ -2448,7 +2451,11 @@
       ];
 
       const questionBank = [
-        { category: "Dolor operativo", text: "¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?" },
+        { category: "Estructura del negocio", text: "Para mapear PowerClub bien, empecemos por estructura. ¿Cuántas sucursales tienen actualmente y cómo se organizan?" },
+        { category: "Personas / roles", text: "¿Quién es responsable del seguimiento comercial por sucursal?" },
+        { category: "Canales / herramientas", text: "¿Por qué canales llegan y se atienden los leads: WhatsApp, llamadas, Instagram, CRM o Excel?" },
+        { category: "Dolor operativo", text: "¿En qué punto se pierden más oportunidades?" },
+        { category: "Reportes / métricas", text: "¿Qué dato necesitaría ver gerencia para saber si ese dolor está mejorando?" },
         { category: "Dolor operativo", text: "¿Con qué frecuencia gerencia se entera tarde de un seguimiento atrasado?" },
         { category: "Visibilidad gerencial", text: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?" },
         { category: "Visibilidad gerencial", text: "¿Qué indicador cambiaría una decisión diaria de sucursal o asesor?" },
@@ -2463,6 +2470,11 @@
       ];
 
       const questionRephrases = {
+        "Para mapear PowerClub bien, empecemos por estructura. ¿Cuántas sucursales tienen actualmente y cómo se organizan?": "Lo pregunto más simple: ¿cuántas sedes operan hoy y si se manejan igual o por regiones?",
+        "¿Quién es responsable del seguimiento comercial por sucursal?": "Pensándolo por operación: ¿qué rol se encarga de que cada oportunidad tenga dueño y próximo paso?",
+        "¿Por qué canales llegan y se atienden los leads: WhatsApp, llamadas, Instagram, CRM o Excel?": "Lo reformulo: ¿dónde nace la oportunidad y dónde queda registrado el seguimiento?",
+        "¿En qué punto se pierden más oportunidades?": "Otra forma: ¿en qué momento sienten que una oportunidad se enfría o se queda sin dueño?",
+        "¿Qué dato necesitaría ver gerencia para saber si ese dolor está mejorando?": "Si el dolor mejora, ¿qué número o señal debería cambiar en el dashboard?",
         "¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?": "Lo pregunto de otra forma: ¿en qué punto del proceso sienten que una oportunidad se enfría o pierde dueño?",
         "¿Con qué frecuencia gerencia se entera tarde de un seguimiento atrasado?": "Otra forma de verlo: ¿cada cuánto gerencia descubre tarde que una oportunidad necesitaba contacto?",
         "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?": "Si mañana solo pudieran ver tres señales para decidir dónde actuar, ¿cuáles serían?",
@@ -2490,9 +2502,84 @@
         lastBoardTarget: "",
         lastCardId: "",
         recommendedSection: "Vista gerencial",
-        recommendedQuestion: "¿Qué necesita ver gerencia cada mañana para saber dónde actuar?",
+        recommendedQuestion: "Para mapear PowerClub bien, empecemos por estructura. ¿Cuántas sucursales tienen actualmente y cómo se organizan?",
         pendingResponse: "",
         categorySource: "",
+      };
+
+      const processPlaybook = {
+        structure: {
+          label: "Estructura del negocio",
+          mapGroup: "structure",
+          demo: "Vista gerencial",
+          question: "¿Cuántas sucursales tienen y cómo se distribuyen?",
+          why: "Esto define la estructura operativa inicial.",
+          suggestion: "Conviene validar sucursales activas, regiones, responsables y qué parte entra al piloto.",
+        },
+        people: {
+          label: "Personas / roles",
+          mapGroup: "people",
+          demo: "Ficha del asesor",
+          question: "¿Quién es responsable del seguimiento comercial por sucursal?",
+          why: "Esto identifica quién podría ser responsable del seguimiento.",
+          suggestion: "Conviene validar rol responsable, frecuencia de revisión y dueño de cada oportunidad.",
+        },
+        sales: {
+          label: "Ventas / leads",
+          mapGroup: "problems",
+          demo: "Vista gerencial",
+          question: "¿El problema es que entran pocos leads, que no se asignan bien, o que se pierden después de entrar?",
+          why: "Esto separa origen del lead, asignación y pérdida posterior.",
+          suggestion: "Una vista útil podría mostrar fuente del lead, estado, dueño, fecha de entrada y resultado.",
+        },
+        followup: {
+          label: "Seguimiento comercial",
+          mapGroup: "problems",
+          demo: "Riesgo y rescate",
+          question: "¿Cuántas oportunidades se enfrían por falta de contacto a tiempo?",
+          why: "Esto permite medir pérdida de oportunidades por falta de seguimiento.",
+          suggestion: "Conviene validar último contacto, próxima acción, asesor dueño, sucursal, estado y antigüedad.",
+        },
+        channels: {
+          label: "Canales / herramientas",
+          mapGroup: "process",
+          demo: "Cola del asesor",
+          question: "¿Por qué canales llegan y se atienden los leads: WhatsApp, llamadas, Instagram, CRM o Excel?",
+          why: "Esto ubica dónde nace y dónde se registra el proceso comercial.",
+          suggestion: "Conviene validar canal, herramienta actual, dato disponible y dónde queda evidencia del contacto.",
+        },
+        metrics: {
+          label: "Reportes / métricas",
+          mapGroup: "metrics",
+          demo: "Vista gerencial",
+          question: "¿Qué dato necesitaría ver gerencia para saber si ese dolor está mejorando?",
+          why: "Esto puede convertirse en una vista de gerencia.",
+          suggestion: "Una vista útil podría incluir atrasos, ranking de asesores, fuente, conversión y riesgo por sucursal.",
+        },
+        operations: {
+          label: "Procesos / operación",
+          mapGroup: "process",
+          demo: "Cola del asesor",
+          question: "¿Cómo se asigna, atiende, escala y registra una oportunidad hoy?",
+          why: "Esto muestra dónde el proceso gana o pierde control.",
+          suggestion: "Conviene validar responsable, paso actual, herramienta, frecuencia y criterio de cierre.",
+        },
+        risk: {
+          label: "Dolores / riesgos",
+          mapGroup: "risks",
+          demo: "Scope freeze / piloto",
+          question: "¿Qué parte del dolor debe entrar en piloto y qué debe quedar fuera?",
+          why: "Esto protege el alcance y evita prometer demasiado.",
+          suggestion: "Conviene validar exclusiones, dependencias, datos pendientes y decisión de fase dos.",
+        },
+        roadmap: {
+          label: "Roadmap / piloto",
+          mapGroup: "risks",
+          demo: "Scope freeze / piloto",
+          question: "Con esto, la primera vista recomendada sería Riesgo y rescate. ¿Quieren validar ese piloto primero?",
+          why: "Esto conecta discovery con una decisión de piloto controlado.",
+          suggestion: "Conviene separar piloto, fase dos, responsable de decisión y siguiente reunión de scope freeze.",
+        },
       };
 
       const mapGroupConfig = {
@@ -2581,6 +2668,9 @@
       const memoryChannel = document.querySelector("#memoryChannel");
       const memoryMetric = document.querySelector("#memoryMetric");
       const memoryDemo = document.querySelector("#memoryDemo");
+      const memoryNextQuestion = document.querySelector("#memoryNextQuestion");
+      const memoryRoadmap = document.querySelector("#memoryRoadmap");
+      const powerValRoadmapHint = document.querySelector("#powerValRoadmapHint");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -3304,6 +3394,11 @@
 
       function categoryFromText(text) {
         const lower = text.toLowerCase();
+        if (lower.includes("sucursal") || lower.includes("sede") || lower.includes("ubicacion") || lower.includes("ubicación") || lower.includes("gimnasio") || lower.includes("region") || lower.includes("región")) return "estructura";
+        if (lower.includes("gerente") || lower.includes("gerencia") || lower.includes("supervisor") || lower.includes("asesor") || lower.includes("vendedor") || lower.includes("usuario") || lower.includes("operador") || lower.includes("responsable")) return "personas";
+        if (lower.includes("dashboard") || lower.includes("reporte") || lower.includes("reportes") || lower.includes("kpi") || lower.includes("ranking") || lower.includes("metrica") || lower.includes("métrica") || lower.includes("visibilidad") || lower.includes("tasa de contacto") || lower.includes("tiempo de respuesta")) return "metricas";
+        if (lower.includes("instagram") || lower.includes("facebook") || lower.includes("excel") || lower.includes("crm") || lower.includes("sistema actual") || lower.includes("herramienta")) return "canales";
+        if (lower.includes("asigna") || lower.includes("asignacion") || lower.includes("asignación") || lower.includes("atiende") || lower.includes("escala") || lower.includes("registra") || lower.includes("proceso")) return "operacion";
         if (
           lower.includes("seguimiento")
           || lower.includes("whatsapp")
@@ -3324,12 +3419,10 @@
           || lower.includes("llamar")
           || lower.includes("pendiente")
         ) return "seguimiento";
-        if (lower.includes("asesor") || lower.includes("vendedor") || lower.includes("usuario") || lower.includes("operador") || lower.includes("cola")) return "asesor";
-        if (lower.includes("gerente") || lower.includes("gerencia") || lower.includes("sucursal") || lower.includes("dashboard") || lower.includes("visibilidad") || lower.includes("reporte")) return "visibilidad";
         if (lower.includes("lead") || lower.includes("prospect") || lower.includes("socio")) return "leads";
         if (lower.includes("venta") || lower.includes("cierre") || lower.includes("compr") || lower.includes("conversion")) return "cierre";
         if (lower.includes("dato") || lower.includes("excel") || lower.includes("fuente") || lower.includes("export") || lower.includes("campo")) return "datos";
-        if (lower.includes("piloto") || lower.includes("alcance") || lower.includes("sucursal") || lower.includes("v1")) return "alcance";
+        if (lower.includes("piloto") || lower.includes("alcance") || lower.includes("fase") || lower.includes("v1") || lower.includes("roadmap") || lower.includes("implementacion") || lower.includes("implementación")) return "roadmap";
         if (lower.includes("riesgo") || lower.includes("exclusion") || lower.includes("exclusión") || lower.includes("integracion") || lower.includes("integración") || lower.includes("pago")) return "riesgo";
         return "";
       }
@@ -3344,6 +3437,12 @@
           datos: "Datos/fuentes",
           alcance: "Alcance/piloto",
           riesgo: "Riesgo/exclusión",
+          estructura: "Estructura del negocio",
+          personas: "Personas / roles",
+          canales: "Canales / herramientas",
+          metricas: "Reportes / métricas",
+          operacion: "Procesos / operación",
+          roadmap: "Roadmap / piloto",
           unknown: "Pendiente",
         };
         return labels[category] || "Pendiente";
@@ -3359,6 +3458,12 @@
           datos: ["Scope freeze / piloto", "¿Qué fuente, export o muestra aprobada podemos revisar?"],
           alcance: ["Scope freeze / piloto", "¿Qué sucursal, usuarios y campos entran al primer piloto?"],
           riesgo: ["Scope freeze / piloto", "¿Qué debe ir a exclusiones o fase dos para proteger el piloto?"],
+          estructura: [processPlaybook.structure.demo, processPlaybook.structure.question],
+          personas: [processPlaybook.people.demo, processPlaybook.people.question],
+          canales: [processPlaybook.channels.demo, processPlaybook.channels.question],
+          metricas: [processPlaybook.metrics.demo, processPlaybook.metrics.question],
+          operacion: [processPlaybook.operations.demo, processPlaybook.operations.question],
+          roadmap: [processPlaybook.roadmap.demo, processPlaybook.roadmap.question],
         };
         return map[category] || map.visibilidad;
       }
@@ -3685,6 +3790,15 @@
         const safeGroup = mapGroupConfig[group] ? group : "problems";
         const cleanLabel = compactLabel(label);
         if (!cleanLabel) return null;
+        const correctionMatch = cleanLabel.match(/^(\d+)\s+(sucursales|sedes|gimnasios|branches|ubicaciones)/i);
+        if (safeGroup === "structure" && correctionMatch) {
+          const existingStructure = [...businessMapState.items].reverse().find((item) => item.group === "structure" && /\d+\s+(sucursales|sedes|gimnasios|branches|ubicaciones)/i.test(item.label));
+          if (existingStructure && source === "correccion") {
+            existingStructure.label = cleanLabel;
+            businessMapState.lastItemId = existingStructure.id;
+            return existingStructure;
+          }
+        }
         const existing = businessMapState.items.find((item) => item.group === safeGroup && item.label.toLowerCase() === cleanLabel.toLowerCase());
         if (existing) {
           businessMapState.lastItemId = existing.id;
@@ -3701,25 +3815,93 @@
         return item;
       }
 
+      function detectedProcessDomains(text, category = "") {
+        const lower = text.toLowerCase();
+        const domains = new Set();
+        if (category === "estructura" || /(\d+)\s*(sucursales|sedes|gimnasios|branches|ubicaciones)/.test(lower) || lower.includes("sucursal") || lower.includes("sede") || lower.includes("ubicacion") || lower.includes("ubicación") || lower.includes("gimnasio") || lower.includes("region") || lower.includes("región")) domains.add("structure");
+        if (category === "personas" || lower.includes("asesor") || lower.includes("vendedor") || lower.includes("gerente") || lower.includes("gerencia") || lower.includes("supervisor") || lower.includes("operador") || lower.includes("responsable") || lower.includes("usuario")) domains.add("people");
+        if (category === "leads" || lower.includes("lead") || lower.includes("prospect") || lower.includes("socio") || lower.includes("oportunidad")) domains.add("sales");
+        if (category === "seguimiento" || lower.includes("seguimiento") || lower.includes("contacto") || lower.includes("último contacto") || lower.includes("ultimo contacto") || lower.includes("proximo paso") || lower.includes("próximo paso") || lower.includes("llamada") || lower.includes("llamar") || lower.includes("whatsapp")) domains.add("followup");
+        if (category === "canales" || lower.includes("whatsapp") || lower.includes("instagram") || lower.includes("facebook") || lower.includes("llamada") || lower.includes("excel") || lower.includes("crm") || lower.includes("sistema") || lower.includes("herramienta")) domains.add("channels");
+        if (category === "metricas" || lower.includes("dashboard") || lower.includes("reporte") || lower.includes("reportes") || lower.includes("kpi") || lower.includes("ranking") || lower.includes("metrica") || lower.includes("métrica") || lower.includes("visibilidad") || lower.includes("conversion") || lower.includes("conversión") || lower.includes("tiempo de respuesta")) domains.add("metrics");
+        if (category === "operacion" || lower.includes("asigna") || lower.includes("asignacion") || lower.includes("asignación") || lower.includes("atiende") || lower.includes("escala") || lower.includes("registra") || lower.includes("proceso")) domains.add("operations");
+        if (category === "riesgo" || lower.includes("pierde") || lower.includes("perdidos") || lower.includes("perdidas") || lower.includes("perdidas") || lower.includes("falta") || lower.includes("incompleto") || lower.includes("baja visibilidad") || lower.includes("riesgo") || lower.includes("exclusion") || lower.includes("exclusión")) domains.add("risk");
+        if (category === "roadmap" || category === "alcance" || lower.includes("piloto") || lower.includes("fase") || lower.includes("alcance") || lower.includes("implementacion") || lower.includes("implementación") || lower.includes("prioridad")) domains.add("roadmap");
+        return [...domains];
+      }
+
+      function strongestProcessDomain(domains = []) {
+        const priority = ["structure", "people", "channels", "followup", "sales", "metrics", "operations", "risk", "roadmap"];
+        return priority.find((domain) => domains.includes(domain)) || domains[0] || "operations";
+      }
+
+      function discoveredProcessDomains() {
+        const groups = new Set(businessMapState.items.map((item) => item.group));
+        const domains = new Set();
+        if (groups.has("structure")) domains.add("structure");
+        if (groups.has("people")) domains.add("people");
+        if (groups.has("process")) domains.add("channels");
+        if (groups.has("problems")) domains.add("followup");
+        if (groups.has("metrics")) domains.add("metrics");
+        if (groups.has("risks")) domains.add("roadmap");
+        return domains;
+      }
+
+      function nextProcessQuestion(domains = []) {
+        const discovered = discoveredProcessDomains();
+        domains.forEach((domain) => discovered.add(domain));
+        if (!discovered.has("structure")) return processPlaybook.structure.question;
+        if (!discovered.has("people")) return processPlaybook.people.question;
+        if (!discovered.has("channels")) return processPlaybook.channels.question;
+        if (!discovered.has("followup") && !discovered.has("sales")) return "¿En qué punto se pierden más oportunidades?";
+        if (!discovered.has("metrics")) return processPlaybook.metrics.question;
+        return processPlaybook.roadmap.question;
+      }
+
+      function processSuggestionFor(domains = []) {
+        const domain = strongestProcessDomain(domains);
+        const play = processPlaybook[domain] || processPlaybook.operations;
+        const extras = [];
+        if (domains.includes("followup")) extras.push("Una vista útil podría medir último contacto, próxima acción, asesor dueño, sucursal, estado, antigüedad y razón de pérdida.");
+        if (domains.includes("metrics")) extras.push("Para gerencia, conviene validar atrasos, ranking de asesores, fuente, conversión y riesgo por sucursal.");
+        if (domains.includes("operations")) extras.push("Para mapear proceso, conviene identificar responsable, fuente de datos, frecuencia, herramienta actual y dueño de decisión.");
+        return [play.suggestion, ...extras].filter(Boolean).join(" ");
+      }
+
+      function recommendedDemoForDomains(domains = []) {
+        if (domains.includes("followup") || domains.includes("sales")) return "Riesgo y rescate";
+        if (domains.includes("metrics") || domains.includes("structure")) return "Vista gerencial";
+        if (domains.includes("people")) return "Ficha del asesor";
+        if (domains.includes("channels") || domains.includes("operations")) return "Cola del asesor";
+        if (domains.includes("roadmap") || domains.includes("risk")) return "Scope freeze / piloto";
+        return captureState.recommendedSection || "Vista gerencial";
+      }
+
       function extractBusinessMapInsights(text, category = "") {
         const lower = text.toLowerCase();
         const insights = [];
-        const branchMatch = lower.match(/(\d+)\s*(sucursales|sedes|gimnasios|branches|ubicaciones)/);
+        const branchMatch = lower.match(/(?:no\s+son\s+\d+,\s*son\s+|son\s+|tiene\s+|tenemos\s+)?(\d+)\s*(sucursales|sedes|gimnasios|branches|ubicaciones)/);
         if (branchMatch) insights.push({ group: "structure", label: `${branchMatch[1]} ${branchMatch[2]}` });
         if (lower.includes("sucursal") && !branchMatch) insights.push({ group: "structure", label: "Sucursales / sedes" });
+        if (lower.includes("region") || lower.includes("región")) insights.push({ group: "structure", label: "Regiones / zonas" });
         if (lower.includes("asesor") || lower.includes("vendedor")) insights.push({ group: "people", label: "Asesores / vendedores" });
         if (lower.includes("gerente") || lower.includes("gerencia")) insights.push({ group: "people", label: "Gerencia" });
+        if (lower.includes("supervisor") || lower.includes("responsable")) insights.push({ group: "people", label: "Responsables / supervisores" });
         if (lower.includes("operador") || lower.includes("usuario")) insights.push({ group: "people", label: "Operadores / usuarios" });
         if (lower.includes("whatsapp")) insights.push({ group: "process", label: "WhatsApp" });
+        if (lower.includes("instagram")) insights.push({ group: "process", label: "Instagram" });
+        if (lower.includes("facebook")) insights.push({ group: "process", label: "Facebook" });
         if (lower.includes("llamada") || lower.includes("llamar") || lower.includes("telefono") || lower.includes("teléfono")) insights.push({ group: "process", label: "Llamadas" });
         if (lower.includes("excel")) insights.push({ group: "process", label: "Excel / export" });
         if (lower.includes("crm")) insights.push({ group: "process", label: "CRM / registro" });
         if (lower.includes("lead")) insights.push({ group: "problems", label: "Leads perdidos" });
         if (lower.includes("tarde") || lower.includes("atras") || lower.includes("enfria") || lower.includes("enfría")) insights.push({ group: "problems", label: "Contacto tardío" });
         if (lower.includes("visibilidad") || lower.includes("reporte") || lower.includes("dashboard")) insights.push({ group: "metrics", label: "Visibilidad gerencial" });
+        if (lower.includes("kpi") || lower.includes("ranking")) insights.push({ group: "metrics", label: "KPIs / ranking" });
+        if (lower.includes("conversion") || lower.includes("conversión")) insights.push({ group: "metrics", label: "Conversión" });
         if (lower.includes("seguimiento") || category === "seguimiento") insights.push({ group: "problems", label: "Falta de seguimiento" });
         if (category === "datos") insights.push({ group: "metrics", label: "Datos / campos por confirmar" });
-        if (category === "alcance") insights.push({ group: "risks", label: "Alcance de piloto" });
+        if (category === "alcance" || category === "roadmap") insights.push({ group: "risks", label: "Alcance de piloto" });
         if (category === "riesgo") insights.push({ group: "risks", label: "Riesgo / exclusión" });
         if (!insights.length && text.trim()) insights.push({ group: "problems", label: compactLabel(text, 34) });
         return insights;
@@ -3760,8 +3942,10 @@
         const groupCounts = {};
         const lines = [];
         const nodes = [];
+        const activeGroups = new Set(businessMapState.items.map((item) => item.group));
         nodes.push(`<div class="map-node root" style="left:50%;top:50%"><small>Cliente</small>${escapeHtml(businessMapState.root)}</div>`);
         Object.entries(mapGroupConfig).forEach(([key, group]) => {
+          if (!activeGroups.has(key)) return;
           nodes.push(`<div class="map-node group" style="left:${group.x}%;top:${group.y}%"><span class="map-icon">${escapeHtml(group.icon)}</span><small>Rama</small>${escapeHtml(group.label)}</div>`);
           lines.push(`<path d="${curvedPath({ x: 50, y: 50 }, group)}"></path>`);
           groupCounts[key] = 0;
@@ -3779,7 +3963,7 @@
         businessMapNodes.innerHTML = nodes.join("");
         mapUnderstandingCue.textContent = businessMapState.items.length
           ? `Val ha organizado ${businessMapState.items.length} señal(es). Rama fuerte: ${categoryLabel(captureState.lastCategory || "unknown")}.`
-          : "Aún no hay señales capturadas. El mapa crecerá cuando Frank use y organice una respuesta.";
+          : "Aún no hay señales capturadas. El mapa crecerá cuando Frank procese una respuesta.";
         updateBusinessMemory();
       }
 
@@ -3790,12 +3974,24 @@
 
       function updateBusinessMemory() {
         if (!memoryStructure) return;
+        const domains = discoveredProcessDomains();
         memoryStructure.textContent = latestMapLabel("structure", "por validar");
         memoryPeople.textContent = latestMapLabel("people", "por validar");
-        memoryPain.textContent = captureState.lastCategory === "seguimiento" ? "seguimiento" : latestMapLabel("problems", "por validar");
         memoryChannel.textContent = latestMapLabel("process", "por validar");
-        memoryMetric.textContent = latestMapLabel("metrics", "oportunidades enfriadas por semana");
+        memoryPain.textContent = domains.has("followup") ? "seguimiento" : latestMapLabel("problems", "por validar");
+        memoryMetric.textContent = latestMapLabel("metrics", domains.has("followup") ? "oportunidades enfriadas por semana" : "por validar");
         memoryDemo.textContent = captureState.recommendedSection || "Vista gerencial";
+        if (memoryNextQuestion) memoryNextQuestion.textContent = captureState.recommendedQuestion || nextProcessQuestion();
+        if (memoryRoadmap) {
+          memoryRoadmap.textContent = domains.has("roadmap") || businessMapState.items.length >= 5
+            ? "piloto y scope freeze por validar"
+            : "por validar";
+        }
+        if (powerValRoadmapHint) {
+          powerValRoadmapHint.textContent = businessMapState.items.length >= 4
+            ? "Esto puede alimentar una memoria operativa de PowerClub: procesos, decisiones, pendientes y roadmap del piloto."
+            : "La memoria operativa aparecerá cuando Val capture estructura, roles, canales o dolor operativo.";
+        }
       }
 
       function pulseBusinessMap(label) {
@@ -3809,8 +4005,9 @@
       function updateBusinessMapFromResponse(text, category = "", source = "respuesta") {
         const insights = extractBusinessMapInsights(text, category);
         let first = null;
+        const isCorrection = /\b(no\s+son|corrige|correccion|corrección|son\s+\d+)/i.test(text);
         insights.forEach((insight) => {
-          const item = addMapItem(insight.group, insight.label, source);
+          const item = addMapItem(insight.group, insight.label, isCorrection ? "correccion" : source);
           if (!first && item) first = item;
         });
         if (first) pulseBusinessMap(first.label);
@@ -3819,42 +4016,47 @@
 
       function dynamicQuestionFor(text, category = "") {
         const lower = text.toLowerCase();
+        const domains = detectedProcessDomains(text, category);
+        const progressiveQuestion = nextProcessQuestion(domains);
         if (lower.includes("sucursal") || lower.includes("sede") || lower.includes("ubicacion") || lower.includes("ubicación") || lower.includes("gimnasio")) {
-          return "¿Cómo se distribuyen esas sucursales y quién les da seguimiento?";
+          return progressiveQuestion;
         }
         if (lower.includes("asesor") || lower.includes("vendedor") || lower.includes("operador")) {
-          return "¿Qué responsabilidad tiene cada asesor en el seguimiento?";
+          return progressiveQuestion;
         }
         if (lower.includes("whatsapp") || lower.includes("contacto") || lower.includes("lead") || category === "seguimiento") {
-          return "¿Cuántas oportunidades se enfrían por falta de contacto a tiempo?";
+          return progressiveQuestion;
         }
         if (lower.includes("dashboard") || lower.includes("reporte") || lower.includes("visibilidad")) {
-          return "¿Qué necesita ver gerencia cada mañana para decidir dónde actuar?";
+          return progressiveQuestion;
         }
         if (lower.includes("piloto") || lower.includes("alcance") || lower.includes("fase")) {
-          return "¿Qué debe entrar en piloto y qué debe quedar para fase dos?";
+          return progressiveQuestion;
         }
-        return "¿Qué señal deberíamos mapear ahora para entender mejor el proceso?";
+        return progressiveQuestion;
       }
 
       function valInterpretationFor(text, category = "") {
         const lower = text.toLowerCase();
+        const domains = detectedProcessDomains(text, category);
+        const primaryDomain = strongestProcessDomain(domains);
+        const play = processPlaybook[primaryDomain] || processPlaybook.operations;
         if ((lower.includes("whatsapp") || lower.includes("contacto")) && (lower.includes("asesor") || lower.includes("vendedor"))) {
           return "Estoy viendo una fuga de seguimiento asociada a WhatsApp y asesores por sede.";
         }
         if (lower.includes("sucursal") || lower.includes("sede") || lower.includes("gimnasio")) {
-          return "Estoy agregando esto a la estructura operativa de PowerClub.";
+          return `${play.why} Estoy agregando esto a la estructura operativa de PowerClub.`;
         }
         if (category === "seguimiento") {
-          return "Estoy mapeando un dolor principal de seguimiento y posible pérdida de oportunidades.";
+          return `${processPlaybook.followup.why} Estoy mapeando un dolor principal de seguimiento y posible pérdida de oportunidades.`;
         }
-        if (category === "visibilidad") {
-          return "Estoy ubicando esto como necesidad de visibilidad gerencial.";
+        if (category === "visibilidad" || category === "metricas") {
+          return `${processPlaybook.metrics.why} Estoy ubicando esto como necesidad de visibilidad gerencial.`;
         }
-        if (category === "alcance" || category === "riesgo") {
-          return "Estoy separando esto como punto de alcance, riesgo o fase dos.";
+        if (category === "alcance" || category === "riesgo" || category === "roadmap") {
+          return `${processPlaybook.risk.why} Estoy separando esto como punto de alcance, riesgo o fase dos.`;
         }
-        return "Estoy convirtiendo esta respuesta en señales conectadas del negocio.";
+        return `${play.why} Estoy convirtiendo esta respuesta en señales conectadas del negocio.`;
       }
 
       function processConversationResponse() {
@@ -3867,9 +4069,14 @@
           return;
         }
         answerCapture.value = text;
-        const category = inferMentorCategory(text) || categoryFromText(text) || "visibilidad";
+        const category = inferMentorCategory(text) || categoryFromText(text) || "operacion";
+        const domains = detectedProcessDomains(text, category);
+        const suggestion = processSuggestionFor(domains);
         captureState.responses.push(`[${category}] ${text}`);
         updateRecommendations(category);
+        const domainDemo = recommendedDemoForDomains(domains);
+        captureState.recommendedSection = domainDemo;
+        recommendedSection.textContent = domainDemo;
         updateBusinessMapFromResponse(text, category, "conversation");
         const nextQuestion = dynamicQuestionFor(text, category);
         captureState.recommendedQuestion = nextQuestion;
@@ -3877,7 +4084,7 @@
         questionText.textContent = nextQuestion;
         wizardQuestionText.textContent = nextQuestion;
         const interpretation = valInterpretationFor(text, category);
-        wizardSuggestionText.textContent = `${interpretation} Siguiente pregunta: ${nextQuestion}`;
+        wizardSuggestionText.textContent = `${interpretation} ${suggestion} Siguiente pregunta: ${nextQuestion}`;
         wizardResultText.textContent = `Val ubicó esta señal en el mapa. Demo recomendado: ${captureState.recommendedSection}.`;
         valObservation.textContent = wizardSuggestionText.textContent;
         mapUnderstandingCue.textContent = interpretation;
