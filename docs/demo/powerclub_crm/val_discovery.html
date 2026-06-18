@@ -1404,26 +1404,38 @@
         pointer-events: none;
       }
 
-      .map-links line {
-        stroke: rgba(99, 232, 255, 0.38);
-        stroke-width: 1.35;
-        filter: drop-shadow(0 0 5px rgba(99, 232, 255, 0.22));
+      .map-links path {
+        fill: none;
+        stroke: rgba(99, 232, 255, 0.22);
+        stroke-width: 0.72;
+        stroke-linecap: round;
+        stroke-dasharray: 4 7;
+        filter: drop-shadow(0 0 4px rgba(99, 232, 255, 0.16));
+      }
+
+      .map-links path.item-link {
+        stroke: rgba(210, 179, 106, 0.28);
+        stroke-width: 0.62;
+        stroke-dasharray: 3 6;
       }
 
       .map-node {
         position: absolute;
-        min-width: 118px;
-        max-width: 190px;
+        min-width: 106px;
+        max-width: 176px;
         transform: translate(-50%, -50%);
         border: 1px solid rgba(99, 232, 255, 0.18);
-        border-radius: 16px;
+        border-radius: 999px;
         padding: 9px 11px;
         color: var(--text);
-        background: rgba(4, 12, 20, 0.86);
+        background:
+          linear-gradient(135deg, rgba(99, 232, 255, 0.08), rgba(255, 255, 255, 0.025)),
+          rgba(4, 12, 20, 0.88);
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
-        font-size: 0.82rem;
+        font-size: 0.79rem;
         font-weight: 850;
         line-height: 1.25;
+        text-align: center;
       }
 
       .map-node small {
@@ -1436,19 +1448,47 @@
 
       .map-node.root {
         border-color: rgba(210, 179, 106, 0.5);
-        background: rgba(210, 179, 106, 0.13);
+        border-radius: 22px;
+        padding: 14px 18px;
+        background:
+          radial-gradient(circle at 50% 0%, rgba(210, 179, 106, 0.24), transparent 58%),
+          rgba(210, 179, 106, 0.12);
         color: #f6e9c6;
-        font-size: 1.05rem;
-        box-shadow: 0 0 42px rgba(210, 179, 106, 0.18);
+        font-size: 1.08rem;
+        box-shadow: 0 0 52px rgba(210, 179, 106, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
       }
 
       .map-node.group {
         border-color: rgba(99, 232, 255, 0.34);
+        background:
+          radial-gradient(circle at 50% 0%, rgba(99, 232, 255, 0.16), transparent 60%),
+          rgba(7, 18, 28, 0.9);
         color: #dff9ff;
+        text-transform: none;
+      }
+
+      .map-node.insight {
+        border-color: rgba(210, 179, 106, 0.22);
+        border-radius: 14px;
+        background: rgba(6, 14, 22, 0.92);
+        text-align: left;
+      }
+
+      .map-icon {
+        display: inline-grid;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        margin: 0 auto 5px;
+        border: 1px solid rgba(99, 232, 255, 0.18);
+        border-radius: 50%;
+        color: var(--cyan);
+        font-size: 0.7rem;
+        font-weight: 950;
       }
 
       .map-node.new {
-        animation: nodeSettle 1.25s ease both, readyPulse 1.4s ease 0.2s 1;
+        animation: nodeSettle 1.25s cubic-bezier(0.18, 0.86, 0.24, 1) both, graphNodeGlow 1.9s ease 0.15s 1;
       }
 
       .business-memory-card {
@@ -1499,13 +1539,13 @@
         left: 50%;
         top: 46%;
         transform: translate(-50%, -50%);
-        border: 1px solid rgba(210, 179, 106, 0.45);
-        border-radius: 999px;
-        padding: 7px 12px;
+        border: 1px solid rgba(210, 179, 106, 0.58);
+        border-radius: 16px;
+        padding: 10px 14px;
         color: #f6e9c6;
         background: rgba(8, 13, 18, 0.92);
-        box-shadow: 0 0 28px rgba(210, 179, 106, 0.18);
-        font-size: 0.78rem;
+        box-shadow: 0 0 36px rgba(210, 179, 106, 0.24);
+        font-size: 0.84rem;
         font-weight: 900;
         opacity: 0;
         pointer-events: none;
@@ -1518,14 +1558,20 @@
       @keyframes nodeSettle {
         from {
           opacity: 0;
-          transform: translate(-50%, -45%) scale(0.92);
-          filter: blur(3px);
+          transform: translate(-50%, -42%) scale(0.82);
+          filter: blur(4px);
         }
         to {
           opacity: 1;
           transform: translate(-50%, -50%) scale(1);
           filter: blur(0);
         }
+      }
+
+      @keyframes graphNodeGlow {
+        0%, 100% { box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22); }
+        35% { box-shadow: 0 0 0 5px rgba(210, 179, 106, 0.12), 0 0 34px rgba(210, 179, 106, 0.32); }
+        62% { box-shadow: 0 0 0 2px rgba(99, 232, 255, 0.12), 0 0 28px rgba(99, 232, 255, 0.2); }
       }
 
       @keyframes mapFloat {
@@ -2450,12 +2496,12 @@
       };
 
       const mapGroupConfig = {
-        structure: { label: "Estructura", x: 18, y: 20 },
-        people: { label: "Personas / roles", x: 82, y: 20 },
-        problems: { label: "Dolores", x: 18, y: 78 },
-        process: { label: "Proceso / canales", x: 82, y: 78 },
-        metrics: { label: "Métricas faltantes", x: 50, y: 16 },
-        risks: { label: "Riesgos / decisiones", x: 50, y: 84 },
+        structure: { label: "Estructura", icon: "ST", x: 22, y: 22 },
+        metrics: { label: "Métricas faltantes", icon: "MX", x: 50, y: 12 },
+        people: { label: "Personas / roles", icon: "PR", x: 78, y: 22 },
+        process: { label: "Proceso / canales", icon: "FL", x: 80, y: 70 },
+        risks: { label: "Riesgos / decisiones", icon: "RK", x: 50, y: 88 },
+        problems: { label: "Dolores", icon: "SG", x: 20, y: 76 },
       };
 
       const businessMapState = {
@@ -3681,19 +3727,32 @@
 
       function positionForMapItem(item, indexInGroup) {
         const group = mapGroupConfig[item.group];
-        const offsets = [
-          [-7, 9],
-          [7, 9],
-          [-8, 19],
-          [8, 19],
-          [0, 28],
+        const directionX = group.x < 50 ? -1 : group.x > 50 ? 1 : 0;
+        const directionY = group.y < 50 ? -1 : group.y > 50 ? 1 : 0;
+        const spread = [
+          [0, 13],
+          [9, 19],
+          [-9, 19],
+          [5, 27],
+          [-5, 27],
         ];
-        const [dx, dy] = offsets[indexInGroup % offsets.length];
-        const direction = group.y < 50 ? 1 : -1;
+        const [side, distance] = spread[indexInGroup % spread.length];
         return {
-          x: Math.max(7, Math.min(93, group.x + dx)),
-          y: Math.max(8, Math.min(92, group.y + (dy * direction))),
+          x: Math.max(8, Math.min(92, group.x + (directionX * distance) + side)),
+          y: Math.max(8, Math.min(92, group.y + (directionY * distance) + (directionX === 0 ? side : 0))),
         };
+      }
+
+      function curvedPath(from, to) {
+        const midX = (from.x + to.x) / 2;
+        const midY = (from.y + to.y) / 2;
+        const pullX = 50;
+        const pullY = 50;
+        const c1x = (from.x + midX + pullX) / 3;
+        const c1y = (from.y + midY + pullY) / 3;
+        const c2x = (to.x + midX + pullX) / 3;
+        const c2y = (to.y + midY + pullY) / 3;
+        return `M ${from.x} ${from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${to.x} ${to.y}`;
       }
 
       function renderBusinessMap() {
@@ -3703,8 +3762,8 @@
         const nodes = [];
         nodes.push(`<div class="map-node root" style="left:50%;top:50%"><small>Cliente</small>${escapeHtml(businessMapState.root)}</div>`);
         Object.entries(mapGroupConfig).forEach(([key, group]) => {
-          nodes.push(`<div class="map-node group" style="left:${group.x}%;top:${group.y}%"><small>Rama</small>${escapeHtml(group.label)}</div>`);
-          lines.push(`<line x1="50" y1="50" x2="${group.x}" y2="${group.y}"></line>`);
+          nodes.push(`<div class="map-node group" style="left:${group.x}%;top:${group.y}%"><span class="map-icon">${escapeHtml(group.icon)}</span><small>Rama</small>${escapeHtml(group.label)}</div>`);
+          lines.push(`<path d="${curvedPath({ x: 50, y: 50 }, group)}"></path>`);
           groupCounts[key] = 0;
         });
         businessMapState.items.slice(-18).forEach((item) => {
@@ -3713,8 +3772,8 @@
           const group = mapGroupConfig[item.group];
           const point = positionForMapItem(item, index);
           const fresh = item.id === businessMapState.lastItemId ? " new" : "";
-          lines.push(`<line x1="${group.x}" y1="${group.y}" x2="${point.x}" y2="${point.y}"></line>`);
-          nodes.push(`<div class="map-node${fresh}" style="left:${point.x}%;top:${point.y}%"><small>${escapeHtml(group.label)}</small>${escapeHtml(item.label)}</div>`);
+          lines.push(`<path class="item-link" d="${curvedPath(group, point)}"></path>`);
+          nodes.push(`<div class="map-node insight${fresh}" style="left:${point.x}%;top:${point.y}%"><small>${escapeHtml(group.label)}</small>${escapeHtml(item.label)}</div>`);
         });
         businessMapLinks.innerHTML = lines.join("");
         businessMapNodes.innerHTML = nodes.join("");
@@ -3731,17 +3790,17 @@
 
       function updateBusinessMemory() {
         if (!memoryStructure) return;
-        memoryStructure.textContent = latestMapLabel("structure");
-        memoryPeople.textContent = latestMapLabel("people");
-        memoryPain.textContent = latestMapLabel("problems");
-        memoryChannel.textContent = latestMapLabel("process");
-        memoryMetric.textContent = latestMapLabel("metrics", "Oportunidades enfriadas por semana");
+        memoryStructure.textContent = latestMapLabel("structure", "por validar");
+        memoryPeople.textContent = latestMapLabel("people", "por validar");
+        memoryPain.textContent = captureState.lastCategory === "seguimiento" ? "seguimiento" : latestMapLabel("problems", "por validar");
+        memoryChannel.textContent = latestMapLabel("process", "por validar");
+        memoryMetric.textContent = latestMapLabel("metrics", "oportunidades enfriadas por semana");
         memoryDemo.textContent = captureState.recommendedSection || "Vista gerencial";
       }
 
       function pulseBusinessMap(label) {
         if (!businessMapFloat) return;
-        businessMapFloat.textContent = `Val ubicando: ${compactLabel(label, 36)}`;
+        businessMapFloat.textContent = `Val organizando: ${compactLabel(label, 54)}`;
         businessMapFloat.classList.remove("active");
         void businessMapFloat.offsetWidth;
         businessMapFloat.classList.add("active");
@@ -3778,6 +3837,26 @@
         return "¿Qué señal deberíamos mapear ahora para entender mejor el proceso?";
       }
 
+      function valInterpretationFor(text, category = "") {
+        const lower = text.toLowerCase();
+        if ((lower.includes("whatsapp") || lower.includes("contacto")) && (lower.includes("asesor") || lower.includes("vendedor"))) {
+          return "Estoy viendo una fuga de seguimiento asociada a WhatsApp y asesores por sede.";
+        }
+        if (lower.includes("sucursal") || lower.includes("sede") || lower.includes("gimnasio")) {
+          return "Estoy agregando esto a la estructura operativa de PowerClub.";
+        }
+        if (category === "seguimiento") {
+          return "Estoy mapeando un dolor principal de seguimiento y posible pérdida de oportunidades.";
+        }
+        if (category === "visibilidad") {
+          return "Estoy ubicando esto como necesidad de visibilidad gerencial.";
+        }
+        if (category === "alcance" || category === "riesgo") {
+          return "Estoy separando esto como punto de alcance, riesgo o fase dos.";
+        }
+        return "Estoy convirtiendo esta respuesta en señales conectadas del negocio.";
+      }
+
       function processConversationResponse() {
         const text = (wizardAnswer.value || answerCapture.value || "").trim();
         if (!text) {
@@ -3797,10 +3876,11 @@
         recommendedQuestion.textContent = nextQuestion;
         questionText.textContent = nextQuestion;
         wizardQuestionText.textContent = nextQuestion;
-        wizardSuggestionText.textContent = `Perfecto. Lo estoy mapeando como ${categoryLabel(category)}. Siguiente pregunta: ${nextQuestion}`;
+        const interpretation = valInterpretationFor(text, category);
+        wizardSuggestionText.textContent = `${interpretation} Siguiente pregunta: ${nextQuestion}`;
         wizardResultText.textContent = `Val ubicó esta señal en el mapa. Demo recomendado: ${captureState.recommendedSection}.`;
         valObservation.textContent = wizardSuggestionText.textContent;
-        mapUnderstandingCue.textContent = `Val entendió: ${categoryLabel(category)}. Próxima pregunta lista.`;
+        mapUnderstandingCue.textContent = interpretation;
         wizardAnswer.value = "";
         answerCapture.value = "";
         setMeetingStep("conversation", `Val mapeó la respuesta. Ahora pregunta: ${nextQuestion}`);
