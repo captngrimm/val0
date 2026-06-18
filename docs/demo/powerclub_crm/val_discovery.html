@@ -759,6 +759,50 @@
         gap: 8px;
       }
 
+      .guided-primary-action {
+        width: 100%;
+        min-height: 54px;
+        border: 1px solid rgba(99, 232, 255, 0.42);
+        border-radius: 16px;
+        padding: 0 18px;
+        color: #061017;
+        background: linear-gradient(135deg, #63e8ff, #d2b36a);
+        box-shadow: 0 0 28px rgba(99, 232, 255, 0.22);
+        font-size: 1rem;
+        font-weight: 950;
+      }
+
+      .guided-secondary-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .guided-secondary-actions button {
+        flex: 1 1 116px;
+        min-height: 36px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.04);
+        font-size: 0.78rem;
+        font-weight: 850;
+      }
+
+      .guided-success {
+        display: none;
+        border: 1px solid rgba(46, 230, 166, 0.25);
+        border-radius: 16px;
+        padding: 12px;
+        color: #d9fff3;
+        background: rgba(46, 230, 166, 0.08);
+        line-height: 1.45;
+      }
+
+      .guided-success.visible {
+        display: block;
+      }
+
       .operator-toggle {
         display: flex;
         align-items: center;
@@ -1186,6 +1230,11 @@
       body[data-mode="presentation"] .val-panel > div:first-child,
       body[data-mode="presentation"] .question-panel > div:first-child,
       body[data-mode="presentation"] .control-grid,
+      body[data-mode="presentation"] .capture-actions,
+      body[data-mode="presentation"] #ringControlButton,
+      body[data-mode="presentation"] #audioModeButton,
+      body[data-mode="presentation"] #voiceTestButton,
+      body[data-mode="presentation"] #audioModeStatus,
       body[data-mode="presentation"] .observation-panel,
       body[data-mode="presentation"] .recommendation-panel h2,
       body[data-mode="presentation"] .recommendation-panel .eyebrow {
@@ -1741,6 +1790,13 @@
             <span class="field-label">Respuesta del cliente</span>
             <textarea id="answerCapture" class="answer-capture" rows="5" placeholder="Escribe aquí una frase corta de lo que dijo el cliente..."></textarea>
           </label>
+          <button id="guidedPrimaryButton" class="guided-primary-action" type="button">Capturar respuesta</button>
+          <div class="guided-secondary-actions" aria-label="Acciones secundarias">
+            <button id="guidedEditButton" type="button">Editar</button>
+            <button id="guidedIgnoreButton" type="button">Ignorar</button>
+            <button id="guidedAdvancedButton" type="button">Avanzado</button>
+          </div>
+          <div id="guidedSuccessBlock" class="guided-success" aria-live="polite"></div>
           <div class="capture-actions">
             <button id="captureResponseButton" class="secondary" type="button">Capturar respuesta</button>
             <button id="presentationOrganizeButton" class="ghost" type="button">Organizar en whiteboard</button>
@@ -2013,6 +2069,11 @@
       const currentStepLabel = document.querySelector("#currentStepLabel");
       const ringActionLabel = document.querySelector("#ringActionLabel");
       const captureModeHint = document.querySelector("#captureModeHint");
+      const guidedPrimaryButton = document.querySelector("#guidedPrimaryButton");
+      const guidedEditButton = document.querySelector("#guidedEditButton");
+      const guidedIgnoreButton = document.querySelector("#guidedIgnoreButton");
+      const guidedAdvancedButton = document.querySelector("#guidedAdvancedButton");
+      const guidedSuccessBlock = document.querySelector("#guidedSuccessBlock");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -2141,9 +2202,12 @@
           intro: "Centro: presentar e iniciar",
           ask: "Centro: hacer pregunta",
           capture: "Centro: capturar respuesta",
+          suggest: "Centro: pedir sugerencia",
+          review: "Centro: usar y organizar",
           confirm: "Centro: confirmar respuesta",
           organize: "Centro: organizar whiteboard",
-          recommend: "Centro: siguiente pregunta",
+          recommend: "Centro: mostrar/avanzar",
+          close: "Centro: generar resumen",
           summary: "Centro: generar resumen",
         };
         const captureHints = {
@@ -2152,34 +2216,59 @@
           capture: SpeechRecognition
             ? "Modo seguro: escribe la respuesta. STT solo se usa si Frank lo activa en Operador."
             : "Modo seguro: escribe la respuesta y presiona centro para confirmar.",
+          suggest: "Centro pide una sugerencia controlada a Val.",
+          review: "Centro usa y organiza solo si Frank aprueba la sugerencia.",
           confirm: "Centro confirma lo capturado.",
           organize: "Centro mueve la señal al whiteboard.",
-          recommend: "Centro avanza a la siguiente pregunta o recomendación.",
+          recommend: "Centro avanza después de mostrar la recomendación.",
+          close: "Centro genera o muestra el resumen local.",
           summary: "Centro genera o muestra el resumen local.",
         };
         const stepLabels = {
           intro: "intro",
           ask: "pregunta",
           capture: "captura",
+          suggest: "sugerir",
+          review: "revision",
           confirm: "confirmacion",
           organize: "organizar",
           recommend: "recomendar",
+          close: "cierre",
           summary: "resumen",
         };
         const coreLabels = {
           intro: "Iniciar",
           ask: "Pregunta",
           capture: "Capturar",
+          suggest: "Sugerir",
+          review: "Usar",
           confirm: "Confirmar",
           organize: "Ordenar",
-          recommend: "Siguiente",
+          recommend: "Avanzar",
+          close: "Resumen",
           summary: "Resumen",
+        };
+        const primaryLabels = {
+          intro: "Val pregunta",
+          ask: "Val pregunta",
+          capture: "Capturar respuesta",
+          suggest: "Sugerir con Val",
+          review: "Usar y organizar",
+          confirm: "Confirmar respuesta",
+          organize: "Organizar en whiteboard",
+          recommend: "Mostrar recomendación / avanzar",
+          close: "Generar resumen",
+          summary: "Generar resumen",
         };
         meetingStep = ringLabels[step] ? step : "intro";
         currentStepLabel.textContent = `Paso: ${stepLabels[meetingStep]}`;
         ringActionLabel.textContent = ringLabels[meetingStep];
         captureModeHint.textContent = captureHints[meetingStep];
         commandCoreButton.textContent = coreLabels[meetingStep];
+        if (guidedPrimaryButton) {
+          guidedPrimaryButton.textContent = primaryLabels[meetingStep];
+          guidedPrimaryButton.dataset.action = meetingStep;
+        }
         if (message) setNextAction(message);
       }
 
@@ -2188,9 +2277,12 @@
           intro: () => runCommand("present"),
           ask: () => runCommand("ask"),
           capture: () => runCaptureCenterAction(),
+          suggest: () => suggestWithValMentor(),
+          review: () => acceptValMentorSuggestion(),
           confirm: () => runCommand("confirm"),
           organize: () => runCommand("organize"),
           recommend: () => runCommand("next"),
+          close: () => runCommand("summary"),
           summary: () => runCommand("summary"),
         };
         actions[meetingStep]?.();
@@ -2215,7 +2307,7 @@
       }
 
       function runBackAction() {
-        if (meetingStep === "capture" || meetingStep === "confirm" || meetingStep === "organize") {
+        if (meetingStep === "capture" || meetingStep === "confirm" || meetingStep === "suggest" || meetingStep === "review" || meetingStep === "organize") {
           focusCaptureField();
           const message = "Perfecto, corrijamos antes de seguir. Ajusta la respuesta y vuelve a presionar centro.";
           setMeetingStep("capture", message);
@@ -2228,7 +2320,7 @@
           stageValResponse(message, { state: "ready", delay: 120 });
           return;
         }
-        if (meetingStep === "summary") {
+        if (meetingStep === "summary" || meetingStep === "close") {
           const message = "Volvemos al cierre operativo. Puedes ajustar la recomendación antes de copiar el resumen.";
           setMeetingStep("recommend", message);
           stageValResponse(message, { state: "ready", delay: 120 });
@@ -2824,9 +2916,9 @@
           return false;
         }
         const reasoning = consultantReasoning(captureState.lastCategory, "signal", text);
-        valObservation.textContent = `${reasoning.line} Respuesta confirmada; Frank puede organizarla en el whiteboard.`;
-        setMeetingStep("organize", "Ahora: organiza en whiteboard.");
-        refreshMentorFlowStatus("Ahora: pide sugerencia a Val u organiza manualmente.");
+        valObservation.textContent = `${reasoning.line} Respuesta capturada; ahora conviene pedir sugerencia a Val.`;
+        setMeetingStep("suggest", "Ahora: pide sugerencia a Val.");
+        refreshMentorFlowStatus("Ahora: pide sugerencia a Val.");
         stageValResponse(valObservation.textContent, { state: "ready", delay: 120 });
         return true;
       }
@@ -2941,6 +3033,18 @@
           const message = "Antes de avanzar, confirmemos la respuesta capturada.";
           setMeetingStep("confirm", message);
           focusCaptureField();
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        if (meetingStep === "suggest" && (answerCapture.value.trim() || captureState.pendingResponse)) {
+          const message = "Antes de avanzar, pide la sugerencia de Val o corrige la respuesta.";
+          setMeetingStep("suggest", message);
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        if (meetingStep === "review" && pendingValMentorSuggestion) {
+          const message = "Antes de avanzar, Frank debe usar y organizar o ignorar la sugerencia.";
+          setMeetingStep("review", message);
           stageValResponse(message, { state: "ready", delay: 120 });
           return;
         }
@@ -3061,6 +3165,10 @@
         pendingValMentorSuggestion = suggestion;
         llmAcceptButton.disabled = false;
         llmIgnoreButton.disabled = false;
+        if (guidedSuccessBlock) {
+          guidedSuccessBlock.classList.remove("visible");
+          guidedSuccessBlock.textContent = "";
+        }
         llmStatus.textContent = mode === "mock"
           ? "Sugerencia mock recibida. Frank debe aprobar antes de usar."
           : "Modo local activo. Sugerencia determinística lista para aprobación.";
@@ -3071,7 +3179,8 @@
         if (suggestion.detected_pain && suggestion.detected_pain !== "unknown") {
           setActiveCategory(suggestion.detected_pain, captureState.categorySource || "inferred");
         }
-        refreshMentorFlowStatus("Ahora: usa y organiza o ignora.");
+        setMeetingStep("review", "Ahora: revisa y usa/ignora la sugerencia.");
+        refreshMentorFlowStatus("Ahora: revisa y usa/ignora la sugerencia.");
         const cards = suggestion.whiteboard_cards.length
           ? suggestion.whiteboard_cards.map((card) => `<li>${escapeHtml(card.lane)}: ${escapeHtml(card.title || card.body)}</li>`).join("")
           : "<li>Sin tarjetas sugeridas.</li>";
@@ -3153,6 +3262,7 @@
         captureState.lastBoardTarget = target;
         captureState.lastCardId = card.id;
         captureState.pendingResponse = "";
+        answerCapture.value = "";
         showFloatingCaptureCard(card);
         renderWhiteboard();
       }
@@ -3169,8 +3279,15 @@
         captureState.recommendedQuestion = pendingValMentorSuggestion.follow_up_question;
         const category = pendingValMentorSuggestion.detected_pain || captureState.lastCategory || "pendiente";
         valObservation.textContent = `Listo. Val organizó la respuesta como ${categoryLabel(category)}. Demo recomendado: ${pendingValMentorSuggestion.recommended_demo_section}. Siguiente pregunta: ${pendingValMentorSuggestion.follow_up_question}`;
+        if (guidedSuccessBlock) {
+          guidedSuccessBlock.textContent = valObservation.textContent;
+          guidedSuccessBlock.classList.add("visible");
+        }
         stageValResponse(pendingValMentorSuggestion.val_message, { state: "speaking", delay: 160, speak: true });
         llmStatus.textContent = valObservation.textContent;
+        pendingValMentorSuggestion = null;
+        llmAcceptButton.disabled = true;
+        llmIgnoreButton.disabled = true;
         setMeetingStep("recommend", "Ahora: muestra sección recomendada o avanza.");
         refreshMentorFlowStatus("Ahora: muestra sección recomendada o avanza.");
       }
@@ -3180,7 +3297,12 @@
         llmAcceptButton.disabled = true;
         llmIgnoreButton.disabled = true;
         llmStatus.textContent = "Sugerencia ignorada. Modo local determinístico disponible.";
-        refreshMentorFlowStatus("Ahora: muestra sección recomendada o avanza.");
+        if (guidedSuccessBlock) {
+          guidedSuccessBlock.classList.remove("visible");
+          guidedSuccessBlock.textContent = "";
+        }
+        setMeetingStep("suggest", "Ahora: pide otra sugerencia o corrige la respuesta.");
+        refreshMentorFlowStatus("Ahora: pide otra sugerencia o corrige la respuesta.");
         llmSuggestionPanel.innerHTML = `
           <strong>Sugerencia de Val</strong>
           <p class="mode-note">Sugerencia descartada. Frank puede continuar con la guía local.</p>
@@ -3232,7 +3354,7 @@
         ].join("\n");
         summaryOutput.value = summary;
         copyStatus.textContent = "Resumen generado localmente.";
-        setMeetingStep("summary", "Ahora: revisa o copia el resumen.");
+        setMeetingStep("close", "Ahora: revisa o copia el resumen.");
         stageValResponse(scriptedLines.wrap, { state: "organizing", delay: 260 });
       }
 
@@ -3261,8 +3383,11 @@
           present: () => respondToQa("intro"),
           qa: () => openQaCapsule(),
           confirm: () => document.querySelector("#confirmResponseButton").click(),
+          suggest: () => suggestWithValMentor(),
+          review: () => acceptValMentorSuggestion(),
           organize: () => document.querySelector("#organizeWhiteboardButton").click(),
           summary: () => generateSummary(),
+          close: () => generateSummary(),
           next: () => advanceMeetingFlow(),
           advance: () => advanceMeetingFlow(),
           rephrase: () => rephraseCurrentQuestion(),
@@ -3516,6 +3641,13 @@
       llmSuggestButton.addEventListener("click", suggestWithValMentor);
       llmAcceptButton.addEventListener("click", acceptValMentorSuggestion);
       llmIgnoreButton.addEventListener("click", ignoreValMentorSuggestion);
+      guidedPrimaryButton.addEventListener("click", runContextAction);
+      guidedEditButton.addEventListener("click", () => {
+        setMeetingStep("capture", "Ahora: corrige la respuesta.");
+        focusCaptureField();
+      });
+      guidedIgnoreButton.addEventListener("click", ignoreValMentorSuggestion);
+      guidedAdvancedButton.addEventListener("click", () => setMode("operator"));
 
       qaInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
