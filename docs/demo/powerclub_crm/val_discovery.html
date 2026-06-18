@@ -2431,12 +2431,20 @@
       const VAL_LLM_ENDPOINT = "/powerclub/val/mentor-suggest";
       const VAL_LLM_REQUIRED_KEYS = [
         "val_message",
+        "val_says",
         "summary",
         "detected_pain",
+        "detected_domains",
         "follow_up_question",
+        "next_question",
         "whiteboard_cards",
+        "nodes_to_add",
+        "nodes_to_update",
+        "business_memory_update",
         "recommended_demo_section",
         "risk_flags",
+        "out_of_scope",
+        "out_of_scope_response",
         "next_step",
         "confidence",
         "needs_frank_confirmation",
@@ -2448,6 +2456,17 @@
         "Cola del asesor",
         "Templates / dictado",
         "Scope freeze / piloto",
+      ];
+      const VAL_PROCESS_DOMAINS = [
+        "Estructura del negocio",
+        "Personas / roles",
+        "Ventas / leads",
+        "Seguimiento comercial",
+        "Canales / herramientas",
+        "Reportes / métricas",
+        "Procesos / operación",
+        "Dolores / riesgos",
+        "Roadmap / piloto",
       ];
 
       const questionBank = [
@@ -4059,7 +4078,46 @@
         return `${play.why} Estoy convirtiendo esta respuesta en señales conectadas del negocio.`;
       }
 
-      function processConversationResponse() {
+      async function requestScopedValSuggestion() {
+        const request = buildValLlmRequest();
+        const response = await fetch(VAL_LLM_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+        if (!response.ok) throw new Error(`backend ${response.status}`);
+        const body = await response.json();
+        const suggestion = body?.suggestion;
+        const validationError = validateValMentorSuggestion(suggestion);
+        if (validationError) throw new Error(validationError);
+        return { suggestion, mode: body.mode || "backend" };
+      }
+
+      function applyScopedSuggestionToConversation(suggestion, mode = "backend") {
+        const nextQuestion = suggestion.next_question || suggestion.follow_up_question;
+        captureState.recommendedSection = suggestion.recommended_demo_section;
+        captureState.recommendedQuestion = nextQuestion;
+        recommendedSection.textContent = suggestion.recommended_demo_section;
+        recommendedQuestion.textContent = nextQuestion;
+        questionText.textContent = nextQuestion;
+        wizardQuestionText.textContent = nextQuestion;
+        applyConsultantNodes(suggestion);
+        applyBusinessMemoryUpdate(suggestion.business_memory_update);
+        const valLine = suggestion.out_of_scope && suggestion.out_of_scope_response
+          ? suggestion.out_of_scope_response
+          : suggestion.val_says || suggestion.val_message;
+        wizardSuggestionText.textContent = `${valLine} Siguiente pregunta: ${nextQuestion}`;
+        wizardResultText.textContent = `Val actualizó el mapa y la memoria operativa. Demo recomendado: ${suggestion.recommended_demo_section}.`;
+        valObservation.textContent = wizardSuggestionText.textContent;
+        mapUnderstandingCue.textContent = valLine;
+        llmStatus.textContent = mode === "mock"
+          ? "Sugerencia mock aplicada desde el flujo guiado."
+          : "Sugerencia de Val aplicada desde el flujo guiado.";
+        setMeetingStep("conversation", `Val actualizó el mapa. Ahora pregunta: ${nextQuestion}`);
+        stageValResponse(wizardSuggestionText.textContent, { state: "organizing", delay: 160 });
+      }
+
+      async function processConversationResponse() {
         const text = (wizardAnswer.value || answerCapture.value || "").trim();
         if (!text) {
           const message = "Escribe lo que dijo el cliente para que Val lo convierta en mapa.";
@@ -4077,6 +4135,15 @@
         const domainDemo = recommendedDemoForDomains(domains);
         captureState.recommendedSection = domainDemo;
         recommendedSection.textContent = domainDemo;
+        try {
+          const scoped = await requestScopedValSuggestion();
+          applyScopedSuggestionToConversation(scoped.suggestion, scoped.mode);
+          wizardAnswer.value = "";
+          answerCapture.value = "";
+          return;
+        } catch (error) {
+          llmStatus.textContent = `Modo local activo. ${error.message || "Backend no disponible."}`;
+        }
         updateBusinessMapFromResponse(text, category, "conversation");
         const nextQuestion = dynamicQuestionFor(text, category);
         captureState.recommendedQuestion = nextQuestion;
@@ -4105,11 +4172,34 @@
         };
       }
 
+      function businessMemoryForLlm() {
+        return {
+          estructura: memoryStructure?.textContent || "por validar",
+          roles: memoryPeople?.textContent || "por validar",
+          canales: memoryChannel?.textContent || "por validar",
+          dolor_principal: memoryPain?.textContent || "por validar",
+          metrica_a_validar: memoryMetric?.textContent || "por validar",
+          vista_recomendada: memoryDemo?.textContent || "Vista gerencial",
+          proxima_pregunta: memoryNextQuestion?.textContent || captureState.recommendedQuestion,
+          roadmap_piloto: memoryRoadmap?.textContent || "por validar",
+        };
+      }
+
+      function mapNodesForLlm() {
+        return businessMapState.items.map((item) => ({
+          domain: mapGroupConfig[item.group]?.label || item.group,
+          label: item.label,
+          source: item.source,
+        }));
+      }
+
       function buildValLlmRequest() {
         const captured = answerCapture.value.trim() || captureState.pendingResponse || "";
         const detectedCategory = inferMentorCategory(captured);
         refreshMentorFlowStatus("Ahora: usa y organiza o ignora.");
         return {
+          client_name: clientNameInput.value.trim() || "PowerClub",
+          meeting_goal: meetingObjectiveInput.value,
           meeting_context: {
             client_or_person: clientNameInput.value.trim() || "PowerClub",
             role_context: clientContextInput.value.trim() || "GM / gerencia comercial",
@@ -4119,14 +4209,20 @@
           current_question: questionText.textContent.trim(),
           captured_response: captured,
           selected_category: detectedCategory || "",
+          current_business_memory: businessMemoryForLlm(),
+          current_map_nodes: mapNodesForLlm(),
+          process_domains: VAL_PROCESS_DOMAINS,
           whiteboard_state: whiteboardStateForLlm(),
           allowed_demo_sections: VAL_LLM_ALLOWED_DEMO_SECTIONS,
+          roadmap_scope: "pilot/discovery only; no production promise",
           guardrails: [
             "Spanish by default",
             "Frank approves before use",
             "No real PowerClub data",
             "No production promise",
             "No pricing/legal/commitment authority",
+            "No implementation promises",
+            "Route out-of-scope requests to phase two or scope freeze",
           ],
         };
       }
@@ -4138,29 +4234,59 @@
         if (!VAL_LLM_ALLOWED_DEMO_SECTIONS.includes(suggestion.recommended_demo_section)) {
           return "La sección recomendada no está permitida.";
         }
+        if (!Array.isArray(suggestion.detected_domains)) return "detected_domains debe ser lista.";
+        const invalidDomain = suggestion.detected_domains.find((domain) => !VAL_PROCESS_DOMAINS.includes(domain));
+        if (invalidDomain) return `Dominio no permitido: ${invalidDomain}.`;
         if (suggestion.needs_frank_confirmation !== true) return "La sugerencia debe requerir confirmación de Frank.";
         if (!Array.isArray(suggestion.whiteboard_cards)) return "whiteboard_cards debe ser lista.";
+        if (!Array.isArray(suggestion.nodes_to_add)) return "nodes_to_add debe ser lista.";
+        if (!Array.isArray(suggestion.nodes_to_update)) return "nodes_to_update debe ser lista.";
+        if (!suggestion.business_memory_update || typeof suggestion.business_memory_update !== "object") return "business_memory_update debe ser objeto.";
         if (!Array.isArray(suggestion.risk_flags)) return "risk_flags debe ser lista.";
+        if (typeof suggestion.out_of_scope !== "boolean") return "out_of_scope debe ser boolean.";
         return "";
       }
 
       function localValMentorSuggestion(reason = "backend_unavailable") {
         const captured = answerCapture.value.trim() || captureState.pendingResponse || "Sin respuesta capturada todavía.";
         const category = captureState.lastCategory || categoryFromText(captured) || "unknown";
+        const domains = detectedProcessDomains(captured, category);
         const [section, followUp] = recommendationFor(category);
+        const valText = "Modo local activo. Si entiendo bien, conviene confirmar el dolor, el impacto y el próximo paso antes de avanzar.";
         return {
-          val_message: "Modo local activo. Si entiendo bien, conviene confirmar el dolor, el impacto y el próximo paso antes de avanzar.",
+          val_message: valText,
+          val_says: valText,
           summary: captured,
           detected_pain: category,
+          detected_domains: domains.map((domain) => processPlaybook[domain]?.label).filter(Boolean),
           follow_up_question: followUp,
+          next_question: followUp,
           whiteboard_cards: captured === "Sin respuesta capturada todavía." ? [] : [{
             lane: "Señales / patrones",
             title: "Señal pendiente de confirmar",
             body: captured,
             category,
           }],
+          nodes_to_add: extractBusinessMapInsights(captured, category).map((item) => ({
+            domain: mapGroupConfig[item.group]?.label || "Dolores / riesgos",
+            label: item.label,
+            detail: "Señal local para validar.",
+          })),
+          nodes_to_update: [],
+          business_memory_update: {
+            estructura: memoryStructure?.textContent || "por validar",
+            roles: memoryPeople?.textContent || "por validar",
+            canales: memoryChannel?.textContent || "por validar",
+            dolor_principal: category === "seguimiento" ? "Seguimiento comercial" : (memoryPain?.textContent || "por validar"),
+            metrica_a_validar: memoryMetric?.textContent || "por validar",
+            vista_recomendada: section,
+            proxima_pregunta: followUp,
+            roadmap_piloto: memoryRoadmap?.textContent || "por validar",
+          },
           recommended_demo_section: section,
           risk_flags: [`Fallback local: ${reason}. Frank debe confirmar antes de usar.`],
+          out_of_scope: false,
+          out_of_scope_response: "",
           next_step: "Continuar con modo determinístico local y validar scope freeze si aparece una solicitud amplia.",
           confidence: captured === "Sin respuesta capturada todavía." ? "low" : "medium",
           needs_frank_confirmation: true,
@@ -4185,6 +4311,8 @@
         }
         llmStatus.textContent = mode === "mock"
           ? "Sugerencia mock recibida. Frank debe aprobar antes de usar."
+          : mode === "backend" || mode === "provider"
+            ? "Sugerencia de Val recibida. Frank debe aprobar antes de usar."
           : "Modo local activo. Sugerencia determinística lista para aprobación.";
         captureState.recommendedSection = suggestion.recommended_demo_section;
         captureState.recommendedQuestion = suggestion.follow_up_question;
@@ -4198,6 +4326,9 @@
         const cards = suggestion.whiteboard_cards.length
           ? suggestion.whiteboard_cards.map((card) => `<li>${escapeHtml(card.lane)}: ${escapeHtml(card.title || card.body)}</li>`).join("")
           : "<li>Sin tarjetas sugeridas.</li>";
+        const nodes = suggestion.nodes_to_add.length
+          ? suggestion.nodes_to_add.map((node) => `<li>${escapeHtml(node.domain)}: ${escapeHtml(node.label)}</li>`).join("")
+          : "<li>Sin nodos sugeridos.</li>";
         const risks = suggestion.risk_flags.length
           ? suggestion.risk_flags.map((risk) => `<li>${escapeHtml(risk)}</li>`).join("")
           : "<li>Sin riesgos adicionales.</li>";
@@ -4208,8 +4339,11 @@
           <p><b>Pregunta:</b> ${escapeHtml(suggestion.follow_up_question)}</p>
           <p><b>Demo recomendado:</b> ${escapeHtml(suggestion.recommended_demo_section)}</p>
           <p><b>Próximo paso:</b> ${escapeHtml(suggestion.next_step)}</p>
+          <p><b>Dominios:</b> ${escapeHtml(suggestion.detected_domains.join(", ") || "por validar")}</p>
           <p><b>Tarjetas sugeridas:</b></p>
           <ul>${cards}</ul>
+          <p><b>Nodos sugeridos:</b></p>
+          <ul>${nodes}</ul>
           <p><b>Riesgos:</b></p>
           <ul>${risks}</ul>
         `;
@@ -4217,6 +4351,47 @@
           wizardSuggestionText.textContent = `${suggestion.val_message} Demo recomendado: ${suggestion.recommended_demo_section}. Siguiente pregunta: ${suggestion.follow_up_question}`;
         }
         updateWizardView();
+      }
+
+      function groupForConsultantDomain(domain = "") {
+        const normalized = domain.toLowerCase();
+        if (normalized.includes("estructura")) return "structure";
+        if (normalized.includes("persona") || normalized.includes("rol")) return "people";
+        if (normalized.includes("canal") || normalized.includes("herramienta") || normalized.includes("proceso") || normalized.includes("operación") || normalized.includes("operacion")) return "process";
+        if (normalized.includes("reporte") || normalized.includes("métrica") || normalized.includes("metrica")) return "metrics";
+        if (normalized.includes("riesgo") || normalized.includes("roadmap") || normalized.includes("piloto")) return "risks";
+        return "problems";
+      }
+
+      function applyConsultantNodes(suggestion) {
+        const nodes = Array.isArray(suggestion.nodes_to_add) ? suggestion.nodes_to_add : [];
+        let first = null;
+        nodes.forEach((node) => {
+          const item = addMapItem(groupForConsultantDomain(node.domain), node.label, "val-consultant");
+          if (!first && item) first = item;
+        });
+        const updates = Array.isArray(suggestion.nodes_to_update) ? suggestion.nodes_to_update : [];
+        updates.forEach((update) => {
+          const item = addMapItem(groupForConsultantDomain(update.domain), update.label || update.match, "val-consultant");
+          if (!first && item) first = item;
+        });
+        if (first) pulseBusinessMap(first.label);
+        renderBusinessMap();
+      }
+
+      function applyBusinessMemoryUpdate(update = {}) {
+        if (!update || typeof update !== "object") return;
+        if (memoryStructure && update.estructura) memoryStructure.textContent = update.estructura;
+        if (memoryPeople && update.roles) memoryPeople.textContent = update.roles;
+        if (memoryChannel && update.canales) memoryChannel.textContent = update.canales;
+        if (memoryPain && update.dolor_principal) memoryPain.textContent = update.dolor_principal;
+        if (memoryMetric && update.metrica_a_validar) memoryMetric.textContent = update.metrica_a_validar;
+        if (memoryDemo && update.vista_recomendada) memoryDemo.textContent = update.vista_recomendada;
+        if (memoryNextQuestion && update.proxima_pregunta) memoryNextQuestion.textContent = update.proxima_pregunta;
+        if (memoryRoadmap && update.roadmap_piloto) memoryRoadmap.textContent = update.roadmap_piloto;
+        if (powerValRoadmapHint) {
+          powerValRoadmapHint.textContent = "Esto puede alimentar una memoria operativa de PowerClub: procesos, decisiones, pendientes y roadmap del piloto.";
+        }
       }
 
       async function suggestWithValMentor() {
@@ -4282,7 +4457,9 @@
         captureState.pendingResponse = "";
         answerCapture.value = "";
         showFloatingCaptureCard(card);
-        updateBusinessMapFromResponse(captured, category, "mentor");
+        applyConsultantNodes(suggestion);
+        applyBusinessMemoryUpdate(suggestion.business_memory_update);
+        if (!suggestion.nodes_to_add?.length) updateBusinessMapFromResponse(captured, category, "mentor");
         renderWhiteboard();
       }
 

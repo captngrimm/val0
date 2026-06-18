@@ -55,11 +55,32 @@ def test_stub_contract() -> None:
     assert_true(valid, f"mock suggestion validates: {reason}")
     for key in stub.REQUIRED_RESPONSE_KEYS:
         assert_true(key in suggestion, f"mock suggestion has {key}")
+    assert_true(suggestion["needs_frank_confirmation"] is True, "new schema requires Frank confirmation")
+    assert_true(isinstance(suggestion["detected_domains"], list), "new schema detected domains list")
+    assert_true(isinstance(suggestion["nodes_to_add"], list), "new schema nodes_to_add list")
+    assert_true(isinstance(suggestion["business_memory_update"], dict), "new schema memory update object")
 
     bad = dict(suggestion)
     bad["recommended_demo_section"] = "API conectada"
     valid, reason = stub.validate_suggestion(bad)
     assert_true(not valid and "recommended_demo_section" in reason, "invalid demo section rejected")
+
+    management_payload = dict(payload)
+    management_payload["captured_response"] = (
+        "Gerencia necesita ver por sucursal cuántos leads están sin contacto por más de 24 horas, "
+        "quién es el asesor responsable y cuál fue el último contacto."
+    )
+    management_payload["selected_category"] = "metricas"
+    management = stub.handle_mentor_request(management_payload, env={stub.MOCK_ENV: "1"})
+    assert_true(management["status"] == "ok", "management mock returns ok")
+    management_suggestion = management["suggestion"]
+    assert_true(management_suggestion["recommended_demo_section"] == "Riesgo y rescate", "management example maps to risk rescue")
+    assert_true("Reportes / métricas" in management_suggestion["detected_domains"], "management example detects metrics")
+    assert_true("Seguimiento comercial" in management_suggestion["detected_domains"], "management example detects follow-up")
+    labels = {node["label"] for node in management_suggestion["nodes_to_add"]}
+    assert_true("Leads sin contacto +24h" in labels, "management example adds +24h node")
+    assert_true("Último contacto" in labels, "management example adds last contact node")
+    assert_true(management_suggestion["business_memory_update"]["metrica_a_validar"] == "Leads sin contacto +24h por sucursal", "management memory metric updated")
 
 
 def test_frontend_integration_seam() -> None:
