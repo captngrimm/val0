@@ -1385,7 +1385,7 @@
 
       .map-stage {
         position: relative;
-        min-height: 440px;
+        min-height: 560px;
         overflow: hidden;
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 20px;
@@ -1405,8 +1405,9 @@
       }
 
       .map-links line {
-        stroke: rgba(99, 232, 255, 0.28);
-        stroke-width: 1.2;
+        stroke: rgba(99, 232, 255, 0.38);
+        stroke-width: 1.35;
+        filter: drop-shadow(0 0 5px rgba(99, 232, 255, 0.22));
       }
 
       .map-node {
@@ -1437,7 +1438,8 @@
         border-color: rgba(210, 179, 106, 0.5);
         background: rgba(210, 179, 106, 0.13);
         color: #f6e9c6;
-        font-size: 0.95rem;
+        font-size: 1.05rem;
+        box-shadow: 0 0 42px rgba(210, 179, 106, 0.18);
       }
 
       .map-node.group {
@@ -1446,7 +1448,50 @@
       }
 
       .map-node.new {
-        animation: nodeSettle 0.95s ease both;
+        animation: nodeSettle 1.25s ease both, readyPulse 1.4s ease 0.2s 1;
+      }
+
+      .business-memory-card {
+        display: grid;
+        gap: 8px;
+        border: 1px solid rgba(210, 179, 106, 0.18);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(210, 179, 106, 0.06);
+      }
+
+      .business-memory-card h3 {
+        margin: 0;
+        color: #f6e9c6;
+      }
+
+      .memory-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .memory-grid div {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 8px;
+        background: rgba(1, 5, 10, 0.24);
+        color: var(--text);
+        font-size: 0.82rem;
+        font-weight: 800;
+      }
+
+      .memory-grid span {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--muted);
+        font-size: 0.68rem;
+        text-transform: uppercase;
+      }
+
+      .memory-grid p {
+        margin: 0;
+        line-height: 1.35;
       }
 
       .map-float {
@@ -1488,6 +1533,34 @@
         20% { opacity: 1; }
         75% { opacity: 1; transform: translate(-50%, -58%) scale(1); }
         100% { opacity: 0; transform: translate(-50%, -70%) scale(0.96); }
+      }
+
+      body[data-mode="presentation"] .wizard-card {
+        gap: 12px;
+        padding: 16px;
+      }
+
+      body[data-mode="presentation"] .wizard-topline,
+      body[data-mode="presentation"] .wizard-suggestion-card,
+      body[data-mode="presentation"] .wizard-result-card {
+        display: none;
+      }
+
+      body[data-mode="presentation"] .wizard-title {
+        font-size: clamp(1.25rem, 2.4vw, 1.8rem);
+      }
+
+      body[data-mode="presentation"] .wizard-instruction {
+        font-size: clamp(1rem, 1.8vw, 1.22rem);
+      }
+
+      body[data-mode="presentation"] .wizard-working-area {
+        grid-template-columns: minmax(260px, 0.9fr) minmax(300px, 1.1fr);
+        align-items: stretch;
+      }
+
+      body[data-mode="presentation"] .wizard-answer {
+        min-height: 96px;
       }
 
       body[data-mode="presentation"] .operator-mode-only,
@@ -1864,6 +1937,17 @@
           <div id="businessMapNodes"></div>
           <div id="businessMapFloat" class="map-float">Val organizando señal...</div>
         </div>
+        <aside class="business-memory-card" aria-labelledby="businessMemoryTitle">
+          <h3 id="businessMemoryTitle">Memoria de negocio</h3>
+          <div class="memory-grid">
+            <div><span>Estructura</span><p id="memoryStructure">Pendiente</p></div>
+            <div><span>Personas</span><p id="memoryPeople">Pendiente</p></div>
+            <div><span>Dolor principal</span><p id="memoryPain">Pendiente</p></div>
+            <div><span>Canal crítico</span><p id="memoryChannel">Pendiente</p></div>
+            <div><span>Métrica pendiente</span><p id="memoryMetric">Oportunidades enfriadas por semana</p></div>
+            <div><span>Demo recomendado</span><p id="memoryDemo">Vista gerencial</p></div>
+          </div>
+        </aside>
       </section>
 
       <section class="setup-panel" aria-labelledby="setupTitle">
@@ -2445,6 +2529,12 @@
       const businessMapNodes = document.querySelector("#businessMapNodes");
       const businessMapFloat = document.querySelector("#businessMapFloat");
       const mapUnderstandingCue = document.querySelector("#mapUnderstandingCue");
+      const memoryStructure = document.querySelector("#memoryStructure");
+      const memoryPeople = document.querySelector("#memoryPeople");
+      const memoryPain = document.querySelector("#memoryPain");
+      const memoryChannel = document.querySelector("#memoryChannel");
+      const memoryMetric = document.querySelector("#memoryMetric");
+      const memoryDemo = document.querySelector("#memoryDemo");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -2621,6 +2711,12 @@
             instruction: "AHORA: revisa el resumen y acuerda el próximo paso.",
             primary: "Generar resumen",
           },
+          conversation: {
+            step: "Conversación",
+            title: "Val escucha la respuesta y actualiza el mapa",
+            instruction: "Escribe lo que dijo el cliente. Val lo convertirá en estructura de negocio.",
+            primary: "Procesar respuesta",
+          },
         };
         const copy = stepCopy[meetingStep] || stepCopy.ask;
         wizardStepPill.textContent = copy.step;
@@ -2651,6 +2747,7 @@
           recommend: "Centro: mostrar/avanzar",
           close: "Centro: generar resumen",
           summary: "Centro: generar resumen",
+          conversation: "Centro: procesar respuesta",
         };
         const captureHints = {
           ask: "Centro hace la pregunta actual.",
@@ -2664,6 +2761,7 @@
           recommend: "Centro avanza después de mostrar la recomendación.",
           close: "Centro genera o muestra el resumen local.",
           summary: "Centro genera o muestra el resumen local.",
+          conversation: "Centro procesa la respuesta y actualiza el mapa.",
         };
         const stepLabels = {
           ask: "pregunta",
@@ -2675,6 +2773,7 @@
           recommend: "recomendar",
           close: "cierre",
           summary: "resumen",
+          conversation: "conversacion",
         };
         const coreLabels = {
           ask: "Pregunta",
@@ -2686,6 +2785,7 @@
           recommend: "Avanzar",
           close: "Resumen",
           summary: "Resumen",
+          conversation: "Procesar",
         };
         const primaryLabels = {
           ask: "Ya pregunté / capturar respuesta",
@@ -2697,6 +2797,7 @@
           recommend: "Mostrar recomendación / avanzar",
           close: "Generar resumen",
           summary: "Generar resumen",
+          conversation: "Procesar respuesta",
         };
         meetingStep = ringLabels[normalizedStep] ? normalizedStep : "ask";
         currentStepLabel.textContent = `Paso: ${stepLabels[meetingStep]}`;
@@ -2725,6 +2826,7 @@
           recommend: () => runCommand("next"),
           close: () => runCommand("summary"),
           summary: () => runCommand("summary"),
+          conversation: () => processConversationResponse(),
         };
         actions[meetingStep]?.();
       }
@@ -3619,6 +3721,22 @@
         mapUnderstandingCue.textContent = businessMapState.items.length
           ? `Val ha organizado ${businessMapState.items.length} señal(es). Rama fuerte: ${categoryLabel(captureState.lastCategory || "unknown")}.`
           : "Aún no hay señales capturadas. El mapa crecerá cuando Frank use y organice una respuesta.";
+        updateBusinessMemory();
+      }
+
+      function latestMapLabel(group, fallback = "Pendiente") {
+        const found = [...businessMapState.items].reverse().find((item) => item.group === group);
+        return found ? found.label : fallback;
+      }
+
+      function updateBusinessMemory() {
+        if (!memoryStructure) return;
+        memoryStructure.textContent = latestMapLabel("structure");
+        memoryPeople.textContent = latestMapLabel("people");
+        memoryPain.textContent = latestMapLabel("problems");
+        memoryChannel.textContent = latestMapLabel("process");
+        memoryMetric.textContent = latestMapLabel("metrics", "Oportunidades enfriadas por semana");
+        memoryDemo.textContent = captureState.recommendedSection || "Vista gerencial";
       }
 
       function pulseBusinessMap(label) {
@@ -3638,6 +3756,55 @@
         });
         if (first) pulseBusinessMap(first.label);
         renderBusinessMap();
+      }
+
+      function dynamicQuestionFor(text, category = "") {
+        const lower = text.toLowerCase();
+        if (lower.includes("sucursal") || lower.includes("sede") || lower.includes("ubicacion") || lower.includes("ubicación") || lower.includes("gimnasio")) {
+          return "¿Cómo se distribuyen esas sucursales y quién les da seguimiento?";
+        }
+        if (lower.includes("asesor") || lower.includes("vendedor") || lower.includes("operador")) {
+          return "¿Qué responsabilidad tiene cada asesor en el seguimiento?";
+        }
+        if (lower.includes("whatsapp") || lower.includes("contacto") || lower.includes("lead") || category === "seguimiento") {
+          return "¿Cuántas oportunidades se enfrían por falta de contacto a tiempo?";
+        }
+        if (lower.includes("dashboard") || lower.includes("reporte") || lower.includes("visibilidad")) {
+          return "¿Qué necesita ver gerencia cada mañana para decidir dónde actuar?";
+        }
+        if (lower.includes("piloto") || lower.includes("alcance") || lower.includes("fase")) {
+          return "¿Qué debe entrar en piloto y qué debe quedar para fase dos?";
+        }
+        return "¿Qué señal deberíamos mapear ahora para entender mejor el proceso?";
+      }
+
+      function processConversationResponse() {
+        const text = (wizardAnswer.value || answerCapture.value || "").trim();
+        if (!text) {
+          const message = "Escribe lo que dijo el cliente para que Val lo convierta en mapa.";
+          setMeetingStep("conversation", message);
+          focusCaptureField();
+          stageValResponse(message, { state: "ready", delay: 120 });
+          return;
+        }
+        answerCapture.value = text;
+        const category = inferMentorCategory(text) || categoryFromText(text) || "visibilidad";
+        captureState.responses.push(`[${category}] ${text}`);
+        updateRecommendations(category);
+        updateBusinessMapFromResponse(text, category, "conversation");
+        const nextQuestion = dynamicQuestionFor(text, category);
+        captureState.recommendedQuestion = nextQuestion;
+        recommendedQuestion.textContent = nextQuestion;
+        questionText.textContent = nextQuestion;
+        wizardQuestionText.textContent = nextQuestion;
+        wizardSuggestionText.textContent = `Perfecto. Lo estoy mapeando como ${categoryLabel(category)}. Siguiente pregunta: ${nextQuestion}`;
+        wizardResultText.textContent = `Val ubicó esta señal en el mapa. Demo recomendado: ${captureState.recommendedSection}.`;
+        valObservation.textContent = wizardSuggestionText.textContent;
+        mapUnderstandingCue.textContent = `Val entendió: ${categoryLabel(category)}. Próxima pregunta lista.`;
+        wizardAnswer.value = "";
+        answerCapture.value = "";
+        setMeetingStep("conversation", `Val mapeó la respuesta. Ahora pregunta: ${nextQuestion}`);
+        stageValResponse(wizardSuggestionText.textContent, { state: "organizing", delay: 160 });
       }
 
       function whiteboardStateForLlm() {
@@ -4284,7 +4451,7 @@
       setCommandHub(false);
       setRingControl(true);
       setAudioMode("text");
-      setMeetingStep("ask", "AHORA: haz esta pregunta al cliente.");
+      setMeetingStep("conversation", "Escribe la respuesta del cliente y procesa para actualizar el mapa.");
     </script>
   </body>
 </html>
