@@ -1215,9 +1215,154 @@
         line-height: 1.45;
       }
 
+      .wizard-card {
+        display: grid;
+        gap: 18px;
+        border: 1px solid rgba(99, 232, 255, 0.24);
+        border-radius: 22px;
+        padding: 22px;
+        background:
+          radial-gradient(circle at 12% 12%, rgba(99, 232, 255, 0.1), transparent 30%),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.025)),
+          var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .wizard-topline {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .wizard-step-pill {
+        width: fit-content;
+        border: 1px solid rgba(210, 179, 106, 0.34);
+        border-radius: 999px;
+        padding: 6px 12px;
+        color: #f6e9c6;
+        background: rgba(210, 179, 106, 0.08);
+        font-size: 0.76rem;
+        font-weight: 950;
+        text-transform: uppercase;
+      }
+
+      .wizard-title {
+        margin: 0;
+        color: #f4fbff;
+        font-size: clamp(1.55rem, 3vw, 2.6rem);
+        line-height: 1.05;
+      }
+
+      .wizard-instruction {
+        margin: 0;
+        color: #f6e9c6;
+        font-size: clamp(1.05rem, 2vw, 1.45rem);
+        font-weight: 950;
+        line-height: 1.35;
+      }
+
+      .wizard-working-area {
+        display: grid;
+        gap: 12px;
+      }
+
+      .wizard-question-card,
+      .wizard-suggestion-card,
+      .wizard-result-card {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(1, 5, 10, 0.34);
+      }
+
+      .wizard-question-card p,
+      .wizard-suggestion-card p,
+      .wizard-result-card p {
+        margin: 0;
+        color: var(--text);
+        font-size: 1.05rem;
+        line-height: 1.45;
+      }
+
+      .wizard-answer {
+        min-height: 118px;
+        width: 100%;
+        border: 1px solid rgba(99, 232, 255, 0.28);
+        border-radius: 16px;
+        padding: 14px;
+        color: var(--text);
+        background: rgba(1, 5, 10, 0.58);
+        resize: vertical;
+        font-size: 1rem;
+        line-height: 1.45;
+      }
+
+      .wizard-primary {
+        min-height: 64px;
+        border: 0;
+        border-radius: 18px;
+        padding: 0 20px;
+        color: #061017;
+        background: linear-gradient(135deg, #63e8ff, #d2b36a);
+        box-shadow: 0 0 34px rgba(99, 232, 255, 0.26);
+        font-size: clamp(1rem, 2vw, 1.24rem);
+        font-weight: 950;
+      }
+
+      .wizard-secondary {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .wizard-secondary button {
+        min-height: 36px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        padding: 0 12px;
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.04);
+        font-size: 0.78rem;
+        font-weight: 850;
+      }
+
+      .wizard-ring-hint {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.76rem;
+      }
+
+      .wizard-ring-hint span {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+
+      .wizard-advanced {
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.025);
+      }
+
+      .wizard-advanced summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 900;
+      }
+
       body[data-mode="presentation"] .operator-mode-only,
       body[data-mode="presentation"] .setup-panel,
       body[data-mode="presentation"] .flow-panel,
+      body[data-mode="presentation"] .cockpit-grid,
+      body[data-mode="presentation"] .whiteboard-panel,
+      body[data-mode="presentation"] .recommendation-panel,
       body[data-mode="presentation"] .capture-column,
       body[data-mode="presentation"] .summary-panel {
         display: none;
@@ -1526,6 +1671,52 @@
           </div>
         </div>
       </header>
+
+      <section class="wizard-card" aria-labelledby="wizardTitle">
+        <div class="wizard-topline">
+          <span id="wizardStepPill" class="wizard-step-pill">Paso 1 de 5</span>
+          <span class="wizard-step-pill">Val Discovery · reunión guiada</span>
+        </div>
+        <div>
+          <h2 id="wizardTitle" class="wizard-title">Preguntar</h2>
+          <p id="wizardInstruction" class="wizard-instruction">AHORA: haz esta pregunta al cliente.</p>
+        </div>
+        <div class="wizard-working-area">
+          <article class="wizard-question-card" aria-label="Pregunta actual">
+            <span class="field-label">Val pregunta</span>
+            <p id="wizardQuestionText">¿En qué parte del seguimiento sienten que se pierden más oportunidades hoy?</p>
+          </article>
+          <label id="wizardAnswerLabel">
+            <span class="field-label">Respuesta del cliente</span>
+            <textarea id="wizardAnswer" class="wizard-answer" rows="4" placeholder="Escribe aquí lo que dijo el cliente. No tiene que estar perfecto."></textarea>
+          </label>
+          <article id="wizardSuggestionCard" class="wizard-suggestion-card">
+            <span class="field-label">Sugerencia de Val</span>
+            <p id="wizardSuggestionText">Aún no hay sugerencia. Primero captura una respuesta.</p>
+          </article>
+          <article id="wizardResultCard" class="wizard-result-card">
+            <span class="field-label">Resultado organizado</span>
+            <p id="wizardResultText">Aún no hay resultado organizado.</p>
+          </article>
+        </div>
+        <button id="wizardPrimaryButton" class="wizard-primary" type="button">Ya pregunté / capturar respuesta</button>
+        <div class="wizard-secondary" aria-label="Acciones secundarias">
+          <button id="wizardEditButton" type="button">Editar</button>
+          <button id="wizardIgnoreButton" type="button">Ignorar</button>
+          <button id="wizardAdvancedButton" type="button">Avanzado / cockpit</button>
+        </div>
+        <div class="wizard-ring-hint" aria-label="Guía ArcX compacta">
+          <span>Centro = botón principal</span>
+          <span>→ avanzar</span>
+          <span>← corregir</span>
+          <span>↑ reformular</span>
+          <span>↓ resumen</span>
+        </div>
+        <details class="wizard-advanced">
+          <summary>Avanzado / cockpit</summary>
+          <p class="mode-note">Cambia a Operador para ver setup, agenda, Q&A seguro, voz, ArcX debug, categorías, notas, whiteboard completo y controles técnicos.</p>
+        </details>
+      </section>
 
       <section class="setup-panel" aria-labelledby="setupTitle">
         <div>
@@ -2074,6 +2265,19 @@
       const guidedIgnoreButton = document.querySelector("#guidedIgnoreButton");
       const guidedAdvancedButton = document.querySelector("#guidedAdvancedButton");
       const guidedSuccessBlock = document.querySelector("#guidedSuccessBlock");
+      const wizardStepPill = document.querySelector("#wizardStepPill");
+      const wizardTitle = document.querySelector("#wizardTitle");
+      const wizardInstruction = document.querySelector("#wizardInstruction");
+      const wizardQuestionText = document.querySelector("#wizardQuestionText");
+      const wizardAnswer = document.querySelector("#wizardAnswer");
+      const wizardSuggestionCard = document.querySelector("#wizardSuggestionCard");
+      const wizardSuggestionText = document.querySelector("#wizardSuggestionText");
+      const wizardResultCard = document.querySelector("#wizardResultCard");
+      const wizardResultText = document.querySelector("#wizardResultText");
+      const wizardPrimaryButton = document.querySelector("#wizardPrimaryButton");
+      const wizardEditButton = document.querySelector("#wizardEditButton");
+      const wizardIgnoreButton = document.querySelector("#wizardIgnoreButton");
+      const wizardAdvancedButton = document.querySelector("#wizardAdvancedButton");
       const clientNameInput = document.querySelector("#clientNameInput");
       const clientContextInput = document.querySelector("#clientContextInput");
       const meetingObjectiveInput = document.querySelector("#meetingObjectiveInput");
@@ -2197,9 +2401,80 @@
         if (mentorNextAction) mentorNextAction.textContent = message;
       }
 
+      function updateWizardView() {
+        if (!wizardStepPill) return;
+        const captured = answerCapture.value.trim() || captureState.pendingResponse || wizardAnswer?.value.trim() || "";
+        const category = captureState.lastCategory || categoryFromText(captured) || "";
+        const stepCopy = {
+          ask: {
+            step: "Paso 1 de 5",
+            title: "Preguntar",
+            instruction: "AHORA: haz esta pregunta al cliente.",
+            primary: "Ya pregunté / capturar respuesta",
+          },
+          capture: {
+            step: "Paso 2 de 5",
+            title: "Capturar",
+            instruction: "AHORA: escribe o dicta lo que respondió el cliente.",
+            primary: "Capturar respuesta",
+          },
+          suggest: {
+            step: "Paso 3 de 5",
+            title: "Sugerir",
+            instruction: "AHORA: pide sugerencia a Val.",
+            primary: "Sugerir con Val",
+          },
+          review: {
+            step: "Paso 4 de 5",
+            title: "Aprobar y organizar",
+            instruction: "AHORA: revisa. Si está bien, usa y organiza.",
+            primary: "Usar y organizar",
+          },
+          organize: {
+            step: "Paso 4 de 5",
+            title: "Aprobar y organizar",
+            instruction: "AHORA: organiza la respuesta en el whiteboard.",
+            primary: "Organizar en whiteboard",
+          },
+          recommend: {
+            step: "Paso 5 de 5",
+            title: "Recomendar / avanzar",
+            instruction: "AHORA: muestra la sección recomendada o avanza.",
+            primary: "Mostrar recomendación / avanzar",
+          },
+          close: {
+            step: "Paso 5 de 5",
+            title: "Cerrar",
+            instruction: "AHORA: revisa el resumen y acuerda el próximo paso.",
+            primary: "Generar resumen",
+          },
+          summary: {
+            step: "Paso 5 de 5",
+            title: "Cerrar",
+            instruction: "AHORA: revisa el resumen y acuerda el próximo paso.",
+            primary: "Generar resumen",
+          },
+        };
+        const copy = stepCopy[meetingStep] || stepCopy.ask;
+        wizardStepPill.textContent = copy.step;
+        wizardTitle.textContent = copy.title;
+        wizardInstruction.textContent = copy.instruction;
+        wizardQuestionText.textContent = questionText.textContent.trim();
+        wizardPrimaryButton.textContent = copy.primary;
+        wizardPrimaryButton.dataset.action = meetingStep;
+        if (wizardAnswer && wizardAnswer.value !== (answerCapture.value || "")) {
+          wizardAnswer.value = answerCapture.value || "";
+        }
+        wizardSuggestionCard.hidden = !["review", "recommend", "close", "summary"].includes(meetingStep);
+        wizardResultCard.hidden = !["recommend", "close", "summary"].includes(meetingStep);
+        if (!pendingValMentorSuggestion && meetingStep === "suggest") {
+          wizardSuggestionText.textContent = `Respuesta capturada${category ? ` como ${categoryLabel(category)}` : ""}. Lista para pedir sugerencia.`;
+        }
+      }
+
       function setMeetingStep(step, message = "") {
+        const normalizedStep = step === "intro" ? "ask" : step === "confirm" ? "suggest" : step;
         const ringLabels = {
-          intro: "Centro: presentar e iniciar",
           ask: "Centro: hacer pregunta",
           capture: "Centro: capturar respuesta",
           suggest: "Centro: pedir sugerencia",
@@ -2211,7 +2486,6 @@
           summary: "Centro: generar resumen",
         };
         const captureHints = {
-          intro: "Centro inicia una guía breve para la reunión.",
           ask: "Centro hace la pregunta actual.",
           capture: SpeechRecognition
             ? "Modo seguro: escribe la respuesta. STT solo se usa si Frank lo activa en Operador."
@@ -2225,7 +2499,6 @@
           summary: "Centro genera o muestra el resumen local.",
         };
         const stepLabels = {
-          intro: "intro",
           ask: "pregunta",
           capture: "captura",
           suggest: "sugerir",
@@ -2237,7 +2510,6 @@
           summary: "resumen",
         };
         const coreLabels = {
-          intro: "Iniciar",
           ask: "Pregunta",
           capture: "Capturar",
           suggest: "Sugerir",
@@ -2249,8 +2521,7 @@
           summary: "Resumen",
         };
         const primaryLabels = {
-          intro: "Val pregunta",
-          ask: "Val pregunta",
+          ask: "Ya pregunté / capturar respuesta",
           capture: "Capturar respuesta",
           suggest: "Sugerir con Val",
           review: "Usar y organizar",
@@ -2260,7 +2531,7 @@
           close: "Generar resumen",
           summary: "Generar resumen",
         };
-        meetingStep = ringLabels[step] ? step : "intro";
+        meetingStep = ringLabels[normalizedStep] ? normalizedStep : "ask";
         currentStepLabel.textContent = `Paso: ${stepLabels[meetingStep]}`;
         ringActionLabel.textContent = ringLabels[meetingStep];
         captureModeHint.textContent = captureHints[meetingStep];
@@ -2270,12 +2541,15 @@
           guidedPrimaryButton.dataset.action = meetingStep;
         }
         if (message) setNextAction(message);
+        updateWizardView();
       }
 
       function runContextAction() {
         const actions = {
-          intro: () => runCommand("present"),
-          ask: () => runCommand("ask"),
+          ask: () => {
+            setMeetingStep("capture", "AHORA: escribe la respuesta del cliente.");
+            focusCaptureField();
+          },
           capture: () => runCaptureCenterAction(),
           suggest: () => suggestWithValMentor(),
           review: () => acceptValMentorSuggestion(),
@@ -2339,7 +2613,11 @@
 
       function focusCaptureField() {
         presentationCapture.classList.add("highlight");
-        answerCapture.focus();
+        if (document.body.dataset.mode === "presentation" && wizardAnswer) {
+          wizardAnswer.focus();
+        } else {
+          answerCapture.focus();
+        }
         window.setTimeout(() => presentationCapture.classList.remove("highlight"), 1300);
       }
 
@@ -2587,9 +2865,11 @@
         const question = questionBank[index % questionBank.length];
         questionCategory.textContent = question.category;
         questionText.textContent = question.text;
+        if (wizardQuestionText) wizardQuestionText.textContent = question.text;
         stageValResponse(`Pregunta sugerida: ${question.text}`, { state: "thinking", delay: 180 });
         captureState.recommendedQuestion = question.text;
         recommendedQuestion.textContent = question.text;
+        updateWizardView();
       }
 
       function appendLine(field, label, text) {
@@ -3199,6 +3479,10 @@
           <p><b>Riesgos:</b></p>
           <ul>${risks}</ul>
         `;
+        if (wizardSuggestionText) {
+          wizardSuggestionText.textContent = `${suggestion.val_message} Demo recomendado: ${suggestion.recommended_demo_section}. Siguiente pregunta: ${suggestion.follow_up_question}`;
+        }
+        updateWizardView();
       }
 
       async function suggestWithValMentor() {
@@ -3283,6 +3567,7 @@
           guidedSuccessBlock.textContent = valObservation.textContent;
           guidedSuccessBlock.classList.add("visible");
         }
+        if (wizardResultText) wizardResultText.textContent = valObservation.textContent;
         stageValResponse(pendingValMentorSuggestion.val_message, { state: "speaking", delay: 160, speak: true });
         llmStatus.textContent = valObservation.textContent;
         pendingValMentorSuggestion = null;
@@ -3301,6 +3586,7 @@
           guidedSuccessBlock.classList.remove("visible");
           guidedSuccessBlock.textContent = "";
         }
+        if (wizardSuggestionText) wizardSuggestionText.textContent = "Sugerencia ignorada. Puedes corregir la respuesta o pedir otra sugerencia.";
         setMeetingStep("suggest", "Ahora: pide otra sugerencia o corrige la respuesta.");
         refreshMentorFlowStatus("Ahora: pide otra sugerencia o corrige la respuesta.");
         llmSuggestionPanel.innerHTML = `
@@ -3551,11 +3837,24 @@
       document.querySelector("#generateSummaryButtonBottom").addEventListener("click", generateSummary);
       document.querySelector("#copySummaryButtonBottom").addEventListener("click", copySummary);
       answerCapture.addEventListener("input", () => {
+        if (wizardAnswer && wizardAnswer.value !== answerCapture.value) {
+          wizardAnswer.value = answerCapture.value;
+        }
         if (captureState.categorySource !== "manual") {
           const inferred = categoryFromText(answerCapture.value.trim());
           if (inferred) setActiveCategory(inferred, "inferred");
         }
         refreshMentorFlowStatus("Ahora: captura respuesta o pide sugerencia a Val.");
+        updateWizardView();
+      });
+      wizardAnswer.addEventListener("input", () => {
+        answerCapture.value = wizardAnswer.value;
+        if (captureState.categorySource !== "manual") {
+          const inferred = categoryFromText(wizardAnswer.value.trim());
+          if (inferred) setActiveCategory(inferred, "inferred");
+        }
+        refreshMentorFlowStatus("Ahora: captura respuesta o pide sugerencia a Val.");
+        updateWizardView();
       });
 
       document.querySelector("#listenResponseButton").addEventListener("click", () => {
@@ -3642,12 +3941,22 @@
       llmAcceptButton.addEventListener("click", acceptValMentorSuggestion);
       llmIgnoreButton.addEventListener("click", ignoreValMentorSuggestion);
       guidedPrimaryButton.addEventListener("click", runContextAction);
+      wizardPrimaryButton.addEventListener("click", () => {
+        answerCapture.value = wizardAnswer.value;
+        runContextAction();
+      });
       guidedEditButton.addEventListener("click", () => {
         setMeetingStep("capture", "Ahora: corrige la respuesta.");
         focusCaptureField();
       });
       guidedIgnoreButton.addEventListener("click", ignoreValMentorSuggestion);
       guidedAdvancedButton.addEventListener("click", () => setMode("operator"));
+      wizardEditButton.addEventListener("click", () => {
+        setMeetingStep("capture", "AHORA: corrige la respuesta del cliente.");
+        focusCaptureField();
+      });
+      wizardIgnoreButton.addEventListener("click", ignoreValMentorSuggestion);
+      wizardAdvancedButton.addEventListener("click", () => setMode("operator"));
 
       qaInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
@@ -3692,7 +4001,7 @@
       setCommandHub(false);
       setRingControl(true);
       setAudioMode("text");
-      setMeetingStep("intro", "Ahora: haz la pregunta.");
+      setMeetingStep("ask", "AHORA: haz esta pregunta al cliente.");
     </script>
   </body>
 </html>
